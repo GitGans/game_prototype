@@ -20,10 +20,10 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     actionType: "melee",
     rowTrait: "front",
     spriteSheet: {
-      path: 'assets/sprites/units/dd_medium.png',
+      path: "assets/sprites/units/dd_medium.png",
       frameWidth: 100,
       frameHeight: 100,
-      states: ['idle', 'attack', 'death'],
+      states: ["idle", "attack", "death"],
     },
   },
   {
@@ -43,6 +43,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     shape: SHAPES["1x1"],
     actionType: "ranged",
     rowTrait: "back",
+    spriteSheet: {
+      path: "assets/sprites/units/archer.png",
+      frameWidth: 100,
+      frameHeight: 100,
+      states: ["idle", "attack", "death"],
+    },
   },
   {
     templateId: "cavalry",
@@ -61,6 +67,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     shape: SHAPES["1x1"],
     actionType: "heal",
     rowTrait: "back",
+    spriteSheet: {
+      path: "assets/sprites/units/healer.png",
+      frameWidth: 100,
+      frameHeight: 100,
+      states: ["idle", "attack", "death"],
+    },
   },
   {
     templateId: "mage_single",

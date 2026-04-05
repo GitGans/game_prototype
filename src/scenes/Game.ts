@@ -761,6 +761,12 @@ export class Game extends Phaser.Scene {
     const targetUnit = state.occupancy.cellToUnit.get(cellKey(coord));
 
     if (activeUnit?.actionType === "heal") {
+      const healerView = this.unitViews.get(state.roundQueue[0]);
+      healerView?.setSpriteState('attack');
+      this.time.delayedCall(400, () => {
+        const current = GameState.get().units.get(state.roundQueue[0]);
+        if (current && current.hp > 0) healerView?.setSpriteState('idle');
+      });
       if (targetUnit) {
         const view = this.unitViews.get(targetUnit.id);
         if (view) this.showFloatingHeal(view.x, view.y, HEAL_AMOUNT);
@@ -819,6 +825,13 @@ export class Game extends Phaser.Scene {
     const activeUnit = state.units.get(state.roundQueue[0]);
 
     if (activeUnit?.actionType === "heal") {
+      const enemyHealerId = state.roundQueue[0];
+      const enemyHealerView = this.unitViews.get(enemyHealerId);
+      enemyHealerView?.setSpriteState('attack');
+      this.time.delayedCall(400, () => {
+        const current = GameState.get().units.get(enemyHealerId);
+        if (current && current.hp > 0) enemyHealerView?.setSpriteState('idle');
+      });
       const healTargets = getFriendlyTargets("enemy", state.occupancy);
       if (healTargets.length === 0) {
         const next = this.advanceQueue(state);
