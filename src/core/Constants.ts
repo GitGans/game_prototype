@@ -1,0 +1,36 @@
+export const LAYOUT_SCALE = Math.min(
+  window.innerWidth / 900,
+  window.innerHeight / 500,
+);
+
+export const CELL_SIZE = Math.round(100 * LAYOUT_SCALE);
+export const CELL_GAP = Math.round(6 * LAYOUT_SCALE);
+export const GRID_COLS = 3;
+export const GRID_ROWS = 2;
+export const SIDE_GAP = Math.round(40 * LAYOUT_SCALE); // horizontal gap between the two grids
+export const BENCH_PANEL_WIDTH = Math.round(90 * LAYOUT_SCALE);
+export const BENCH_GAP = Math.round(10 * LAYOUT_SCALE);
+
+export const COLORS = {
+  cell: 0x2a3a5a,
+  cellBorder: 0x4a6a9a,
+  cellHover: 0x3a5a8a,
+  cellSelected: 0xffaa00,
+  validTarget: 0xff4444,
+  unitPlayer: 0x4488ff,
+  unitEnemy: 0xff5544,
+  unitDead: 0x333344,
+  hpBarBg: 0x222233,
+  hpBarFg: 0x44dd44,
+  validHeal: 0x44dd44,
+  textLight: "#ffffff",
+  textDark: "#cccccc",
+  label: "#aaddff",
+  labelEnemy: "#ffaaaa",
+  bench: 0x1a2a3a,
+  benchSelected: 0x2a5a1a,
+  benchBorder: 0x3a5a7a,
+};
+
+export const DAMAGE = 10;
+export const HEAL_AMOUNT = 10;
