@@ -61,6 +61,7 @@ export interface OccupancyMap {
 }
 
 export type Phase = 'placement' | 'select_target' | 'end';
+export type BattleMode = 'manual' | 'auto' | 'quick';
 
 export interface BattleState {
   units: Map<string, Unit>;
