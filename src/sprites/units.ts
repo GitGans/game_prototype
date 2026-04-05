@@ -131,14 +131,4 @@ export const UNIT_TEXTURES: Record<string, { pixels: number[][], scale: number }
   'sprite-shaman':  { pixels: SHAMAN,  scale: 4 },
 };
 
-// Maps unit ID → texture key
-export const UNIT_TEXTURE_MAP: Record<string, string> = {
-  p1: 'sprite-knight',
-  p2: 'sprite-archer',
-  p3: 'sprite-mage',
-  e1: 'sprite-goblin',
-  e2: 'sprite-orc',
-  e3: 'sprite-shaman',
-};
-
 export { GAME_PALETTE };
