@@ -26,7 +26,7 @@ export interface UnitBlueprint {
   hp: number;
   initiative: number;
   shape: UnitShape;
-  actionType: 'attack' | 'heal';
+  actionType: 'melee' | 'ranged' | 'heal';
   rowTrait: RowTrait;
   race?: UnitRace;
 }
@@ -39,7 +39,7 @@ export interface Unit {
   initiative: number;
   shape: UnitShape;
   anchor: CellCoord;
-  actionType: 'attack' | 'heal';
+  actionType: 'melee' | 'ranged' | 'heal';
   rowTrait: RowTrait;
   race?: UnitRace;
   templateId: string;

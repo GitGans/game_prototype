@@ -1,4 +1,4 @@
-import { CellCoord, Col, OccupancyMap, Row, Side } from './types';
+import { CellCoord, Col, OccupancyMap, Row, Side, Unit } from './types';
 import { cellKey } from './field';
 
 const ENEMY_SIDE: Record<Side, Side> = {
@@ -20,10 +20,18 @@ export function isFrontRowAlive(side: Side, occupancy: OccupancyMap): boolean {
 
 /**
  * Returns valid melee target cells on the enemy side.
+ * - If the attacker is in back row AND own front row is alive → blocked, returns []
  * - If enemy front row has any unit → only front-row occupied cells
  * - Otherwise → back-row occupied cells
  */
-export function getMeleeTargets(attackerSide: Side, occupancy: OccupancyMap): CellCoord[] {
+export function getMeleeTargets(attacker: Unit, occupancy: OccupancyMap): CellCoord[] {
+  const attackerSide = attacker.anchor.side;
+
+  // Back-row melee is blocked by own front row
+  if (attacker.anchor.row === 1 && isFrontRowAlive(attackerSide, occupancy)) {
+    return [];
+  }
+
   const targetSide = ENEMY_SIDE[attackerSide];
   const frontAlive = isFrontRowAlive(targetSide, occupancy);
   const targetRow: Row = frontAlive ? 0 : 1;
