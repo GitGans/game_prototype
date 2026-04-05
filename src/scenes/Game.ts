@@ -24,9 +24,11 @@ import {
   Side,
   Unit,
   UnitBlueprint,
+  SpriteSheetConfig,
 } from "../battle/types";
 import { renderPixelArt } from "../core/PixelRenderer";
 import { UNIT_TEXTURES, GAME_PALETTE } from "../sprites/units";
+import { PLAYER_UNITS, ENEMY_UNITS } from "../data/unitDefinitions";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
 import { canPlace, placeUnit } from "../battle/placement";
@@ -201,8 +203,8 @@ export class Game extends Phaser.Scene {
     const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
     const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
 
-    // All units render as rectangles (no textureKey passed)
-    const view = new UnitView(this, cx, cy, unit, colSpan, rowSpan, undefined);
+    const { key: textureKey, config: spriteConfig } = this.getSpriteKeyAndConfig(unit);
+    const view = new UnitView(this, cx, cy, unit, colSpan, rowSpan, textureKey, spriteConfig);
     this.unitViews.set(unit.id, view);
   }
 
@@ -212,6 +214,19 @@ export class Game extends Phaser.Scene {
       view.destroy();
       this.unitViews.delete(unitId);
     }
+  }
+
+  private getSpriteKeyAndConfig(unit: Unit): { key: string | undefined; config: SpriteSheetConfig | undefined } {
+    const allBlueprints = [
+      ...PLAYER_UNITS,
+      ...Object.values(ENEMY_UNITS).flat(),
+    ];
+    const bp = allBlueprints.find(b => b.templateId === unit.templateId);
+    if (!bp?.spriteSheet) return { key: undefined, config: undefined };
+    return {
+      key: `sprite-${unit.templateId}`,
+      config: bp.spriteSheet,
+    };
   }
 
   // ─── UI ───────────────────────────────────────────────────────────────────
@@ -771,6 +786,15 @@ export class Game extends Phaser.Scene {
       );
     }
 
+    // Flash attack state briefly
+    const attackerId = state.roundQueue[0];
+    const attackerView = this.unitViews.get(attackerId);
+    attackerView?.setSpriteState('attack');
+    this.time.delayedCall(400, () => {
+      const current = GameState.get().units.get(attackerId);
+      if (current && current.hp > 0) attackerView?.setSpriteState('idle');
+    });
+
     let next = resolveAttack([coord], DAMAGE, state);
 
     const winner = checkGameOver(next);
@@ -851,6 +875,15 @@ export class Game extends Phaser.Scene {
         "negative",
       );
     }
+
+    // Flash attack state briefly
+    const enemyAttackerId = state.roundQueue[0];
+    const enemyAttackerView = this.unitViews.get(enemyAttackerId);
+    enemyAttackerView?.setSpriteState('attack');
+    this.time.delayedCall(400, () => {
+      const current = GameState.get().units.get(enemyAttackerId);
+      if (current && current.hp > 0) enemyAttackerView?.setSpriteState('idle');
+    });
 
     let next = resolveAttack([target], DAMAGE, state);
 

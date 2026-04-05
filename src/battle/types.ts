@@ -20,6 +20,15 @@ export interface UnitShape {
   offsets: ShapeOffset[];
 }
 
+export type SpriteState = 'idle' | 'attack' | 'death';
+
+export interface SpriteSheetConfig {
+  path: string;          // path from public/, e.g. 'assets/sprites/units/dd_medium.png'
+  frameWidth: number;    // width of one frame in pixels
+  frameHeight: number;   // height of one frame in pixels
+  states: SpriteState[]; // states in column order, e.g. ['idle', 'attack', 'death']
+}
+
 export interface UnitBlueprint {
   templateId: string;
   name: string;
@@ -29,6 +38,7 @@ export interface UnitBlueprint {
   actionType: 'melee' | 'ranged' | 'heal';
   rowTrait: RowTrait;
   race?: UnitRace;
+  spriteSheet?: SpriteSheetConfig;
 }
 
 export interface Unit {
