@@ -19,6 +19,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     shape: SHAPES["1x1"],
     actionType: "melee",
     rowTrait: "front",
+    spriteSheet: {
+      path: 'assets/sprites/units/dd_medium.png',
+      frameWidth: 100,
+      frameHeight: 100,
+      states: ['idle', 'attack', 'death'],
+    },
   },
   {
     templateId: "dd_heavy",

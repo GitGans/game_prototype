@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { CELL_SIZE, CELL_GAP, COLORS, LAYOUT_SCALE } from '../core/Constants';
-import { Unit } from '../battle/types';
+import { Unit, SpriteState, SpriteSheetConfig } from '../battle/types';
 
 export class UnitView extends Phaser.GameObjects.Container {
   private bgSprite: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
@@ -12,6 +12,10 @@ export class UnitView extends Phaser.GameObjects.Container {
 
   private readonly isPlayer: boolean;
 
+  // Sprite state tracking (only used when bgSprite is an Image)
+  private spriteConfig: SpriteSheetConfig | null = null;
+  private isDead = false;
+
   constructor(
     scene: Phaser.Scene,
     x: number,
@@ -19,18 +23,25 @@ export class UnitView extends Phaser.GameObjects.Container {
     unit: Unit,
     colSpan: number,
     rowSpan: number,
-    textureKey?: string
+    textureKey?: string,
+    spriteConfig?: SpriteSheetConfig
   ) {
     super(scene, x, y);
     this.isPlayer = unit.anchor.side === 'player';
 
-    // row = horizontal axis, col = vertical axis
     const pad = Math.round(10 * LAYOUT_SCALE);
     const w = rowSpan * CELL_SIZE + (rowSpan - 1) * CELL_GAP - pad;
     const h = colSpan * CELL_SIZE + (colSpan - 1) * CELL_GAP - pad;
 
     if (textureKey && scene.textures.exists(textureKey)) {
-      this.bgSprite = scene.add.image(0, 0, textureKey).setDisplaySize(w - 2, h - 2);
+      this.spriteConfig = spriteConfig ?? null;
+      const img = scene.add.image(0, 0, textureKey);
+      // Show only the idle frame (column 0) via crop
+      if (this.spriteConfig) {
+        img.setFrame(0);
+      }
+      img.setDisplaySize(w - 2, h - 2);
+      this.bgSprite = img;
     } else {
       const color = this.isPlayer ? COLORS.unitPlayer : COLORS.unitEnemy;
       this.bgSprite = scene.add.rectangle(0, 0, w, h, color, 0.85);
@@ -63,22 +74,43 @@ export class UnitView extends Phaser.GameObjects.Container {
     ).setOrigin(0, 0.5);
 
     this.add([this.bgSprite, this.nameText, this.hpText, this.hpBarBg, this.hpBarFg]);
-    scene.add.existing(this);
+    scene.add.existing(this as unknown as Phaser.GameObjects.GameObject);
+  }
+
+  /**
+   * Switch to a sprite state (idle / attack / death).
+   * If the unit is already dead, only 'death' is allowed — other states are ignored.
+   * Does nothing if bgSprite is a Rectangle (no sprite config).
+   */
+  setSpriteState(state: SpriteState): void {
+    if (this.isDead && state !== 'death') return;
+    if (!this.spriteConfig) return;
+    if (!(this.bgSprite instanceof Phaser.GameObjects.Image)) return;
+
+    const frameIndex = this.spriteConfig.states.indexOf(state);
+    if (frameIndex === -1) return; // state not present in this sprite sheet
+
+    this.bgSprite.setFrame(frameIndex);
   }
 
   update(unit: Unit | null): void {
     if (!unit || unit.hp <= 0) {
-      if (this.bgSprite instanceof Phaser.GameObjects.Image) {
-        this.bgSprite.setTint(0x333344).setAlpha(0.4);
-      } else {
+      this.isDead = true;
+      this.setSpriteState('death');
+
+      if (this.bgSprite instanceof Phaser.GameObjects.Rectangle) {
         (this.bgSprite as Phaser.GameObjects.Rectangle).setFillStyle(COLORS.unitDead, 0.4);
+      } else {
+        (this.bgSprite as Phaser.GameObjects.Image).setTint(0x888888).setAlpha(0.6);
       }
+
       this.nameText.setAlpha(0.4);
       this.hpText.setText('DEAD').setAlpha(0.5);
       this.hpBarFg.setDisplaySize(0, this.barH);
       return;
     }
 
+    // Unit alive — only update HP display; Game.ts manages attack/idle transitions via setState()
     const maxW = this.hpBarBg.width;
     const ratio = unit.hp / unit.maxHp;
     this.hpBarFg.setDisplaySize(maxW * ratio, this.barH);
