@@ -31,7 +31,7 @@ import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
 import { canPlace, placeUnit } from "../battle/placement";
 import { buildOccupancy } from "../battle/occupancy";
-import { getMeleeTargets, getFriendlyTargets } from "../battle/targeting";
+import { getMeleeTargets, getRangedTargets, getFriendlyTargets } from "../battle/targeting";
 import { resolveAttack, resolveHeal, checkGameOver } from "../battle/combat";
 import { buildRoundQueue, pruneQueue } from "../battle/initiative";
 import {
@@ -691,10 +691,25 @@ export class Game extends Phaser.Scene {
     }
 
     if (activeUnit.anchor.side === "player") {
-      const validTargets =
-        activeUnit.actionType === "heal"
-          ? getFriendlyTargets("player", state.occupancy)
-          : getMeleeTargets("player", state.occupancy);
+      let validTargets: CellCoord[];
+      if (activeUnit.actionType === "heal") {
+        validTargets = getFriendlyTargets("player", state.occupancy);
+      } else if (activeUnit.actionType === "ranged") {
+        validTargets = getRangedTargets("player", state.occupancy);
+      } else {
+        validTargets = getMeleeTargets(activeUnit, state.occupancy);
+      }
+
+      // Back-row melee blocked by own front row — auto-skip
+      if (validTargets.length === 0 && activeUnit.actionType === "melee") {
+        this.battleLog.addEntry(`${activeUnit.name} — blocked, skipping turn`, "neutral");
+        const next = this.advanceQueue(state);
+        GameState.set(next);
+        EventBus.emit(Events.STATE_CHANGED, next);
+        this.time.delayedCall(500, () => this.startActiveUnitTurn(next));
+        return;
+      }
+
       const next: BattleState = {
         ...state,
         phase: "select_target",
@@ -811,10 +826,17 @@ export class Game extends Phaser.Scene {
       return;
     }
 
-    const targets = getMeleeTargets("enemy", state.occupancy);
+    const targets = activeUnit?.actionType === "ranged"
+      ? getRangedTargets("enemy", state.occupancy)
+      : getMeleeTargets(activeUnit!, state.occupancy);
+
     if (targets.length === 0) {
+      if (activeUnit?.actionType === "melee") {
+        this.battleLog.addEntry(`${activeUnit.name} — blocked, skipping turn`, "neutral");
+      }
       const next = this.advanceQueue(state);
       GameState.set(next);
+      EventBus.emit(Events.STATE_CHANGED, next);
       this.startActiveUnitTurn(next);
       return;
     }
