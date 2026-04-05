@@ -43,6 +43,37 @@ import {
   blueprintFromUnit,
 } from "../battle/autoPlace";
 
+/**
+ * Compute one turn for the given unit and return the resulting BattleState.
+ * Pure — no Phaser calls, no animations. Used by runQuickBattle().
+ */
+function computeOneTurn(state: BattleState, unitId: string): BattleState {
+  const unit = state.units.get(unitId);
+  if (!unit) return state;
+
+  const side = unit.anchor.side;
+
+  if (unit.actionType === 'heal') {
+    const targets = getFriendlyTargets(side, state.occupancy);
+    if (targets.length === 0) return state;
+    const target = targets.reduce((best, coord) => {
+      const u = state.occupancy.cellToUnit.get(cellKey(coord));
+      const bestU = state.occupancy.cellToUnit.get(cellKey(best));
+      return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp ? coord : best;
+    });
+    return resolveHeal([target], HEAL_AMOUNT, state);
+  }
+
+  const targets = unit.actionType === 'ranged'
+    ? getRangedTargets(side, state.occupancy)
+    : getMeleeTargets(unit, state.occupancy);
+
+  if (targets.length === 0) return state;
+
+  const target = targets[Math.floor(Math.random() * targets.length)];
+  return resolveAttack([target], DAMAGE, state);
+}
+
 export class Game extends Phaser.Scene {
   private cellViews: Map<string, CellView> = new Map();
   private unitViews: Map<string, UnitView> = new Map();
@@ -50,9 +81,17 @@ export class Game extends Phaser.Scene {
   private statusText!: Phaser.GameObjects.Text;
   private battleLog!: BattleLog;
 
+  // Delays (ms)
+  private static readonly DELAY_ENEMY_THINK = 700;
+  private static readonly DELAY_AUTO_THINK  = 200;
+  private static readonly DELAY_NEXT_TURN   = 500;
+  private static readonly DELAY_AUTO_NEXT   = 150;
+  private static readonly DELAY_GAMEOVER    = 600;
+
   // Placement phase UI
   private benchCards: Phaser.GameObjects.Container[] = [];
   private startBattleBtn: Phaser.GameObjects.Container | null = null;
+  private autoBattleButtons: Phaser.GameObjects.Container[] = [];
   private selectedBenchIdx: number | null = null;
   private selectedFieldUnitId: string | null = null;
   private lastClickCoordKey: string | null = null;
@@ -688,12 +727,14 @@ export class Game extends Phaser.Scene {
     EventBus.emit(Events.STATE_CHANGED, state);
     this.setStatus("");
     this.battleLog.setVisible(true);
+    this.buildAutoBattleButtons();
     this.startActiveUnitTurn(state);
   }
 
   // ─── Turn Flow ─────────────────────────────────────────────────────────────
 
   private startActiveUnitTurn(state: BattleState): void {
+    if (GameState.get().phase === 'end') return;
     const activeId = state.roundQueue[0];
     if (!activeId) return;
 
@@ -705,7 +746,19 @@ export class Game extends Phaser.Scene {
       return;
     }
 
+    const mode = GameState.getBattleMode();
+
     if (activeUnit.anchor.side === "player") {
+      // Auto / quick mode — player units act automatically
+      if (mode === 'auto') {
+        this.setStatus(`${activeUnit.name} turn… (auto)`);
+        const next: BattleState = { ...state, phase: 'select_target', validTargets: [] };
+        GameState.set(next);
+        EventBus.emit(Events.STATE_CHANGED, next);
+        this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
+        return;
+      }
+
       let validTargets: CellCoord[];
       if (activeUnit.actionType === "heal") {
         validTargets = getFriendlyTargets("player", state.occupancy);
@@ -721,7 +774,7 @@ export class Game extends Phaser.Scene {
         const next = this.advanceQueue(state);
         GameState.set(next);
         EventBus.emit(Events.STATE_CHANGED, next);
-        this.time.delayedCall(500, () => this.startActiveUnitTurn(next));
+        this.time.delayedCall(Game.DELAY_NEXT_TURN, () => this.startActiveUnitTurn(next));
         return;
       }
 
@@ -746,7 +799,10 @@ export class Game extends Phaser.Scene {
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
       this.setStatus(`${activeUnit.name} turn…`);
-      this.time.delayedCall(700, () => this.enemyTurn());
+      this.time.delayedCall(
+        mode === 'auto' ? Game.DELAY_AUTO_THINK : Game.DELAY_ENEMY_THINK,
+        () => this.autoTurn(),
+      );
     }
   }
 
@@ -779,7 +835,7 @@ export class Game extends Phaser.Scene {
       next = this.advanceQueue(next);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
-      this.time.delayedCall(500, () => this.startActiveUnitTurn(next));
+      this.time.delayedCall(Game.DELAY_NEXT_TURN, () => this.startActiveUnitTurn(next));
       return;
     }
 
@@ -808,73 +864,86 @@ export class Game extends Phaser.Scene {
       next = { ...next, phase: "end" };
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
-      this.time.delayedCall(600, () => this.showGameOver(winner));
+      this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
       return;
     }
 
     next = this.advanceQueue(next);
     GameState.set(next);
     EventBus.emit(Events.STATE_CHANGED, next);
-    this.time.delayedCall(500, () => this.startActiveUnitTurn(next));
+    this.time.delayedCall(Game.DELAY_NEXT_TURN, () => this.startActiveUnitTurn(next));
   }
 
-  private enemyTurn(): void {
+  private autoTurn(): void {
     const state = GameState.get();
-    if (state.phase === "end") return;
+    if (state.phase === 'end') return;
 
-    const activeUnit = state.units.get(state.roundQueue[0]);
+    const unitId = state.roundQueue[0];
+    const activeUnit = state.units.get(unitId);
+    if (!activeUnit) {
+      const next = this.advanceQueue(state);
+      GameState.set(next);
+      this.startActiveUnitTurn(next);
+      return;
+    }
 
-    if (activeUnit?.actionType === "heal") {
-      const enemyHealerId = state.roundQueue[0];
-      const enemyHealerView = this.unitViews.get(enemyHealerId);
-      enemyHealerView?.setSpriteState('attack');
+    const isPlayer = activeUnit.anchor.side === 'player';
+    const logStyle = isPlayer ? 'positive' : 'negative';
+    const nextDelay = Game.DELAY_AUTO_NEXT;
+
+    // ── Heal ────────────────────────────────────────────────────────────────
+    if (activeUnit.actionType === 'heal') {
+      const healerView = this.unitViews.get(unitId);
+      healerView?.setSpriteState('attack');
       this.time.delayedCall(400, () => {
-        const current = GameState.get().units.get(enemyHealerId);
-        if (current && current.hp > 0) enemyHealerView?.setSpriteState('idle');
+        const current = GameState.get().units.get(unitId);
+        if (current && current.hp > 0) healerView?.setSpriteState('idle');
       });
-      const healTargets = getFriendlyTargets("enemy", state.occupancy);
+
+      const healTargets = getFriendlyTargets(activeUnit.anchor.side, state.occupancy);
       if (healTargets.length === 0) {
         const next = this.advanceQueue(state);
         GameState.set(next);
-        this.startActiveUnitTurn(next);
+        EventBus.emit(Events.STATE_CHANGED, next);
+        this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
         return;
       }
+
       const target = healTargets.reduce((best, coord) => {
         const u = state.occupancy.cellToUnit.get(cellKey(coord));
         const bestU = state.occupancy.cellToUnit.get(cellKey(best));
-        return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp
-          ? coord
-          : best;
+        return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp ? coord : best;
       });
+
       const healedUnit = state.occupancy.cellToUnit.get(cellKey(target));
       if (healedUnit) {
         const view = this.unitViews.get(healedUnit.id);
         if (view) this.showFloatingHeal(view.x, view.y, HEAL_AMOUNT);
         this.battleLog.addEntry(
-          `${activeUnit?.name ?? "?"} heals ${healedUnit.name} +${HEAL_AMOUNT}`,
-          "negative",
+          `${activeUnit.name} heals ${healedUnit.name} +${HEAL_AMOUNT}`, logStyle,
         );
       }
+
       let next = resolveHeal([target], HEAL_AMOUNT, state);
       next = this.advanceQueue(next);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
-      this.time.delayedCall(500, () => this.startActiveUnitTurn(next));
+      this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
       return;
     }
 
-    const targets = activeUnit?.actionType === "ranged"
-      ? getRangedTargets("enemy", state.occupancy)
-      : getMeleeTargets(activeUnit!, state.occupancy);
+    // ── Attack ───────────────────────────────────────────────────────────────
+    const targets = activeUnit.actionType === 'ranged'
+      ? getRangedTargets(activeUnit.anchor.side, state.occupancy)
+      : getMeleeTargets(activeUnit, state.occupancy);
 
     if (targets.length === 0) {
-      if (activeUnit?.actionType === "melee") {
-        this.battleLog.addEntry(`${activeUnit.name} — blocked, skipping turn`, "neutral");
-      }
+      if (activeUnit.actionType === 'melee')
+        this.battleLog.addEntry(`${activeUnit.name} — blocked, skipping turn`, 'neutral');
       const next = this.advanceQueue(state);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
-      this.startActiveUnitTurn(next);
+      this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
       return;
     }
 
@@ -884,35 +953,114 @@ export class Game extends Phaser.Scene {
       const view = this.unitViews.get(hitUnit.id);
       if (view) this.showFloatingDamage(view.x, view.y, DAMAGE);
       this.battleLog.addEntry(
-        `${activeUnit?.name ?? "?"} attacks ${hitUnit.name} -${DAMAGE}`,
-        "negative",
+        `${activeUnit.name} attacks ${hitUnit.name} -${DAMAGE}`, logStyle,
       );
     }
 
-    // Flash attack state briefly
-    const enemyAttackerId = state.roundQueue[0];
-    const enemyAttackerView = this.unitViews.get(enemyAttackerId);
-    enemyAttackerView?.setSpriteState('attack');
+    const attackerView = this.unitViews.get(unitId);
+    attackerView?.setSpriteState('attack');
     this.time.delayedCall(400, () => {
-      const current = GameState.get().units.get(enemyAttackerId);
-      if (current && current.hp > 0) enemyAttackerView?.setSpriteState('idle');
+      const current = GameState.get().units.get(unitId);
+      if (current && current.hp > 0) attackerView?.setSpriteState('idle');
     });
 
     let next = resolveAttack([target], DAMAGE, state);
 
     const winner = checkGameOver(next);
     if (winner) {
-      next = { ...next, phase: "end" };
+      next = { ...next, phase: 'end' };
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
-      this.time.delayedCall(600, () => this.showGameOver(winner));
+      this.time.delayedCall(Game.DELAY_GAMEOVER, () => {
+        this.destroyAutoBattleButtons();
+        this.showGameOver(winner);
+      });
       return;
     }
 
     next = this.advanceQueue(next);
     GameState.set(next);
     EventBus.emit(Events.STATE_CHANGED, next);
-    this.time.delayedCall(500, () => this.startActiveUnitTurn(next));
+    this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
+  }
+
+  private runQuickBattle(): void {
+    let state = GameState.get();
+    const MAX_ITERATIONS = 2000;
+    let i = 0;
+
+    while (i++ < MAX_ITERATIONS) {
+      const unitId = state.roundQueue[0];
+      if (!unitId) break;
+
+      state = computeOneTurn(state, unitId);
+      state = this.advanceQueue(state);
+
+      const winner = checkGameOver(state);
+      if (winner) {
+        state = { ...state, phase: 'end' };
+        break;
+      }
+    }
+
+    GameState.set(state);
+    EventBus.emit(Events.STATE_CHANGED, state);
+
+    const winner = checkGameOver(state);
+    this.time.delayedCall(200, () => this.showGameOver(winner ?? 'player'));
+  }
+
+  private buildAutoBattleButtons(): void {
+    const btnW = Math.round(110 * LAYOUT_SCALE);
+    const btnH = Math.round(34 * LAYOUT_SCALE);
+    const gap  = Math.round(8 * LAYOUT_SCALE);
+    const y    = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
+    const x1   = btnW / 2 + Math.round(12 * LAYOUT_SCALE);
+    const x2   = x1 + btnW + gap;
+
+    const makeBtn = (x: number, label: string, color: number, cb: () => void) => {
+      const rect = this.add.rectangle(0, 0, btnW, btnH, color)
+        .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), 0xaaaaaa);
+      const txt = this.add.text(0, 0, label, {
+        fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
+        color: '#ffffff',
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+
+      const btn = this.add.container(x, y, [rect, txt]);
+      btn.setSize(btnW, btnH).setInteractive({ useHandCursor: true });
+      btn.on('pointerover', () => rect.setFillStyle(color + 0x111111));
+      btn.on('pointerout',  () => rect.setFillStyle(color));
+      btn.on('pointerup',   cb);
+      return btn;
+    };
+
+    const autoBtn = makeBtn(x1, '▶▶ Auto Battle', 0x2a5a8a, () => {
+      if (GameState.getBattleMode() !== 'manual') return;
+      GameState.setBattleMode('auto');
+      const s = GameState.get();
+      if (s.phase === 'select_target') {
+        const active = s.units.get(s.roundQueue[0]);
+        if (active?.anchor.side === 'player') {
+          const next: BattleState = { ...s, validTargets: [] };
+          GameState.set(next);
+          EventBus.emit(Events.STATE_CHANGED, next);
+          this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
+        }
+      }
+    });
+
+    const quickBtn = makeBtn(x2, '⚡ Quick Battle', 0x5a3a8a, () => {
+      GameState.setBattleMode('quick');
+      this.runQuickBattle();
+    });
+
+    this.autoBattleButtons = [autoBtn, quickBtn];
+  }
+
+  private destroyAutoBattleButtons(): void {
+    for (const btn of this.autoBattleButtons) btn.destroy();
+    this.autoBattleButtons = [];
   }
 
   private advanceQueue(state: BattleState): BattleState {
@@ -1004,6 +1152,7 @@ export class Game extends Phaser.Scene {
   }
 
   private showGameOver(winner: Side): void {
+    this.destroyAutoBattleButtons();
     const w = this.scale.width;
     const h = this.scale.height;
 
