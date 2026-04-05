@@ -1,4 +1,4 @@
-import { CellCoord, OccupancyMap, Unit } from './types';
+import { OccupancyMap, Unit } from './types';
 import { cellKey } from './field';
 import { getOccupiedCells } from './shapes';
 
@@ -15,10 +15,6 @@ export function buildOccupancy(units: Map<string, Unit>): OccupancyMap {
   }
 
   return { cellToUnit, unitToCells };
-}
-
-export function getUnitAtCell(coord: CellCoord, occupancy: OccupancyMap): Unit | null {
-  return occupancy.cellToUnit.get(cellKey(coord)) ?? null;
 }
 
 export function removeUnit(unitId: string, occupancy: OccupancyMap): OccupancyMap {
