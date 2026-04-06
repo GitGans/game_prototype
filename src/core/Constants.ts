@@ -8,8 +8,9 @@ export const CELL_GAP = Math.round(6 * LAYOUT_SCALE);
 export const GRID_COLS = 3;
 export const GRID_ROWS = 2;
 export const SIDE_GAP = Math.round(40 * LAYOUT_SCALE); // horizontal gap between the two grids
-export const BENCH_PANEL_WIDTH = Math.round(90 * LAYOUT_SCALE);
+export const BENCH_PANEL_WIDTH = CELL_SIZE;
 export const BENCH_GAP = Math.round(10 * LAYOUT_SCALE);
+export const BENCH_SLOTS = 3;
 
 export const COLORS = {
   cell: 0x2a3a5a,
@@ -30,6 +31,7 @@ export const COLORS = {
   bench: 0x1a2a3a,
   benchSelected: 0x2a5a1a,
   benchBorder: 0x3a5a7a,
+  benchEmpty: 0x0d1a26,
 };
 
 export const DAMAGE = 10;
