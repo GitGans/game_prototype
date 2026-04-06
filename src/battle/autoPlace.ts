@@ -2,6 +2,7 @@ import { BattleState, CellCoord, Col, Unit, UnitBlueprint, UnitRace } from './ty
 import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
 import { PLAYER_UNITS, PLAYER_STARTING_IDS, ENEMY_UNITS } from '../data/unitDefinitions';
+import { BENCH_SLOTS } from '../core/Constants';
 
 export function createUnitInstance(blueprint: UnitBlueprint, id: string, anchor: CellCoord): Unit {
   return {
@@ -20,6 +21,11 @@ export function createUnitInstance(blueprint: UnitBlueprint, id: string, anchor:
 }
 
 export function blueprintFromUnit(unit: Unit): UnitBlueprint {
+  const allBlueprints = [
+    ...PLAYER_UNITS,
+    ...Object.values(ENEMY_UNITS).flat(),
+  ];
+  const originalBp = allBlueprints.find(b => b.templateId === unit.templateId);
   return {
     templateId: unit.templateId,
     name: unit.name,
@@ -29,6 +35,7 @@ export function blueprintFromUnit(unit: Unit): UnitBlueprint {
     actionType: unit.actionType,
     rowTrait: unit.rowTrait,
     race: unit.race,
+    spriteSheet: originalBp?.spriteSheet,
   };
 }
 
@@ -65,7 +72,9 @@ export function autoPlacePlayer(state: BattleState): BattleState {
     }
   }
 
-  return { ...state, benchUnits: benchDefs };
+  const paddedBench: (UnitBlueprint | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
+  benchDefs.forEach((bp, i) => { if (i < BENCH_SLOTS) paddedBench[i] = bp; });
+  return { ...state, benchUnits: paddedBench };
 }
 
 export function autoPlaceEnemies(state: BattleState): BattleState {

@@ -61,7 +61,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     name: "Cavalry",
     hp: 60,
     initiative: 6,
-    shape: SHAPES["2x1"],
+    shape: SHAPES["1x1"],
     actionType: "melee",
     rowTrait: "front",
   },

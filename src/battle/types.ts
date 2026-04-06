@@ -69,5 +69,5 @@ export interface BattleState {
   roundQueue: string[]; // unit IDs to act this round; [0] = currently acting
   phase: Phase;
   validTargets: CellCoord[];
-  benchUnits: UnitBlueprint[]; // player units waiting on the bench
+  benchUnits: (UnitBlueprint | undefined)[]; // player units waiting on the bench; undefined = empty slot
 }

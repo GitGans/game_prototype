@@ -7,6 +7,7 @@ import {
   SIDE_GAP,
   BENCH_PANEL_WIDTH,
   BENCH_GAP,
+  BENCH_SLOTS,
   COLORS,
   DAMAGE,
   HEAL_AMOUNT,
@@ -319,79 +320,107 @@ export class Game extends Phaser.Scene {
   }
 
   private benchCardHeight(): number {
-    return Math.round(CELL_SIZE * 0.72);
+    return CELL_SIZE;
   }
 
   private benchPanelX(): number {
-    const totalGridW = GRID_ROWS * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-    const leftGridX = this.scale.width / 2 - SIDE_GAP / 2 - totalGridW;
-    return leftGridX - BENCH_GAP - BENCH_PANEL_WIDTH / 2;
+    return BENCH_GAP + BENCH_PANEL_WIDTH / 2;
   }
 
   private buildBenchPanel(): void {
-    // Destroy any existing cards
     for (const card of this.benchCards) card.destroy();
     this.benchCards = [];
 
     const state = GameState.get();
     const cardH = this.benchCardHeight();
     const panelX = this.benchPanelX();
+    const slotGap = CELL_GAP;
 
-    // Vertical centre aligned with the grid
+    // Vertically center 3 slots aligned with the player grid
     const gridTopY = this.cellPixelPos("player", 0, 2).y - CELL_SIZE / 2;
     const gridBottomY = this.cellPixelPos("player", 0, 0).y + CELL_SIZE / 2;
-    const totalH =
-      state.benchUnits.length * cardH +
-      (state.benchUnits.length - 1) * Math.round(4 * LAYOUT_SCALE);
+    const totalH = BENCH_SLOTS * cardH + (BENCH_SLOTS - 1) * slotGap;
     const startY = (gridTopY + gridBottomY) / 2 - totalH / 2 + cardH / 2;
 
-    state.benchUnits.forEach((bp, idx) => {
-      const cardY = startY + idx * (cardH + Math.round(4 * LAYOUT_SCALE));
-      const isSelected = this.selectedBenchIdx === idx;
-      const card = this.makeBenchCard(bp, idx, panelX, cardY, isSelected);
+    for (let i = 0; i < BENCH_SLOTS; i++) {
+      const bp = state.benchUnits[i] ?? null;
+      const cardY = startY + i * (cardH + slotGap);
+      const isSelected = this.selectedBenchIdx === i;
+      const card = this.makeBenchCard(bp, i, panelX, cardY, isSelected);
       this.benchCards.push(card);
-    });
+    }
   }
 
   private makeBenchCard(
-    bp: UnitBlueprint,
+    bp: UnitBlueprint | null,
     idx: number,
     x: number,
     y: number,
     selected: boolean,
   ): Phaser.GameObjects.Container {
     const cardH = this.benchCardHeight();
+
+    // Empty slot — dim placeholder, no interaction
+    if (bp === null) {
+      const rect = this.add
+        .rectangle(0, 0, BENCH_PANEL_WIDTH, cardH, COLORS.benchEmpty, 0.5)
+        .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), COLORS.benchBorder);
+      const container = this.add.container(x, y, [rect]);
+      container.setSize(BENCH_PANEL_WIDTH, cardH);
+      container.setInteractive({ useHandCursor: true });
+      container.on("pointerup", () => this.onBenchCardClick(idx));
+      return container;
+    }
+
+    // Occupied slot
     const fillColor = selected ? COLORS.benchSelected : COLORS.bench;
     const rect = this.add
       .rectangle(0, 0, BENCH_PANEL_WIDTH, cardH, fillColor, 0.9)
       .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), COLORS.benchBorder);
+
+    // Sprite (frame 0 = idle) — only when texture is loaded for this blueprint
+    const spriteKey = `sprite-${bp.templateId}`;
+    const spriteObj =
+      bp.spriteSheet && this.textures.exists(spriteKey)
+        ? this.add
+            .image(0, 0, spriteKey)
+            .setFrame(0)
+            .setDisplaySize(BENCH_PANEL_WIDTH - 2, cardH - 2)
+        : null;
 
     const nameStyle = {
       fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
       color: COLORS.label,
       fontStyle: "bold",
       align: "center",
+      stroke: "#000000",
+      strokeThickness: Math.round(3 * LAYOUT_SCALE),
       wordWrap: { width: BENCH_PANEL_WIDTH - 8 },
     };
     const nameText = this.add
-      .text(0, -Math.round(10 * LAYOUT_SCALE), bp.name, nameStyle)
-      .setOrigin(0.5, 0.5);
+      .text(0, -cardH / 2 + Math.round(10 * LAYOUT_SCALE), bp.name, nameStyle)
+      .setOrigin(0.5, 0);
 
     const statsStyle = {
       fontSize: `${Math.round(10 * LAYOUT_SCALE)}px`,
       color: COLORS.textDark,
       align: "center",
+      stroke: "#000000",
+      strokeThickness: Math.round(2 * LAYOUT_SCALE),
     };
     const statsText = this.add
       .text(
         0,
-        Math.round(8 * LAYOUT_SCALE),
-        `HP:${bp.hp} Инц:${bp.initiative}`,
+        cardH / 2 - Math.round(10 * LAYOUT_SCALE),
+        `HP:${bp.hp}  Init:${bp.initiative}`,
         statsStyle,
       )
-      .setOrigin(0.5, 0.5);
+      .setOrigin(0.5, 1);
 
-    const container = this.add.container(x, y, [rect, nameText, statsText]);
+    const children = spriteObj
+      ? [rect, spriteObj, nameText, statsText]
+      : [rect, nameText, statsText];
+    const container = this.add.container(x, y, children);
     container.setSize(BENCH_PANEL_WIDTH, cardH);
     container.setInteractive({ useHandCursor: true });
     container.on("pointerup", () => this.onBenchCardClick(idx));
@@ -405,8 +434,20 @@ export class Game extends Phaser.Scene {
   }
 
   private onBenchCardClick(idx: number): void {
+    const state = GameState.get();
+
+    // Empty bench slot: if a field unit is selected, move it here
+    if (!state.benchUnits[idx]) {
+      if (this.selectedFieldUnitId !== null) {
+        this.moveFieldUnitToBench(this.selectedFieldUnitId, idx);
+        this.selectedFieldUnitId = null;
+        this.clearPlacementHighlights();
+        this.buildBenchPanel();
+      }
+      return;
+    }
+
     if (this.selectedFieldUnitId !== null) {
-      const state = GameState.get();
       const fieldUnit = [...state.units.values()].find(
         (u) => u.id === this.selectedFieldUnitId,
       );
@@ -546,7 +587,8 @@ export class Game extends Phaser.Scene {
     if (!canPlace(anchor, bp.shape, state, "player")) return;
 
     state = placeUnit(unit, state);
-    const newBench = state.benchUnits.filter((_, i) => i !== benchIdx);
+    const newBench = [...state.benchUnits];
+    newBench[benchIdx] = undefined;
     state = { ...state, benchUnits: newBench };
     GameState.set(state);
 
@@ -646,9 +688,12 @@ export class Game extends Phaser.Scene {
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
     if (!unit) return;
 
+    const newBench = [...state.benchUnits];
+    const emptyIdx = newBench.findIndex(b => b === undefined);
+    if (emptyIdx === -1) return; // bench full — all 3 slots occupied
     const newUnits = new Map(state.units);
     newUnits.delete(unit.id);
-    const newBench = [...state.benchUnits, blueprintFromUnit(unit)];
+    newBench[emptyIdx] = blueprintFromUnit(unit);
     const newState = {
       ...state,
       units: newUnits,
@@ -659,6 +704,28 @@ export class Game extends Phaser.Scene {
 
     this.destroyUnitView(unit.id);
     this.buildBenchPanel();
+  }
+
+  private moveFieldUnitToBench(unitId: string, benchIdx: number): void {
+    const state = GameState.get();
+    const unit = state.units.get(unitId);
+    if (!unit) return;
+    if (!state.benchUnits.some(b => b === undefined)) return; // all slots occupied
+
+    const newUnits = new Map(state.units);
+    newUnits.delete(unit.id);
+
+    const newBench = [...state.benchUnits];
+    newBench[benchIdx] = blueprintFromUnit(unit);
+
+    GameState.set({
+      ...state,
+      units: newUnits,
+      occupancy: buildOccupancy(newUnits),
+      benchUnits: newBench,
+    });
+
+    this.destroyUnitView(unit.id);
   }
 
   // ─── Double Click Detection ────────────────────────────────────────────────
