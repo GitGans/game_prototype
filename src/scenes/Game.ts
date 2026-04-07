@@ -42,6 +42,7 @@ import {
   autoPlaceEnemies,
   createUnitInstance,
   blueprintFromUnit,
+  getPlayerAverageLevel,
 } from "../battle/autoPlace";
 
 /**
@@ -62,7 +63,7 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
       const bestU = state.occupancy.cellToUnit.get(cellKey(best));
       return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp ? coord : best;
     });
-    return resolveHeal([target], HEAL_AMOUNT, state);
+    return resolveHeal([target], unit.healAmount, state);
   }
 
   const targets = unit.actionType === 'ranged'
@@ -72,7 +73,7 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
   if (targets.length === 0) return state;
 
   const target = targets[Math.floor(Math.random() * targets.length)];
-  return resolveAttack([target], DAMAGE, state);
+  return resolveAttack([target], unit.damage, state);
 }
 
 export class Game extends Phaser.Scene {
@@ -201,9 +202,16 @@ export class Game extends Phaser.Scene {
   // ─── Battle Initialisation ─────────────────────────────────────────────────
 
   private initBattle(): void {
+    const data = this.scene.settings.data as { replay?: boolean } | undefined;
+    const isReplay = data?.replay === true;
+
     let state = GameState.get();
     state = autoPlacePlayer(state);
-    state = autoPlaceEnemies(state);
+    state = autoPlaceEnemies(
+      state,
+      getPlayerAverageLevel(state),
+      isReplay ? (GameState.lastEnemyRace ?? undefined) : undefined,
+    );
 
     // Determine the highest player instance counter used so we can continue from there
     this.playerIdCounter = state.units.size; // rough upper bound; refined below
@@ -408,11 +416,13 @@ export class Game extends Phaser.Scene {
       stroke: "#000000",
       strokeThickness: Math.round(2 * LAYOUT_SCALE),
     };
+    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const scaledHp = Math.round(bp.hp * (1 + 0.1 * (level - 1)));
     const statsText = this.add
       .text(
         0,
         cardH / 2 - Math.round(10 * LAYOUT_SCALE),
-        `HP:${bp.hp}  Init:${bp.initiative}`,
+        `HP:${scaledHp}  Init:${bp.initiative}`,
         statsStyle,
       )
       .setOrigin(0.5, 1);
@@ -582,7 +592,8 @@ export class Game extends Phaser.Scene {
   ): void {
     let state = GameState.get();
     const newId = `p${++this.playerIdCounter}`;
-    const unit = createUnitInstance(bp, newId, anchor);
+    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const unit = createUnitInstance(bp, newId, anchor, level);
 
     if (!canPlace(anchor, bp.shape, state, "player")) return;
 
@@ -616,7 +627,8 @@ export class Game extends Phaser.Scene {
     }
 
     const newId = `p${++this.playerIdCounter}`;
-    const newUnit = createUnitInstance(bp, newId, anchor);
+    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const newUnit = createUnitInstance(bp, newId, anchor, level);
     state = placeUnit(newUnit, state);
 
     // Update bench: replace bp at benchIdx with field unit's blueprint
@@ -892,13 +904,13 @@ export class Game extends Phaser.Scene {
       });
       if (targetUnit) {
         const view = this.unitViews.get(targetUnit.id);
-        if (view) this.showFloatingHeal(view.x, view.y, HEAL_AMOUNT);
+        if (view) this.showFloatingHeal(view.x, view.y, activeUnit?.healAmount ?? 0);
         this.battleLog.addEntry(
-          `${activeUnit?.name ?? "?"} heals ${targetUnit.name} +${HEAL_AMOUNT}`,
+          `${activeUnit?.name ?? "?"} heals ${targetUnit.name} +${activeUnit?.healAmount ?? 0}`,
           "positive",
         );
       }
-      let next = resolveHeal([coord], HEAL_AMOUNT, state);
+      let next = resolveHeal([coord], activeUnit?.healAmount ?? 0, state);
       next = this.advanceQueue(next);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
@@ -908,9 +920,9 @@ export class Game extends Phaser.Scene {
 
     if (targetUnit) {
       const view = this.unitViews.get(targetUnit.id);
-      if (view) this.showFloatingDamage(view.x, view.y, DAMAGE);
+      if (view) this.showFloatingDamage(view.x, view.y, activeUnit?.damage ?? 0);
       this.battleLog.addEntry(
-        `${activeUnit?.name ?? "?"} attacks ${targetUnit.name} -${DAMAGE}`,
+        `${activeUnit?.name ?? "?"} attacks ${targetUnit.name} -${activeUnit?.damage ?? 0}`,
         "positive",
       );
     }
@@ -924,7 +936,7 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState('idle');
     });
 
-    let next = resolveAttack([coord], DAMAGE, state);
+    let next = resolveAttack([coord], activeUnit?.damage ?? 0, state);
 
     const winner = checkGameOver(next);
     if (winner) {
@@ -985,13 +997,13 @@ export class Game extends Phaser.Scene {
       const healedUnit = state.occupancy.cellToUnit.get(cellKey(target));
       if (healedUnit) {
         const view = this.unitViews.get(healedUnit.id);
-        if (view) this.showFloatingHeal(view.x, view.y, HEAL_AMOUNT);
+        if (view) this.showFloatingHeal(view.x, view.y, activeUnit.healAmount);
         this.battleLog.addEntry(
-          `${activeUnit.name} heals ${healedUnit.name} +${HEAL_AMOUNT}`, logStyle,
+          `${activeUnit.name} heals ${healedUnit.name} +${activeUnit.healAmount}`, logStyle,
         );
       }
 
-      let next = resolveHeal([target], HEAL_AMOUNT, state);
+      let next = resolveHeal([target], activeUnit.healAmount, state);
       next = this.advanceQueue(next);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
@@ -1018,9 +1030,9 @@ export class Game extends Phaser.Scene {
     const hitUnit = state.occupancy.cellToUnit.get(cellKey(target));
     if (hitUnit) {
       const view = this.unitViews.get(hitUnit.id);
-      if (view) this.showFloatingDamage(view.x, view.y, DAMAGE);
+      if (view) this.showFloatingDamage(view.x, view.y, activeUnit.damage);
       this.battleLog.addEntry(
-        `${activeUnit.name} attacks ${hitUnit.name} -${DAMAGE}`, logStyle,
+        `${activeUnit.name} attacks ${hitUnit.name} -${activeUnit.damage}`, logStyle,
       );
     }
 
@@ -1031,7 +1043,7 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState('idle');
     });
 
-    let next = resolveAttack([target], DAMAGE, state);
+    let next = resolveAttack([target], activeUnit.damage, state);
 
     const winner = checkGameOver(next);
     if (winner) {
@@ -1225,43 +1237,74 @@ export class Game extends Phaser.Scene {
 
     this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.72).setDepth(30);
 
-    const isVictory = winner === "enemy";
-    this.add
-      .text(
-        w / 2,
-        h / 2 - Math.round(60 * LAYOUT_SCALE),
-        isVictory ? "VICTORY!" : "DEFEAT",
-        {
-          fontSize: `${Math.round(52 * LAYOUT_SCALE)}px`,
-          color: isVictory ? "#ffdd44" : "#ff4444",
-          fontStyle: "bold",
-          stroke: "#000000",
-          strokeThickness: Math.round(5 * LAYOUT_SCALE),
-        },
-      )
-      .setOrigin(0.5)
-      .setDepth(31);
+    const isVictory = winner === 'enemy';
+
+    this.add.text(
+      w / 2,
+      h / 2 - Math.round(60 * LAYOUT_SCALE),
+      isVictory ? 'VICTORY!' : 'DEFEAT',
+      {
+        fontSize: `${Math.round(52 * LAYOUT_SCALE)}px`,
+        color: isVictory ? '#ffdd44' : '#ff4444',
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: Math.round(5 * LAYOUT_SCALE),
+      },
+    ).setOrigin(0.5).setDepth(31);
 
     const btnW = Math.round(180 * LAYOUT_SCALE);
     const btnH = Math.round(46 * LAYOUT_SCALE);
     const btnY = h / 2 + Math.round(40 * LAYOUT_SCALE);
+    const fontSize = `${Math.round(18 * LAYOUT_SCALE)}px`;
 
-    const btn = this.add
-      .rectangle(w / 2, btnY, btnW, btnH, 0x2a4a7a)
-      .setDepth(31)
-      .setInteractive({ useHandCursor: true });
+    if (isVictory) {
+      const gap    = Math.round(20 * LAYOUT_SCALE);
+      const leftX  = w / 2 - btnW / 2 - gap / 2;
+      const rightX = w / 2 + btnW / 2 + gap / 2;
 
-    this.add
-      .text(w / 2, btnY, "Play again", {
-        fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-        color: "#ffffff",
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5)
-      .setDepth(32);
+      // Replay button (left) — same enemies, no level-up
+      const replayBtn = this.add.rectangle(leftX, btnY, btnW, btnH, 0x4a4a6a)
+        .setDepth(31).setInteractive({ useHandCursor: true });
+      this.add.text(leftX, btnY, 'Replay', { fontSize, color: '#ffffff', fontStyle: 'bold' })
+        .setOrigin(0.5).setDepth(32);
+      replayBtn.on('pointerover', () => replayBtn.setFillStyle(0x6a6a8a));
+      replayBtn.on('pointerout',  () => replayBtn.setFillStyle(0x4a4a6a));
+      replayBtn.on('pointerup',   () => this.scene.restart({ replay: true }));
 
-    btn.on("pointerover", () => btn.setFillStyle(0x3a6aaa));
-    btn.on("pointerout", () => btn.setFillStyle(0x2a4a7a));
-    btn.on("pointerup", () => this.scene.restart());
+      // Next Battle button (right) — level-up + new random enemies
+      const nextBtn = this.add.rectangle(rightX, btnY, btnW, btnH, 0x2a6a2a)
+        .setDepth(31).setInteractive({ useHandCursor: true });
+      this.add.text(rightX, btnY, 'Next Battle', { fontSize, color: '#ffffff', fontStyle: 'bold' })
+        .setOrigin(0.5).setDepth(32);
+      nextBtn.on('pointerover', () => nextBtn.setFillStyle(0x3a8a3a));
+      nextBtn.on('pointerout',  () => nextBtn.setFillStyle(0x2a6a2a));
+      nextBtn.on('pointerup',   () => {
+        const state = GameState.get();
+        const allBlueprints = [...PLAYER_UNITS, ...Object.values(ENEMY_UNITS).flat()];
+        state.units.forEach(unit => {
+          if (!unit.id.startsWith('p')) return;
+          unit.level += 1;
+          GameState.playerUnitLevels[unit.templateId] = unit.level;
+          const bp = allBlueprints.find(b => b.templateId === unit.templateId);
+          if (!bp) return;
+          const scale = 1 + 0.1 * (unit.level - 1);
+          unit.maxHp      = Math.round(bp.hp * scale);
+          unit.damage     = Math.round(bp.damage * scale);
+          unit.healAmount = Math.round(bp.healAmount * scale);
+        });
+        GameState.set(state);
+        this.scene.restart({ replay: false });
+      });
+
+    } else {
+      // Defeat — single Replay button
+      const replayBtn = this.add.rectangle(w / 2, btnY, btnW, btnH, 0x2a4a7a)
+        .setDepth(31).setInteractive({ useHandCursor: true });
+      this.add.text(w / 2, btnY, 'Replay', { fontSize, color: '#ffffff', fontStyle: 'bold' })
+        .setOrigin(0.5).setDepth(32);
+      replayBtn.on('pointerover', () => replayBtn.setFillStyle(0x3a6aaa));
+      replayBtn.on('pointerout',  () => replayBtn.setFillStyle(0x2a4a7a));
+      replayBtn.on('pointerup',   () => this.scene.restart({ replay: true }));
+    }
   }
 }
