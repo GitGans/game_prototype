@@ -33,6 +33,9 @@ export interface UnitBlueprint {
   templateId: string;
   name: string;
   hp: number;
+  damage: number;
+  healAmount: number;
+  level: number;
   initiative: number;
   shape: UnitShape;
   actionType: 'melee' | 'ranged' | 'heal';
@@ -46,6 +49,9 @@ export interface Unit {
   name: string;
   hp: number;
   maxHp: number;
+  damage: number;
+  healAmount: number;
+  level: number;
   initiative: number;
   shape: UnitShape;
   anchor: CellCoord;

@@ -3,13 +3,31 @@ import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
 import { PLAYER_UNITS, PLAYER_STARTING_IDS, ENEMY_UNITS } from '../data/unitDefinitions';
 import { BENCH_SLOTS } from '../core/Constants';
+import { GameState } from '../core/GameState';
 
-export function createUnitInstance(blueprint: UnitBlueprint, id: string, anchor: CellCoord): Unit {
+export function getPlayerAverageLevel(state: BattleState): number {
+  const playerUnits = [...state.units.values()].filter(u => u.id.startsWith('p'));
+  if (playerUnits.length === 0) return 1;
+  const total = playerUnits.reduce((sum, u) => sum + u.level, 0);
+  return Math.round(total / playerUnits.length);
+}
+
+export function createUnitInstance(
+  blueprint: UnitBlueprint,
+  id: string,
+  anchor: CellCoord,
+  levelOverride?: number,
+): Unit {
+  const level = levelOverride ?? blueprint.level;
+  const scale = 1 + 0.1 * (level - 1);
   return {
     id,
     name: blueprint.name,
-    hp: blueprint.hp,
-    maxHp: blueprint.hp,
+    hp: Math.round(blueprint.hp * scale),
+    maxHp: Math.round(blueprint.hp * scale),
+    damage: Math.round(blueprint.damage * scale),
+    healAmount: Math.round(blueprint.healAmount * scale),
+    level,
     initiative: blueprint.initiative,
     shape: blueprint.shape,
     anchor,
@@ -25,17 +43,10 @@ export function blueprintFromUnit(unit: Unit): UnitBlueprint {
     ...PLAYER_UNITS,
     ...Object.values(ENEMY_UNITS).flat(),
   ];
-  const originalBp = allBlueprints.find(b => b.templateId === unit.templateId);
+  const originalBp = allBlueprints.find(b => b.templateId === unit.templateId)!;
   return {
-    templateId: unit.templateId,
-    name: unit.name,
-    hp: unit.maxHp,
-    initiative: unit.initiative,
-    shape: unit.shape,
-    actionType: unit.actionType,
-    rowTrait: unit.rowTrait,
-    race: unit.race,
-    spriteSheet: originalBp?.spriteSheet,
+    ...originalBp,       // unscaled base stats from static definition
+    level: unit.level,   // preserve current level
   };
 }
 
@@ -56,7 +67,8 @@ export function autoPlacePlayer(state: BattleState): BattleState {
     for (const col of cols) {
       const anchor: CellCoord = { side: 'player', row: 0, col };
       if (canPlace(anchor, def.shape, state, 'player')) {
-        state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor), state);
+        const level = GameState.playerUnitLevels[def.templateId] ?? def.level;
+        state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level), state);
         break;
       }
     }
@@ -66,7 +78,8 @@ export function autoPlacePlayer(state: BattleState): BattleState {
     for (const col of cols) {
       const anchor: CellCoord = { side: 'player', row: 1, col };
       if (canPlace(anchor, def.shape, state, 'player')) {
-        state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor), state);
+        const level = GameState.playerUnitLevels[def.templateId] ?? def.level;
+        state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level), state);
         break;
       }
     }
@@ -77,9 +90,15 @@ export function autoPlacePlayer(state: BattleState): BattleState {
   return { ...state, benchUnits: paddedBench };
 }
 
-export function autoPlaceEnemies(state: BattleState): BattleState {
+export function autoPlaceEnemies(
+  state: BattleState,
+  playerAvgLevel: number = 1,
+  forceRace?: UnitRace,
+): BattleState {
   const races: UnitRace[] = ['orc', 'demon', 'undead'];
-  const race = races[Math.floor(Math.random() * races.length)];
+  const race = forceRace ?? races[Math.floor(Math.random() * races.length)];
+  GameState.lastEnemyRace = race;
+
   const raceUnits = ENEMY_UNITS[race];
 
   const frontPool = raceUnits.filter(d => d.rowTrait === 'front');
@@ -94,7 +113,7 @@ export function autoPlaceEnemies(state: BattleState): BattleState {
     if (state.occupancy.cellToUnit.has(cellKey(anchor))) continue;
     if (frontPool.length === 0) continue;
     const def = frontPool[Math.floor(Math.random() * frontPool.length)];
-    const unit = createUnitInstance(def, `e${counter++}`, anchor);
+    const unit = createUnitInstance(def, `e${counter++}`, anchor, playerAvgLevel);
     if (canPlace(anchor, def.shape, state, 'enemy')) {
       state = placeUnit(unit, state);
     }
@@ -106,7 +125,7 @@ export function autoPlaceEnemies(state: BattleState): BattleState {
     if (state.occupancy.cellToUnit.has(cellKey(anchor))) continue;
     if (backPool.length === 0) continue;
     const def = backPool[Math.floor(Math.random() * backPool.length)];
-    const unit = createUnitInstance(def, `e${counter++}`, anchor);
+    const unit = createUnitInstance(def, `e${counter++}`, anchor, playerAvgLevel);
     if (canPlace(anchor, def.shape, state, 'enemy')) {
       state = placeUnit(unit, state);
     }
