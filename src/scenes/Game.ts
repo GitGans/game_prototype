@@ -27,8 +27,6 @@ import {
   UnitBlueprint,
   SpriteSheetConfig,
 } from "../battle/types";
-import { renderPixelArt } from "../core/PixelRenderer";
-import { UNIT_TEXTURES, GAME_PALETTE } from "../sprites/units";
 import { PLAYER_UNITS, ENEMY_UNITS } from "../data/unitDefinitions";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
@@ -108,11 +106,6 @@ export class Game extends Phaser.Scene {
 
   create(): void {
     GameState.reset();
-
-    // Register pixel art textures (kept for forward compatibility)
-    for (const [key, { pixels, scale }] of Object.entries(UNIT_TEXTURES)) {
-      renderPixelArt(this, pixels, GAME_PALETTE, key, scale);
-    }
 
     this.buildGrid();
     this.initBattle();
