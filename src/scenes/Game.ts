@@ -31,7 +31,11 @@ import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
 import { canPlace, placeUnit } from "../battle/placement";
 import { buildOccupancy } from "../battle/occupancy";
-import { getMeleeTargets, getRangedTargets, getFriendlyTargets } from "../battle/targeting";
+import {
+  getMeleeTargets,
+  getRangedTargets,
+  getFriendlyTargets,
+} from "../battle/targeting";
 import { resolveAttack, resolveHeal, checkGameOver } from "../battle/combat";
 import { resolvePattern, PATTERNS } from "../battle/skillPatterns";
 import { buildRoundQueue, pruneQueue } from "../battle/initiative";
@@ -63,25 +67,33 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
 
   const side = unit.anchor.side;
 
-  if (unit.actionType === 'heal') {
+  if (unit.actionType === "heal") {
     const targets = getFriendlyTargets(side, state.occupancy);
     if (targets.length === 0) return state;
     const target = targets.reduce((best, coord) => {
       const u = state.occupancy.cellToUnit.get(cellKey(coord));
       const bestU = state.occupancy.cellToUnit.get(cellKey(best));
-      return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp ? coord : best;
+      return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp
+        ? coord
+        : best;
     });
     return resolveHeal(getHitCells(unit, target), unit.healAmount, state);
   }
 
-  const targets = unit.actionType === 'ranged'
-    ? getRangedTargets(side, state.occupancy)
-    : getMeleeTargets(unit, state.occupancy);
+  const targets =
+    unit.actionType === "ranged"
+      ? getRangedTargets(side, state.occupancy)
+      : getMeleeTargets(unit, state.occupancy);
 
   if (targets.length === 0) return state;
 
   const target = targets[Math.floor(Math.random() * targets.length)];
-  return resolveAttack(getHitCells(unit, target), unit.damage, unit.skill?.damageType ?? 'physical', state);
+  return resolveAttack(
+    getHitCells(unit, target),
+    unit.damage,
+    unit.skill?.damageType ?? "physical",
+    state,
+  );
 }
 
 export class Game extends Phaser.Scene {
@@ -93,15 +105,18 @@ export class Game extends Phaser.Scene {
 
   // Delays (ms)
   private static readonly DELAY_ENEMY_THINK = 700;
-  private static readonly DELAY_AUTO_THINK  = 200;
-  private static readonly DELAY_NEXT_TURN   = 500;
-  private static readonly DELAY_AUTO_NEXT   = 150;
-  private static readonly DELAY_GAMEOVER    = 600;
+  private static readonly DELAY_AUTO_THINK = 200;
+  private static readonly DELAY_NEXT_TURN = 500;
+  private static readonly DELAY_AUTO_NEXT = 150;
+  private static readonly DELAY_GAMEOVER = 600;
 
   // Placement phase UI
   private benchCards: Phaser.GameObjects.Container[] = [];
   private startBattleBtn: Phaser.GameObjects.Container | null = null;
   private autoBattleButtons: Phaser.GameObjects.Container[] = [];
+  private chargedThisRound = new Set<string>();
+  private manualTurnButtons: Phaser.GameObjects.Container[] = [];
+  private chargeBtn: Phaser.GameObjects.Container | null = null;
   private selectedBenchIdx: number | null = null;
   private selectedFieldUnitId: string | null = null;
   private lastClickCoordKey: string | null = null;
@@ -254,8 +269,18 @@ export class Game extends Phaser.Scene {
     const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
     const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
 
-    const { key: textureKey, config: spriteConfig } = this.getSpriteKeyAndConfig(unit);
-    const view = new UnitView(this, cx, cy, unit, colSpan, rowSpan, textureKey, spriteConfig);
+    const { key: textureKey, config: spriteConfig } =
+      this.getSpriteKeyAndConfig(unit);
+    const view = new UnitView(
+      this,
+      cx,
+      cy,
+      unit,
+      colSpan,
+      rowSpan,
+      textureKey,
+      spriteConfig,
+    );
     this.unitViews.set(unit.id, view);
   }
 
@@ -267,12 +292,15 @@ export class Game extends Phaser.Scene {
     }
   }
 
-  private getSpriteKeyAndConfig(unit: Unit): { key: string | undefined; config: SpriteSheetConfig | undefined } {
+  private getSpriteKeyAndConfig(unit: Unit): {
+    key: string | undefined;
+    config: SpriteSheetConfig | undefined;
+  } {
     const allBlueprints = [
       ...PLAYER_UNITS,
       ...Object.values(ENEMY_UNITS).flat(),
     ];
-    const bp = allBlueprints.find(b => b.templateId === unit.templateId);
+    const bp = allBlueprints.find((b) => b.templateId === unit.templateId);
     if (!bp?.spriteSheet) return { key: undefined, config: undefined };
     return {
       key: `sprite-${unit.templateId}`,
@@ -303,16 +331,12 @@ export class Game extends Phaser.Scene {
       .setOrigin(0.5);
 
     const totalGridW = GRID_ROWS * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-    const rightGridRightEdge =
-      this.scale.width / 2 + SIDE_GAP / 2 + totalGridW;
+    const rightGridRightEdge = this.scale.width / 2 + SIDE_GAP / 2 + totalGridW;
     const logGap = Math.round(10 * LAYOUT_SCALE);
     const logX = rightGridRightEdge + logGap;
     const logY = this.cellPixelPos("enemy", 0, 2).y - CELL_SIZE / 2;
     const logW = this.scale.width - logX - logGap;
-    const logH =
-      this.cellPixelPos("enemy", 0, 0).y +
-      CELL_SIZE / 2 -
-      logY;
+    const logH = this.cellPixelPos("enemy", 0, 0).y + CELL_SIZE / 2 - logY;
     this.battleLog = new BattleLog(this, logX, logY, logW, logH);
     this.battleLog.setVisible(false);
   }
@@ -704,7 +728,7 @@ export class Game extends Phaser.Scene {
     if (!unit) return;
 
     const newBench = [...state.benchUnits];
-    const emptyIdx = newBench.findIndex(b => b === undefined);
+    const emptyIdx = newBench.findIndex((b) => b === undefined);
     if (emptyIdx === -1) return; // bench full — all 3 slots occupied
     const newUnits = new Map(state.units);
     newUnits.delete(unit.id);
@@ -725,7 +749,7 @@ export class Game extends Phaser.Scene {
     const state = GameState.get();
     const unit = state.units.get(unitId);
     if (!unit) return;
-    if (!state.benchUnits.some(b => b === undefined)) return; // all slots occupied
+    if (!state.benchUnits.some((b) => b === undefined)) return; // all slots occupied
 
     const newUnits = new Map(state.units);
     newUnits.delete(unit.id);
@@ -809,6 +833,7 @@ export class Game extends Phaser.Scene {
     EventBus.emit(Events.STATE_CHANGED, state);
     this.setStatus("");
     this.battleLog.setVisible(true);
+    this.chargedThisRound.clear();
     this.buildAutoBattleButtons();
     this.startActiveUnitTurn(state);
   }
@@ -816,7 +841,7 @@ export class Game extends Phaser.Scene {
   // ─── Turn Flow ─────────────────────────────────────────────────────────────
 
   private startActiveUnitTurn(state: BattleState): void {
-    if (GameState.get().phase === 'end') return;
+    if (GameState.get().phase === "end") return;
     const activeId = state.roundQueue[0];
     if (!activeId) return;
 
@@ -829,12 +854,17 @@ export class Game extends Phaser.Scene {
     }
 
     const mode = GameState.getBattleMode();
+    this.updateManualButtons(state);
 
     if (activeUnit.anchor.side === "player") {
       // Auto / quick mode — player units act automatically
-      if (mode === 'auto') {
+      if (mode === "auto") {
         this.setStatus(`${activeUnit.name} turn… (auto)`);
-        const next: BattleState = { ...state, phase: 'select_target', validTargets: [] };
+        const next: BattleState = {
+          ...state,
+          phase: "select_target",
+          validTargets: [],
+        };
         GameState.set(next);
         EventBus.emit(Events.STATE_CHANGED, next);
         this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
@@ -852,11 +882,16 @@ export class Game extends Phaser.Scene {
 
       // Back-row melee blocked by own front row — auto-skip
       if (validTargets.length === 0 && activeUnit.actionType === "melee") {
-        this.battleLog.addEntry(`${activeUnit.name} — blocked, skipping turn`, "neutral");
+        this.battleLog.addEntry(
+          `${activeUnit.name} — blocked, skipping turn`,
+          "neutral",
+        );
         const next = this.advanceQueue(state);
         GameState.set(next);
         EventBus.emit(Events.STATE_CHANGED, next);
-        this.time.delayedCall(Game.DELAY_NEXT_TURN, () => this.startActiveUnitTurn(next));
+        this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
+          this.startActiveUnitTurn(next),
+        );
         return;
       }
 
@@ -882,7 +917,7 @@ export class Game extends Phaser.Scene {
       EventBus.emit(Events.STATE_CHANGED, next);
       this.setStatus(`${activeUnit.name} turn…`);
       this.time.delayedCall(
-        mode === 'auto' ? Game.DELAY_AUTO_THINK : Game.DELAY_ENEMY_THINK,
+        mode === "auto" ? Game.DELAY_AUTO_THINK : Game.DELAY_ENEMY_THINK,
         () => this.autoTurn(),
       );
     }
@@ -900,30 +935,40 @@ export class Game extends Phaser.Scene {
 
     if (activeUnit?.actionType === "heal") {
       const healerView = this.unitViews.get(state.roundQueue[0]);
-      healerView?.setSpriteState('attack');
+      healerView?.setSpriteState("attack");
       this.time.delayedCall(400, () => {
         const current = GameState.get().units.get(state.roundQueue[0]);
-        if (current && current.hp > 0) healerView?.setSpriteState('idle');
+        if (current && current.hp > 0) healerView?.setSpriteState("idle");
       });
       if (targetUnit) {
         const view = this.unitViews.get(targetUnit.id);
-        if (view) this.showFloatingHeal(view.x, view.y, activeUnit?.healAmount ?? 0);
+        if (view)
+          this.showFloatingHeal(view.x, view.y, activeUnit?.healAmount ?? 0);
         this.battleLog.addEntry(
           `${activeUnit?.name ?? "?"} heals ${targetUnit.name} +${activeUnit?.healAmount ?? 0}`,
           "positive",
         );
       }
-      let next = resolveHeal(activeUnit ? getHitCells(activeUnit, coord) : [{ coord, multiplier: 1.0 }], activeUnit?.healAmount ?? 0, state);
+      let next = resolveHeal(
+        activeUnit
+          ? getHitCells(activeUnit, coord)
+          : [{ coord, multiplier: 1.0 }],
+        activeUnit?.healAmount ?? 0,
+        state,
+      );
       next = this.advanceQueue(next);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
-      this.time.delayedCall(Game.DELAY_NEXT_TURN, () => this.startActiveUnitTurn(next));
+      this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
+        this.startActiveUnitTurn(next),
+      );
       return;
     }
 
     if (targetUnit) {
       const view = this.unitViews.get(targetUnit.id);
-      if (view) this.showFloatingDamage(view.x, view.y, activeUnit?.damage ?? 0);
+      if (view)
+        this.showFloatingDamage(view.x, view.y, activeUnit?.damage ?? 0);
       this.battleLog.addEntry(
         `${activeUnit?.name ?? "?"} attacks ${targetUnit.name} -${activeUnit?.damage ?? 0}`,
         "positive",
@@ -933,32 +978,43 @@ export class Game extends Phaser.Scene {
     // Flash attack state briefly
     const attackerId = state.roundQueue[0];
     const attackerView = this.unitViews.get(attackerId);
-    attackerView?.setSpriteState('attack');
+    attackerView?.setSpriteState("attack");
     this.time.delayedCall(400, () => {
       const current = GameState.get().units.get(attackerId);
-      if (current && current.hp > 0) attackerView?.setSpriteState('idle');
+      if (current && current.hp > 0) attackerView?.setSpriteState("idle");
     });
 
-    let next = resolveAttack(activeUnit ? getHitCells(activeUnit, coord) : [{ coord, multiplier: 1.0 }], activeUnit?.damage ?? 0, activeUnit?.skill?.damageType ?? 'physical', state);
+    let next = resolveAttack(
+      activeUnit
+        ? getHitCells(activeUnit, coord)
+        : [{ coord, multiplier: 1.0 }],
+      activeUnit?.damage ?? 0,
+      activeUnit?.skill?.damageType ?? "physical",
+      state,
+    );
 
     const winner = checkGameOver(next);
     if (winner) {
       next = { ...next, phase: "end" };
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
-      this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
+      this.time.delayedCall(Game.DELAY_GAMEOVER, () =>
+        this.showGameOver(winner),
+      );
       return;
     }
 
     next = this.advanceQueue(next);
     GameState.set(next);
     EventBus.emit(Events.STATE_CHANGED, next);
-    this.time.delayedCall(Game.DELAY_NEXT_TURN, () => this.startActiveUnitTurn(next));
+    this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
+      this.startActiveUnitTurn(next),
+    );
   }
 
   private autoTurn(): void {
     const state = GameState.get();
-    if (state.phase === 'end') return;
+    if (state.phase === "end") return;
 
     const unitId = state.roundQueue[0];
     const activeUnit = state.units.get(unitId);
@@ -969,20 +1025,23 @@ export class Game extends Phaser.Scene {
       return;
     }
 
-    const isPlayer = activeUnit.anchor.side === 'player';
-    const logStyle = isPlayer ? 'positive' : 'negative';
+    const isPlayer = activeUnit.anchor.side === "player";
+    const logStyle = isPlayer ? "positive" : "negative";
     const nextDelay = Game.DELAY_AUTO_NEXT;
 
     // ── Heal ────────────────────────────────────────────────────────────────
-    if (activeUnit.actionType === 'heal') {
+    if (activeUnit.actionType === "heal") {
       const healerView = this.unitViews.get(unitId);
-      healerView?.setSpriteState('attack');
+      healerView?.setSpriteState("attack");
       this.time.delayedCall(400, () => {
         const current = GameState.get().units.get(unitId);
-        if (current && current.hp > 0) healerView?.setSpriteState('idle');
+        if (current && current.hp > 0) healerView?.setSpriteState("idle");
       });
 
-      const healTargets = getFriendlyTargets(activeUnit.anchor.side, state.occupancy);
+      const healTargets = getFriendlyTargets(
+        activeUnit.anchor.side,
+        state.occupancy,
+      );
       if (healTargets.length === 0) {
         const next = this.advanceQueue(state);
         GameState.set(next);
@@ -994,7 +1053,9 @@ export class Game extends Phaser.Scene {
       const target = healTargets.reduce((best, coord) => {
         const u = state.occupancy.cellToUnit.get(cellKey(coord));
         const bestU = state.occupancy.cellToUnit.get(cellKey(best));
-        return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp ? coord : best;
+        return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp
+          ? coord
+          : best;
       });
 
       const healedUnit = state.occupancy.cellToUnit.get(cellKey(target));
@@ -1002,11 +1063,16 @@ export class Game extends Phaser.Scene {
         const view = this.unitViews.get(healedUnit.id);
         if (view) this.showFloatingHeal(view.x, view.y, activeUnit.healAmount);
         this.battleLog.addEntry(
-          `${activeUnit.name} heals ${healedUnit.name} +${activeUnit.healAmount}`, logStyle,
+          `${activeUnit.name} heals ${healedUnit.name} +${activeUnit.healAmount}`,
+          logStyle,
         );
       }
 
-      let next = resolveHeal(getHitCells(activeUnit, target), activeUnit.healAmount, state);
+      let next = resolveHeal(
+        getHitCells(activeUnit, target),
+        activeUnit.healAmount,
+        state,
+      );
       next = this.advanceQueue(next);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
@@ -1015,13 +1081,17 @@ export class Game extends Phaser.Scene {
     }
 
     // ── Attack ───────────────────────────────────────────────────────────────
-    const targets = activeUnit.actionType === 'ranged'
-      ? getRangedTargets(activeUnit.anchor.side, state.occupancy)
-      : getMeleeTargets(activeUnit, state.occupancy);
+    const targets =
+      activeUnit.actionType === "ranged"
+        ? getRangedTargets(activeUnit.anchor.side, state.occupancy)
+        : getMeleeTargets(activeUnit, state.occupancy);
 
     if (targets.length === 0) {
-      if (activeUnit.actionType === 'melee')
-        this.battleLog.addEntry(`${activeUnit.name} — blocked, skipping turn`, 'neutral');
+      if (activeUnit.actionType === "melee")
+        this.battleLog.addEntry(
+          `${activeUnit.name} — blocked, skipping turn`,
+          "neutral",
+        );
       const next = this.advanceQueue(state);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
@@ -1035,22 +1105,28 @@ export class Game extends Phaser.Scene {
       const view = this.unitViews.get(hitUnit.id);
       if (view) this.showFloatingDamage(view.x, view.y, activeUnit.damage);
       this.battleLog.addEntry(
-        `${activeUnit.name} attacks ${hitUnit.name} -${activeUnit.damage}`, logStyle,
+        `${activeUnit.name} attacks ${hitUnit.name} -${activeUnit.damage}`,
+        logStyle,
       );
     }
 
     const attackerView = this.unitViews.get(unitId);
-    attackerView?.setSpriteState('attack');
+    attackerView?.setSpriteState("attack");
     this.time.delayedCall(400, () => {
       const current = GameState.get().units.get(unitId);
-      if (current && current.hp > 0) attackerView?.setSpriteState('idle');
+      if (current && current.hp > 0) attackerView?.setSpriteState("idle");
     });
 
-    let next = resolveAttack(getHitCells(activeUnit, target), activeUnit.damage, activeUnit.skill?.damageType ?? 'physical', state);
+    let next = resolveAttack(
+      getHitCells(activeUnit, target),
+      activeUnit.damage,
+      activeUnit.skill?.damageType ?? "physical",
+      state,
+    );
 
     const winner = checkGameOver(next);
     if (winner) {
-      next = { ...next, phase: 'end' };
+      next = { ...next, phase: "end" };
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
       this.time.delayedCall(Game.DELAY_GAMEOVER, () => {
@@ -1080,7 +1156,7 @@ export class Game extends Phaser.Scene {
 
       const winner = checkGameOver(state);
       if (winner) {
-        state = { ...state, phase: 'end' };
+        state = { ...state, phase: "end" };
         break;
       }
     }
@@ -1089,41 +1165,50 @@ export class Game extends Phaser.Scene {
     EventBus.emit(Events.STATE_CHANGED, state);
 
     const winner = checkGameOver(state);
-    this.time.delayedCall(200, () => this.showGameOver(winner ?? 'player'));
+    this.time.delayedCall(200, () => this.showGameOver(winner ?? "player"));
   }
 
   private buildAutoBattleButtons(): void {
     const btnW = Math.round(110 * LAYOUT_SCALE);
     const btnH = Math.round(34 * LAYOUT_SCALE);
-    const gap  = Math.round(8 * LAYOUT_SCALE);
-    const y    = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
-    const x1   = btnW / 2 + Math.round(12 * LAYOUT_SCALE);
-    const x2   = x1 + btnW + gap;
+    const gap = Math.round(8 * LAYOUT_SCALE);
+    const y = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
+    const x1 = btnW / 2 + Math.round(12 * LAYOUT_SCALE);
+    const x2 = x1 + btnW + gap;
 
-    const makeBtn = (x: number, label: string, color: number, cb: () => void) => {
-      const rect = this.add.rectangle(0, 0, btnW, btnH, color)
+    const makeBtn = (
+      x: number,
+      label: string,
+      color: number,
+      cb: () => void,
+    ) => {
+      const rect = this.add
+        .rectangle(0, 0, btnW, btnH, color)
         .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), 0xaaaaaa);
-      const txt = this.add.text(0, 0, label, {
-        fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
-        color: '#ffffff',
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
+      const txt = this.add
+        .text(0, 0, label, {
+          fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
+          color: "#ffffff",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5);
 
       const btn = this.add.container(x, y, [rect, txt]);
       btn.setSize(btnW, btnH).setInteractive({ useHandCursor: true });
-      btn.on('pointerover', () => rect.setFillStyle(color + 0x111111));
-      btn.on('pointerout',  () => rect.setFillStyle(color));
-      btn.on('pointerup',   cb);
+      btn.on("pointerover", () => rect.setFillStyle(color + 0x111111));
+      btn.on("pointerout", () => rect.setFillStyle(color));
+      btn.on("pointerup", cb);
       return btn;
     };
 
-    const autoBtn = makeBtn(x1, '▶▶ Auto Battle', 0x2a5a8a, () => {
-      if (GameState.getBattleMode() !== 'manual') return;
-      GameState.setBattleMode('auto');
+    const autoBtn = makeBtn(x1, "▶▶ Auto Battle", 0x2a5a8a, () => {
+      if (GameState.getBattleMode() !== "manual") return;
+      GameState.setBattleMode("auto");
+      this.updateManualButtons(GameState.get());
       const s = GameState.get();
-      if (s.phase === 'select_target') {
+      if (s.phase === "select_target") {
         const active = s.units.get(s.roundQueue[0]);
-        if (active?.anchor.side === 'player') {
+        if (active?.anchor.side === "player") {
           const next: BattleState = { ...s, validTargets: [] };
           GameState.set(next);
           EventBus.emit(Events.STATE_CHANGED, next);
@@ -1132,25 +1217,147 @@ export class Game extends Phaser.Scene {
       }
     });
 
-    const quickBtn = makeBtn(x2, '⚡ Quick Battle', 0x5a3a8a, () => {
-      GameState.setBattleMode('quick');
+    const quickBtn = makeBtn(x2, "⚡ Quick Battle", 0x5a3a8a, () => {
+      GameState.setBattleMode("quick");
       this.runQuickBattle();
     });
 
     this.autoBattleButtons = [autoBtn, quickBtn];
+    this.buildManualTurnButtons();
   }
 
   private destroyAutoBattleButtons(): void {
     for (const btn of this.autoBattleButtons) btn.destroy();
     this.autoBattleButtons = [];
+    for (const btn of this.manualTurnButtons) btn.destroy();
+    this.manualTurnButtons = [];
+    this.chargeBtn = null;
   }
 
   private advanceQueue(state: BattleState): BattleState {
     let remaining = state.roundQueue.slice(1);
     remaining = pruneQueue(remaining, state.units);
+    if (remaining.length === 0) {
+      this.chargedThisRound.clear();
+    }
     const queue =
       remaining.length > 0 ? remaining : buildRoundQueue(state.units);
     return { ...state, roundQueue: queue, validTargets: [] };
+  }
+
+  private handleSkipTurn(): void {
+    const state = GameState.get();
+    const activeUnit = state.units.get(state.roundQueue[0]);
+    if (!activeUnit) return;
+    this.battleLog.addEntry(`${activeUnit.name} skips their turn`, "neutral");
+    const next = this.advanceQueue(state);
+    GameState.set(next);
+    EventBus.emit(Events.STATE_CHANGED, next);
+    this.updateManualButtons(next);
+    this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
+      this.startActiveUnitTurn(next),
+    );
+  }
+
+  private handleChargeTurn(): void {
+    const state = GameState.get();
+    const activeId = state.roundQueue[0];
+    const activeUnit = state.units.get(activeId);
+    if (!activeUnit || this.chargedThisRound.has(activeId)) return;
+
+    this.chargedThisRound.add(activeId);
+
+    let remaining = state.roundQueue.slice(1);
+    remaining = pruneQueue(remaining, state.units);
+
+    let newQueue: string[];
+    if (remaining.length === 0) {
+      // Edge case: unit was already last in the round.
+      // Move it to the end of the NEXT round's queue.
+      newQueue = buildRoundQueue(state.units).filter((id) => id !== activeId);
+      newQueue.push(activeId);
+    } else {
+      // Standard case: append the active unit at the end of remaining queue.
+      newQueue = [...remaining, activeId];
+    }
+
+    this.battleLog.addEntry(
+      `${activeUnit.name} charges their turn (acts last this round)`,
+      "neutral",
+    );
+    const next: BattleState = {
+      ...state,
+      roundQueue: newQueue,
+      validTargets: [],
+    };
+    GameState.set(next);
+    EventBus.emit(Events.STATE_CHANGED, next);
+    this.updateManualButtons(next);
+    this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
+      this.startActiveUnitTurn(next),
+    );
+  }
+
+  private updateManualButtons(state: BattleState): void {
+    if (this.manualTurnButtons.length === 0) return;
+    const mode = GameState.getBattleMode();
+    const activeUnit = state.units.get(state.roundQueue[0]);
+    const show = mode === "manual" && activeUnit?.anchor.side === "player";
+    for (const btn of this.manualTurnButtons) btn.setVisible(show);
+    if (show && this.chargeBtn) {
+      const used = this.chargedThisRound.has(state.roundQueue[0]);
+      this.chargeBtn.setAlpha(used ? 0.4 : 1.0);
+      if (used) this.chargeBtn.disableInteractive();
+      else this.chargeBtn.setInteractive({ useHandCursor: true });
+    }
+  }
+
+  private buildManualTurnButtons(): void {
+    const btnW = Math.round(110 * LAYOUT_SCALE);
+    const btnH = Math.round(34 * LAYOUT_SCALE);
+    const gap = Math.round(8 * LAYOUT_SCALE);
+    const y = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
+    const xSkip = this.scale.width - btnW / 2 - Math.round(12 * LAYOUT_SCALE);
+    const xCharge = xSkip - btnW - gap;
+
+    const makeBtn = (
+      x: number,
+      label: string,
+      color: number,
+      cb: () => void,
+    ) => {
+      const rect = this.add
+        .rectangle(0, 0, btnW, btnH, color)
+        .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), 0xaaaaaa);
+      const txt = this.add
+        .text(0, 0, label, {
+          fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
+          color: "#ffffff",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5);
+      const btn = this.add.container(x, y, [rect, txt]);
+      btn.setSize(btnW, btnH).setInteractive({ useHandCursor: true });
+      btn.on("pointerover", () => rect.setFillStyle(color + 0x111111));
+      btn.on("pointerout", () => rect.setFillStyle(color));
+      btn.on("pointerup", cb);
+      return { btn, rect };
+    };
+
+    const { btn: skipBtn } = makeBtn(xSkip, "Skip Turn", 0x5a5a2a, () => {
+      if (GameState.getBattleMode() !== "manual") return;
+      this.handleSkipTurn();
+    });
+
+    const { btn: chargeBtn } = makeBtn(xCharge, "Wait", 0x2a5a3a, () => {
+      if (GameState.getBattleMode() !== "manual") return;
+      this.handleChargeTurn();
+    });
+
+    this.chargeBtn = chargeBtn;
+    this.manualTurnButtons = [skipBtn, chargeBtn];
+
+    for (const b of this.manualTurnButtons) b.setVisible(false);
   }
 
   // ─── State Refresh ─────────────────────────────────────────────────────────
@@ -1240,20 +1447,23 @@ export class Game extends Phaser.Scene {
 
     this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.72).setDepth(30);
 
-    const isVictory = winner === 'enemy';
+    const isVictory = winner === "enemy";
 
-    this.add.text(
-      w / 2,
-      h / 2 - Math.round(60 * LAYOUT_SCALE),
-      isVictory ? 'VICTORY!' : 'DEFEAT',
-      {
-        fontSize: `${Math.round(52 * LAYOUT_SCALE)}px`,
-        color: isVictory ? '#ffdd44' : '#ff4444',
-        fontStyle: 'bold',
-        stroke: '#000000',
-        strokeThickness: Math.round(5 * LAYOUT_SCALE),
-      },
-    ).setOrigin(0.5).setDepth(31);
+    this.add
+      .text(
+        w / 2,
+        h / 2 - Math.round(60 * LAYOUT_SCALE),
+        isVictory ? "VICTORY!" : "DEFEAT",
+        {
+          fontSize: `${Math.round(52 * LAYOUT_SCALE)}px`,
+          color: isVictory ? "#ffdd44" : "#ff4444",
+          fontStyle: "bold",
+          stroke: "#000000",
+          strokeThickness: Math.round(5 * LAYOUT_SCALE),
+        },
+      )
+      .setOrigin(0.5)
+      .setDepth(31);
 
     const btnW = Math.round(180 * LAYOUT_SCALE);
     const btnH = Math.round(46 * LAYOUT_SCALE);
@@ -1261,53 +1471,81 @@ export class Game extends Phaser.Scene {
     const fontSize = `${Math.round(18 * LAYOUT_SCALE)}px`;
 
     if (isVictory) {
-      const gap    = Math.round(20 * LAYOUT_SCALE);
-      const leftX  = w / 2 - btnW / 2 - gap / 2;
+      const gap = Math.round(20 * LAYOUT_SCALE);
+      const leftX = w / 2 - btnW / 2 - gap / 2;
       const rightX = w / 2 + btnW / 2 + gap / 2;
 
       // Replay button (left) — same enemies, no level-up
-      const replayBtn = this.add.rectangle(leftX, btnY, btnW, btnH, 0x4a4a6a)
-        .setDepth(31).setInteractive({ useHandCursor: true });
-      this.add.text(leftX, btnY, 'Replay', { fontSize, color: '#ffffff', fontStyle: 'bold' })
-        .setOrigin(0.5).setDepth(32);
-      replayBtn.on('pointerover', () => replayBtn.setFillStyle(0x6a6a8a));
-      replayBtn.on('pointerout',  () => replayBtn.setFillStyle(0x4a4a6a));
-      replayBtn.on('pointerup',   () => this.scene.restart({ replay: true }));
+      const replayBtn = this.add
+        .rectangle(leftX, btnY, btnW, btnH, 0x4a4a6a)
+        .setDepth(31)
+        .setInteractive({ useHandCursor: true });
+      this.add
+        .text(leftX, btnY, "Replay", {
+          fontSize,
+          color: "#ffffff",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+        .setDepth(32);
+      replayBtn.on("pointerover", () => replayBtn.setFillStyle(0x6a6a8a));
+      replayBtn.on("pointerout", () => replayBtn.setFillStyle(0x4a4a6a));
+      replayBtn.on("pointerup", () => this.scene.restart({ replay: true }));
 
       // Next Battle button (right) — level-up + new random enemies
-      const nextBtn = this.add.rectangle(rightX, btnY, btnW, btnH, 0x2a6a2a)
-        .setDepth(31).setInteractive({ useHandCursor: true });
-      this.add.text(rightX, btnY, 'Next Battle', { fontSize, color: '#ffffff', fontStyle: 'bold' })
-        .setOrigin(0.5).setDepth(32);
-      nextBtn.on('pointerover', () => nextBtn.setFillStyle(0x3a8a3a));
-      nextBtn.on('pointerout',  () => nextBtn.setFillStyle(0x2a6a2a));
-      nextBtn.on('pointerup',   () => {
+      const nextBtn = this.add
+        .rectangle(rightX, btnY, btnW, btnH, 0x2a6a2a)
+        .setDepth(31)
+        .setInteractive({ useHandCursor: true });
+      this.add
+        .text(rightX, btnY, "Next Battle", {
+          fontSize,
+          color: "#ffffff",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+        .setDepth(32);
+      nextBtn.on("pointerover", () => nextBtn.setFillStyle(0x3a8a3a));
+      nextBtn.on("pointerout", () => nextBtn.setFillStyle(0x2a6a2a));
+      nextBtn.on("pointerup", () => {
         const state = GameState.get();
-        const allBlueprints = [...PLAYER_UNITS, ...Object.values(ENEMY_UNITS).flat()];
-        state.units.forEach(unit => {
-          if (!unit.id.startsWith('p')) return;
+        const allBlueprints = [
+          ...PLAYER_UNITS,
+          ...Object.values(ENEMY_UNITS).flat(),
+        ];
+        state.units.forEach((unit) => {
+          if (!unit.id.startsWith("p")) return;
           unit.level += 1;
           GameState.playerUnitLevels[unit.templateId] = unit.level;
-          const bp = allBlueprints.find(b => b.templateId === unit.templateId);
+          const bp = allBlueprints.find(
+            (b) => b.templateId === unit.templateId,
+          );
           if (!bp) return;
           const scale = 1 + 0.1 * (unit.level - 1);
-          unit.maxHp      = Math.round(bp.hp * scale);
-          unit.damage     = Math.round(bp.damage * scale);
+          unit.maxHp = Math.round(bp.hp * scale);
+          unit.damage = Math.round(bp.damage * scale);
           unit.healAmount = Math.round(bp.healAmount * scale);
         });
         GameState.set(state);
         this.scene.restart({ replay: false });
       });
-
     } else {
       // Defeat — single Replay button
-      const replayBtn = this.add.rectangle(w / 2, btnY, btnW, btnH, 0x2a4a7a)
-        .setDepth(31).setInteractive({ useHandCursor: true });
-      this.add.text(w / 2, btnY, 'Replay', { fontSize, color: '#ffffff', fontStyle: 'bold' })
-        .setOrigin(0.5).setDepth(32);
-      replayBtn.on('pointerover', () => replayBtn.setFillStyle(0x3a6aaa));
-      replayBtn.on('pointerout',  () => replayBtn.setFillStyle(0x2a4a7a));
-      replayBtn.on('pointerup',   () => this.scene.restart({ replay: true }));
+      const replayBtn = this.add
+        .rectangle(w / 2, btnY, btnW, btnH, 0x2a4a7a)
+        .setDepth(31)
+        .setInteractive({ useHandCursor: true });
+      this.add
+        .text(w / 2, btnY, "Replay", {
+          fontSize,
+          color: "#ffffff",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+        .setDepth(32);
+      replayBtn.on("pointerover", () => replayBtn.setFillStyle(0x3a6aaa));
+      replayBtn.on("pointerout", () => replayBtn.setFillStyle(0x2a4a7a));
+      replayBtn.on("pointerup", () => this.scene.restart({ replay: true }));
     }
   }
 }
