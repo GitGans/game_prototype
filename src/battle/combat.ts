@@ -11,7 +11,7 @@ import { buildOccupancy, removeUnit } from './occupancy';
 export function resolveAttack(
   hitCells: ResolvedHitCell[],
   baseDamage: number,
-  _damageType: DamageType,
+  damageType: DamageType,
   state: BattleState,
 ): BattleState {
   const hitUnits = new Map<string, { unit: Unit; damage: number }>();
@@ -19,7 +19,10 @@ export function resolveAttack(
   for (const { coord, multiplier } of hitCells) {
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
     if (!unit) continue;
-    const dmg = Math.round(baseDamage * multiplier);
+    const defense = damageType === 'physical' ? unit.physicalDefense : unit.magicalDefense;
+    // min base damage = 10 (before pattern multiplier)
+    const effectiveBase = Math.max(10, Math.round(baseDamage * (1 - defense / 100)));
+    const dmg = Math.round(effectiveBase * multiplier);
     const existing = hitUnits.get(unit.id);
     if (!existing || dmg > existing.damage) {
       hitUnits.set(unit.id, { unit, damage: dmg });
