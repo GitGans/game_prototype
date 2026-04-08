@@ -362,7 +362,7 @@ export class Game extends Phaser.Scene {
     return BENCH_GAP + BENCH_PANEL_WIDTH / 2;
   }
 
-  private buildBenchPanel(): void {
+  private buildBenchPanel(interactive = true): void {
     for (const card of this.benchCards) card.destroy();
     this.benchCards = [];
 
@@ -381,7 +381,7 @@ export class Game extends Phaser.Scene {
       const bp = state.benchUnits[i] ?? null;
       const cardY = startY + i * (cardH + slotGap);
       const isSelected = this.selectedBenchIdx === i;
-      const card = this.makeBenchCard(bp, i, panelX, cardY, isSelected);
+      const card = this.makeBenchCard(bp, i, panelX, cardY, isSelected, interactive);
       this.benchCards.push(card);
     }
   }
@@ -392,6 +392,7 @@ export class Game extends Phaser.Scene {
     x: number,
     y: number,
     selected: boolean,
+    interactive = true,
   ): Phaser.GameObjects.Container {
     const cardH = this.benchCardHeight();
 
@@ -402,8 +403,10 @@ export class Game extends Phaser.Scene {
         .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), COLORS.benchBorder);
       const container = this.add.container(x, y, [rect]);
       container.setSize(BENCH_PANEL_WIDTH, cardH);
-      container.setInteractive({ useHandCursor: true });
-      container.on("pointerup", () => this.onBenchCardClick(idx));
+      if (interactive) {
+        container.setInteractive({ useHandCursor: true });
+        container.on("pointerup", () => this.onBenchCardClick(idx));
+      }
       return container;
     }
 
@@ -459,14 +462,18 @@ export class Game extends Phaser.Scene {
       : [rect, nameText, statsText];
     const container = this.add.container(x, y, children);
     container.setSize(BENCH_PANEL_WIDTH, cardH);
-    container.setInteractive({ useHandCursor: true });
-    container.on("pointerup", () => this.onBenchCardClick(idx));
-    container.on("pointerover", () => {
-      if (this.selectedBenchIdx !== idx) rect.setFillStyle(0x2a3a4a, 0.9);
-    });
-    container.on("pointerout", () => {
-      if (this.selectedBenchIdx !== idx) rect.setFillStyle(fillColor, 0.9);
-    });
+    if (interactive) {
+      container.setInteractive({ useHandCursor: true });
+      container.on("pointerup", () => this.onBenchCardClick(idx));
+      container.on("pointerover", () => {
+        if (this.selectedBenchIdx !== idx) rect.setFillStyle(0x2a3a4a, 0.9);
+      });
+      container.on("pointerout", () => {
+        if (this.selectedBenchIdx !== idx) rect.setFillStyle(fillColor, 0.9);
+      });
+    } else {
+      container.setAlpha(0.6);
+    }
     return container;
   }
 
@@ -815,9 +822,8 @@ export class Game extends Phaser.Scene {
   // ─── Start Battle ──────────────────────────────────────────────────────────
 
   private startBattle(): void {
-    // Tear down placement UI
-    for (const card of this.benchCards) card.destroy();
-    this.benchCards = [];
+    // Tear down placement UI; keep bench visible as display-only
+    this.buildBenchPanel(false);
     if (this.startBattleBtn) {
       this.startBattleBtn.destroy();
       this.startBattleBtn = null;
