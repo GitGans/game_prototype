@@ -1,36 +1,36 @@
-import { BattleState, CellCoord, Side, Unit } from './types';
+import { BattleState, DamageType, ResolvedHitCell, Side, Unit } from './types';
 import { cellKey } from './field';
 import { buildOccupancy, removeUnit } from './occupancy';
 
 /**
- * Full attack sequence:
- * 1. Find units in target cells
- * 2. Deduplicate (large units hit only once)
- * 3. Apply damage
- * 4. Remove dead units
+ * Applies damage to all units in hitCells.
+ * Large units (occupying multiple cells) are deduplicated — they take
+ * the single highest damage value from all cells that hit them.
+ * damageType is reserved for future armor/resistance logic.
  */
 export function resolveAttack(
-  targetCells: CellCoord[],
-  damage: number,
-  state: BattleState
+  hitCells: ResolvedHitCell[],
+  baseDamage: number,
+  _damageType: DamageType,
+  state: BattleState,
 ): BattleState {
-  // Step 1-2: find unique units in target cells
-  const hitUnits = new Map<string, Unit>();
-  for (const coord of targetCells) {
+  const hitUnits = new Map<string, { unit: Unit; damage: number }>();
+
+  for (const { coord, multiplier } of hitCells) {
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
-    if (unit && !hitUnits.has(unit.id)) {
-      hitUnits.set(unit.id, unit);
+    if (!unit) continue;
+    const dmg = Math.round(baseDamage * multiplier);
+    const existing = hitUnits.get(unit.id);
+    if (!existing || dmg > existing.damage) {
+      hitUnits.set(unit.id, { unit, damage: dmg });
     }
   }
 
-  // Step 3: apply damage
   const newUnits = new Map(state.units);
-  for (const unit of hitUnits.values()) {
-    const updated: Unit = { ...unit, hp: Math.max(0, unit.hp - damage) };
-    newUnits.set(unit.id, updated);
+  for (const { unit, damage } of hitUnits.values()) {
+    newUnits.set(unit.id, { ...unit, hp: Math.max(0, unit.hp - damage) });
   }
 
-  // Step 4: remove dead units
   let occupancy = buildOccupancy(newUnits);
   for (const unit of newUnits.values()) {
     if (unit.hp <= 0) {
@@ -43,32 +43,35 @@ export function resolveAttack(
 }
 
 /**
- * Heal sequence: find unique units in target cells, restore HP (capped at maxHp).
+ * Heals all units in hitCells.
+ * Large units deduplicated — they receive the single highest heal value.
  */
 export function resolveHeal(
-  targetCells: CellCoord[],
-  healAmount: number,
-  state: BattleState
+  hitCells: ResolvedHitCell[],
+  baseHeal: number,
+  state: BattleState,
 ): BattleState {
-  const hitUnits = new Map<string, Unit>();
-  for (const coord of targetCells) {
+  const hitUnits = new Map<string, { unit: Unit; heal: number }>();
+
+  for (const { coord, multiplier } of hitCells) {
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
-    if (unit && !hitUnits.has(unit.id)) {
-      hitUnits.set(unit.id, unit);
+    if (!unit) continue;
+    const amount = Math.round(baseHeal * multiplier);
+    const existing = hitUnits.get(unit.id);
+    if (!existing || amount > existing.heal) {
+      hitUnits.set(unit.id, { unit, heal: amount });
     }
   }
 
   const newUnits = new Map(state.units);
-  for (const unit of hitUnits.values()) {
-    const updated: Unit = { ...unit, hp: Math.min(unit.maxHp, unit.hp + healAmount) };
-    newUnits.set(unit.id, updated);
+  for (const { unit, heal } of hitUnits.values()) {
+    newUnits.set(unit.id, { ...unit, hp: Math.min(unit.maxHp, unit.hp + heal) });
   }
 
-  const occupancy = buildOccupancy(newUnits);
-  return { ...state, units: newUnits, occupancy };
+  return { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) };
 }
 
-/** Returns true when all units on one side are dead. */
+/** Returns the winning side when all units on one side are dead, or null. */
 export function checkGameOver(state: BattleState): Side | null {
   let playerAlive = false;
   let enemyAlive = false;
@@ -76,8 +79,7 @@ export function checkGameOver(state: BattleState): Side | null {
     if (unit.anchor.side === 'player') playerAlive = true;
     if (unit.anchor.side === 'enemy') enemyAlive = true;
   }
-  if (!playerAlive) return 'player'; // player lost
-  if (!enemyAlive) return 'enemy';  // enemy lost
+  if (!playerAlive) return 'player';
+  if (!enemyAlive) return 'enemy';
   return null;
 }
-

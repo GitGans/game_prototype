@@ -9,8 +9,6 @@ import {
   BENCH_GAP,
   BENCH_SLOTS,
   COLORS,
-  DAMAGE,
-  HEAL_AMOUNT,
   LAYOUT_SCALE,
 } from "../core/Constants";
 import { EventBus, Events } from "../core/EventBus";
@@ -22,6 +20,7 @@ import { BattleLog } from "../objects/BattleLog";
 import {
   BattleState,
   CellCoord,
+  ResolvedHitCell,
   Side,
   Unit,
   UnitBlueprint,
@@ -34,6 +33,7 @@ import { canPlace, placeUnit } from "../battle/placement";
 import { buildOccupancy } from "../battle/occupancy";
 import { getMeleeTargets, getRangedTargets, getFriendlyTargets } from "../battle/targeting";
 import { resolveAttack, resolveHeal, checkGameOver } from "../battle/combat";
+import { resolvePattern, PATTERNS } from "../battle/skillPatterns";
 import { buildRoundQueue, pruneQueue } from "../battle/initiative";
 import {
   autoPlacePlayer,
@@ -42,6 +42,16 @@ import {
   blueprintFromUnit,
   getPlayerAverageLevel,
 } from "../battle/autoPlace";
+
+/**
+ * Resolves the pattern of a unit's skill relative to a target anchor cell.
+ * Falls back to PATTERNS.single if the unit has no skill attached.
+ * Used by all combat paths: manual, auto, quick.
+ */
+function getHitCells(attacker: Unit, anchor: CellCoord): ResolvedHitCell[] {
+  const pattern = attacker.skill?.pattern ?? PATTERNS.single;
+  return resolvePattern(anchor, pattern);
+}
 
 /**
  * Compute one turn for the given unit and return the resulting BattleState.
@@ -61,7 +71,7 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
       const bestU = state.occupancy.cellToUnit.get(cellKey(best));
       return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp ? coord : best;
     });
-    return resolveHeal([target], unit.healAmount, state);
+    return resolveHeal(getHitCells(unit, target), unit.healAmount, state);
   }
 
   const targets = unit.actionType === 'ranged'
@@ -71,7 +81,7 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
   if (targets.length === 0) return state;
 
   const target = targets[Math.floor(Math.random() * targets.length)];
-  return resolveAttack([target], unit.damage, state);
+  return resolveAttack(getHitCells(unit, target), unit.damage, unit.skill?.damageType ?? 'physical', state);
 }
 
 export class Game extends Phaser.Scene {
@@ -903,7 +913,7 @@ export class Game extends Phaser.Scene {
           "positive",
         );
       }
-      let next = resolveHeal([coord], activeUnit?.healAmount ?? 0, state);
+      let next = resolveHeal(activeUnit ? getHitCells(activeUnit, coord) : [{ coord, multiplier: 1.0 }], activeUnit?.healAmount ?? 0, state);
       next = this.advanceQueue(next);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
@@ -929,7 +939,7 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState('idle');
     });
 
-    let next = resolveAttack([coord], activeUnit?.damage ?? 0, state);
+    let next = resolveAttack(activeUnit ? getHitCells(activeUnit, coord) : [{ coord, multiplier: 1.0 }], activeUnit?.damage ?? 0, activeUnit?.skill?.damageType ?? 'physical', state);
 
     const winner = checkGameOver(next);
     if (winner) {
@@ -996,7 +1006,7 @@ export class Game extends Phaser.Scene {
         );
       }
 
-      let next = resolveHeal([target], activeUnit.healAmount, state);
+      let next = resolveHeal(getHitCells(activeUnit, target), activeUnit.healAmount, state);
       next = this.advanceQueue(next);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
@@ -1036,7 +1046,7 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState('idle');
     });
 
-    let next = resolveAttack([target], activeUnit.damage, state);
+    let next = resolveAttack(getHitCells(activeUnit, target), activeUnit.damage, activeUnit.skill?.damageType ?? 'physical', state);
 
     const winner = checkGameOver(next);
     if (winner) {

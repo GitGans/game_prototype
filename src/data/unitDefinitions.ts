@@ -1,5 +1,6 @@
 import { UnitBlueprint, UnitRace } from "../battle/types";
 import { SHAPES } from "../battle/shapes";
+import { SKILLS } from "./skillDefinitions";
 
 export const PLAYER_UNITS: UnitBlueprint[] = [
   {
@@ -12,6 +13,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     initiative: 3,
     shape: SHAPES["1x1"],
     actionType: "melee",
+    skill: SKILLS.basic_melee,
     rowTrait: "front",
     spriteSheet: {
       path: "assets/sprites/units/knight.png",
@@ -30,6 +32,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     initiative: 5,
     shape: SHAPES["1x1"],
     actionType: "melee",
+    skill: SKILLS.basic_melee,
     rowTrait: "front",
     spriteSheet: {
       path: "assets/sprites/units/dd_medium.png",
@@ -48,6 +51,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     initiative: 9,
     shape: SHAPES["1x1"],
     actionType: "melee",
+    skill: SKILLS.basic_melee,
     rowTrait: "front",
   },
   {
@@ -60,6 +64,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     initiative: 7,
     shape: SHAPES["1x1"],
     actionType: "ranged",
+    skill: SKILLS.basic_ranged,
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/archer.png",
@@ -78,6 +83,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     initiative: 6,
     shape: SHAPES["1x1"],
     actionType: "melee",
+    skill: SKILLS.row_strike,
     rowTrait: "front",
   },
   {
@@ -90,6 +96,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     initiative: 4,
     shape: SHAPES["1x1"],
     actionType: "heal",
+    skill: SKILLS.basic_heal,
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/healer.png",
@@ -108,6 +115,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     initiative: 7,
     shape: SHAPES["1x1"],
     actionType: "ranged",
+    skill: SKILLS.basic_ranged,
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/mage_single.png",
@@ -126,6 +134,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     initiative: 6,
     shape: SHAPES["1x1"],
     actionType: "ranged",
+    skill: SKILLS.arcane_cross,
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/mage_single.png",
@@ -157,6 +166,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 2,
       shape: SHAPES["2x1"],
       actionType: "melee",
+      skill: SKILLS.basic_melee,
       rowTrait: "front",
       race: "orc",
     },
@@ -170,6 +180,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 6,
       shape: SHAPES["1x1"],
       actionType: "melee",
+      skill: SKILLS.basic_melee,
       rowTrait: "front",
       race: "orc",
     },
@@ -183,6 +194,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 7,
       shape: SHAPES["1x1"],
       actionType: "ranged",
+      skill: SKILLS.basic_ranged,
       rowTrait: "back",
       race: "orc",
     },
@@ -196,6 +208,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 6,
       shape: SHAPES["1x1"],
       actionType: "ranged",
+      skill: SKILLS.basic_ranged,
       rowTrait: "back",
       race: "orc",
     },
@@ -209,6 +222,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 4,
       shape: SHAPES["1x1"],
       actionType: "heal",
+      skill: SKILLS.basic_heal,
       rowTrait: "back",
       race: "orc",
     },
@@ -224,6 +238,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 4,
       shape: SHAPES["1x1"],
       actionType: "melee",
+      skill: SKILLS.basic_melee,
       rowTrait: "front",
       race: "demon",
     },
@@ -237,6 +252,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 8,
       shape: SHAPES["1x1"],
       actionType: "melee",
+      skill: SKILLS.basic_melee,
       rowTrait: "front",
       race: "demon",
     },
@@ -250,6 +266,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 9,
       shape: SHAPES["1x1"],
       actionType: "ranged",
+      skill: SKILLS.basic_ranged,
       rowTrait: "back",
       race: "demon",
     },
@@ -263,6 +280,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 8,
       shape: SHAPES["1x1"],
       actionType: "ranged",
+      skill: SKILLS.arcane_cross,
       rowTrait: "back",
       race: "demon",
     },
@@ -276,6 +294,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 5,
       shape: SHAPES["1x1"],
       actionType: "heal",
+      skill: SKILLS.basic_heal,
       rowTrait: "back",
       race: "demon",
     },
@@ -291,6 +310,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 2,
       shape: SHAPES["2x1"],
       actionType: "melee",
+      skill: SKILLS.basic_melee,
       rowTrait: "front",
       race: "undead",
     },
@@ -304,6 +324,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 4,
       shape: SHAPES["1x1"],
       actionType: "melee",
+      skill: SKILLS.basic_melee,
       rowTrait: "front",
       race: "undead",
     },
@@ -317,6 +338,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 7,
       shape: SHAPES["1x1"],
       actionType: "ranged",
+      skill: SKILLS.basic_ranged,
       rowTrait: "back",
       race: "undead",
     },
@@ -330,6 +352,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 7,
       shape: SHAPES["1x1"],
       actionType: "ranged",
+      skill: SKILLS.arcane_cross,
       rowTrait: "back",
       race: "undead",
     },
@@ -343,6 +366,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       initiative: 3,
       shape: SHAPES["1x1"],
       actionType: "heal",
+      skill: SKILLS.basic_heal,
       rowTrait: "back",
       race: "undead",
     },
