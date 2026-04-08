@@ -39,6 +39,7 @@ export interface UnitBlueprint {
   initiative: number;
   shape: UnitShape;
   actionType: 'melee' | 'ranged' | 'heal';
+  skill?: Skill;
   rowTrait: RowTrait;
   race?: UnitRace;
   spriteSheet?: SpriteSheetConfig;
@@ -56,6 +57,7 @@ export interface Unit {
   shape: UnitShape;
   anchor: CellCoord;
   actionType: 'melee' | 'ranged' | 'heal';
+  skill?: Skill;
   rowTrait: RowTrait;
   race?: UnitRace;
   templateId: string;
@@ -76,4 +78,55 @@ export interface BattleState {
   phase: Phase;
   validTargets: CellCoord[];
   benchUnits: (UnitBlueprint | undefined)[]; // player units waiting on the bench; undefined = empty slot
+}
+
+// ─── Skill / Pattern System ───────────────────────────────────────────────
+
+export type DamageType = 'physical' | 'magical';
+export type SkillEffectType = 'damage' | 'heal';
+
+/**
+ * One active cell in a skill pattern.
+ * Stored as an object so fields (e.g. status effects) can be added later
+ * without changing the matrix structure.
+ */
+export interface PatternCell {
+  damageMultiplier: number;
+  // future: effects?: StatusEffect[]
+}
+
+/**
+ * 2D matrix defining a skill's area of effect.
+ *
+ * cells[rowIndex][colIndex]:
+ *   PatternCell → this cell is part of the pattern
+ *   null        → this cell is not affected
+ *
+ * anchorRow / anchorCol: the matrix position that maps to the player-selected
+ * target cell. All other cells are offset relative to this anchor.
+ *
+ * The `side` dimension is not part of the pattern — it is always inherited
+ * from the selected target cell (attacks never cross sides).
+ */
+export interface SkillPattern {
+  anchorRow: number;
+  anchorCol: number;
+  cells: (PatternCell | null)[][];
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  damageType: DamageType;
+  effectType: SkillEffectType;
+  pattern: SkillPattern;
+}
+
+/**
+ * One cell produced by resolvePattern().
+ * Ready to pass directly to resolveAttack() or resolveHeal().
+ */
+export interface ResolvedHitCell {
+  coord: CellCoord;
+  multiplier: number;
 }
