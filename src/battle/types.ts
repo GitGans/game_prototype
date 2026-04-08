@@ -33,7 +33,10 @@ export interface UnitBlueprint {
   templateId: string;
   name: string;
   hp: number;
-  damage: number;
+  physicalDamage: number;
+  magicalDamage: number;
+  physicalDefense: number;  // percentage 0–100, reduces incoming physical damage
+  magicalDefense: number;   // percentage 0–100, reduces incoming magical damage
   healAmount: number;
   level: number;
   initiative: number;
@@ -50,7 +53,10 @@ export interface Unit {
   name: string;
   hp: number;
   maxHp: number;
-  damage: number;
+  physicalDamage: number;
+  magicalDamage: number;
+  physicalDefense: number;
+  magicalDefense: number;
   healAmount: number;
   level: number;
   initiative: number;

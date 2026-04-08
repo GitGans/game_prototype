@@ -90,7 +90,7 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
   const target = targets[Math.floor(Math.random() * targets.length)];
   return resolveAttack(
     getHitCells(unit, target),
-    unit.damage,
+    unit.physicalDamage + unit.magicalDamage,
     unit.skill?.damageType ?? "physical",
     state,
   );
@@ -967,10 +967,11 @@ export class Game extends Phaser.Scene {
 
     if (targetUnit) {
       const view = this.unitViews.get(targetUnit.id);
+      const dispDmg = (activeUnit?.physicalDamage ?? 0) + (activeUnit?.magicalDamage ?? 0);
       if (view)
-        this.showFloatingDamage(view.x, view.y, activeUnit?.damage ?? 0);
+        this.showFloatingDamage(view.x, view.y, dispDmg);
       this.battleLog.addEntry(
-        `${activeUnit?.name ?? "?"} attacks ${targetUnit.name} -${activeUnit?.damage ?? 0}`,
+        `${activeUnit?.name ?? "?"} attacks ${targetUnit.name} -${dispDmg}`,
         "positive",
       );
     }
@@ -988,7 +989,7 @@ export class Game extends Phaser.Scene {
       activeUnit
         ? getHitCells(activeUnit, coord)
         : [{ coord, multiplier: 1.0 }],
-      activeUnit?.damage ?? 0,
+      (activeUnit?.physicalDamage ?? 0) + (activeUnit?.magicalDamage ?? 0),
       activeUnit?.skill?.damageType ?? "physical",
       state,
     );
@@ -1103,9 +1104,10 @@ export class Game extends Phaser.Scene {
     const hitUnit = state.occupancy.cellToUnit.get(cellKey(target));
     if (hitUnit) {
       const view = this.unitViews.get(hitUnit.id);
-      if (view) this.showFloatingDamage(view.x, view.y, activeUnit.damage);
+      const dispDmg = activeUnit.physicalDamage + activeUnit.magicalDamage;
+      if (view) this.showFloatingDamage(view.x, view.y, dispDmg);
       this.battleLog.addEntry(
-        `${activeUnit.name} attacks ${hitUnit.name} -${activeUnit.damage}`,
+        `${activeUnit.name} attacks ${hitUnit.name} -${dispDmg}`,
         logStyle,
       );
     }
@@ -1119,7 +1121,7 @@ export class Game extends Phaser.Scene {
 
     let next = resolveAttack(
       getHitCells(activeUnit, target),
-      activeUnit.damage,
+      activeUnit.physicalDamage + activeUnit.magicalDamage,
       activeUnit.skill?.damageType ?? "physical",
       state,
     );
@@ -1523,7 +1525,8 @@ export class Game extends Phaser.Scene {
           if (!bp) return;
           const scale = 1 + 0.1 * (unit.level - 1);
           unit.maxHp = Math.round(bp.hp * scale);
-          unit.damage = Math.round(bp.damage * scale);
+          unit.physicalDamage = Math.round(bp.physicalDamage * scale);
+          unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
           unit.healAmount = Math.round(bp.healAmount * scale);
         });
         GameState.set(state);
