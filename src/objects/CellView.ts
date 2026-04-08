@@ -5,6 +5,14 @@ import { cellKey } from '../battle/field';
 
 type HighlightType = 'none' | 'selected' | 'target' | 'heal_target';
 
+function lerpColor(c1: number, c2: number, t: number): number {
+  const r1 = (c1 >> 16) & 0xff, g1 = (c1 >> 8) & 0xff, b1 = c1 & 0xff;
+  const r2 = (c2 >> 16) & 0xff, g2 = (c2 >> 8) & 0xff, b2 = c2 & 0xff;
+  return (Math.round(r1 + (r2 - r1) * t) << 16)
+       | (Math.round(g1 + (g2 - g1) * t) << 8)
+       |  Math.round(b1 + (b2 - b1) * t);
+}
+
 export class CellView extends Phaser.GameObjects.Container {
   readonly coord: CellCoord;
   readonly key: string;
@@ -52,5 +60,11 @@ export class CellView extends Phaser.GameObjects.Container {
     } else {
       this.bg.setFillStyle(COLORS.cell);
     }
+  }
+
+  setSkillPreview(multiplier: number, isHeal = false): void {
+    const dim    = isHeal ? 0x0a2a0a : 0x2a1a00;
+    const bright = isHeal ? 0x44dd44 : 0xff8800;
+    this.bg.setFillStyle(lerpColor(dim, bright, multiplier));
   }
 }
