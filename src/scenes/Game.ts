@@ -1234,7 +1234,7 @@ export class Game extends Phaser.Scene {
   }
 
   private buildAutoBattleButtons(): void {
-    const btnW = Math.round(110 * LAYOUT_SCALE);
+    const btnW = Math.round(44 * LAYOUT_SCALE);
     const btnH = Math.round(34 * LAYOUT_SCALE);
     const gap = Math.round(8 * LAYOUT_SCALE);
     const y = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
@@ -1252,7 +1252,7 @@ export class Game extends Phaser.Scene {
         .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), 0xaaaaaa);
       const txt = this.add
         .text(0, 0, label, {
-          fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
+          fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
           color: "#ffffff",
           fontStyle: "bold",
         })
@@ -1260,13 +1260,14 @@ export class Game extends Phaser.Scene {
 
       const btn = this.add.container(x, y, [rect, txt]);
       btn.setSize(btnW, btnH).setInteractive({ useHandCursor: true });
-      btn.on("pointerover", () => rect.setFillStyle(color + 0x111111));
-      btn.on("pointerout", () => rect.setFillStyle(color));
+      btn.setAlpha(0.4);
+      btn.on("pointerover", () => { rect.setFillStyle(color + 0x111111); btn.setAlpha(0.85); });
+      btn.on("pointerout", () => { rect.setFillStyle(color); btn.setAlpha(0.4); });
       btn.on("pointerup", cb);
       return btn;
     };
 
-    const autoBtn = makeBtn(x1, "▶▶ Auto Battle", 0x2a5a8a, () => {
+    const autoBtn = makeBtn(x1, "▶▶", 0x1a3a5a, () => {
       if (GameState.getBattleMode() !== "manual") return;
       GameState.setBattleMode("auto");
       this.updateManualButtons(GameState.get());
@@ -1282,7 +1283,7 @@ export class Game extends Phaser.Scene {
       }
     });
 
-    const quickBtn = makeBtn(x2, "⚡ Quick Battle", 0x5a3a8a, () => {
+    const quickBtn = makeBtn(x2, "⚡", 0x3a1a5a, () => {
       GameState.setBattleMode("quick");
       this.runQuickBattle();
     });
@@ -1371,14 +1372,14 @@ export class Game extends Phaser.Scene {
     for (const btn of this.manualTurnButtons) btn.setVisible(show);
     if (show && this.chargeBtn) {
       const used = this.chargedThisRound.has(state.roundQueue[0]);
-      this.chargeBtn.setAlpha(used ? 0.4 : 1.0);
+      this.chargeBtn.setAlpha(used ? 0.2 : 0.4);
       if (used) this.chargeBtn.disableInteractive();
       else this.chargeBtn.setInteractive({ useHandCursor: true });
     }
   }
 
   private buildManualTurnButtons(): void {
-    const btnW = Math.round(110 * LAYOUT_SCALE);
+    const btnW = Math.round(44 * LAYOUT_SCALE);
     const btnH = Math.round(34 * LAYOUT_SCALE);
     const gap = Math.round(8 * LAYOUT_SCALE);
     const y = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
@@ -1396,25 +1397,26 @@ export class Game extends Phaser.Scene {
         .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), 0xaaaaaa);
       const txt = this.add
         .text(0, 0, label, {
-          fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
+          fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
           color: "#ffffff",
           fontStyle: "bold",
         })
         .setOrigin(0.5);
       const btn = this.add.container(x, y, [rect, txt]);
       btn.setSize(btnW, btnH).setInteractive({ useHandCursor: true });
-      btn.on("pointerover", () => rect.setFillStyle(color + 0x111111));
-      btn.on("pointerout", () => rect.setFillStyle(color));
+      btn.setAlpha(0.4);
+      btn.on("pointerover", () => { rect.setFillStyle(color + 0x111111); btn.setAlpha(0.85); });
+      btn.on("pointerout", () => { rect.setFillStyle(color); btn.setAlpha(0.4); });
       btn.on("pointerup", cb);
       return { btn, rect };
     };
 
-    const { btn: skipBtn } = makeBtn(xSkip, "Skip Turn", 0x5a5a2a, () => {
+    const { btn: skipBtn } = makeBtn(xSkip, "🛡️", 0x5a5a2a, () => {
       if (GameState.getBattleMode() !== "manual") return;
       this.handleSkipTurn();
     });
 
-    const { btn: chargeBtn } = makeBtn(xCharge, "Wait", 0x2a5a3a, () => {
+    const { btn: chargeBtn } = makeBtn(xCharge, "⏳", 0x2a5a3a, () => {
       if (GameState.getBattleMode() !== "manual") return;
       this.handleChargeTurn();
     });

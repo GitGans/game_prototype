@@ -60,7 +60,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     initiative: 9,
     shape: SHAPES["1x1"],
     actionType: "melee",
-    skill: SKILLS.basic_melee,
+    skill: SKILLS.pierce,
     rowTrait: "front",
   },
   {

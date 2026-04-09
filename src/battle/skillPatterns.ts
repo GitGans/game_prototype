@@ -60,7 +60,10 @@ export const PATTERNS: Record<string, SkillPattern> = {
   pierce: {
     anchorRow: 0,
     anchorCol: 0,
-    cells: [[P(1.0), P(0.5)]],
+    cells: [
+      [P(1.0)], // row 0 — цель, 100%
+      [P(0.5)], // row 1 — вторая строка той же колонки, 50%
+    ],
   },
 };
 

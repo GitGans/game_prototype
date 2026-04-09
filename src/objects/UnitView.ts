@@ -29,9 +29,11 @@ export class UnitView extends Phaser.GameObjects.Container {
     super(scene, x, y);
     this.isPlayer = unit.anchor.side === 'player';
 
-    const pad = Math.round(10 * LAYOUT_SCALE);
-    const w = rowSpan * CELL_SIZE + (rowSpan - 1) * CELL_GAP - pad;
-    const h = colSpan * CELL_SIZE + (colSpan - 1) * CELL_GAP - pad;
+    const pad   = Math.round(10 * LAYOUT_SCALE);
+    const w     = rowSpan * CELL_SIZE + (rowSpan - 1) * CELL_GAP - pad;  // padded — used by rect and UI elements
+    const h     = colSpan * CELL_SIZE + (colSpan - 1) * CELL_GAP - pad;
+    const wFull = rowSpan * CELL_SIZE + (rowSpan - 1) * CELL_GAP;        // full cell — used by sprite
+    const hFull = colSpan * CELL_SIZE + (colSpan - 1) * CELL_GAP;
 
     if (textureKey && scene.textures.exists(textureKey)) {
       this.spriteConfig = spriteConfig ?? null;
@@ -40,7 +42,7 @@ export class UnitView extends Phaser.GameObjects.Container {
       if (this.spriteConfig) {
         img.setFrame(0);
       }
-      img.setDisplaySize(w - 2, h - 2);
+      img.setDisplaySize(wFull, hFull);
       this.bgSprite = img;
     } else {
       const color = this.isPlayer ? COLORS.unitPlayer : COLORS.unitEnemy;

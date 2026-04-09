@@ -4,7 +4,7 @@ export const LAYOUT_SCALE = Math.min(
 );
 
 export const CELL_SIZE = Math.round(100 * LAYOUT_SCALE);
-export const CELL_GAP = Math.round(6 * LAYOUT_SCALE);
+export const CELL_GAP = Math.round(12 * LAYOUT_SCALE);
 export const GRID_COLS = 3;
 export const GRID_ROWS = 2;
 export const SIDE_GAP = Math.round(40 * LAYOUT_SCALE); // horizontal gap between the two grids
@@ -14,7 +14,7 @@ export const BENCH_SLOTS = 3;
 
 export const COLORS = {
   cell: 0x2a3a5a,
-  cellBorder: 0x4a6a9a,
+  cellBorder: 0x2a3f60,
   cellHover: 0x3a5a8a,
   cellSelected: 0xffaa00,
   validTarget: 0xff4444,
