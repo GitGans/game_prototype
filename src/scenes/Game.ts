@@ -371,13 +371,21 @@ export class Game extends Phaser.Scene {
     interactive = true,
   ): Phaser.GameObjects.Container {
     const cardH = this.benchCardHeight();
+    const borderThickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
 
-    // Empty slot — dim placeholder, no interaction
+    // ── Empty slot ──────────────────────────────────────────────────────────
     if (bp === null) {
-      const rect = this.add
-        .rectangle(0, 0, BENCH_PANEL_WIDTH, cardH, COLORS.benchEmpty, 0.5)
-        .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), COLORS.benchBorder);
-      const container = this.add.container(x, y, [rect]);
+      const emptyBorder = this.add.rectangle(0, 0, BENCH_PANEL_WIDTH, cardH, COLORS.cellBorder);
+      const emptyBg = this.add.rectangle(
+        0, 0,
+        BENCH_PANEL_WIDTH - borderThickness, cardH - borderThickness,
+        COLORS.benchEmpty, 0.5,
+      );
+      if (!interactive) {
+        emptyBorder.setVisible(false);
+        emptyBg.setVisible(false);
+      }
+      const container = this.add.container(x, y, [emptyBorder, emptyBg]);
       container.setSize(BENCH_PANEL_WIDTH, cardH);
       if (interactive) {
         container.setInteractive({ useHandCursor: true });
@@ -386,70 +394,86 @@ export class Game extends Phaser.Scene {
       return container;
     }
 
-    // Occupied slot
+    // ── Occupied slot ───────────────────────────────────────────────────────
     const fillColor = selected ? COLORS.benchSelected : COLORS.bench;
-    const rect = this.add
-      .rectangle(0, 0, BENCH_PANEL_WIDTH, cardH, fillColor, 0.9)
-      .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), COLORS.benchBorder);
+
+    // Border + background (same two-rect pattern as CellView)
+    const rect = this.add.rectangle(0, 0, BENCH_PANEL_WIDTH, cardH, COLORS.cellBorder);
+    const bg = this.add.rectangle(
+      0, 0,
+      BENCH_PANEL_WIDTH - borderThickness, cardH - borderThickness,
+      fillColor, 0.9,
+    );
 
     // Sprite (frame 0 = idle) — only when texture is loaded for this blueprint
     const spriteKey = `sprite-${bp.templateId}`;
     const spriteObj =
       bp.spriteSheet && this.textures.exists(spriteKey)
-        ? this.add
-            .image(0, 0, spriteKey)
-            .setFrame(0)
-            .setDisplaySize(BENCH_PANEL_WIDTH - 2, cardH - 2)
+        ? this.add.image(0, 0, spriteKey).setFrame(0).setDisplaySize(BENCH_PANEL_WIDTH - 2, cardH - 2)
         : null;
 
-    const nameStyle = {
-      fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-      color: COLORS.label,
-      fontStyle: "bold",
-      align: "center",
-      stroke: "#000000",
-      strokeThickness: Math.round(3 * LAYOUT_SCALE),
-      wordWrap: { width: BENCH_PANEL_WIDTH - 8 },
-    };
-    const nameText = this.add
-      .text(0, -cardH / 2 + Math.round(10 * LAYOUT_SCALE), bp.name, nameStyle)
-      .setOrigin(0.5, 0);
+    // Name
+    const nameText = this.add.text(
+      0, -cardH / 2 + Math.round(10 * LAYOUT_SCALE),
+      bp.name,
+      {
+        fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
+        color: COLORS.label,
+        fontStyle: "bold",
+        align: "center",
+        stroke: "#000000",
+        strokeThickness: Math.round(3 * LAYOUT_SCALE),
+        wordWrap: { width: BENCH_PANEL_WIDTH - 8 },
+      },
+    ).setOrigin(0.5, 0);
 
-    const statsStyle = {
-      fontSize: `${Math.round(10 * LAYOUT_SCALE)}px`,
-      color: COLORS.textDark,
-      align: "center",
-      stroke: "#000000",
-      strokeThickness: Math.round(2 * LAYOUT_SCALE),
-    };
+    // HP text + HP bar
     const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
     const scaledHp = Math.round(bp.hp * (1 + 0.1 * (level - 1)));
-    const statsText = this.add
-      .text(
-        0,
-        cardH / 2 - Math.round(10 * LAYOUT_SCALE),
-        `HP:${scaledHp}  Init:${bp.initiative}`,
-        statsStyle,
-      )
-      .setOrigin(0.5, 1);
+    const barW = BENCH_PANEL_WIDTH - Math.round(12 * LAYOUT_SCALE);
+    const barH = Math.round(6 * LAYOUT_SCALE);
+    const barY = cardH / 2 - Math.round(10 * LAYOUT_SCALE);
 
-    const children = spriteObj
-      ? [rect, spriteObj, nameText, statsText]
-      : [rect, nameText, statsText];
+    const hpText = this.add.text(
+      0, barY - Math.round(14 * LAYOUT_SCALE),
+      `${scaledHp}/${scaledHp}`,
+      {
+        fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
+        color: COLORS.textDark,
+        align: "center",
+        stroke: "#000000",
+        strokeThickness: Math.round(2 * LAYOUT_SCALE),
+      },
+    ).setOrigin(0.5, 0);
+
+    const hpBarBg = this.add.rectangle(0, barY, barW, barH, COLORS.hpBarBg);
+    const hpBarFg = this.add.rectangle(-barW / 2, barY, barW, barH, COLORS.hpBarFg).setOrigin(0, 0.5);
+
+    const children: Phaser.GameObjects.GameObject[] = spriteObj
+      ? [rect, bg, spriteObj, nameText, hpText, hpBarBg, hpBarFg]
+      : [rect, bg, nameText, hpText, hpBarBg, hpBarFg];
     const container = this.add.container(x, y, children);
     container.setSize(BENCH_PANEL_WIDTH, cardH);
+
     if (interactive) {
       container.setInteractive({ useHandCursor: true });
       container.on("pointerup", () => this.onBenchCardClick(idx));
       container.on("pointerover", () => {
-        if (this.selectedBenchIdx !== idx) rect.setFillStyle(0x2a3a4a, 0.9);
+        if (this.selectedBenchIdx !== idx) bg.setFillStyle(0x2a3a4a, 0.9);
       });
       container.on("pointerout", () => {
-        if (this.selectedBenchIdx !== idx) rect.setFillStyle(fillColor, 0.9);
+        if (this.selectedBenchIdx !== idx) bg.setFillStyle(fillColor, 0.9);
       });
     } else {
-      container.setAlpha(0.6);
+      // Battle mode: sprite only — hide everything else
+      rect.setVisible(false);
+      bg.setVisible(false);
+      nameText.setVisible(false);
+      hpText.setVisible(false);
+      hpBarBg.setVisible(false);
+      hpBarFg.setVisible(false);
     }
+
     return container;
   }
 
