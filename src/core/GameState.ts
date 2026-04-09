@@ -1,4 +1,4 @@
-import { BattleState, BattleMode, Phase, UnitRace } from '../battle/types';
+import { BattleState, BattleMode, Phase, UnitRace, CellCoord } from '../battle/types';
 import { buildOccupancy } from '../battle/occupancy';
 
 function emptyState(): BattleState {
@@ -19,6 +19,8 @@ class GameStateManager {
   // Survive reset() — shared across scene restarts
   playerUnitLevels: Record<string, number> = {};  // templateId → level
   lastEnemyRace: UnitRace | null = null;          // race from last battle (for Replay)
+  playerUnitPlacements: Record<string, CellCoord> = {};  // templateId → anchor, survives reset()
+  playerBenchIds: string[] | null = null;               // templateIds on bench; null = first battle, use defaults
 
   get(): BattleState {
     return this.state;

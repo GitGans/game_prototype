@@ -1,4 +1,4 @@
-import { BattleState, CellCoord, Col, Unit, UnitBlueprint, UnitRace } from './types';
+import { BattleState, CellCoord, Col, Row, Unit, UnitBlueprint, UnitRace } from './types';
 import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
 import { PLAYER_UNITS, PLAYER_STARTING_IDS, ENEMY_UNITS } from '../data/unitDefinitions';
@@ -55,39 +55,45 @@ export function blueprintFromUnit(unit: Unit): UnitBlueprint {
 }
 
 export function autoPlacePlayer(state: BattleState): BattleState {
-  const startingDefs = PLAYER_STARTING_IDS
-    .map(id => PLAYER_UNITS.find(u => u.templateId === id))
-    .filter((u): u is UnitBlueprint => u !== undefined);
+  const savedBenchIds = GameState.playerBenchIds;
 
-  const benchDefs = PLAYER_UNITS.filter(u => !PLAYER_STARTING_IDS.includes(u.templateId));
+  const startingDefs = savedBenchIds !== null
+    ? PLAYER_UNITS.filter(u => !savedBenchIds.includes(u.templateId))
+    : PLAYER_UNITS.filter(u => PLAYER_STARTING_IDS.includes(u.templateId));
+
+  const benchDefs = savedBenchIds !== null
+    ? PLAYER_UNITS.filter(u => savedBenchIds.includes(u.templateId))
+    : PLAYER_UNITS.filter(u => !PLAYER_STARTING_IDS.includes(u.templateId));
 
   const frontUnits = startingDefs.filter(d => d.rowTrait === 'front');
   const backUnits  = startingDefs.filter(d => d.rowTrait === 'back');
 
   let counter = 1;
   const cols: Col[] = [0, 1, 2];
+  const saved = GameState.playerUnitPlacements;
 
-  for (const def of frontUnits) {
+  const tryPlace = (def: UnitBlueprint, fallbackRow: Row): void => {
+    const level = GameState.playerUnitLevels[def.templateId] ?? def.level;
+    const savedAnchor = saved[def.templateId];
+
+    // Try saved position first
+    if (savedAnchor && canPlace(savedAnchor, def.shape, state, 'player')) {
+      state = placeUnit(createUnitInstance(def, `p${counter++}`, savedAnchor, level), state);
+      return;
+    }
+
+    // Fall back to auto-placement
     for (const col of cols) {
-      const anchor: CellCoord = { side: 'player', row: 0, col };
+      const anchor: CellCoord = { side: 'player', row: fallbackRow, col };
       if (canPlace(anchor, def.shape, state, 'player')) {
-        const level = GameState.playerUnitLevels[def.templateId] ?? def.level;
         state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level), state);
-        break;
+        return;
       }
     }
-  }
+  };
 
-  for (const def of backUnits) {
-    for (const col of cols) {
-      const anchor: CellCoord = { side: 'player', row: 1, col };
-      if (canPlace(anchor, def.shape, state, 'player')) {
-        const level = GameState.playerUnitLevels[def.templateId] ?? def.level;
-        state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level), state);
-        break;
-      }
-    }
-  }
+  for (const def of frontUnits) tryPlace(def, 0);
+  for (const def of backUnits)  tryPlace(def, 1);
 
   const paddedBench: (UnitBlueprint | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
   benchDefs.forEach((bp, i) => { if (i < BENCH_SLOTS) paddedBench[i] = bp; });
