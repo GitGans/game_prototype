@@ -825,6 +825,19 @@ export class Game extends Phaser.Scene {
     this.clearPlacementHighlights();
 
     let state = GameState.get();
+
+    // Save player unit positions so they can be restored next battle
+    const placements: Record<string, CellCoord> = {};
+    for (const unit of state.units.values()) {
+      if (unit.anchor.side === 'player') {
+        placements[unit.templateId] = unit.anchor;
+      }
+    }
+    GameState.playerUnitPlacements = placements;
+    GameState.playerBenchIds = state.benchUnits
+      .filter((bp): bp is UnitBlueprint => bp !== undefined)
+      .map(bp => bp.templateId);
+
     const queue = buildRoundQueue(state.units);
     state = { ...state, roundQueue: queue, phase: "select_target" };
     GameState.set(state);
