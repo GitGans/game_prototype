@@ -132,6 +132,7 @@ export class Game extends Phaser.Scene {
 
   create(): void {
     GameState.reset();
+    this.unitViews.clear();
 
     this.buildGrid();
     this.initBattle();
@@ -1481,6 +1482,7 @@ export class Game extends Phaser.Scene {
 
   private refreshUnits(state: BattleState): void {
     for (const [id, view] of this.unitViews) {
+      if (!view.active) continue;
       view.update(state.units.get(id) ?? null);
     }
   }
