@@ -119,6 +119,7 @@ export class Game extends Phaser.Scene {
   private chargeBtn: Phaser.GameObjects.Container | null = null;
   private selectedBenchIdx: number | null = null;
   private selectedFieldUnitId: string | null = null;
+  private pendingTargetCoord: CellCoord | null = null;
   private lastClickCoordKey: string | null = null;
   private lastClickTime = 0;
 
@@ -160,7 +161,7 @@ export class Game extends Phaser.Scene {
 
     const leftGridX = canvasW / 2 - SIDE_GAP / 2 - totalGridW;
     const rightGridX = canvasW / 2 + SIDE_GAP / 2;
-    const gridY = (canvasH - totalGridH) / 2 + Math.round(40 * LAYOUT_SCALE);
+    const gridY = (canvasH - totalGridH) / 2 + Math.round(20 * LAYOUT_SCALE);
 
     const rowOffset =
       side === "player"
@@ -190,31 +191,6 @@ export class Game extends Phaser.Scene {
       }
     }
 
-    const topY =
-      this.cellPixelPos("player", 0, 2).y -
-      CELL_SIZE / 2 -
-      Math.round(14 * LAYOUT_SCALE);
-    const { x: pFrontX } = this.cellPixelPos("player", 0, 0);
-    const { x: pBackX } = this.cellPixelPos("player", 1, 0);
-    const { x: eFrontX } = this.cellPixelPos("enemy", 0, 0);
-    const { x: eBackX } = this.cellPixelPos("enemy", 1, 0);
-    const playerCenterX = (pFrontX + pBackX) / 2;
-    const enemyCenterX = (eFrontX + eBackX) / 2;
-    const sideY = topY - Math.round(18 * LAYOUT_SCALE);
-    this.add
-      .text(playerCenterX, sideY, "PLAYER", {
-        fontSize: `${Math.round(14 * LAYOUT_SCALE)}px`,
-        color: COLORS.label,
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5, 1);
-    this.add
-      .text(enemyCenterX, sideY, "ENEMY", {
-        fontSize: `${Math.round(14 * LAYOUT_SCALE)}px`,
-        color: COLORS.labelEnemy,
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5, 1);
   }
 
   // ─── Battle Initialisation ─────────────────────────────────────────────────
@@ -320,10 +296,10 @@ export class Game extends Phaser.Scene {
     this.statusText = this.add
       .text(
         this.scale.width / 2,
-        this.scale.height - Math.round(20 * LAYOUT_SCALE),
+        this.scale.height - Math.round(34 * LAYOUT_SCALE),
         "",
         {
-          fontSize: `${Math.round(14 * LAYOUT_SCALE)}px`,
+          fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
           color: COLORS.textLight,
           align: "center",
         },
@@ -816,7 +792,23 @@ export class Game extends Phaser.Scene {
   private onCellClick(coord: CellCoord): void {
     const state = GameState.get();
     if (state.phase !== "select_target") return;
-    this.handleTargetSelect(coord, state);
+
+    const isValid = state.validTargets.some(
+      (c) => c.side === coord.side && c.row === coord.row && c.col === coord.col,
+    );
+    if (!isValid) return;
+
+    const p = this.pendingTargetCoord;
+    if (p && p.side === coord.side && p.row === coord.row && p.col === coord.col) {
+      // Second click on the same cell → execute
+      this.pendingTargetCoord = null;
+      this.refreshCells(state);
+      this.handleTargetSelect(coord, state);
+    } else {
+      // First click or switching target → show preview
+      this.pendingTargetCoord = coord;
+      this.showSkillPreview(state, coord);
+    }
   }
 
   // ─── Start Battle ──────────────────────────────────────────────────────────
@@ -847,6 +839,7 @@ export class Game extends Phaser.Scene {
   // ─── Turn Flow ─────────────────────────────────────────────────────────────
 
   private startActiveUnitTurn(state: BattleState): void {
+    this.pendingTargetCoord = null;
     if (GameState.get().phase === "end") return;
     const activeId = state.roundQueue[0];
     if (!activeId) return;
@@ -927,6 +920,57 @@ export class Game extends Phaser.Scene {
         () => this.autoTurn(),
       );
     }
+  }
+
+  private showSkillPreview(state: BattleState, coord: CellCoord): void {
+    const activeUnit = state.units.get(state.roundQueue[0]);
+    if (!activeUnit) return;
+
+    this.refreshCells(state);
+
+    const hitCells = getHitCells(activeUnit, coord);
+    const isHeal = activeUnit.actionType === "heal";
+
+    for (const { coord: hc, multiplier } of hitCells) {
+      this.cellViews.get(cellKey(hc))?.setSkillPreview(multiplier, isHeal);
+    }
+
+    const previewParts: string[] = [];
+    const seen = new Set<string>();
+
+    if (isHeal) {
+      for (const { coord: hc } of hitCells) {
+        const unit = state.occupancy.cellToUnit.get(cellKey(hc));
+        if (!unit || seen.has(unit.id)) continue;
+        seen.add(unit.id);
+        previewParts.push(`${unit.name} +${activeUnit.healAmount}`);
+      }
+    } else {
+      const baseDamage = activeUnit.physicalDamage + activeUnit.magicalDamage;
+      const damageType = activeUnit.skill?.damageType ?? "physical";
+
+      for (const { coord: hc, multiplier } of hitCells) {
+        const unit = state.occupancy.cellToUnit.get(cellKey(hc));
+        if (!unit || seen.has(unit.id)) continue;
+        seen.add(unit.id);
+        const defense = damageType === "physical" ? unit.physicalDefense : unit.magicalDefense;
+        const effectiveBase = Math.max(10, Math.round(baseDamage * (1 - defense / 100)));
+        const dmg = Math.round(effectiveBase * multiplier);
+        previewParts.push(`${unit.name} ~${dmg}`);
+      }
+    }
+
+    let preview: string;
+    if (previewParts.length === 0) {
+      preview = "Preview: no targets in range";
+    } else {
+      const lines: string[] = [];
+      for (let i = 0; i < previewParts.length; i += 3) {
+        lines.push(previewParts.slice(i, i + 3).join(" | "));
+      }
+      preview = `Preview:\n${lines.join("\n")}\n[click again to confirm]`;
+    }
+    this.setStatus(preview);
   }
 
   private handleTargetSelect(coord: CellCoord, state: BattleState): void {
