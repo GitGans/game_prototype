@@ -4,6 +4,8 @@ import { cellKey } from './field';
 import { PLAYER_UNITS, PLAYER_STARTING_IDS, ENEMY_UNITS } from '../data/unitDefinitions';
 import { BENCH_SLOTS } from '../core/Constants';
 import { GameState } from '../core/GameState';
+import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
+import { getEquippedBonuses } from './itemOps';
 
 export function getPlayerAverageLevel(state: BattleState): number {
   const playerUnits = [...state.units.values()].filter(u => u.id.startsWith('p'));
@@ -20,25 +22,40 @@ export function createUnitInstance(
 ): Unit {
   const level = levelOverride ?? blueprint.level;
   const scale = 1 + 0.1 * (level - 1);
+
+  // Base stats scaled by level
+  const scaledHp         = Math.round(blueprint.hp * scale);
+  const scaledPhysDmg    = Math.round(blueprint.physicalDamage * scale);
+  const scaledMagicDmg   = Math.round(blueprint.magicalDamage * scale);
+  const scaledHealAmount = Math.round(blueprint.healAmount * scale);
+
+  // Flat bonuses from equipped items (returns {} for enemies — no containers)
+  const bonuses = getEquippedBonuses(
+    blueprint.templateId,
+    GameState.itemContainers,
+    GameState.itemInstances,
+    ITEM_DEFINITIONS,
+  );
+
   return {
     id,
-    name: blueprint.name,
-    hp: Math.round(blueprint.hp * scale),
-    maxHp: Math.round(blueprint.hp * scale),
-    physicalDamage: Math.round(blueprint.physicalDamage * scale),
-    magicalDamage: Math.round(blueprint.magicalDamage * scale),
-    physicalDefense: blueprint.physicalDefense,
-    magicalDefense: blueprint.magicalDefense,
-    healAmount: Math.round(blueprint.healAmount * scale),
+    name:            blueprint.name,
+    hp:              scaledHp         + (bonuses.hp              ?? 0),
+    maxHp:           scaledHp         + (bonuses.hp              ?? 0),
+    physicalDamage:  scaledPhysDmg    + (bonuses.physicalDamage  ?? 0),
+    magicalDamage:   scaledMagicDmg   + (bonuses.magicalDamage   ?? 0),
+    physicalDefense: blueprint.physicalDefense + (bonuses.physicalDefense ?? 0),
+    magicalDefense:  blueprint.magicalDefense  + (bonuses.magicalDefense  ?? 0),
+    healAmount:      scaledHealAmount  + (bonuses.healAmount      ?? 0),
     level,
-    initiative: blueprint.initiative,
-    shape: blueprint.shape,
+    initiative:  blueprint.initiative,
+    shape:       blueprint.shape,
     anchor,
-    actionType: blueprint.actionType,
-    skill: blueprint.skill,
-    rowTrait: blueprint.rowTrait,
-    race: blueprint.race,
-    templateId: blueprint.templateId,
+    actionType:  blueprint.actionType,
+    skill:       blueprint.skill,
+    rowTrait:    blueprint.rowTrait,
+    race:        blueprint.race,
+    templateId:  blueprint.templateId,
   };
 }
 

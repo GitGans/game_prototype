@@ -136,3 +136,43 @@ export interface ResolvedHitCell {
   coord: CellCoord;
   multiplier: number;
 }
+
+// ─── Item System ──────────────────────────────────────────────────────────────
+
+// To add a new equipment slot (e.g. weapon): extend this union with | 'weapon'
+export type EquipSlot = 'accessory';
+
+export interface ItemStatBonuses {
+  hp?: number;
+  physicalDamage?: number;
+  magicalDamage?: number;
+  physicalDefense?: number;
+  magicalDefense?: number;
+  healAmount?: number;
+}
+
+export interface ItemDefinition {
+  id: string;
+  name: string;
+  equipSlot: EquipSlot | null;  // null = can only live in backpack (e.g. future consumables)
+  statBonuses: ItemStatBonuses;
+  description?: string;
+}
+
+export interface ItemInstance {
+  id: string;           // unique runtime id, e.g. 'item_001'
+  definitionId: string; // references ItemDefinition.id
+}
+
+export type ContainerKind = 'backpack' | 'equipment';
+
+export interface ItemContainer {
+  id: string;               // e.g. 'backpack_tank', 'equip_tank'
+  kind: ContainerKind;
+  ownerTemplateId: string;  // unit templateId
+  slots: Record<string, string>;
+  // Convention:
+  //   backpack  → keys are '0'–'23' (sparse; absent key = empty cell)
+  //   equipment → keys are EquipSlot strings, e.g. 'accessory' (absent = empty)
+  // NEVER store null/undefined as a value — only set and delete keys.
+}
