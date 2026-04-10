@@ -56,14 +56,16 @@ export function blueprintFromUnit(unit: Unit): UnitBlueprint {
 
 export function autoPlacePlayer(state: BattleState): BattleState {
   const savedBenchIds = GameState.playerBenchIds;
+  const campIds = GameState.campUnitIds;
+  const availableUnits = PLAYER_UNITS.filter(u => !campIds.includes(u.templateId));
 
   const startingDefs = savedBenchIds !== null
-    ? PLAYER_UNITS.filter(u => !savedBenchIds.includes(u.templateId))
-    : PLAYER_UNITS.filter(u => PLAYER_STARTING_IDS.includes(u.templateId));
+    ? availableUnits.filter(u => !savedBenchIds.includes(u.templateId))
+    : availableUnits.filter(u => PLAYER_STARTING_IDS.includes(u.templateId));
 
   const benchDefs = savedBenchIds !== null
-    ? PLAYER_UNITS.filter(u => savedBenchIds.includes(u.templateId))
-    : PLAYER_UNITS.filter(u => !PLAYER_STARTING_IDS.includes(u.templateId));
+    ? availableUnits.filter(u => savedBenchIds.includes(u.templateId))
+    : availableUnits.filter(u => !PLAYER_STARTING_IDS.includes(u.templateId));
 
   const frontUnits = startingDefs.filter(d => d.rowTrait === 'front');
   const backUnits  = startingDefs.filter(d => d.rowTrait === 'back');

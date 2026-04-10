@@ -21,6 +21,7 @@ class GameStateManager {
   lastEnemyRace: UnitRace | null = null;          // race from last battle (for Replay)
   playerUnitPlacements: Record<string, CellCoord> = {};  // templateId → anchor, survives reset()
   playerBenchIds: string[] | null = null;               // templateIds on bench; null = first battle, use defaults
+  campUnitIds: string[] = [];                            // templateIds of units in camp (fully excluded from battle)
 
   get(): BattleState {
     return this.state;
