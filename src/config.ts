@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
-import { Boot } from './scenes/Boot';
+import { Boot }      from './scenes/Boot';
 import { Preloader } from './scenes/Preloader';
-import { Game } from './scenes/Game';
+import { MainMenu }  from './scenes/MainMenu';
+import { Prep }      from './scenes/Prep';
+import { Game }      from './scenes/Game';
 
 export const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -10,7 +12,7 @@ export const config: Phaser.Types.Core.GameConfig = {
   backgroundColor: '#1a1a2e',
   pixelArt: true,
   resolution: window.devicePixelRatio,
-  scene: [Boot, Preloader, Game],
+  scene: [Boot, Preloader, MainMenu, Prep, Game],
   parent: document.body,
   scale: {
     mode: Phaser.Scale.NONE,

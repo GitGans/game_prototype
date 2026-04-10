@@ -1564,82 +1564,78 @@ export class Game extends Phaser.Scene {
     const fontSize = `${Math.round(18 * LAYOUT_SCALE)}px`;
 
     if (isVictory) {
-      const gap = Math.round(20 * LAYOUT_SCALE);
-      const leftX = w / 2 - btnW / 2 - gap / 2;
+      // ── Level up all battle participants (field + bench), camp units excluded ──
+      const allBlueprints = [
+        ...PLAYER_UNITS,
+        ...Object.values(ENEMY_UNITS).flat(),
+      ];
+      const state = GameState.get();
+
+      // Field units — live Unit objects in state.units (camp units were never placed)
+      state.units.forEach((unit) => {
+        if (!unit.id.startsWith("p")) return;
+        unit.level += 1;
+        GameState.playerUnitLevels[unit.templateId] = unit.level;
+        const bp = allBlueprints.find(b => b.templateId === unit.templateId);
+        if (!bp) return;
+        const scale = 1 + 0.1 * (unit.level - 1);
+        unit.maxHp          = Math.round(bp.hp * scale);
+        unit.physicalDamage = Math.round(bp.physicalDamage * scale);
+        unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
+        unit.healAmount     = Math.round(bp.healAmount * scale);
+      });
+      GameState.set(state);
+
+      // Bench units — stored as UnitBlueprint | undefined (camp units were never benched)
+      state.benchUnits.forEach((bp) => {
+        if (!bp) return;
+        const currentLevel = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+        GameState.playerUnitLevels[bp.templateId] = currentLevel + 1;
+      });
+
+      // ── Two buttons ──
+      const gap    = Math.round(20 * LAYOUT_SCALE);
+      const leftX  = w / 2 - btnW / 2 - gap / 2;
       const rightX = w / 2 + btnW / 2 + gap / 2;
 
-      // Replay button (left) — same enemies, no level-up
-      const replayBtn = this.add
+      // Restart Battle (same enemies, units already leveled up above)
+      const restartBtn = this.add
         .rectangle(leftX, btnY, btnW, btnH, 0x4a4a6a)
         .setDepth(31)
         .setInteractive({ useHandCursor: true });
       this.add
-        .text(leftX, btnY, "Replay", {
-          fontSize,
-          color: "#ffffff",
-          fontStyle: "bold",
-        })
+        .text(leftX, btnY, "Restart Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
         .setOrigin(0.5)
         .setDepth(32);
-      replayBtn.on("pointerover", () => replayBtn.setFillStyle(0x6a6a8a));
-      replayBtn.on("pointerout", () => replayBtn.setFillStyle(0x4a4a6a));
-      replayBtn.on("pointerup", () => this.scene.restart({ replay: true }));
+      restartBtn.on("pointerover", () => restartBtn.setFillStyle(0x6a6a8a));
+      restartBtn.on("pointerout",  () => restartBtn.setFillStyle(0x4a4a6a));
+      restartBtn.on("pointerup",   () => this.scene.restart({ replay: true }));
 
-      // Next Battle button (right) — level-up + new random enemies
-      const nextBtn = this.add
+      // Exit Battle — return to prep screen
+      const exitBtn = this.add
         .rectangle(rightX, btnY, btnW, btnH, 0x2a6a2a)
         .setDepth(31)
         .setInteractive({ useHandCursor: true });
       this.add
-        .text(rightX, btnY, "Next Battle", {
-          fontSize,
-          color: "#ffffff",
-          fontStyle: "bold",
-        })
+        .text(rightX, btnY, "Exit Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
         .setOrigin(0.5)
         .setDepth(32);
-      nextBtn.on("pointerover", () => nextBtn.setFillStyle(0x3a8a3a));
-      nextBtn.on("pointerout", () => nextBtn.setFillStyle(0x2a6a2a));
-      nextBtn.on("pointerup", () => {
-        const state = GameState.get();
-        const allBlueprints = [
-          ...PLAYER_UNITS,
-          ...Object.values(ENEMY_UNITS).flat(),
-        ];
-        state.units.forEach((unit) => {
-          if (!unit.id.startsWith("p")) return;
-          unit.level += 1;
-          GameState.playerUnitLevels[unit.templateId] = unit.level;
-          const bp = allBlueprints.find(
-            (b) => b.templateId === unit.templateId,
-          );
-          if (!bp) return;
-          const scale = 1 + 0.1 * (unit.level - 1);
-          unit.maxHp = Math.round(bp.hp * scale);
-          unit.physicalDamage = Math.round(bp.physicalDamage * scale);
-          unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
-          unit.healAmount = Math.round(bp.healAmount * scale);
-        });
-        GameState.set(state);
-        this.scene.restart({ replay: false });
-      });
+      exitBtn.on("pointerover", () => exitBtn.setFillStyle(0x3a8a3a));
+      exitBtn.on("pointerout",  () => exitBtn.setFillStyle(0x2a6a2a));
+      exitBtn.on("pointerup",   () => this.scene.start("Prep"));
     } else {
-      // Defeat — single Replay button
-      const replayBtn = this.add
+      // Defeat — single Restart Battle button, no level-up
+      const restartBtn = this.add
         .rectangle(w / 2, btnY, btnW, btnH, 0x2a4a7a)
         .setDepth(31)
         .setInteractive({ useHandCursor: true });
       this.add
-        .text(w / 2, btnY, "Replay", {
-          fontSize,
-          color: "#ffffff",
-          fontStyle: "bold",
-        })
+        .text(w / 2, btnY, "Restart Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
         .setOrigin(0.5)
         .setDepth(32);
-      replayBtn.on("pointerover", () => replayBtn.setFillStyle(0x3a6aaa));
-      replayBtn.on("pointerout", () => replayBtn.setFillStyle(0x2a4a7a));
-      replayBtn.on("pointerup", () => this.scene.restart({ replay: true }));
+      restartBtn.on("pointerover", () => restartBtn.setFillStyle(0x3a6aaa));
+      restartBtn.on("pointerout",  () => restartBtn.setFillStyle(0x2a4a7a));
+      restartBtn.on("pointerup",   () => this.scene.restart({ replay: true }));
     }
   }
 }
