@@ -67,7 +67,8 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
 
   const side = unit.anchor.side;
 
-  if (unit.actionType === "heal") {
+  const skill = unit.skill;
+  if (skill.actionType === "enchantment") {
     const targets = getFriendlyTargets(side, state.occupancy);
     if (targets.length === 0) return state;
     const target = targets.reduce((best, coord) => {
@@ -81,17 +82,20 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
   }
 
   const targets =
-    unit.actionType === "ranged"
+    skill.actionType === "ranged"
       ? getRangedTargets(side, state.occupancy)
       : getMeleeTargets(unit, state.occupancy);
 
   if (targets.length === 0) return state;
 
   const target = targets[Math.floor(Math.random() * targets.length)];
+  const baseDamage = skill.damageType === "physical"
+    ? unit.physicalDamage
+    : unit.magicalDamage;
   return resolveAttack(
     getHitCells(unit, target),
-    unit.physicalDamage + unit.magicalDamage,
-    unit.skill?.damageType ?? "physical",
+    baseDamage,
+    skill.damageType,
     state,
   );
 }
@@ -914,16 +918,16 @@ export class Game extends Phaser.Scene {
       }
 
       let validTargets: CellCoord[];
-      if (activeUnit.actionType === "heal") {
+      if (activeUnit.skill.actionType === "enchantment") {
         validTargets = getFriendlyTargets("player", state.occupancy);
-      } else if (activeUnit.actionType === "ranged") {
+      } else if (activeUnit.skill.actionType === "ranged") {
         validTargets = getRangedTargets("player", state.occupancy);
       } else {
         validTargets = getMeleeTargets(activeUnit, state.occupancy);
       }
 
       // Back-row melee blocked by own front row — auto-skip
-      if (validTargets.length === 0 && activeUnit.actionType === "melee") {
+      if (validTargets.length === 0 && activeUnit.skill.actionType === "melee") {
         this.battleLog.addEntry(
           `${activeUnit.name} — blocked, skipping turn`,
           "neutral",
@@ -945,7 +949,7 @@ export class Game extends Phaser.Scene {
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
       this.setStatus(
-        activeUnit.actionType === "heal"
+        activeUnit.skill.actionType === "enchantment"
           ? `${activeUnit.name} — Click on the green cell to heal`
           : `${activeUnit.name} — Click on the red cell to attack`,
       );
@@ -972,7 +976,7 @@ export class Game extends Phaser.Scene {
     this.refreshCells(state);
 
     const hitCells = getHitCells(activeUnit, coord);
-    const isHeal = activeUnit.actionType === "heal";
+    const isHeal = activeUnit.skill.actionType === "enchantment";
 
     for (const { coord: hc, multiplier } of hitCells) {
       this.cellViews.get(cellKey(hc))?.setSkillPreview(multiplier, isHeal);
@@ -1022,7 +1026,7 @@ export class Game extends Phaser.Scene {
     const activeUnit = state.units.get(state.roundQueue[0]);
     const targetUnit = state.occupancy.cellToUnit.get(cellKey(coord));
 
-    if (activeUnit?.actionType === "heal") {
+    if (activeUnit?.skill.actionType === "enchantment") {
       const healerView = this.unitViews.get(state.roundQueue[0]);
       healerView?.setSpriteState("attack");
       this.time.delayedCall(400, () => {
@@ -1056,7 +1060,9 @@ export class Game extends Phaser.Scene {
 
     if (targetUnit) {
       const view = this.unitViews.get(targetUnit.id);
-      const dispDmg = (activeUnit?.physicalDamage ?? 0) + (activeUnit?.magicalDamage ?? 0);
+      const dispDmg = activeUnit?.skill.damageType === "physical"
+        ? (activeUnit?.physicalDamage ?? 0)
+        : (activeUnit?.magicalDamage ?? 0);
       if (view)
         this.showFloatingDamage(view.x, view.y, dispDmg);
       this.battleLog.addEntry(
@@ -1078,8 +1084,10 @@ export class Game extends Phaser.Scene {
       activeUnit
         ? getHitCells(activeUnit, coord)
         : [{ coord, multiplier: 1.0 }],
-      (activeUnit?.physicalDamage ?? 0) + (activeUnit?.magicalDamage ?? 0),
-      activeUnit?.skill?.damageType ?? "physical",
+      activeUnit?.skill.damageType === "physical"
+        ? (activeUnit?.physicalDamage ?? 0)
+        : (activeUnit?.magicalDamage ?? 0),
+      activeUnit?.skill.damageType ?? "physical",
       state,
     );
 
@@ -1120,7 +1128,7 @@ export class Game extends Phaser.Scene {
     const nextDelay = Game.DELAY_AUTO_NEXT;
 
     // ── Heal ────────────────────────────────────────────────────────────────
-    if (activeUnit.actionType === "heal") {
+    if (activeUnit.skill.actionType === "enchantment") {
       const healerView = this.unitViews.get(unitId);
       healerView?.setSpriteState("attack");
       this.time.delayedCall(400, () => {
@@ -1172,12 +1180,12 @@ export class Game extends Phaser.Scene {
 
     // ── Attack ───────────────────────────────────────────────────────────────
     const targets =
-      activeUnit.actionType === "ranged"
+      activeUnit.skill.actionType === "ranged"
         ? getRangedTargets(activeUnit.anchor.side, state.occupancy)
         : getMeleeTargets(activeUnit, state.occupancy);
 
     if (targets.length === 0) {
-      if (activeUnit.actionType === "melee")
+      if (activeUnit.skill.actionType === "melee")
         this.battleLog.addEntry(
           `${activeUnit.name} — blocked, skipping turn`,
           "neutral",
@@ -1193,7 +1201,9 @@ export class Game extends Phaser.Scene {
     const hitUnit = state.occupancy.cellToUnit.get(cellKey(target));
     if (hitUnit) {
       const view = this.unitViews.get(hitUnit.id);
-      const dispDmg = activeUnit.physicalDamage + activeUnit.magicalDamage;
+      const dispDmg = activeUnit.skill.damageType === "physical"
+        ? activeUnit.physicalDamage
+        : activeUnit.magicalDamage;
       if (view) this.showFloatingDamage(view.x, view.y, dispDmg);
       this.battleLog.addEntry(
         `${activeUnit.name} attacks ${hitUnit.name} -${dispDmg}`,
@@ -1210,8 +1220,10 @@ export class Game extends Phaser.Scene {
 
     let next = resolveAttack(
       getHitCells(activeUnit, target),
-      activeUnit.physicalDamage + activeUnit.magicalDamage,
-      activeUnit.skill?.damageType ?? "physical",
+      activeUnit.skill.damageType === "physical"
+        ? activeUnit.physicalDamage
+        : activeUnit.magicalDamage,
+      activeUnit.skill.damageType,
       state,
     );
 
@@ -1467,7 +1479,7 @@ export class Game extends Phaser.Scene {
     const validKeys = new Set(state.validTargets.map(cellKey));
     const activeUnit = state.units.get(state.roundQueue[0]);
     const targetHighlight =
-      activeUnit?.actionType === "heal" ? "heal_target" : "target";
+      activeUnit?.skill.actionType === "enchantment" ? "heal_target" : "target";
 
     for (const [key, cell] of this.cellViews) {
       cell.setHighlight(validKeys.has(key) ? targetHighlight : "none");
