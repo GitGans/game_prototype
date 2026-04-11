@@ -18,6 +18,9 @@ export class UnitView extends Phaser.GameObjects.Container {
 
   // Buff/debuff squares
   private effectSquares: Phaser.GameObjects.Rectangle[] = [];
+  private effectLabels: Phaser.GameObjects.Text[] = [];
+  private footprintW = 0;
+  private footprintH = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -37,6 +40,8 @@ export class UnitView extends Phaser.GameObjects.Container {
     const h     = colSpan * CELL_SIZE + (colSpan - 1) * CELL_GAP - pad;
     const wFull = rowSpan * CELL_SIZE + (rowSpan - 1) * CELL_GAP;        // full cell — used by sprite
     const hFull = colSpan * CELL_SIZE + (colSpan - 1) * CELL_GAP;
+    this.footprintW = wFull;
+    this.footprintH = hFull;
 
     if (textureKey && scene.textures.exists(textureKey)) {
       this.spriteConfig = spriteConfig ?? null;
@@ -115,6 +120,8 @@ export class UnitView extends Phaser.GameObjects.Container {
 
       for (const sq of this.effectSquares) sq.destroy();
       this.effectSquares = [];
+      for (const lbl of this.effectLabels) lbl.destroy();
+      this.effectLabels = [];
       return;
     }
 
@@ -130,21 +137,37 @@ export class UnitView extends Phaser.GameObjects.Container {
   private updateEffectSquares(unit: Unit): void {
     for (const sq of this.effectSquares) sq.destroy();
     this.effectSquares = [];
+    for (const lbl of this.effectLabels) lbl.destroy();
+    this.effectLabels = [];
 
     if (unit.activeEffects.length === 0) return;
 
-    const sqSize = Math.round(12 * LAYOUT_SCALE);
-    const gap = Math.round(3 * LAYOUT_SCALE);
-    const baseY = this.hpBarBg.y + Math.round(11 * LAYOUT_SCALE);
-    const totalW = unit.activeEffects.length * sqSize + (unit.activeEffects.length - 1) * gap;
-    const startX = -totalW / 2 + sqSize / 2;
+    const sqSize = Math.round(24 * LAYOUT_SCALE);
+    const gap    = Math.round(3  * LAYOUT_SCALE);
+
+    const topY  = -this.footprintH / 2 + sqSize / 2;
+    const baseX = this.isPlayer
+      ? -this.footprintW / 2 + sqSize / 2   // player → top-left
+      :  this.footprintW / 2 - sqSize / 2;  // enemy  → top-right
 
     unit.activeEffects.forEach((ae, i) => {
       const color = ae.effect.isBuff ? 0x22cc44 : 0xcc2222;
-      const x = startX + i * (sqSize + gap);
-      const sq = this.scene.add.rectangle(x, baseY, sqSize, sqSize, color, 0.9);
+      const x = baseX;
+      const y = topY + i * (sqSize + gap);
+
+      const sq = this.scene.add.rectangle(x, y, sqSize, sqSize, color, 0.9);
       this.add(sq);
       this.effectSquares.push(sq);
+
+      const lbl = this.scene.add.text(x, y, String(ae.remainingRounds), {
+        fontSize: `${Math.round(10 * LAYOUT_SCALE)}px`,
+        color: '#ffffff',
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: Math.round(2 * LAYOUT_SCALE),
+      }).setOrigin(0.5, 0.5);
+      this.add(lbl);
+      this.effectLabels.push(lbl);
     });
   }
 }

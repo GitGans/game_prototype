@@ -53,7 +53,20 @@ export const SKILLS: Record<string, Skill> = {
     id: "basic_heal",
     name: "Heal",
     actionType: "enchantment",
-    damageBlock: { pattern: PATTERNS.single, damageType: "physical" },
+    damageBlock: { pattern: PATTERNS.single, damageType: "magical" },
+  },
+
+  heal_with_defence: {
+    id: "heal_with_defence",
+    name: "Protective Heal",
+    actionType: "enchantment",
+    damageBlock: { pattern: PATTERNS.single, damageType: "magical" },
+    effectBlock: {
+      pattern: PATTERNS.single,
+      effectName: "Defence",
+      effect: EFFECTS.fortify,
+      duration: 2,
+    },
   },
 
   arcane_cross: {
