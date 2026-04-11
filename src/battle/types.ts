@@ -173,7 +173,6 @@ export interface ItemDefinition {
   subclass?: string;             // e.g. 'robe' | 'medium_armor' | 'heavy_armor' — plain string, extend freely in data
   allowedClasses?: UnitClass[];  // absent or [] = usable by all classes
   statBonuses: ItemStatBonuses;
-  description?: string;
   sprite?: string;  // path from public/, e.g. 'assets/sprites/items/wooden_ring.png'
 }
 
