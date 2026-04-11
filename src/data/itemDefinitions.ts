@@ -20,7 +20,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     id: "bronze_necklace",
     name: "Bronze Necklace",
     equipSlot: "necklace",
-    allowedClasses: ["warrior"],
+    allowedClasses: ["warrior", "pikeman", "halberdist", "crusher"],
     statBonuses: { hp: 5 },
     description: "+5 HP",
     sprite: "assets/sprites/items/bronze_necklace.png",
