@@ -39,7 +39,6 @@ export class Prep extends Phaser.Scene {
       ["magicalDamage", "Magic Dmg"],
       ["physicalDefense", "Phys Def"],
       ["magicalDefense", "Magic Def"],
-      ["healAmount", "Heal"],
     ];
     const statLines = STAT_LABELS.filter(
       ([k]) => (def.statBonuses[k] ?? 0) !== 0,
@@ -725,16 +724,9 @@ export class Prep extends Phaser.Scene {
         label: "Magic Def",
         value: `${bp.magicalDefense + (bonuses.magicalDefense ?? 0)}%`,
       },
-      {
-        label: "Heal",
-        value: String(
-          Math.round(bp.healAmount * scale) + (bonuses.healAmount ?? 0),
-        ),
-      },
       { label: "Initiative", value: String(bp.initiative) },
       { label: "Dodge", value: `${bp.dodge}%` },
       { label: "Block", value: `${bp.block}%` },
-      { label: "Action", value: bp.skill.actionType },
       // rowTrait is intentionally not displayed — it is an internal auto-placement hint, not a player-facing stat
     ];
     statLines.forEach(({ label, value }) => {

@@ -40,7 +40,6 @@ export interface UnitBlueprint {
   magicalDefense: number;   // percentage 0–100, reduces incoming magical damage
   dodge: number;            // % chance to avoid damage entirely (effective cap: 90)
   block: number;            // % chance to take only 50% damage (effective cap: 90)
-  healAmount: number;
   level: number;
   initiative: number;
   shape: UnitShape;
@@ -62,7 +61,6 @@ export interface Unit {
   magicalDefense: number;
   dodge: number;
   block: number;
-  healAmount: number;
   level: number;
   initiative: number;
   shape: UnitShape;
@@ -163,7 +161,6 @@ export interface ItemStatBonuses {
   magicalDamage?: number;
   physicalDefense?: number;
   magicalDefense?: number;
-  healAmount?: number;
 }
 
 export interface ItemDefinition {
