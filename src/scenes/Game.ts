@@ -888,6 +888,7 @@ export class Game extends Phaser.Scene {
   private startActiveUnitTurn(state: BattleState): void {
     this.pendingTargetCoord = null;
     if (GameState.get().phase === "end") return;
+    if (GameState.getBattleMode() === "quick") return;
     const activeId = state.roundQueue[0];
     if (!activeId) return;
 
@@ -1120,6 +1121,12 @@ export class Game extends Phaser.Scene {
   private autoTurn(): void {
     const state = GameState.get();
     if (state.phase === "end") return;
+    if (GameState.getBattleMode() !== "auto") {
+      if (GameState.getBattleMode() === "manual") {
+        this.startActiveUnitTurn(state);
+      }
+      return;
+    }
 
     const unitId = state.roundQueue[0];
     const activeUnit = state.units.get(unitId);
@@ -1279,6 +1286,7 @@ export class Game extends Phaser.Scene {
       }
     }
 
+    state = { ...state, phase: "end" };
     GameState.set(state);
     EventBus.emit(Events.STATE_CHANGED, state);
 
@@ -1321,6 +1329,11 @@ export class Game extends Phaser.Scene {
     };
 
     const autoBtn = makeBtn(x1, "▶▶", 0x1a3a5a, () => {
+      if (GameState.getBattleMode() === "auto") {
+        GameState.setBattleMode("manual");
+        this.updateManualButtons(GameState.get());
+        return;
+      }
       if (GameState.getBattleMode() !== "manual") return;
       GameState.setBattleMode("auto");
       this.updateManualButtons(GameState.get());
