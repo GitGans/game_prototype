@@ -137,7 +137,7 @@ export function applyEffectBlock(
     const newEffect: ActiveEffect = {
       effectName: block.effectName,
       effect: block.effect,
-      remainingRounds: 2,
+      remainingRounds: block.duration,
     };
 
     const effects = [...unit.activeEffects];

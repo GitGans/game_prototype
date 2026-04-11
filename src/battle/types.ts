@@ -124,6 +124,7 @@ export interface SkillEffectBlock {
   pattern: SkillPattern;
   effectName: string; // display name for the applied status (e.g. "Poisoned")
   effect: Effect;
+  duration: number;  // number of rounds the effect lasts
 }
 
 /**

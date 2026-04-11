@@ -86,6 +86,7 @@ export const SKILLS: Record<string, Skill> = {
       pattern: PATTERNS.single,
       effectName: "Poisoned",
       effect: EFFECTS.poison,
+      duration: 3,
     },
   },
 
@@ -97,6 +98,7 @@ export const SKILLS: Record<string, Skill> = {
       pattern: PATTERNS.single,
       effectName: "Weakened",
       effect: EFFECTS.weaken,
+      duration: 2,
     },
   },
 };
