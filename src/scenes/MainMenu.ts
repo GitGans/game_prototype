@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
+import { GameState } from "../core/GameState";
 
 export class MainMenu extends Phaser.Scene {
   constructor() {
@@ -7,6 +8,8 @@ export class MainMenu extends Phaser.Scene {
   }
 
   create(): void {
+    GameState.initItemsIfNeeded();
+
     const w = this.scale.width;
     const h = this.scale.height;
 

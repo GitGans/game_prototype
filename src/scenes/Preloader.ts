@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
+import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 
 export class Preloader extends Phaser.Scene {
   constructor() {
@@ -17,6 +18,13 @@ export class Preloader extends Phaser.Scene {
           frameWidth:  bp.spriteSheet.frameWidth,
           frameHeight: bp.spriteSheet.frameHeight,
         });
+      }
+    }
+
+    // load item sprites
+    for (const def of Object.values(ITEM_DEFINITIONS)) {
+      if (def.sprite) {
+        this.load.image(`sprite-item-${def.id}`, def.sprite);
       }
     }
   }

@@ -2,11 +2,82 @@ import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { GameState } from "../core/GameState";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
-import { UnitBlueprint } from "../battle/types";
+import { EquipSlot, UnitBlueprint } from "../battle/types";
+import { ITEM_DEFINITIONS } from "../data/itemDefinitions";
+import { equipItem, unequipItem, canUnitEquipItem, getEquippedBonuses } from "../battle/itemOps";
 
 export class Prep extends Phaser.Scene {
+  private _selectedItemId: string | null = null;
+  private _itemDescPanel: Phaser.GameObjects.Container | null = null;
+  private _activePanel: Phaser.GameObjects.Container | null = null;
+
   constructor() {
     super("Prep");
+  }
+
+  private _showItemDesc(instanceId: string, anchorX: number, anchorY: number): void {
+    this._itemDescPanel?.destroy(true);
+
+    const inst = GameState.itemInstances[instanceId];
+    const def = inst ? ITEM_DEFINITIONS[inst.definitionId] : undefined;
+    if (!def) return;
+
+    const STAT_LABELS: [keyof typeof def.statBonuses, string][] = [
+      ['hp',              'HP'],
+      ['physicalDamage',  'Phys Dmg'],
+      ['magicalDamage',   'Magic Dmg'],
+      ['physicalDefense', 'Phys Def'],
+      ['magicalDefense',  'Magic Def'],
+      ['healAmount',      'Heal'],
+    ];
+    const statLines = STAT_LABELS
+      .filter(([k]) => (def.statBonuses[k] ?? 0) !== 0)
+      .map(([k, label]) => `${label}: +${def.statBonuses[k]}`);
+
+    const lines = [def.name, ...statLines];
+    const panelW = Math.round(140 * LAYOUT_SCALE);
+    const lineH  = Math.round(16 * LAYOUT_SCALE);
+    const padV   = Math.round(8 * LAYOUT_SCALE);
+    const padH   = Math.round(8 * LAYOUT_SCALE);
+    const panelH = padV * 2 + lines.length * lineH;
+
+    const sceneW = this.scale.width;
+    let panelX = anchorX + Math.round(6 * LAYOUT_SCALE) + panelW / 2;
+    if (panelX + panelW / 2 > sceneW - 10) {
+      panelX = anchorX - Math.round(6 * LAYOUT_SCALE) - panelW / 2;
+    }
+    const panelY = anchorY;
+
+    const panel = this.add.container(0, 0).setDepth(50);
+    panel.add(this.add.rectangle(panelX, panelY, panelW + 2, panelH + 2, 0x6666aa).setDepth(49));
+    panel.add(this.add.rectangle(panelX, panelY, panelW, panelH, 0x111122).setAlpha(0.95).setDepth(50));
+
+    lines.forEach((line, i) => {
+      const isName = i === 0;
+      panel.add(
+        this.add
+          .text(
+            panelX - panelW / 2 + padH,
+            panelY - panelH / 2 + padV + i * lineH,
+            line,
+            {
+              fontSize: `${Math.round((isName ? 12 : 11) * LAYOUT_SCALE)}px`,
+              color: isName ? '#ffdd44' : '#cccccc',
+              fontStyle: isName ? 'bold' : 'normal',
+            },
+          )
+          .setDepth(51),
+      );
+    });
+
+    this._itemDescPanel = panel;
+    this._selectedItemId = instanceId;
+  }
+
+  private _clearItemDesc(): void {
+    this._itemDescPanel?.destroy(true);
+    this._itemDescPanel = null;
+    this._selectedItemId = null;
   }
 
   create(): void {
@@ -31,6 +102,13 @@ export class Prep extends Phaser.Scene {
       shop:  shopPanel,
       party: partyPanel,
     };
+
+    this.input.keyboard!.on('keydown-ESC', () => {
+      if (this._activePanel) {
+        this._activePanel.setVisible(false);
+        this._activePanel = null;
+      }
+    });
 
     // ── Three icon buttons ─────────────────────────────────────────────────────
     const iconSize = Math.round(90 * LAYOUT_SCALE);
@@ -59,6 +137,7 @@ export class Prep extends Phaser.Scene {
       icon.on("pointerup",   () => {
         Object.values(panels).forEach(p => p.setVisible(false));
         panels[key].setVisible(true);
+        this._activePanel = panels[key];
         if (key === "camp")  this.refreshCampPanel(campPanel, w, h);
         if (key === "party") this.refreshPartyPanel(partyPanel, w, h);
       });
@@ -266,89 +345,344 @@ export class Prep extends Phaser.Scene {
     w: number,
     h: number,
   ): void {
+    this._clearItemDesc();
     const detail = this.add.container(0, 0).setDepth(20);
-    detail.add(this.add.rectangle(
-      w / 2, h / 2,
-      Math.round(500 * LAYOUT_SCALE), Math.round(420 * LAYOUT_SCALE),
-      0x1a1a3a,
-    ));
 
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-    const scale = 1 + 0.1 * (level - 1);
+    const onEsc = () => {
+      detail.destroy(true);
+      this._clearItemDesc();
+      this.refreshPartyPanel(partyPanel, w, h);
+      partyPanel.setVisible(true);
+      this._activePanel = partyPanel;
+    };
+    this.input.keyboard!.once('keydown-ESC', onEsc);
 
-    // Name + level header
+    // ── Transparent overlay: click empty area → close description panel ───────
+    const overlay = this.add
+      .rectangle(w / 2, h / 2, w, h, 0x000000, 0)
+      .setInteractive()
+      .setDepth(19);
+    detail.add(overlay);
+    overlay.on('pointerup', () => { this._clearItemDesc(); });
+
+    // ── Window ────────────────────────────────────────────────────────────────
+    const WIN_W = Math.round(860 * LAYOUT_SCALE);
+    const WIN_H = Math.round(560 * LAYOUT_SCALE);
+    const winCY = Math.max(WIN_H / 2 + 10, h / 2);
+    detail.add(
+      this.add.rectangle(w / 2, winCY, WIN_W, WIN_H, 0x1a1a3a).setDepth(20)
+    );
+
+    // ── Close button (×) ─────────────────────────────────────────────────────
+    const closeBtn = this.add.text(
+      w / 2 - WIN_W / 2 + WIN_W - Math.round(10 * LAYOUT_SCALE),
+      winCY - WIN_H / 2 + Math.round(18 * LAYOUT_SCALE),
+      '×',
+      { fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`, color: '#aaaaaa' },
+    ).setOrigin(1, 0.5).setDepth(23).setInteractive({ useHandCursor: true });
+    detail.add(closeBtn);
+    closeBtn.on('pointerover', () => closeBtn.setColor('#ffffff'));
+    closeBtn.on('pointerout',  () => closeBtn.setColor('#aaaaaa'));
+    closeBtn.on('pointerup',   () => {
+      this.input.keyboard!.off('keydown-ESC', onEsc);
+      onEsc();
+    });
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    const level   = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const scale   = 1 + 0.1 * (level - 1);
+    const bonuses = getEquippedBonuses(
+      bp.templateId, GameState.itemContainers, GameState.itemInstances, ITEM_DEFINITIONS,
+    );
     detail.add(
       this.add
-        .text(w / 2, h / 2 - Math.round(185 * LAYOUT_SCALE), `${bp.name}  —  Level ${level}`, {
-          fontSize: `${Math.round(20 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
-          fontStyle: "bold",
-        })
-        .setOrigin(0.5)
+        .text(w / 2, winCY - WIN_H / 2 + Math.round(16 * LAYOUT_SCALE),
+          `${bp.name}  —  Level ${level}`,
+          { fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`, color: '#ffdd44', fontStyle: 'bold' })
+        .setOrigin(0.5, 0)
         .setDepth(21),
     );
 
-    // Sprite (idle frame 0) or colored fallback rect
+    // ── Layout constants ──────────────────────────────────────────────────────
+    const PAD          = Math.round(16 * LAYOUT_SCALE);
+    const EQ_CELL      = Math.round(64 * LAYOUT_SCALE);   // equipment cell size
+    const EQ_COL_STEP  = Math.round(72 * LAYOUT_SCALE);   // col stride (64 + 8 gap)
+    const EQ_ROW_STEP  = Math.round(72 * LAYOUT_SCALE);   // row stride (64 + 8 gap)
+    const SPRITE_SIZE  = Math.round(256 * LAYOUT_SCALE);
+    const BP_CELL      = Math.round(64 * LAYOUT_SCALE);
+    const BP_GAP       = Math.round(6 * LAYOUT_SCALE);
+    const BP_COLS      = 10;
+    const BP_ROWS      = 1;
+    const HEADER_H     = Math.round(36 * LAYOUT_SCALE);
+
+    const winLeft     = w / 2 - WIN_W / 2;
+    const contentTopY = winCY - WIN_H / 2 + HEADER_H + PAD;
+
+    // Equipment block: column centers, relative to window left
+    const eqColCenters = [
+      winLeft + PAD + EQ_CELL / 2,
+      winLeft + PAD + EQ_CELL / 2 + EQ_COL_STEP,
+      winLeft + PAD + EQ_CELL / 2 + 2 * EQ_COL_STEP,
+    ];
+    // Sprite block center X
+    const EQ_BLOCK_W = 3 * EQ_COL_STEP;
+    const spriteX    = winLeft + PAD + EQ_BLOCK_W + PAD + SPRITE_SIZE / 2;
+    const spriteY    = contentTopY + SPRITE_SIZE / 2;
+    // Skill block X start
+    const skillX     = spriteX + SPRITE_SIZE / 2 + PAD;
+    const skillY     = contentTopY;
+    const rightPanelW = winLeft + WIN_W - PAD - skillX;
+
+    // ── LEFT: Equipment silhouette ────────────────────────────────────────────
+    const EQUIP_SILHOUETTE: { slot: EquipSlot; col: 0 | 1 | 2; row: number }[] = [
+      { slot: 'necklace',   col: 0, row: 0 },
+      { slot: 'helmet',     col: 1, row: 0 },
+      { slot: 'artifact',   col: 2, row: 0 },
+      { slot: 'hand_left',  col: 0, row: 1 },
+      { slot: 'armor',      col: 1, row: 1 },
+      { slot: 'hand_right', col: 2, row: 1 },
+      { slot: 'ring_1',     col: 0, row: 2 },
+      { slot: 'belt',       col: 1, row: 2 },
+      { slot: 'ring_2',     col: 2, row: 2 },
+      { slot: 'gloves',     col: 0, row: 3 },
+      { slot: 'boots',      col: 1, row: 3 },
+      // col 2, row 3 → empty placeholder (drawn separately below)
+    ];
+
+    const SLOT_ICONS: Partial<Record<EquipSlot, string>> = {
+      helmet:     '🪖',
+      necklace:   '📿',
+      armor:      '🥋',
+      belt:       '▬',
+      hand_left:  '🛡️',
+      hand_right: '⚔️',
+      gloves:     '🧤',
+      ring_1:     '💍',
+      ring_2:     '💍',
+      boots:      '👢',
+      artifact:   '🔮',
+    };
+
+    const equipContainer = GameState.itemContainers[`equip_${bp.templateId}`];
+
+    EQUIP_SILHOUETTE.forEach(({ slot, col, row }) => {
+      const cx = eqColCenters[col];
+      const cy = contentTopY + row * EQ_ROW_STEP + EQ_CELL / 2;
+
+      const equippedId   = equipContainer?.slots[slot];
+      const equippedInst = equippedId ? GameState.itemInstances[equippedId] : undefined;
+      const equippedDef  = equippedInst ? ITEM_DEFINITIONS[equippedInst.definitionId] : undefined;
+      const bgColor      = 0x1e1e2e;
+
+      const cell = this.add.rectangle(cx, cy, EQ_CELL, EQ_CELL, bgColor).setDepth(21);
+      detail.add(cell);
+
+      if (!equippedDef) {
+        const icon = SLOT_ICONS[slot];
+        if (icon) {
+          detail.add(
+            this.add.text(cx, cy, icon,
+              { fontSize: `${Math.round(28 * LAYOUT_SCALE)}px` })
+              .setOrigin(0.5).setDepth(22).setAlpha(0.5)
+          );
+        }
+        detail.add(
+          this.add.rectangle(cx, cy, EQ_CELL, EQ_CELL, 0x000000)
+            .setAlpha(0.45)
+            .setDepth(23)
+        );
+      }
+
+      if (equippedDef) {
+        const itemSpriteKey = `sprite-item-${equippedInst!.definitionId}`;
+        if (this.textures.exists(itemSpriteKey)) {
+          detail.add(
+            this.add.image(cx, cy, itemSpriteKey)
+              .setDisplaySize(EQ_CELL, EQ_CELL)
+              .setDepth(22)
+          );
+        }
+
+        cell.setInteractive({ useHandCursor: true });
+        cell.on('pointerover', () => cell.setFillStyle(0x2e2e4e));
+        cell.on('pointerout',  () => cell.setFillStyle(bgColor));
+        cell.on('pointerup', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
+          event.stopPropagation();
+          if (this._selectedItemId === equippedId) {
+            this._clearItemDesc();
+            this.input.keyboard!.off('keydown-ESC', onEsc);
+            unequipItem(bp.templateId, slot,
+              GameState.itemContainers, GameState.itemInstances, ITEM_DEFINITIONS);
+            detail.destroy(true);
+            this.showUnitDetail(partyPanel, bp, w, h);
+          } else {
+            this._showItemDesc(equippedId!, cx + EQ_CELL / 2, cy);
+          }
+        });
+      }
+    });
+
+    // Empty placeholder cell at col 2, row 3
+    {
+      const cx = eqColCenters[2];
+      const cy = contentTopY + 3 * EQ_ROW_STEP + EQ_CELL / 2;
+      detail.add(this.add.rectangle(cx, cy, EQ_CELL, EQ_CELL, 0x1e1e2e).setDepth(21));
+    }
+
+    // ── CENTER: Unit sprite ───────────────────────────────────────────────────
     const textureKey = `sprite-${bp.templateId}`;
-    const spriteX    = w / 2 - Math.round(130 * LAYOUT_SCALE);
-    const spriteY    = h / 2 - Math.round(60 * LAYOUT_SCALE);
     if (this.textures.exists(textureKey)) {
       detail.add(
-        this.add.image(spriteX, spriteY, textureKey, 0).setScale(LAYOUT_SCALE).setDepth(21),
+        this.add.image(spriteX, spriteY, textureKey, 0)
+          .setDisplaySize(SPRITE_SIZE, SPRITE_SIZE)
+          .setDepth(21)
       );
     } else {
       detail.add(
-        this.add
-          .rectangle(spriteX, spriteY, Math.round(80 * LAYOUT_SCALE), Math.round(80 * LAYOUT_SCALE), 0x4a4a6a)
-          .setDepth(21),
+        this.add.rectangle(spriteX, spriteY, SPRITE_SIZE, SPRITE_SIZE, 0x4a4a6a).setDepth(21)
       );
     }
 
-    // Stats column
-    const statsX  = w / 2 + Math.round(20 * LAYOUT_SCALE);
-    const statsY0 = h / 2 - Math.round(120 * LAYOUT_SCALE);
-    const lineH   = Math.round(26 * LAYOUT_SCALE);
-    const statLines: string[] = [
-      `HP:            ${Math.round(bp.hp * scale)}`,
-      `Phys Damage:   ${Math.round(bp.physicalDamage * scale)}`,
-      `Magic Damage:  ${Math.round(bp.magicalDamage * scale)}`,
-      `Phys Defense:  ${bp.physicalDefense}%`,
-      `Magic Defense: ${bp.magicalDefense}%`,
-      `Heal Amount:   ${Math.round(bp.healAmount * scale)}`,
-      `Initiative:    ${bp.initiative}`,
-      `Action:        ${bp.actionType}`,
-      `Row:           ${bp.rowTrait}`,
-      `Skill:         ${bp.skill?.name ?? "—"}`,
+    // ── RIGHT: Stats + Skill ─────────────────────────────────────────────────
+    const lineH = Math.round(18 * LAYOUT_SCALE);
+    let rightY  = skillY;
+
+    detail.add(
+      this.add.text(skillX, rightY, 'Stats',
+        { fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`, color: '#ffdd44', fontStyle: 'bold', wordWrap: { width: rightPanelW } })
+        .setDepth(21)
+    );
+    rightY += Math.round(20 * LAYOUT_SCALE);
+
+    const statLines: { label: string; value: string }[] = [
+      { label: 'HP',          value: String(Math.round(bp.hp * scale)            + (bonuses.hp              ?? 0)) },
+      { label: 'Phys Dmg',   value: String(Math.round(bp.physicalDamage * scale) + (bonuses.physicalDamage  ?? 0)) },
+      { label: 'Magic Dmg',  value: String(Math.round(bp.magicalDamage * scale)  + (bonuses.magicalDamage   ?? 0)) },
+      { label: 'Phys Def',   value: `${bp.physicalDefense + (bonuses.physicalDefense ?? 0)}%` },
+      { label: 'Magic Def',  value: `${bp.magicalDefense  + (bonuses.magicalDefense  ?? 0)}%` },
+      { label: 'Heal',        value: String(Math.round(bp.healAmount * scale)     + (bonuses.healAmount      ?? 0)) },
+      { label: 'Initiative',  value: String(bp.initiative) },
+      { label: 'Action',      value: bp.actionType },
+      { label: 'Row',         value: bp.rowTrait },
     ];
-    statLines.forEach((line, i) => {
+    statLines.forEach(({ label, value }) => {
       detail.add(
-        this.add
-          .text(statsX, statsY0 + i * lineH, line, {
-            fontSize: `${Math.round(14 * LAYOUT_SCALE)}px`,
-            color: "#cccccc",
-          })
-          .setDepth(21),
+        this.add.text(skillX, rightY, `${label}: ${value}`,
+          { fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`, color: '#cccccc', wordWrap: { width: rightPanelW } })
+          .setDepth(21)
       );
+      rightY += lineH;
     });
 
-    // Back button
-    const backBtnY = h / 2 + Math.round(185 * LAYOUT_SCALE);
+    rightY += Math.round(8 * LAYOUT_SCALE);
+    detail.add(
+      this.add.text(skillX, rightY, 'Skill',
+        { fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`, color: '#ffdd44', fontStyle: 'bold', wordWrap: { width: rightPanelW } })
+        .setDepth(21)
+    );
+    rightY += Math.round(20 * LAYOUT_SCALE);
+
+    const skill = bp.skill;
+    if (skill) {
+      const skillLines: { text: string; color: string }[] = [
+        { text: skill.name,                    color: '#ffffff' },
+        { text: `Type: ${skill.effectType}`,   color: '#aaaaaa' },
+        { text: `Damage: ${skill.damageType}`, color: '#aaaaaa' },
+      ];
+      skillLines.forEach(({ text, color }) => {
+        detail.add(
+          this.add.text(skillX, rightY, text,
+            { fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`, color, wordWrap: { width: rightPanelW } })
+            .setDepth(21)
+        );
+        rightY += lineH;
+      });
+    } else {
+      detail.add(
+        this.add.text(skillX, rightY, 'No skill',
+          { fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`, color: '#555555', wordWrap: { width: rightPanelW } })
+          .setDepth(21)
+      );
+    }
+
+    // ── BOTTOM: Shared backpack ───────────────────────────────────────────────
+    const backpackTopY      = contentTopY + 4 * EQ_ROW_STEP + PAD;
+    const bpGridX           = winLeft + PAD;
+    const bpGridY           = backpackTopY + Math.round(20 * LAYOUT_SCALE);
+    const backpackContainer = GameState.itemContainers['backpack_shared'];
+
+    detail.add(
+      this.add.text(bpGridX, backpackTopY, 'Backpack',
+        { fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`, color: '#ffdd44', fontStyle: 'bold' })
+        .setDepth(21)
+    );
+
+    for (let row = 0; row < BP_ROWS; row++) {
+      for (let col = 0; col < BP_COLS; col++) {
+        const slotKey    = String(row * BP_COLS + col);
+        const cellCX     = bpGridX + col * (BP_CELL + BP_GAP) + BP_CELL / 2;
+        const cellCY     = bpGridY + row * (BP_CELL + BP_GAP) + BP_CELL / 2;
+        const instanceId = backpackContainer?.slots[slotKey];
+        const instance   = instanceId ? GameState.itemInstances[instanceId] : undefined;
+        const def        = instance ? ITEM_DEFINITIONS[instance.definitionId] : undefined;
+        const allowed    = def
+          ? canUnitEquipItem(bp.unitClass, instanceId!, GameState.itemInstances, ITEM_DEFINITIONS)
+          : true;
+        const bgColor = def ? (allowed ? 0x2a2a4a : 0x252535) : 0x1e1e2e;
+
+        const cell = this.add.rectangle(cellCX, cellCY, BP_CELL, BP_CELL, bgColor).setDepth(21);
+        detail.add(cell);
+
+        if (def) {
+          const itemSpriteKey = `sprite-item-${instance!.definitionId}`;
+          if (this.textures.exists(itemSpriteKey)) {
+            detail.add(
+              this.add.image(cellCX, cellCY, itemSpriteKey)
+                .setDisplaySize(BP_CELL, BP_CELL)
+                .setAlpha(allowed ? 1 : 0.4)
+                .setDepth(22)
+            );
+          }
+
+          if (allowed) {
+            cell.setInteractive({ useHandCursor: true });
+            cell.on('pointerover', () => cell.setFillStyle(0x3a3a6a));
+            cell.on('pointerout',  () => cell.setFillStyle(bgColor));
+            cell.on('pointerup', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
+              if (!instanceId) return;
+              event.stopPropagation();
+              if (this._selectedItemId === instanceId) {
+                this._clearItemDesc();
+                this.input.keyboard!.off('keydown-ESC', onEsc);
+                equipItem(bp.templateId, bp.unitClass, instanceId,
+                  GameState.itemContainers, GameState.itemInstances, ITEM_DEFINITIONS);
+                detail.destroy(true);
+                this.showUnitDetail(partyPanel, bp, w, h);
+              } else {
+                this._showItemDesc(instanceId, cellCX + BP_CELL / 2, cellCY);
+              }
+            });
+          }
+        }
+      }
+    }
+
+    // ── Back button ───────────────────────────────────────────────────────────
+    const backBtnY = winCY + WIN_H / 2 - Math.round(24 * LAYOUT_SCALE);
     const backBtn  = this.add
-      .rectangle(w / 2, backBtnY, Math.round(120 * LAYOUT_SCALE), Math.round(34 * LAYOUT_SCALE), 0x4a4a6a)
+      .rectangle(w / 2, backBtnY, Math.round(120 * LAYOUT_SCALE), Math.round(30 * LAYOUT_SCALE), 0x4a4a6a)
       .setInteractive({ useHandCursor: true })
       .setDepth(21);
     detail.add(backBtn);
     detail.add(
-      this.add
-        .text(w / 2, backBtnY, "← Back", {
-          fontSize: `${Math.round(14 * LAYOUT_SCALE)}px`,
-          color: "#ffffff",
-        })
-        .setOrigin(0.5)
-        .setDepth(22),
+      this.add.text(w / 2, backBtnY, '← Back',
+        { fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`, color: '#ffffff' })
+        .setOrigin(0.5).setDepth(22)
     );
-
-    backBtn.on("pointerup", () => {
+    backBtn.on('pointerover', () => backBtn.setFillStyle(0x5a5a8a));
+    backBtn.on('pointerout',  () => backBtn.setFillStyle(0x4a4a6a));
+    backBtn.on('pointerup', () => {
+      this.input.keyboard!.off('keydown-ESC', onEsc);
       detail.destroy(true);
       this.refreshPartyPanel(partyPanel, w, h);
     });
@@ -372,7 +706,7 @@ export class Prep extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(12);
 
-    closeBtn.on("pointerup", () => panel.setVisible(false));
+    closeBtn.on("pointerup", () => { panel.setVisible(false); this._activePanel = null; });
     panel.add([closeBtn, closeText]);
   }
 }

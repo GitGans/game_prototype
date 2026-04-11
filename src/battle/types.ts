@@ -4,6 +4,7 @@ export type Col = 0 | 1 | 2;
 
 export type RowTrait = 'front' | 'back';
 export type UnitRace = 'orc' | 'demon' | 'undead';
+export type UnitClass = 'warrior' | 'ranger' | 'mage' | 'priest';
 
 export interface CellCoord {
   side: Side;
@@ -45,6 +46,7 @@ export interface UnitBlueprint {
   skill?: Skill;
   rowTrait: RowTrait;
   race?: UnitRace;
+  unitClass: UnitClass;
   spriteSheet?: SpriteSheetConfig;
 }
 
@@ -135,4 +137,58 @@ export interface Skill {
 export interface ResolvedHitCell {
   coord: CellCoord;
   multiplier: number;
+}
+
+// ─── Item System ──────────────────────────────────────────────────────────────
+
+export type EquipSlot =
+  | 'ring_1'
+  | 'ring_2'
+  | 'ring'        // item-level type only — never a container slot key
+  | 'helmet'
+  | 'necklace'
+  | 'hand_right'
+  | 'armor'
+  | 'hand_left'
+  | 'gloves'
+  | 'belt'
+  | 'boots'
+  | 'artifact';
+
+export interface ItemStatBonuses {
+  hp?: number;
+  physicalDamage?: number;
+  magicalDamage?: number;
+  physicalDefense?: number;
+  magicalDefense?: number;
+  healAmount?: number;
+}
+
+export interface ItemDefinition {
+  id: string;
+  name: string;
+  equipSlot: EquipSlot | null;  // null = can only live in backpack (e.g. future consumables)
+  subclass?: string;             // e.g. 'robe' | 'medium_armor' | 'heavy_armor' — plain string, extend freely in data
+  allowedClasses?: UnitClass[];  // absent or [] = usable by all classes
+  statBonuses: ItemStatBonuses;
+  description?: string;
+  sprite?: string;  // path from public/, e.g. 'assets/sprites/items/wooden_ring.png'
+}
+
+export interface ItemInstance {
+  id: string;           // unique runtime id, e.g. 'item_001'
+  definitionId: string; // references ItemDefinition.id
+}
+
+export type ContainerKind = 'backpack' | 'equipment';
+
+export interface ItemContainer {
+  id: string;               // e.g. 'backpack_tank', 'equip_tank'
+  kind: ContainerKind;
+  ownerTemplateId?: string;  // unit templateId; absent for shared containers (e.g. backpack_shared)
+  slots: Record<string, string>;
+  // Convention:
+  //   backpack  → keys are '0'–'23' (sparse; absent key = empty cell)
+  //   equipment → keys are EquipSlot strings, e.g. 'accessory' (absent = empty)
+  // NEVER store null/undefined as a value — only set and delete keys.
 }
