@@ -724,9 +724,9 @@ export class Prep extends Phaser.Scene {
         label: "Magic Def",
         value: `${bp.magicalDefense + (bonuses.magicalDefense ?? 0)}%`,
       },
-      { label: "Initiative", value: String(bp.initiative) },
       { label: "Dodge", value: `${bp.dodge}%` },
       { label: "Block", value: `${bp.block}%` },
+      { label: "Initiative", value: String(bp.initiative) },
       // rowTrait is intentionally not displayed — it is an internal auto-placement hint, not a player-facing stat
     ];
     statLines.forEach(({ label, value }) => {
