@@ -990,7 +990,7 @@ export class Game extends Phaser.Scene {
         const unit = state.occupancy.cellToUnit.get(cellKey(hc));
         if (!unit || seen.has(unit.id)) continue;
         seen.add(unit.id);
-        previewParts.push(`${unit.name} +${activeUnit.healAmount}`);
+        previewParts.push(`${unit.name} +${activeUnit.magicalDamage}`);
       }
     } else {
       const baseDamage = activeUnit.physicalDamage + activeUnit.magicalDamage;
@@ -1036,9 +1036,9 @@ export class Game extends Phaser.Scene {
       if (targetUnit) {
         const view = this.unitViews.get(targetUnit.id);
         if (view)
-          this.showFloatingHeal(view.x, view.y, activeUnit?.healAmount ?? 0);
+          this.showFloatingHeal(view.x, view.y, activeUnit?.magicalDamage ?? 0);
         this.battleLog.addEntry(
-          `${activeUnit?.name ?? "?"} heals ${targetUnit.name} +${activeUnit?.healAmount ?? 0}`,
+          `${activeUnit?.name ?? "?"} heals ${targetUnit.name} +${activeUnit?.magicalDamage ?? 0}`,
           "positive",
         );
       }
@@ -1046,7 +1046,7 @@ export class Game extends Phaser.Scene {
         activeUnit
           ? getHitCells(activeUnit, coord)
           : [{ coord, multiplier: 1.0 }],
-        activeUnit?.healAmount ?? 0,
+        activeUnit?.magicalDamage ?? 0,
         state,
       );
       next = this.advanceQueue(next);
@@ -1166,16 +1166,16 @@ export class Game extends Phaser.Scene {
       const healedUnit = state.occupancy.cellToUnit.get(cellKey(target));
       if (healedUnit) {
         const view = this.unitViews.get(healedUnit.id);
-        if (view) this.showFloatingHeal(view.x, view.y, activeUnit.healAmount);
+        if (view) this.showFloatingHeal(view.x, view.y, activeUnit.magicalDamage);
         this.battleLog.addEntry(
-          `${activeUnit.name} heals ${healedUnit.name} +${activeUnit.healAmount}`,
+          `${activeUnit.name} heals ${healedUnit.name} +${activeUnit.magicalDamage}`,
           logStyle,
         );
       }
 
       let next = resolveHeal(
         getHitCells(activeUnit, target),
-        activeUnit.healAmount,
+        activeUnit.magicalDamage,
         state,
       );
       next = this.advanceQueue(next);
@@ -1610,7 +1610,6 @@ export class Game extends Phaser.Scene {
         unit.maxHp          = Math.round(bp.hp * scale);
         unit.physicalDamage = Math.round(bp.physicalDamage * scale);
         unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
-        unit.healAmount     = Math.round(bp.healAmount * scale);
       });
       GameState.set(state);
 

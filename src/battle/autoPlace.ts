@@ -27,8 +27,6 @@ export function createUnitInstance(
   const scaledHp         = Math.round(blueprint.hp * scale);
   const scaledPhysDmg    = Math.round(blueprint.physicalDamage * scale);
   const scaledMagicDmg   = Math.round(blueprint.magicalDamage * scale);
-  const scaledHealAmount = Math.round(blueprint.healAmount * scale);
-
   // Flat bonuses from equipped items (returns {} for enemies — no containers)
   const bonuses = getEquippedBonuses(
     blueprint.templateId,
@@ -48,7 +46,6 @@ export function createUnitInstance(
     magicalDefense:  blueprint.magicalDefense  + (bonuses.magicalDefense  ?? 0),
     dodge:           blueprint.dodge,
     block:           blueprint.block,
-    healAmount:      scaledHealAmount  + (bonuses.healAmount      ?? 0),
     level,
     initiative:  blueprint.initiative,
     shape:       blueprint.shape,
