@@ -10,6 +10,8 @@ export class Prep extends Phaser.Scene {
   private _selectedItemId: string | null = null;
   private _itemDescPanel: Phaser.GameObjects.Container | null = null;
   private _activePanel: Phaser.GameObjects.Container | null = null;
+  private battleBtn!: Phaser.GameObjects.Rectangle;
+  private battleBtnText!: Phaser.GameObjects.Text;
 
   constructor() {
     super("Prep");
@@ -148,20 +150,48 @@ export class Prep extends Phaser.Scene {
     const btnH = Math.round(56 * LAYOUT_SCALE);
     const btnY = h / 2 + Math.round(160 * LAYOUT_SCALE);
 
-    const btn = this.add
+    this.battleBtn = this.add
       .rectangle(w / 2, btnY, btnW, btnH, 0x2a6a2a)
       .setInteractive({ useHandCursor: true });
-    this.add
+    this.battleBtnText = this.add
       .text(w / 2, btnY, "Go to Battle", {
-        fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
+        fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
         color: "#ffffff",
         fontStyle: "bold",
+        align: "center",
       })
       .setOrigin(0.5);
 
-    btn.on("pointerover", () => btn.setFillStyle(0x3a8a3a));
-    btn.on("pointerout",  () => btn.setFillStyle(0x2a6a2a));
-    btn.on("pointerup",   () => this.scene.start("Game"));
+    this.battleBtn.on("pointerup", () => this.scene.start("Game"));
+    this.refreshBattleButton();
+  }
+
+  // ── Battle button helpers ───────────────────────────────────────────────────
+
+  private getActiveCount(): number {
+    return PLAYER_UNITS.length - GameState.campUnitIds.length;
+  }
+
+  private refreshBattleButton(): void {
+    const active = this.getActiveCount();
+    const valid = active > 0 && active <= 9;
+    const excess = active - 9;
+
+    this.battleBtn.setFillStyle(valid ? 0x2a6a2a : 0x6a2a2a);
+
+    let label = "Go to Battle";
+    if (active === 0) {
+      label = "Go to Battle\n(party is empty)";
+    } else if (excess > 0) {
+      label = `Go to Battle\n(move ${excess} to camp)`;
+    }
+    this.battleBtnText.setText(label);
+
+    if (valid) {
+      this.battleBtn.setInteractive({ useHandCursor: true });
+    } else {
+      this.battleBtn.disableInteractive();
+    }
   }
 
   // ── Camp Panel ──────────────────────────────────────────────────────────────
@@ -237,8 +267,14 @@ export class Prep extends Phaser.Scene {
       toggleBtn.on("pointerup", () => {
         const ids = GameState.campUnitIds;
         const idx = ids.indexOf(bp.templateId);
+        const isCurrentlyActive = idx < 0;
+
+        // Prevent sending the last active unit to camp
+        if (isCurrentlyActive && this.getActiveCount() <= 1) return;
+
         if (idx >= 0) ids.splice(idx, 1); else ids.push(bp.templateId);
         this.refreshCampPanel(panel, w, h);
+        this.refreshBattleButton();
       });
 
       panel.add([label, toggleBtn, toggleText]);

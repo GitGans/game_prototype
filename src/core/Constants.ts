@@ -3,8 +3,8 @@ export const LAYOUT_SCALE = Math.min(
   window.innerHeight / 500,
 );
 
-export const CELL_SIZE = Math.round(100 * LAYOUT_SCALE);
-export const CELL_GAP = Math.round(12 * LAYOUT_SCALE);
+export const CELL_SIZE = Math.round(126 * LAYOUT_SCALE);
+export const CELL_GAP = 0;
 export const GRID_COLS = 3;
 export const GRID_ROWS = 2;
 export const SIDE_GAP = Math.round(40 * LAYOUT_SCALE); // horizontal gap between the two grids
