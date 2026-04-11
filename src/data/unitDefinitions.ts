@@ -86,7 +86,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 9,
     shape: SHAPES["1x1"],
-    skill: SKILLS.pierce,
+    skill: SKILLS.poison_strike,
     rowTrait: "front",
     spriteSheet: {
       path: "assets/sprites/units/crusher.png",
@@ -155,7 +155,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 6,
     shape: SHAPES["1x1"],
-    skill: SKILLS.arcane_cross,
+    skill: SKILLS.weaken_curse,
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/stormbearer.png",

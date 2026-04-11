@@ -16,6 +16,9 @@ export class UnitView extends Phaser.GameObjects.Container {
   private spriteConfig: SpriteSheetConfig | null = null;
   private isDead = false;
 
+  // Buff/debuff squares
+  private effectSquares: Phaser.GameObjects.Rectangle[] = [];
+
   constructor(
     scene: Phaser.Scene,
     x: number,
@@ -109,6 +112,9 @@ export class UnitView extends Phaser.GameObjects.Container {
       this.nameText.setAlpha(0.4);
       this.hpText.setText('DEAD').setAlpha(0.5);
       this.hpBarFg.setDisplaySize(0, this.barH);
+
+      for (const sq of this.effectSquares) sq.destroy();
+      this.effectSquares = [];
       return;
     }
 
@@ -117,5 +123,28 @@ export class UnitView extends Phaser.GameObjects.Container {
     const ratio = unit.hp / unit.maxHp;
     this.hpBarFg.setDisplaySize(maxW * ratio, this.barH);
     this.hpText.setText(`${unit.hp}/${unit.maxHp}`);
+
+    this.updateEffectSquares(unit);
+  }
+
+  private updateEffectSquares(unit: Unit): void {
+    for (const sq of this.effectSquares) sq.destroy();
+    this.effectSquares = [];
+
+    if (unit.activeEffects.length === 0) return;
+
+    const sqSize = Math.round(12 * LAYOUT_SCALE);
+    const gap = Math.round(3 * LAYOUT_SCALE);
+    const baseY = this.hpBarBg.y + Math.round(11 * LAYOUT_SCALE);
+    const totalW = unit.activeEffects.length * sqSize + (unit.activeEffects.length - 1) * gap;
+    const startX = -totalW / 2 + sqSize / 2;
+
+    unit.activeEffects.forEach((ae, i) => {
+      const color = ae.effect.isBuff ? 0x22cc44 : 0xcc2222;
+      const x = startX + i * (sqSize + gap);
+      const sq = this.scene.add.rectangle(x, baseY, sqSize, sqSize, color, 0.9);
+      this.add(sq);
+      this.effectSquares.push(sq);
+    });
   }
 }

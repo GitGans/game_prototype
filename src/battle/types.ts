@@ -69,6 +69,7 @@ export interface Unit {
   rowTrait: RowTrait;
   race?: UnitRace;
   templateId: string;
+  activeEffects: ActiveEffect[]; // runtime only; max 2; ordered oldest-first
 }
 
 export interface OccupancyMap {
@@ -92,6 +93,38 @@ export interface BattleState {
 
 export type DamageType = 'physical' | 'magical';
 export type SkillActionType = 'melee' | 'ranged' | 'enchantment';
+
+// ─── Effect System ────────────────────────────────────────────────────────────
+
+/** Reusable mechanical effect definition (referenced by SkillEffectBlock). */
+export interface Effect {
+  id: string;
+  isBuff: boolean;               // true = green square, false = red square
+  healPerTurn?: number;          // HP restored at round end while active
+  damagePerTurn?: number;        // HP lost at round end while active
+  physicalDefenseBonus?: number; // flat additive modifier to physicalDefense while active
+  magicalDefenseBonus?: number;  // flat additive modifier to magicalDefense while active
+}
+
+/** Live buff/debuff instance on a unit. */
+export interface ActiveEffect {
+  effectName: string;      // display name shown in log/UI (e.g. "Poisoned")
+  effect: Effect;
+  remainingRounds: number; // decremented at round end; removed when reaches 0
+}
+
+/** Skill block that deals damage. */
+export interface DamageBlock {
+  pattern: SkillPattern;
+  damageType: DamageType;
+}
+
+/** Skill block that applies a buff/debuff. Never deals damage. */
+export interface SkillEffectBlock {
+  pattern: SkillPattern;
+  effectName: string; // display name for the applied status (e.g. "Poisoned")
+  effect: Effect;
+}
 
 /**
  * One active cell in a skill pattern.
@@ -126,8 +159,9 @@ export interface Skill {
   id: string;
   name: string;
   actionType: SkillActionType;
-  damageType: DamageType;
-  pattern: SkillPattern;
+  // At least one of the two blocks must be present.
+  damageBlock?: DamageBlock;
+  effectBlock?: SkillEffectBlock;
 }
 
 /**
