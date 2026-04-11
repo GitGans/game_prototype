@@ -65,9 +65,9 @@ class GameStateManager {
     if (Object.keys(this.itemContainers).length > 0) return;
 
     // One shared backpack for all player units
-    this.itemContainers['backpack_shared'] = {
-      id: 'backpack_shared',
-      kind: 'backpack',
+    this.itemContainers["backpack_shared"] = {
+      id: "backpack_shared",
+      kind: "backpack",
       slots: {},
     };
 
@@ -76,7 +76,7 @@ class GameStateManager {
       const tid = bp.templateId;
       this.itemContainers[`equip_${tid}`] = {
         id: `equip_${tid}`,
-        kind: 'equipment',
+        kind: "equipment",
         ownerTemplateId: tid,
         slots: {},
       };
@@ -87,12 +87,12 @@ class GameStateManager {
     const addToSharedBackpack = (slotKey: string, definitionId: string) => {
       const id = `item_${String(counter++).padStart(3, "0")}`;
       this.itemInstances[id] = { id, definitionId };
-      this.itemContainers['backpack_shared'].slots[slotKey] = id;
+      this.itemContainers["backpack_shared"].slots[slotKey] = id;
     };
 
-    addToSharedBackpack("0", "wooden_ring");
+    addToSharedBackpack("0", "bronze_ring");
     addToSharedBackpack("1", "iron_ring");
-    addToSharedBackpack("2", "battle_charm");
+    addToSharedBackpack("2", "bronze_necklace");
   }
 }
 

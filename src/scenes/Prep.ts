@@ -367,9 +367,10 @@ export class Prep extends Phaser.Scene {
 
     // ── Window ────────────────────────────────────────────────────────────────
     const WIN_W = Math.round(860 * LAYOUT_SCALE);
-    const WIN_H = Math.round(640 * LAYOUT_SCALE);
+    const WIN_H = Math.round(560 * LAYOUT_SCALE);
+    const winCY = Math.max(WIN_H / 2 + 10, h / 2);
     detail.add(
-      this.add.rectangle(w / 2, h / 2, WIN_W, WIN_H, 0x1a1a3a).setDepth(20)
+      this.add.rectangle(w / 2, winCY, WIN_W, WIN_H, 0x1a1a3a).setDepth(20)
     );
 
     // ── Header ────────────────────────────────────────────────────────────────
@@ -380,7 +381,7 @@ export class Prep extends Phaser.Scene {
     );
     detail.add(
       this.add
-        .text(w / 2, h / 2 - WIN_H / 2 + Math.round(16 * LAYOUT_SCALE),
+        .text(w / 2, winCY - WIN_H / 2 + Math.round(16 * LAYOUT_SCALE),
           `${bp.name}  —  Level ${level}`,
           { fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`, color: '#ffdd44', fontStyle: 'bold' })
         .setOrigin(0.5, 0)
@@ -400,7 +401,7 @@ export class Prep extends Phaser.Scene {
     const HEADER_H     = Math.round(36 * LAYOUT_SCALE);
 
     const winLeft     = w / 2 - WIN_W / 2;
-    const contentTopY = h / 2 - WIN_H / 2 + HEADER_H + PAD;
+    const contentTopY = winCY - WIN_H / 2 + HEADER_H + PAD;
 
     // Equipment block: column centers, relative to window left
     const eqColCenters = [
@@ -418,17 +419,18 @@ export class Prep extends Phaser.Scene {
 
     // ── LEFT: Equipment silhouette ────────────────────────────────────────────
     const EQUIP_SILHOUETTE: { slot: EquipSlot; col: 0 | 1 | 2; row: number }[] = [
+      { slot: 'necklace',   col: 0, row: 0 },
       { slot: 'helmet',     col: 1, row: 0 },
+      { slot: 'artifact',   col: 2, row: 0 },
       { slot: 'hand_left',  col: 0, row: 1 },
-      { slot: 'necklace',   col: 1, row: 1 },
+      { slot: 'armor',      col: 1, row: 1 },
       { slot: 'hand_right', col: 2, row: 1 },
-      { slot: 'armor',      col: 1, row: 2 },
-      { slot: 'ring_1',     col: 0, row: 3 },
-      { slot: 'gloves',     col: 1, row: 3 },
-      { slot: 'ring_2',     col: 2, row: 3 },
-      { slot: 'belt',       col: 1, row: 4 },
-      { slot: 'boots',      col: 1, row: 5 },
-      { slot: 'artifact',   col: 2, row: 5 },
+      { slot: 'ring_1',     col: 0, row: 2 },
+      { slot: 'belt',       col: 1, row: 2 },
+      { slot: 'ring_2',     col: 2, row: 2 },
+      { slot: 'gloves',     col: 0, row: 3 },
+      { slot: 'boots',      col: 1, row: 3 },
+      // col 2, row 3 → empty placeholder (drawn separately below)
     ];
 
     const SLOT_LABELS: Partial<Record<EquipSlot, string>> = {
@@ -486,6 +488,13 @@ export class Prep extends Phaser.Scene {
         });
       }
     });
+
+    // Empty placeholder cell at col 2, row 3
+    {
+      const cx = eqColCenters[2];
+      const cy = contentTopY + 3 * EQ_ROW_STEP + EQ_CELL / 2;
+      detail.add(this.add.rectangle(cx, cy, EQ_CELL, EQ_CELL, 0x1e1e2e).setDepth(21));
+    }
 
     // ── CENTER: Unit sprite ───────────────────────────────────────────────────
     const textureKey = `sprite-${bp.templateId}`;
@@ -564,7 +573,7 @@ export class Prep extends Phaser.Scene {
     }
 
     // ── BOTTOM: Shared backpack ───────────────────────────────────────────────
-    const backpackTopY      = contentTopY + Math.round(490 * LAYOUT_SCALE);
+    const backpackTopY      = contentTopY + 4 * EQ_ROW_STEP + PAD;
     const bpGridX           = winLeft + PAD;
     const bpGridY           = backpackTopY + Math.round(20 * LAYOUT_SCALE);
     const backpackContainer = GameState.itemContainers['backpack_shared'];
@@ -626,7 +635,7 @@ export class Prep extends Phaser.Scene {
     }
 
     // ── Back button ───────────────────────────────────────────────────────────
-    const backBtnY = h / 2 + WIN_H / 2 - Math.round(24 * LAYOUT_SCALE);
+    const backBtnY = winCY + WIN_H / 2 - Math.round(24 * LAYOUT_SCALE);
     const backBtn  = this.add
       .rectangle(w / 2, backBtnY, Math.round(120 * LAYOUT_SCALE), Math.round(30 * LAYOUT_SCALE), 0x4a4a6a)
       .setInteractive({ useHandCursor: true })
