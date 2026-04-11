@@ -1,4 +1,4 @@
-import { EquipSlot, ItemContainer, ItemDefinition, ItemInstance, ItemStatBonuses } from './types';
+import { EquipSlot, ItemContainer, ItemDefinition, ItemInstance, ItemStatBonuses, UnitClass } from './types';
 
 // ─── Low-level ────────────────────────────────────────────────────────────────
 
@@ -28,10 +28,31 @@ export function canPlace(
   }
 
   if (container.kind === 'equipment') {
+    if (definition.equipSlot === 'ring') {
+      return slotKey === 'ring_1' || slotKey === 'ring_2';
+    }
     return definition.equipSlot === slotKey;
   }
 
   return false;
+}
+
+/**
+ * Returns true if the unit class is allowed to equip this item.
+ * If the item has no allowedClasses (or empty array), all classes are allowed.
+ */
+export function canUnitEquipItem(
+  unitClass: UnitClass,
+  instanceId: string,
+  instances: Record<string, ItemInstance>,
+  definitions: Record<string, ItemDefinition>,
+): boolean {
+  const instance = instances[instanceId];
+  if (!instance) return false;
+  const definition = definitions[instance.definitionId];
+  if (!definition) return false;
+  if (!definition.allowedClasses || definition.allowedClasses.length === 0) return true;
+  return definition.allowedClasses.includes(unitClass);
 }
 
 /**
@@ -103,6 +124,7 @@ export function moveItem(
  */
 export function equipItem(
   unitTemplateId: string,
+  unitClass: UnitClass,
   instanceId: string,
   containers: Record<string, ItemContainer>,
   instances: Record<string, ItemInstance>,
@@ -114,7 +136,16 @@ export function equipItem(
   const definition = definitions[instance.definitionId];
   if (!definition || !definition.equipSlot) return false;
 
-  const slot = definition.equipSlot;
+  // Class restriction check
+  if (!canUnitEquipItem(unitClass, instanceId, instances, definitions)) return false;
+
+  // Rings can equip into ring_1 or ring_2; pick first free, else swap ring_1.
+  const equipContainerForRingCheck = containers[`equip_${unitTemplateId}`];
+  const slot: EquipSlot = definition.equipSlot === 'ring'
+    ? ((['ring_1', 'ring_2'] as EquipSlot[]).find(
+        s => equipContainerForRingCheck?.slots[s] === undefined
+      ) ?? 'ring_1')
+    : definition.equipSlot;
   const equipContainerId = `equip_${unitTemplateId}`;
   const equipContainer = containers[equipContainerId];
   if (!equipContainer) return false;
@@ -186,7 +217,7 @@ export function unequipItem(
   definitions: Record<string, ItemDefinition>,
 ): boolean {
   const equipContainerId    = `equip_${unitTemplateId}`;
-  const backpackContainerId = `backpack_${unitTemplateId}`;
+  const backpackContainerId = 'backpack_shared';
 
   const equipContainer    = containers[equipContainerId];
   const backpackContainer = containers[backpackContainerId];
