@@ -46,6 +46,8 @@ export function createUnitInstance(
     magicalDamage:   scaledMagicDmg   + (bonuses.magicalDamage   ?? 0),
     physicalDefense: blueprint.physicalDefense + (bonuses.physicalDefense ?? 0),
     magicalDefense:  blueprint.magicalDefense  + (bonuses.magicalDefense  ?? 0),
+    dodge:           blueprint.dodge,
+    block:           blueprint.block,
     healAmount:      scaledHealAmount  + (bonuses.healAmount      ?? 0),
     level,
     initiative:  blueprint.initiative,

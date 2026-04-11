@@ -1058,19 +1058,6 @@ export class Game extends Phaser.Scene {
       return;
     }
 
-    if (targetUnit) {
-      const view = this.unitViews.get(targetUnit.id);
-      const dispDmg = activeUnit?.skill.damageType === "physical"
-        ? (activeUnit?.physicalDamage ?? 0)
-        : (activeUnit?.magicalDamage ?? 0);
-      if (view)
-        this.showFloatingDamage(view.x, view.y, dispDmg);
-      this.battleLog.addEntry(
-        `${activeUnit?.name ?? "?"} attacks ${targetUnit.name} -${dispDmg}`,
-        "positive",
-      );
-    }
-
     // Flash attack state briefly
     const attackerId = state.roundQueue[0];
     const attackerView = this.unitViews.get(attackerId);
@@ -1080,7 +1067,7 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState("idle");
     });
 
-    let next = resolveAttack(
+    let { state: next, events } = resolveAttack(
       activeUnit
         ? getHitCells(activeUnit, coord)
         : [{ coord, multiplier: 1.0 }],
@@ -1090,6 +1077,26 @@ export class Game extends Phaser.Scene {
       activeUnit?.skill.damageType ?? "physical",
       state,
     );
+
+    for (const event of events) {
+      if (event.type === "dodged") {
+        this.battleLog.addEntry(`${event.unitName} dodged the attack!`, "neutral");
+      } else {
+        const view = this.unitViews.get(event.unitId);
+        if (view) this.showFloatingDamage(view.x, view.y, event.damage);
+        if (event.type === "blocked") {
+          this.battleLog.addEntry(
+            `${activeUnit?.name ?? "?"} attacks ${event.unitName} — blocked! -${event.damage}`,
+            "neutral",
+          );
+        } else {
+          this.battleLog.addEntry(
+            `${activeUnit?.name ?? "?"} attacks ${event.unitName} -${event.damage}`,
+            "positive",
+          );
+        }
+      }
+    }
 
     const winner = checkGameOver(next);
     if (winner) {
@@ -1198,18 +1205,6 @@ export class Game extends Phaser.Scene {
     }
 
     const target = targets[Math.floor(Math.random() * targets.length)];
-    const hitUnit = state.occupancy.cellToUnit.get(cellKey(target));
-    if (hitUnit) {
-      const view = this.unitViews.get(hitUnit.id);
-      const dispDmg = activeUnit.skill.damageType === "physical"
-        ? activeUnit.physicalDamage
-        : activeUnit.magicalDamage;
-      if (view) this.showFloatingDamage(view.x, view.y, dispDmg);
-      this.battleLog.addEntry(
-        `${activeUnit.name} attacks ${hitUnit.name} -${dispDmg}`,
-        logStyle,
-      );
-    }
 
     const attackerView = this.unitViews.get(unitId);
     attackerView?.setSpriteState("attack");
@@ -1218,7 +1213,7 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState("idle");
     });
 
-    let next = resolveAttack(
+    let { state: next, events } = resolveAttack(
       getHitCells(activeUnit, target),
       activeUnit.skill.damageType === "physical"
         ? activeUnit.physicalDamage
@@ -1226,6 +1221,26 @@ export class Game extends Phaser.Scene {
       activeUnit.skill.damageType,
       state,
     );
+
+    for (const event of events) {
+      if (event.type === "dodged") {
+        this.battleLog.addEntry(`${event.unitName} dodged the attack!`, "neutral");
+      } else {
+        const view = this.unitViews.get(event.unitId);
+        if (view) this.showFloatingDamage(view.x, view.y, event.damage);
+        if (event.type === "blocked") {
+          this.battleLog.addEntry(
+            `${activeUnit.name} attacks ${event.unitName} — blocked! -${event.damage}`,
+            "neutral",
+          );
+        } else {
+          this.battleLog.addEntry(
+            `${activeUnit.name} attacks ${event.unitName} -${event.damage}`,
+            logStyle,
+          );
+        }
+      }
+    }
 
     const winner = checkGameOver(next);
     if (winner) {

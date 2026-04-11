@@ -2,18 +2,26 @@ import { BattleState, DamageType, ResolvedHitCell, Side, Unit } from './types';
 import { cellKey } from './field';
 import { buildOccupancy, removeUnit } from './occupancy';
 
+export type CombatEvent =
+  | { type: 'hit';     unitId: string; unitName: string; damage: number }
+  | { type: 'dodged';  unitId: string; unitName: string }
+  | { type: 'blocked'; unitId: string; unitName: string; damage: number };
+
+export type AttackResult = { state: BattleState; events: CombatEvent[] };
+
 /**
  * Applies damage to all units in hitCells.
  * Large units (occupying multiple cells) are deduplicated — they take
  * the single highest damage value from all cells that hit them.
- * damageType is reserved for future armor/resistance logic.
+ * Applies dodge (full miss) and block (50% damage) before applying HP loss.
+ * Min hit chance = 10% (dodge capped at 90). Min unblocked chance = 10% (block capped at 90).
  */
 export function resolveAttack(
   hitCells: ResolvedHitCell[],
   baseDamage: number,
   damageType: DamageType,
   state: BattleState,
-): BattleState {
+): AttackResult {
   const hitUnits = new Map<string, { unit: Unit; damage: number }>();
 
   for (const { coord, multiplier } of hitCells) {
@@ -29,9 +37,27 @@ export function resolveAttack(
     }
   }
 
+  const events: CombatEvent[] = [];
   const newUnits = new Map(state.units);
-  for (const { unit, damage } of hitUnits.values()) {
-    newUnits.set(unit.id, { ...unit, hp: Math.max(0, unit.hp - damage) });
+
+  for (const { unit, damage: rawDmg } of hitUnits.values()) {
+    const effectiveDodge = Math.min(unit.dodge, 90);
+    const effectiveBlock = Math.min(unit.block, 90);
+
+    if (Math.random() * 100 < effectiveDodge) {
+      events.push({ type: 'dodged', unitId: unit.id, unitName: unit.name });
+      continue;
+    }
+
+    let finalDmg = rawDmg;
+    if (Math.random() * 100 < effectiveBlock) {
+      finalDmg = Math.round(rawDmg / 2);
+      events.push({ type: 'blocked', unitId: unit.id, unitName: unit.name, damage: finalDmg });
+    } else {
+      events.push({ type: 'hit', unitId: unit.id, unitName: unit.name, damage: finalDmg });
+    }
+
+    newUnits.set(unit.id, { ...unit, hp: Math.max(0, unit.hp - finalDmg) });
   }
 
   let occupancy = buildOccupancy(newUnits);
@@ -42,7 +68,7 @@ export function resolveAttack(
     }
   }
 
-  return { ...state, units: newUnits, occupancy };
+  return { state: { ...state, units: newUnits, occupancy }, events };
 }
 
 /**
