@@ -102,6 +102,10 @@ export class Game extends Phaser.Scene {
   private initiativeBar!: InitiativeBar;
   private statusText!: Phaser.GameObjects.Text;
   private battleLog!: BattleLog;
+  private logX = 0;
+  private logY = 0;
+  private logW = 0;
+  private logH = 0;
 
   // Delays (ms)
   private static readonly DELAY_ENEMY_THINK = 700;
@@ -162,7 +166,7 @@ export class Game extends Phaser.Scene {
 
     const leftGridX = canvasW / 2 - SIDE_GAP / 2 - totalGridW;
     const rightGridX = canvasW / 2 + SIDE_GAP / 2;
-    const gridY = (canvasH - totalGridH) / 2 + Math.round(20 * LAYOUT_SCALE);
+    const gridY = (canvasH - totalGridH) / 2 + Math.round(50 * LAYOUT_SCALE);
 
     const rowOffset =
       side === "player"
@@ -294,28 +298,29 @@ export class Game extends Phaser.Scene {
       Math.round(8 * LAYOUT_SCALE),
     );
 
+    const totalGridW = GRID_ROWS * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+    const rightGridRightEdge = this.scale.width / 2 + SIDE_GAP / 2 + totalGridW;
+    const logGap = Math.round(10 * LAYOUT_SCALE);
+    this.logX = rightGridRightEdge + logGap;
+    this.logY = this.cellPixelPos("enemy", 0, 2).y - CELL_SIZE / 2;
+    this.logW = this.scale.width - this.logX - logGap;
+    this.logH = this.cellPixelPos("enemy", 0, 0).y + CELL_SIZE / 2 - this.logY;
+    this.battleLog = new BattleLog(this, this.logX, this.logY, this.logW, this.logH);
+    this.battleLog.setVisible(false);
+
     this.statusText = this.add
       .text(
-        this.scale.width / 2,
-        this.scale.height - Math.round(34 * LAYOUT_SCALE),
+        this.logX + this.logW / 2,
+        this.logY + Math.round(26 * LAYOUT_SCALE) + Math.round(8 * LAYOUT_SCALE),
         "",
         {
           fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
           color: COLORS.textLight,
           align: "center",
+          wordWrap: { width: this.logW },
         },
       )
-      .setOrigin(0.5);
-
-    const totalGridW = GRID_ROWS * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-    const rightGridRightEdge = this.scale.width / 2 + SIDE_GAP / 2 + totalGridW;
-    const logGap = Math.round(10 * LAYOUT_SCALE);
-    const logX = rightGridRightEdge + logGap;
-    const logY = this.cellPixelPos("enemy", 0, 2).y - CELL_SIZE / 2;
-    const logW = this.scale.width - logX - logGap;
-    const logH = this.cellPixelPos("enemy", 0, 0).y + CELL_SIZE / 2 - logY;
-    this.battleLog = new BattleLog(this, logX, logY, logW, logH);
-    this.battleLog.setVisible(false);
+      .setOrigin(0.5, 0);
   }
 
   private setStatus(msg: string): void {
@@ -521,24 +526,20 @@ export class Game extends Phaser.Scene {
       this.startBattleBtn = null;
     }
 
-    const btnW = Math.round(120 * LAYOUT_SCALE);
-    const btnH = Math.round(36 * LAYOUT_SCALE);
-    // Place below the initiative bar
-    const btnY =
-      Math.round(8 * LAYOUT_SCALE) +
-      Math.round(28 * LAYOUT_SCALE) +
-      btnH / 2 +
-      Math.round(6 * LAYOUT_SCALE);
-    const btnX = this.scale.width / 2;
+    const btnW = Math.round(160 * LAYOUT_SCALE);
+    const btnH = Math.round(100 * LAYOUT_SCALE);
+    const btnX = this.logX + this.logW / 2;
+    const btnY = this.logY + this.logH / 2;
 
     const rect = this.add
       .rectangle(0, 0, btnW, btnH, 0x2a6a2a)
-      .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), 0x44aa44);
+      .setStrokeStyle(Math.round(2 * LAYOUT_SCALE), 0x44aa44);
     const label = this.add
-      .text(0, 0, "⚔  Battle", {
-        fontSize: `${Math.round(14 * LAYOUT_SCALE)}px`,
+      .text(0, 0, "⚔\nBattle", {
+        fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
         color: "#ffffff",
         fontStyle: "bold",
+        align: "center",
       })
       .setOrigin(0.5);
 
@@ -546,8 +547,8 @@ export class Game extends Phaser.Scene {
     btn.setSize(btnW, btnH);
     btn.setInteractive({ useHandCursor: true });
     btn.on("pointerover", () => rect.setFillStyle(0x3a8a3a));
-    btn.on("pointerout", () => rect.setFillStyle(0x2a6a2a));
-    btn.on("pointerup", () => this.startBattle());
+    btn.on("pointerout",  () => rect.setFillStyle(0x2a6a2a));
+    btn.on("pointerup",   () => this.startBattle());
 
     this.startBattleBtn = btn;
   }
@@ -849,6 +850,10 @@ export class Game extends Phaser.Scene {
     this.selectedFieldUnitId = null;
     this.clearPlacementHighlights();
 
+    for (const [, cell] of this.cellViews) {
+      cell.setMode('battle');
+    }
+
     let state = GameState.get();
 
     // Save player unit positions so they can be restored next battle
@@ -1002,11 +1007,7 @@ export class Game extends Phaser.Scene {
     if (previewParts.length === 0) {
       preview = "Preview: no targets in range";
     } else {
-      const lines: string[] = [];
-      for (let i = 0; i < previewParts.length; i += 3) {
-        lines.push(previewParts.slice(i, i + 3).join(" | "));
-      }
-      preview = `Preview:\n${lines.join("\n")}\n[click again to confirm]`;
+      preview = `Preview:\n${previewParts.join("\n")}\n[click again to confirm]`;
     }
     this.setStatus(preview);
   }

@@ -1,7 +1,7 @@
 import { BattleState, CellCoord, Col, Row, Unit, UnitBlueprint, UnitRace } from './types';
 import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
-import { PLAYER_UNITS, PLAYER_STARTING_IDS, ENEMY_UNITS } from '../data/unitDefinitions';
+import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
 import { BENCH_SLOTS } from '../core/Constants';
 import { GameState } from '../core/GameState';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
@@ -72,50 +72,66 @@ export function blueprintFromUnit(unit: Unit): UnitBlueprint {
 }
 
 export function autoPlacePlayer(state: BattleState): BattleState {
-  const savedBenchIds = GameState.playerBenchIds;
-  const campIds = GameState.campUnitIds;
+  const campIds        = GameState.campUnitIds;
+  const savedBenchIds  = GameState.playerBenchIds;
+  const saved          = GameState.playerUnitPlacements;
   const availableUnits = PLAYER_UNITS.filter(u => !campIds.includes(u.templateId));
 
-  const startingDefs = savedBenchIds !== null
-    ? availableUnits.filter(u => !savedBenchIds.includes(u.templateId))
-    : availableUnits.filter(u => PLAYER_STARTING_IDS.includes(u.templateId));
-
-  const benchDefs = savedBenchIds !== null
-    ? availableUnits.filter(u => savedBenchIds.includes(u.templateId))
-    : availableUnits.filter(u => !PLAYER_STARTING_IDS.includes(u.templateId));
-
-  const frontUnits = startingDefs.filter(d => d.rowTrait === 'front');
-  const backUnits  = startingDefs.filter(d => d.rowTrait === 'back');
-
   let counter = 1;
-  const cols: Col[] = [0, 1, 2];
-  const saved = GameState.playerUnitPlacements;
+  const paddedBench: (UnitBlueprint | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
 
-  const tryPlace = (def: UnitBlueprint, fallbackRow: Row): void => {
-    const level = GameState.playerUnitLevels[def.templateId] ?? def.level;
-    const savedAnchor = saved[def.templateId];
-
-    // Try saved position first
-    if (savedAnchor && canPlace(savedAnchor, def.shape, state, 'player')) {
-      state = placeUnit(createUnitInstance(def, `p${counter++}`, savedAnchor, level), state);
-      return;
-    }
-
-    // Fall back to auto-placement
-    for (const col of cols) {
-      const anchor: CellCoord = { side: 'player', row: fallbackRow, col };
-      if (canPlace(anchor, def.shape, state, 'player')) {
-        state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level), state);
-        return;
-      }
-    }
+  // Returns true if a bench slot was free and the unit was added.
+  const addToBench = (def: UnitBlueprint): boolean => {
+    const slot = paddedBench.indexOf(undefined);
+    if (slot === -1) return false;
+    paddedBench[slot] = def;
+    return true;
   };
 
-  for (const def of frontUnits) tryPlace(def, 0);
-  for (const def of backUnits)  tryPlace(def, 1);
+  // Returns true if the unit was placed on the field.
+  const tryPlaceOnField = (def: UnitBlueprint): boolean => {
+    const level = GameState.playerUnitLevels[def.templateId] ?? def.level;
+    // 1. Try saved position
+    const savedAnchor = saved[def.templateId];
+    if (savedAnchor && canPlace(savedAnchor, def.shape, state, 'player')) {
+      state = placeUnit(createUnitInstance(def, `p${counter++}`, savedAnchor, level), state);
+      return true;
+    }
+    // 2. Auto-placement: preferred row first, then the other row
+    const rows: Row[] = def.rowTrait === 'front' ? [0, 1] : [1, 0];
+    for (const row of rows) {
+      for (const col of [0, 1, 2] as Col[]) {
+        const anchor: CellCoord = { side: 'player', row, col };
+        if (canPlace(anchor, def.shape, state, 'player')) {
+          state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level), state);
+          return true;
+        }
+      }
+    }
+    return false;
+  };
 
-  const paddedBench: (UnitBlueprint | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
-  benchDefs.forEach((bp, i) => { if (i < BENCH_SLOTS) paddedBench[i] = bp; });
+  const toField: UnitBlueprint[] = [];
+  const toBench: UnitBlueprint[] = [];
+
+  for (const def of availableUnits) {
+    if (savedBenchIds !== null && savedBenchIds.includes(def.templateId)) {
+      toBench.push(def);   // was on bench last battle → restore to bench
+    } else {
+      toField.push(def);   // was on field (or first battle) → try field
+    }
+  }
+
+  // Place field units; failures spill into the bench queue
+  for (const def of toField) {
+    if (!tryPlaceOnField(def)) toBench.push(def);
+  }
+
+  // Fill bench; overflow goes to field
+  for (const def of toBench) {
+    if (!addToBench(def)) tryPlaceOnField(def);
+  }
+
   return { ...state, benchUnits: paddedBench };
 }
 
