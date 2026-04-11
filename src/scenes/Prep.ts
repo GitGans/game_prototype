@@ -483,9 +483,14 @@ export class Prep extends Phaser.Scene {
           detail.add(
             this.add.text(cx, cy, icon,
               { fontSize: `${Math.round(28 * LAYOUT_SCALE)}px` })
-              .setOrigin(0.5).setDepth(22)
+              .setOrigin(0.5).setDepth(22).setAlpha(0.5)
           );
         }
+        detail.add(
+          this.add.rectangle(cx, cy, EQ_CELL, EQ_CELL, 0x000000)
+            .setAlpha(0.45)
+            .setDepth(23)
+        );
       }
 
       if (equippedDef) {
