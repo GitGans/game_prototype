@@ -598,7 +598,7 @@ export class Prep extends Phaser.Scene {
       { label: 'Magic Def',  value: `${bp.magicalDefense  + (bonuses.magicalDefense  ?? 0)}%` },
       { label: 'Heal',        value: String(Math.round(bp.healAmount * scale)     + (bonuses.healAmount      ?? 0)) },
       { label: 'Initiative',  value: String(bp.initiative) },
-      { label: 'Action',      value: bp.actionType },
+      { label: 'Action',      value: bp.skill.actionType },
       { label: 'Row',         value: bp.rowTrait },
     ];
     statLines.forEach(({ label, value }) => {
@@ -622,7 +622,6 @@ export class Prep extends Phaser.Scene {
     if (skill) {
       const skillLines: { text: string; color: string }[] = [
         { text: skill.name,                    color: '#ffffff' },
-        { text: `Type: ${skill.effectType}`,   color: '#aaaaaa' },
         { text: `Damage: ${skill.damageType}`, color: '#aaaaaa' },
       ];
       skillLines.forEach(({ text, color }) => {

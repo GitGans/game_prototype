@@ -42,8 +42,7 @@ export interface UnitBlueprint {
   level: number;
   initiative: number;
   shape: UnitShape;
-  actionType: 'melee' | 'ranged' | 'heal';
-  skill?: Skill;
+  skill: Skill;
   rowTrait: RowTrait;
   race?: UnitRace;
   unitClass: UnitClass;
@@ -64,8 +63,7 @@ export interface Unit {
   initiative: number;
   shape: UnitShape;
   anchor: CellCoord;
-  actionType: 'melee' | 'ranged' | 'heal';
-  skill?: Skill;
+  skill: Skill;
   rowTrait: RowTrait;
   race?: UnitRace;
   templateId: string;
@@ -91,7 +89,7 @@ export interface BattleState {
 // ─── Skill / Pattern System ───────────────────────────────────────────────
 
 export type DamageType = 'physical' | 'magical';
-export type SkillEffectType = 'damage' | 'heal';
+export type SkillActionType = 'melee' | 'ranged' | 'enchantment';
 
 /**
  * One active cell in a skill pattern.
@@ -125,8 +123,8 @@ export interface SkillPattern {
 export interface Skill {
   id: string;
   name: string;
+  actionType: SkillActionType;
   damageType: DamageType;
-  effectType: SkillEffectType;
   pattern: SkillPattern;
 }
 

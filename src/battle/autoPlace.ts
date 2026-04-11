@@ -51,7 +51,6 @@ export function createUnitInstance(
     initiative:  blueprint.initiative,
     shape:       blueprint.shape,
     anchor,
-    actionType:  blueprint.actionType,
     skill:       blueprint.skill,
     rowTrait:    blueprint.rowTrait,
     race:        blueprint.race,
