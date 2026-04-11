@@ -50,10 +50,11 @@ export function createUnitInstance(
     initiative:  blueprint.initiative,
     shape:       blueprint.shape,
     anchor,
-    skill:       blueprint.skill,
-    rowTrait:    blueprint.rowTrait,
-    race:        blueprint.race,
-    templateId:  blueprint.templateId,
+    skill:         blueprint.skill,
+    rowTrait:      blueprint.rowTrait,
+    race:          blueprint.race,
+    templateId:    blueprint.templateId,
+    activeEffects: [],
   };
 }
 

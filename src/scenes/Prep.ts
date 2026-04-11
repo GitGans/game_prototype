@@ -759,7 +759,7 @@ export class Prep extends Phaser.Scene {
     if (skill) {
       const skillLines: { text: string; color: string }[] = [
         { text: skill.name, color: "#ffffff" },
-        { text: `Damage: ${skill.damageType}`, color: "#aaaaaa" },
+        { text: skill.damageBlock ? `Damage: ${skill.damageBlock.damageType}` : `Effect only`, color: "#aaaaaa" },
       ];
       skillLines.forEach(({ text, color }) => {
         detail.add(

@@ -86,7 +86,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 9,
     shape: SHAPES["1x1"],
-    skill: SKILLS.pierce,
+    skill: SKILLS.poison_strike,
     rowTrait: "front",
     spriteSheet: {
       path: "assets/sprites/units/crusher.png",
@@ -155,7 +155,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 6,
     shape: SHAPES["1x1"],
-    skill: SKILLS.arcane_cross,
+    skill: SKILLS.weaken_curse,
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/stormbearer.png",
@@ -170,7 +170,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     unitClass: "hieromonk" as UnitClass,
     hp: 25,
     physicalDamage: 0,
-    magicalDamage: 10,
+    magicalDamage: 8,
     physicalDefense: 0,
     magicalDefense: 0,
     dodge: 0,
@@ -178,7 +178,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 4,
     shape: SHAPES["1x1"],
-    skill: SKILLS.basic_heal,
+    skill: SKILLS.heal_with_defence,
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/hieromonk.png",

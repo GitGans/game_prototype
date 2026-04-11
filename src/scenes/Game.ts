@@ -36,7 +36,7 @@ import {
   getRangedTargets,
   getFriendlyTargets,
 } from "../battle/targeting";
-import { resolveAttack, resolveHeal, checkGameOver } from "../battle/combat";
+import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, EffectEvent } from "../battle/combat";
 import { resolvePattern, PATTERNS } from "../battle/skillPatterns";
 import { buildRoundQueue, pruneQueue } from "../battle/initiative";
 import {
@@ -53,7 +53,7 @@ import {
  * Used by all combat paths: manual, auto, quick.
  */
 function getHitCells(attacker: Unit, anchor: CellCoord): ResolvedHitCell[] {
-  const pattern = attacker.skill?.pattern ?? PATTERNS.single;
+  const pattern = attacker.skill?.damageBlock?.pattern ?? PATTERNS.single;
   return resolvePattern(anchor, pattern);
 }
 
@@ -66,19 +66,21 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
   if (!unit) return state;
 
   const side = unit.anchor.side;
-
   const skill = unit.skill;
+
   if (skill.actionType === "enchantment") {
     const targets = getFriendlyTargets(side, state.occupancy);
     if (targets.length === 0) return state;
     const target = targets.reduce((best, coord) => {
       const u = state.occupancy.cellToUnit.get(cellKey(coord));
       const bestU = state.occupancy.cellToUnit.get(cellKey(best));
-      return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp
-        ? coord
-        : best;
+      return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp ? coord : best;
     });
-    return resolveHeal(getHitCells(unit, target), unit.healAmount, state);
+    let next = resolveHeal(getHitCells(unit, target), unit.magicalDamage, state);
+    if (skill.effectBlock) {
+      next = applyEffectBlock(skill.effectBlock, target, next).state;
+    }
+    return next;
   }
 
   const targets =
@@ -89,15 +91,17 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
   if (targets.length === 0) return state;
 
   const target = targets[Math.floor(Math.random() * targets.length)];
-  const baseDamage = skill.damageType === "physical"
-    ? unit.physicalDamage
-    : unit.magicalDamage;
-  return resolveAttack(
-    getHitCells(unit, target),
-    baseDamage,
-    skill.damageType,
-    state,
-  );
+  const damageType = skill.damageBlock?.damageType ?? "physical";
+  const baseDamage = damageType === "physical" ? unit.physicalDamage : unit.magicalDamage;
+
+  let next = state;
+  if (skill.damageBlock) {
+    next = resolveAttack(getHitCells(unit, target), baseDamage, damageType, state).state;
+  }
+  if (skill.effectBlock) {
+    next = applyEffectBlock(skill.effectBlock, target, next).state;
+  }
+  return next;
 }
 
 export class Game extends Phaser.Scene {
@@ -995,7 +999,7 @@ export class Game extends Phaser.Scene {
       }
     } else {
       const baseDamage = activeUnit.physicalDamage + activeUnit.magicalDamage;
-      const damageType = activeUnit.skill?.damageType ?? "physical";
+      const damageType = activeUnit.skill?.damageBlock?.damageType ?? "physical";
 
       for (const { coord: hc, multiplier } of hitCells) {
         const unit = state.occupancy.cellToUnit.get(cellKey(hc));
@@ -1050,6 +1054,11 @@ export class Game extends Phaser.Scene {
         activeUnit?.magicalDamage ?? 0,
         state,
       );
+      if (activeUnit?.skill.effectBlock) {
+        const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, coord, next);
+        next = effState;
+        for (const e of effEvents) this.logEffectEvent(e);
+      }
       next = this.advanceQueue(next);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
@@ -1068,14 +1077,15 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState("idle");
     });
 
+    const damageType = activeUnit?.skill.damageBlock?.damageType ?? "physical";
     let { state: next, events } = resolveAttack(
       activeUnit
         ? getHitCells(activeUnit, coord)
         : [{ coord, multiplier: 1.0 }],
-      activeUnit?.skill.damageType === "physical"
+      damageType === "physical"
         ? (activeUnit?.physicalDamage ?? 0)
         : (activeUnit?.magicalDamage ?? 0),
-      activeUnit?.skill.damageType ?? "physical",
+      damageType,
       state,
     );
 
@@ -1097,6 +1107,12 @@ export class Game extends Phaser.Scene {
           );
         }
       }
+    }
+
+    if (activeUnit?.skill.effectBlock) {
+      const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, coord, next);
+      next = effState;
+      for (const e of effEvents) this.logEffectEvent(e);
     }
 
     const winner = checkGameOver(next);
@@ -1121,15 +1137,19 @@ export class Game extends Phaser.Scene {
   private autoTurn(): void {
     const state = GameState.get();
     if (state.phase === "end") return;
-    if (GameState.getBattleMode() !== "auto") {
+
+    const unitId = state.roundQueue[0];
+    const activeUnit = state.units.get(unitId);
+    const isEnemy = activeUnit?.anchor.side === "enemy";
+
+    // Guard applies only to player units in non-auto mode.
+    // Enemy units always act automatically, regardless of battle mode.
+    if (!isEnemy && GameState.getBattleMode() !== "auto") {
       if (GameState.getBattleMode() === "manual") {
         this.startActiveUnitTurn(state);
       }
       return;
     }
-
-    const unitId = state.roundQueue[0];
-    const activeUnit = state.units.get(unitId);
     if (!activeUnit) {
       const next = this.advanceQueue(state);
       GameState.set(next);
@@ -1220,12 +1240,13 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState("idle");
     });
 
+    const autoAttackDmgType = activeUnit.skill.damageBlock?.damageType ?? "physical";
     let { state: next, events } = resolveAttack(
       getHitCells(activeUnit, target),
-      activeUnit.skill.damageType === "physical"
+      autoAttackDmgType === "physical"
         ? activeUnit.physicalDamage
         : activeUnit.magicalDamage,
-      activeUnit.skill.damageType,
+      autoAttackDmgType,
       state,
     );
 
@@ -1247,6 +1268,12 @@ export class Game extends Phaser.Scene {
           );
         }
       }
+    }
+
+    if (activeUnit.skill.effectBlock) {
+      const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, target, next);
+      next = effState;
+      for (const e of effEvents) this.logEffectEvent(e);
     }
 
     const winner = checkGameOver(next);
@@ -1371,10 +1398,31 @@ export class Game extends Phaser.Scene {
     remaining = pruneQueue(remaining, state.units);
     if (remaining.length === 0) {
       this.chargedThisRound.clear();
+      // Tick all buffs/debuffs simultaneously at round end
+      const { state: ticked, events } = tickEffects(state);
+      for (const e of events) this.logEffectEvent(e);
+      state = ticked;
     }
     const queue =
       remaining.length > 0 ? remaining : buildRoundQueue(state.units);
     return { ...state, roundQueue: queue, validTargets: [] };
+  }
+
+  private logEffectEvent(e: EffectEvent): void {
+    switch (e.type) {
+      case 'effect_applied':
+        this.battleLog.addEntry(`${e.unitName} is affected by ${e.effectName}`, 'neutral');
+        break;
+      case 'effect_tick_heal':
+        this.battleLog.addEntry(`${e.unitName} regenerates +${e.amount} HP (${e.effectName})`, 'positive');
+        break;
+      case 'effect_tick_damage':
+        this.battleLog.addEntry(`${e.unitName} takes -${e.amount} HP (${e.effectName})`, 'negative');
+        break;
+      case 'effect_expired':
+        this.battleLog.addEntry(`${e.effectName} expired on ${e.unitName}`, 'neutral');
+        break;
+    }
   }
 
   private handleSkipTurn(): void {
