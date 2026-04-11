@@ -373,6 +373,21 @@ export class Prep extends Phaser.Scene {
       this.add.rectangle(w / 2, winCY, WIN_W, WIN_H, 0x1a1a3a).setDepth(20)
     );
 
+    // ── Close button (×) ─────────────────────────────────────────────────────
+    const closeBtn = this.add.text(
+      w / 2 - WIN_W / 2 + WIN_W - Math.round(10 * LAYOUT_SCALE),
+      winCY - WIN_H / 2 + Math.round(18 * LAYOUT_SCALE),
+      '×',
+      { fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`, color: '#aaaaaa' },
+    ).setOrigin(1, 0.5).setDepth(23).setInteractive({ useHandCursor: true });
+    detail.add(closeBtn);
+    closeBtn.on('pointerover', () => closeBtn.setColor('#ffffff'));
+    closeBtn.on('pointerout',  () => closeBtn.setColor('#aaaaaa'));
+    closeBtn.on('pointerup',   () => {
+      this.input.keyboard!.off('keydown-ESC', onEsc);
+      onEsc();
+    });
+
     // ── Header ────────────────────────────────────────────────────────────────
     const level   = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
     const scale   = 1 + 0.1 * (level - 1);
@@ -392,12 +407,12 @@ export class Prep extends Phaser.Scene {
     const PAD          = Math.round(16 * LAYOUT_SCALE);
     const EQ_CELL      = Math.round(64 * LAYOUT_SCALE);   // equipment cell size
     const EQ_COL_STEP  = Math.round(72 * LAYOUT_SCALE);   // col stride (64 + 8 gap)
-    const EQ_ROW_STEP  = Math.round(78 * LAYOUT_SCALE);   // row stride (64 + 10 label + 4 gap)
+    const EQ_ROW_STEP  = Math.round(72 * LAYOUT_SCALE);   // row stride (64 + 8 gap)
     const SPRITE_SIZE  = Math.round(256 * LAYOUT_SCALE);
     const BP_CELL      = Math.round(64 * LAYOUT_SCALE);
     const BP_GAP       = Math.round(6 * LAYOUT_SCALE);
-    const BP_COLS      = 8;
-    const BP_ROWS      = 2;
+    const BP_COLS      = 10;
+    const BP_ROWS      = 1;
     const HEADER_H     = Math.round(36 * LAYOUT_SCALE);
 
     const winLeft     = w / 2 - WIN_W / 2;
@@ -416,6 +431,7 @@ export class Prep extends Phaser.Scene {
     // Skill block X start
     const skillX     = spriteX + SPRITE_SIZE / 2 + PAD;
     const skillY     = contentTopY;
+    const rightPanelW = winLeft + WIN_W - PAD - skillX;
 
     // ── LEFT: Equipment silhouette ────────────────────────────────────────────
     const EQUIP_SILHOUETTE: { slot: EquipSlot; col: 0 | 1 | 2; row: number }[] = [
@@ -433,10 +449,18 @@ export class Prep extends Phaser.Scene {
       // col 2, row 3 → empty placeholder (drawn separately below)
     ];
 
-    const SLOT_LABELS: Partial<Record<EquipSlot, string>> = {
-      helmet: 'Helmet', necklace: 'Necklace', hand_left: 'L.Hand', armor: 'Armor',
-      hand_right: 'R.Hand', gloves: 'Gloves', ring_1: 'Ring 1',
-      belt: 'Belt', ring_2: 'Ring 2', boots: 'Boots', artifact: 'Artifact',
+    const SLOT_ICONS: Partial<Record<EquipSlot, string>> = {
+      helmet:     '🪖',
+      necklace:   '📿',
+      armor:      '🥋',
+      belt:       '▬',
+      hand_left:  '🛡️',
+      hand_right: '⚔️',
+      gloves:     '🧤',
+      ring_1:     '💍',
+      ring_2:     '💍',
+      boots:      '👢',
+      artifact:   '🔮',
     };
 
     const equipContainer = GameState.itemContainers[`equip_${bp.templateId}`];
@@ -448,17 +472,21 @@ export class Prep extends Phaser.Scene {
       const equippedId   = equipContainer?.slots[slot];
       const equippedInst = equippedId ? GameState.itemInstances[equippedId] : undefined;
       const equippedDef  = equippedInst ? ITEM_DEFINITIONS[equippedInst.definitionId] : undefined;
-      const bgColor      = equippedDef ? 0x2a3a2a : 0x1e1e2e;
+      const bgColor      = 0x1e1e2e;
 
       const cell = this.add.rectangle(cx, cy, EQ_CELL, EQ_CELL, bgColor).setDepth(21);
       detail.add(cell);
 
-      detail.add(
-        this.add.text(cx, cy + EQ_CELL / 2 + Math.round(3 * LAYOUT_SCALE),
-          SLOT_LABELS[slot] ?? slot,
-          { fontSize: `${Math.round(10 * LAYOUT_SCALE)}px`, color: '#555577' })
-          .setOrigin(0.5, 0).setDepth(22)
-      );
+      if (!equippedDef) {
+        const icon = SLOT_ICONS[slot];
+        if (icon) {
+          detail.add(
+            this.add.text(cx, cy, icon,
+              { fontSize: `${Math.round(28 * LAYOUT_SCALE)}px` })
+              .setOrigin(0.5).setDepth(22)
+          );
+        }
+      }
 
       if (equippedDef) {
         const itemSpriteKey = `sprite-item-${equippedInst!.definitionId}`;
@@ -471,7 +499,7 @@ export class Prep extends Phaser.Scene {
         }
 
         cell.setInteractive({ useHandCursor: true });
-        cell.on('pointerover', () => cell.setFillStyle(0x3a4a3a));
+        cell.on('pointerover', () => cell.setFillStyle(0x2e2e4e));
         cell.on('pointerout',  () => cell.setFillStyle(bgColor));
         cell.on('pointerup', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
           event.stopPropagation();
@@ -516,7 +544,7 @@ export class Prep extends Phaser.Scene {
 
     detail.add(
       this.add.text(skillX, rightY, 'Stats',
-        { fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`, color: '#ffdd44', fontStyle: 'bold' })
+        { fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`, color: '#ffdd44', fontStyle: 'bold', wordWrap: { width: rightPanelW } })
         .setDepth(21)
     );
     rightY += Math.round(20 * LAYOUT_SCALE);
@@ -535,7 +563,7 @@ export class Prep extends Phaser.Scene {
     statLines.forEach(({ label, value }) => {
       detail.add(
         this.add.text(skillX, rightY, `${label}: ${value}`,
-          { fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`, color: '#cccccc' })
+          { fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`, color: '#cccccc', wordWrap: { width: rightPanelW } })
           .setDepth(21)
       );
       rightY += lineH;
@@ -544,7 +572,7 @@ export class Prep extends Phaser.Scene {
     rightY += Math.round(8 * LAYOUT_SCALE);
     detail.add(
       this.add.text(skillX, rightY, 'Skill',
-        { fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`, color: '#ffdd44', fontStyle: 'bold' })
+        { fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`, color: '#ffdd44', fontStyle: 'bold', wordWrap: { width: rightPanelW } })
         .setDepth(21)
     );
     rightY += Math.round(20 * LAYOUT_SCALE);
@@ -559,7 +587,7 @@ export class Prep extends Phaser.Scene {
       skillLines.forEach(({ text, color }) => {
         detail.add(
           this.add.text(skillX, rightY, text,
-            { fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`, color })
+            { fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`, color, wordWrap: { width: rightPanelW } })
             .setDepth(21)
         );
         rightY += lineH;
@@ -567,7 +595,7 @@ export class Prep extends Phaser.Scene {
     } else {
       detail.add(
         this.add.text(skillX, rightY, 'No skill',
-          { fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`, color: '#555555' })
+          { fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`, color: '#555555', wordWrap: { width: rightPanelW } })
           .setDepth(21)
       );
     }
