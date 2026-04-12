@@ -109,7 +109,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 7,
     shape: SHAPES["1x1"],
-    skills: [SKILLS.basic_ranged],
+    skills: [SKILLS.slowing_ranged],
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/archer.png",

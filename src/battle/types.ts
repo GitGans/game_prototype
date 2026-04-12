@@ -103,6 +103,9 @@ export interface Effect {
   isBuff: boolean;               // true = green square, false = red square
   physicalDefenseBonus?: number; // flat additive modifier to physicalDefense while active
   magicalDefenseBonus?: number;  // flat additive modifier to magicalDefense while active
+  dodgeBonus?: number;           // flat % added to unit.dodge before 90% cap
+  blockBonus?: number;           // flat % added to unit.block before 90% cap
+  initiativeBonus?: number;      // flat added to unit.initiative for queue ordering
 }
 
 /** Live buff/debuff instance on a unit. */

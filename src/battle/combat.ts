@@ -55,8 +55,10 @@ export function resolveAttack(
   const newUnits = new Map(state.units);
 
   for (const { unit, damage: rawDmg } of hitUnits.values()) {
-    const effectiveDodge = Math.min(unit.dodge, 90);
-    const effectiveBlock = Math.min(unit.block, 90);
+    const dodgeBonus = unit.activeEffects.reduce((sum, ae) => sum + (ae.effect.dodgeBonus ?? 0), 0);
+    const blockBonus = unit.activeEffects.reduce((sum, ae) => sum + (ae.effect.blockBonus ?? 0), 0);
+    const effectiveDodge = Math.min(unit.dodge + dodgeBonus, 90);
+    const effectiveBlock = Math.min(unit.block + blockBonus, 90);
 
     if (Math.random() * 100 < effectiveDodge) {
       events.push({ type: 'dodged', unitId: unit.id, unitName: unit.name });

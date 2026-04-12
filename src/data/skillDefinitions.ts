@@ -15,12 +15,25 @@ const P = (m: number) => ({ damageMultiplier: m });
 // ─── Base Effects ─────────────────────────────────────────────────────────────
 
 const EFFECTS: Record<string, Effect> = {
-  regeneration:         { id: "regeneration",         isBuff: true  },
-  lose_health:          { id: "lose_health",           isBuff: false },
-  fortify:              { id: "fortify",               isBuff: true,  physicalDefenseBonus:  1 },
-  weaken:               { id: "weaken",                isBuff: false, physicalDefenseBonus: -1 },
-  arcane_shield:        { id: "arcane_shield",         isBuff: true,  magicalDefenseBonus:   1 },
-  arcane_vulnerability: { id: "arcane_vulnerability",  isBuff: false, magicalDefenseBonus:  -1 },
+  regeneration: { id: "regeneration", isBuff: true },
+  lose_health: { id: "lose_health", isBuff: false },
+  fortify: { id: "fortify", isBuff: true, physicalDefenseBonus: 1 },
+  weaken: { id: "weaken", isBuff: false, physicalDefenseBonus: -1 },
+  arcane_shield: { id: "arcane_shield", isBuff: true, magicalDefenseBonus: 1 },
+  arcane_vulnerability: {
+    id: "arcane_vulnerability",
+    isBuff: false,
+    magicalDefenseBonus: -1,
+  },
+  // Dodge effects
+  swift: { id: "swift", isBuff: true, dodgeBonus: 1 },
+  clumsy: { id: "clumsy", isBuff: false, dodgeBonus: -1 },
+  // Block effects
+  guard_stance: { id: "guard_stance", isBuff: true, blockBonus: 1 },
+  off_balance: { id: "off_balance", isBuff: false, blockBonus: -1 },
+  // Initiative effects
+  haste: { id: "haste", isBuff: true, initiativeBonus: 1 },
+  slow: { id: "slow", isBuff: false, initiativeBonus: -1 },
 };
 
 // ─── Named Damage Matrices ────────────────────────────────────────────────────
@@ -30,7 +43,6 @@ const EFFECTS: Record<string, Effect> = {
 // Multiple skills can share the same matrix name.
 
 export const DAMAGE_MATRICES: Record<string, LeveledDamageMatrix> = {
-
   /** Single cell, 100% damage. */
   single: {
     levels: [
@@ -51,20 +63,22 @@ export const DAMAGE_MATRICES: Record<string, LeveledDamageMatrix> = {
     levels: [
       // level 1
       {
-        anchorRow: 1, anchorCol: 1,
+        anchorRow: 1,
+        anchorCol: 1,
         cells: [
-          [null,   P(0.2), null  ],
+          [null, P(0.2), null],
           [P(0.2), P(1.0), P(0.2)],
-          [null,   P(0.2), null  ],
+          [null, P(0.2), null],
         ],
       },
       // level 2
       {
-        anchorRow: 1, anchorCol: 1,
+        anchorRow: 1,
+        anchorCol: 1,
         cells: [
-          [null,   P(0.4), null  ],
+          [null, P(0.4), null],
           [P(0.4), P(1.0), P(0.4)],
-          [null,   P(0.4), null  ],
+          [null, P(0.4), null],
         ],
       },
     ],
@@ -102,13 +116,12 @@ export const DAMAGE_MATRICES: Record<string, LeveledDamageMatrix> = {
 //   only cell presence matters; damageMultiplier is unused
 
 export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
-
   /** Single target. Multiplier used for stat-based per-turn scaling. */
   single: {
     levels: [
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.25)]] },  // level 1
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.40)]] },  // level 2
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.60)]] },  // level 3
+      { anchorRow: 0, anchorCol: 0, cells: [[P(0.25)]] }, // level 1
+      { anchorRow: 0, anchorCol: 0, cells: [[P(0.4)]] }, // level 2
+      { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] }, // level 3
     ],
   },
 
@@ -124,20 +137,22 @@ export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
     levels: [
       // level 1
       {
-        anchorRow: 1, anchorCol: 1,
+        anchorRow: 1,
+        anchorCol: 1,
         cells: [
-          [null,   P(0.2), null  ],
+          [null, P(0.2), null],
           [P(0.2), P(0.2), P(0.2)],
-          [null,   P(0.2), null  ],
+          [null, P(0.2), null],
         ],
       },
       // level 2 — TODO: set values
       {
-        anchorRow: 1, anchorCol: 1,
+        anchorRow: 1,
+        anchorCol: 1,
         cells: [
-          [null,   P(0.3), null  ],
+          [null, P(0.3), null],
           [P(0.3), P(0.3), P(0.3)],
-          [null,   P(0.3), null  ],
+          [null, P(0.3), null],
         ],
       },
     ],
@@ -151,35 +166,64 @@ export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
 // - bonusByLevel     → fixed defense bonus magnitude per level; sign from base Effect
 
 export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
-
   regeneration: {
     effect: EFFECTS.regeneration,
-    effectDamageType: 'magical',   // computedPerTurn = magicalDamage × matrix multiplier
+    effectDamageType: "magical", // computedPerTurn = magicalDamage × matrix multiplier
   },
 
   lose_health: {
     effect: EFFECTS.lose_health,
-    effectDamageType: 'physical',  // computedPerTurn = physicalDamage × matrix multiplier
+    effectDamageType: "physical", // computedPerTurn = physicalDamage × matrix multiplier
   },
 
   fortify: {
     effect: EFFECTS.fortify,
-    bonusByLevel: [10, 20, 30],    // physicalDefenseBonus sign (+) inherited from EFFECTS.fortify
+    bonusByLevel: [10, 20, 30], // physicalDefenseBonus sign (+) inherited from EFFECTS.fortify
   },
 
   weaken: {
     effect: EFFECTS.weaken,
-    bonusByLevel: [10, 20, 30],    // physicalDefenseBonus sign (-) inherited from EFFECTS.weaken
+    bonusByLevel: [10, 20, 30], // physicalDefenseBonus sign (-) inherited from EFFECTS.weaken
   },
 
   arcane_shield: {
     effect: EFFECTS.arcane_shield,
-    bonusByLevel: [10, 20, 30],    // magicalDefenseBonus sign (+) inherited from EFFECTS.arcane_shield
+    bonusByLevel: [10, 20, 30], // magicalDefenseBonus sign (+) inherited from EFFECTS.arcane_shield
   },
 
   arcane_vulnerability: {
     effect: EFFECTS.arcane_vulnerability,
-    bonusByLevel: [10, 20, 30],    // magicalDefenseBonus sign (-) inherited from EFFECTS.arcane_vulnerability
+    bonusByLevel: [10, 20, 30], // magicalDefenseBonus sign (-) inherited from EFFECTS.arcane_vulnerability
+  },
+
+  swift: {
+    effect: EFFECTS.swift,
+    bonusByLevel: [10, 20, 30], // dodgeBonus sign (+) inherited from EFFECTS.swift
+  },
+
+  clumsy: {
+    effect: EFFECTS.clumsy,
+    bonusByLevel: [10, 20, 30], // dodgeBonus sign (-) inherited from EFFECTS.clumsy
+  },
+
+  guard_stance: {
+    effect: EFFECTS.guard_stance,
+    bonusByLevel: [10, 20, 30], // blockBonus sign (+) inherited from EFFECTS.guard_stance
+  },
+
+  off_balance: {
+    effect: EFFECTS.off_balance,
+    bonusByLevel: [10, 20, 30], // blockBonus sign (-) inherited from EFFECTS.off_balance
+  },
+
+  haste: {
+    effect: EFFECTS.haste,
+    bonusByLevel: [1, 2, 3], // initiativeBonus sign (+) inherited from EFFECTS.haste
+  },
+
+  slow: {
+    effect: EFFECTS.slow,
+    bonusByLevel: [1, 2, 3], // initiativeBonus sign (-) inherited from EFFECTS.slow
   },
 };
 
@@ -207,7 +251,6 @@ export function getEffectPattern(block: SkillEffectBlock): SkillPattern {
 // ─── Skill Definitions ────────────────────────────────────────────────────────
 
 export const SKILLS: Record<string, Skill> = {
-
   basic_melee: {
     id: "basic_melee",
     name: "Strike",
@@ -220,6 +263,21 @@ export const SKILLS: Record<string, Skill> = {
     name: "Shot",
     actionType: "ranged",
     damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+  },
+
+  slowing_ranged: {
+    id: "slowing_ranged",
+    name: "Arrow that breaks legs",
+    actionType: "ranged",
+    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+    effectBlock: {
+      effectMatrixName: "single",
+      level: 1,
+      effectDisplayName: "Slow",
+      effectName: "slow",
+      duration: 2,
+      damageType: "physical",
+    },
   },
 
   basic_heal: {

@@ -6,7 +6,12 @@ import { Unit } from './types';
  * - Ties: interleave player first, then enemy (player, enemy, player, enemy, ...).
  */
 export function buildRoundQueue(units: Map<string, Unit>): string[] {
-  const alive = Array.from(units.values()).filter(u => u.hp > 0);
+  const alive = Array.from(units.values())
+    .filter(u => u.hp > 0)
+    .map(u => {
+      const initBonus = u.activeEffects.reduce((sum, ae) => sum + (ae.effect.initiativeBonus ?? 0), 0);
+      return initBonus !== 0 ? { ...u, initiative: u.initiative + initBonus } : u;
+    });
 
   // Group by initiative value
   const groups = new Map<number, { player: Unit[]; enemy: Unit[] }>();

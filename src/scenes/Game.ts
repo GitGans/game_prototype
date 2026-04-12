@@ -41,8 +41,8 @@ import {
   getSelfTarget,
 } from "../battle/targeting";
 import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, EffectEvent } from "../battle/combat";
-import { resolvePattern, PATTERNS } from "../battle/skillPatterns";
-import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern } from "../data/skillDefinitions";
+import { resolvePattern } from "../battle/skillPatterns";
+import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, DAMAGE_MATRICES } from "../data/skillDefinitions";
 import { buildRoundQueue, pruneQueue } from "../battle/initiative";
 import {
   autoPlacePlayer,
@@ -64,7 +64,7 @@ function activeSkill(unit: Unit): Skill {
  */
 function getHitCells(attacker: Unit, anchor: CellCoord): ResolvedHitCell[] {
   const skill = activeSkill(attacker);
-  const pattern = skill?.damageBlock ? getSkillPattern(skill) : PATTERNS.single;
+  const pattern = skill?.damageBlock ? getSkillPattern(skill) : DAMAGE_MATRICES.single.levels[0];
   return resolvePattern(anchor, pattern);
 }
 
@@ -97,6 +97,15 @@ function resolveEffectArgs(skill: Skill, caster: Unit): [import('../battle/types
         : undefined,
       magicalDefenseBonus: def.effect.magicalDefenseBonus !== undefined
         ? Math.sign(def.effect.magicalDefenseBonus) * bonus
+        : undefined,
+      dodgeBonus: def.effect.dodgeBonus !== undefined
+        ? Math.sign(def.effect.dodgeBonus) * bonus
+        : undefined,
+      blockBonus: def.effect.blockBonus !== undefined
+        ? Math.sign(def.effect.blockBonus) * bonus
+        : undefined,
+      initiativeBonus: def.effect.initiativeBonus !== undefined
+        ? Math.sign(def.effect.initiativeBonus) * bonus
         : undefined,
     };
     return [resolvedEffect, undefined];
