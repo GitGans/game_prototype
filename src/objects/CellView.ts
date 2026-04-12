@@ -26,6 +26,7 @@ export class CellView extends Phaser.GameObjects.Container {
 
   private bg: Phaser.GameObjects.Rectangle;
   private border: Phaser.GameObjects.Rectangle;
+  private effectGfx: Phaser.GameObjects.Graphics;
   private _mode: CellMode = "placement";
 
   constructor(scene: Phaser.Scene, x: number, y: number, coord: CellCoord) {
@@ -48,12 +49,13 @@ export class CellView extends Phaser.GameObjects.Container {
       CELL_SIZE - borderThickness,
       COLORS.cell,
     );
+    this.effectGfx = scene.add.graphics();
 
     // Default placement alpha — semi-transparent
     this.border.setAlpha(0.4);
     this.bg.setAlpha(0.3);
 
-    this.add([this.border, this.bg]);
+    this.add([this.border, this.bg, this.effectGfx]);
     scene.add.existing(this);
 
     this.setInteractive(
@@ -112,5 +114,24 @@ export class CellView extends Phaser.GameObjects.Container {
     const dim = isHeal ? 0x0a2a0a : 0x2a1a00;
     const bright = isHeal ? 0x44dd44 : 0xff8800;
     this.bg.setFillStyle(lerpColor(dim, bright, multiplier)).setAlpha(0.85);
+  }
+
+  setEffectPreview(isHeal: boolean): void {
+    const color = isHeal ? COLORS.validHeal : COLORS.validTarget;
+    const thickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
+    const half = CELL_SIZE / 2;
+    const inset = thickness / 2;
+    this.effectGfx.clear();
+    this.effectGfx.lineStyle(thickness, color, 1.0);
+    this.effectGfx.strokeRect(
+      -half + inset,
+      -half + inset,
+      CELL_SIZE - thickness,
+      CELL_SIZE - thickness,
+    );
+  }
+
+  clearEffectPreview(): void {
+    this.effectGfx.clear();
   }
 }
