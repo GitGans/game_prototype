@@ -43,7 +43,7 @@ import {
 import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, EffectEvent } from "../battle/combat";
 import { resolvePattern } from "../battle/skillPatterns";
 import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, DAMAGE_MATRICES } from "../data/skillDefinitions";
-import { buildRoundQueue, pruneQueue } from "../battle/initiative";
+import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/initiative";
 import {
   autoPlacePlayer,
   autoPlaceEnemies,
@@ -1240,6 +1240,17 @@ export class Game extends Phaser.Scene {
       const { state: effState, events: effEvents } = applyEffectBlock(skill.effectBlock!, getEffectPattern(skill.effectBlock!), coord, next, eff, perTurn);
       next = effState;
       for (const e of effEvents) this.logEffectEvent(e);
+      if ((eff?.initiativeBonus ?? 0) !== 0) {
+        next = {
+          ...next,
+          roundQueue: rebuildRemainingQueue(
+            next.roundQueue[0],
+            next.roundQueue.slice(1),
+            this.chargedThisRound,
+            next.units
+          )
+        };
+      }
     }
 
     const winner = checkGameOver(next);
@@ -1415,6 +1426,17 @@ export class Game extends Phaser.Scene {
       const { state: effState, events: effEvents } = applyEffectBlock(skill.effectBlock!, getEffectPattern(skill.effectBlock!), target, next, eff, perTurn);
       next = effState;
       for (const e of effEvents) this.logEffectEvent(e);
+      if ((eff?.initiativeBonus ?? 0) !== 0) {
+        next = {
+          ...next,
+          roundQueue: rebuildRemainingQueue(
+            next.roundQueue[0],
+            next.roundQueue.slice(1),
+            this.chargedThisRound,
+            next.units
+          )
+        };
+      }
     }
 
     const winner = checkGameOver(next);

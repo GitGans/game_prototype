@@ -48,3 +48,40 @@ export function pruneQueue(queue: string[], units: Map<string, Unit>): string[] 
     return u !== undefined && u.hp > 0;
   });
 }
+
+/**
+ * Re-sorts the remaining queue mid-round after an initiative-changing effect is applied.
+ *
+ * Preserves two independent pools:
+ *   - notCharged: units that haven't acted yet and haven't charged
+ *   - charged:    units that deferred their turn (charge mechanic) — always stay at the end
+ *
+ * Each pool is re-sorted by effective initiative (base + active effect bonuses) independently.
+ *
+ * @param currentId        - ID of the currently acting unit (stays at index 0)
+ * @param remaining        - state.roundQueue.slice(1) — units yet to act this round
+ * @param chargedThisRound - set of unit IDs that already used the charge action
+ * @param units            - current unit map with up-to-date activeEffects
+ * @returns new queue: [currentId, ...sortedNotCharged, ...sortedCharged]
+ */
+export function rebuildRemainingQueue(
+  currentId: string,
+  remaining: string[],
+  chargedThisRound: Set<string>,
+  units: Map<string, Unit>
+): string[] {
+  const effectiveInit = (id: string): number => {
+    const u = units.get(id);
+    if (!u) return 0;
+    const bonus = u.activeEffects.reduce((s, ae) => s + (ae.effect.initiativeBonus ?? 0), 0);
+    return u.initiative + bonus;
+  };
+
+  const notCharged = remaining.filter(id => !chargedThisRound.has(id));
+  const charged    = remaining.filter(id =>  chargedThisRound.has(id));
+
+  const sortDesc = (ids: string[]) =>
+    [...ids].sort((a, b) => effectiveInit(b) - effectiveInit(a));
+
+  return [currentId, ...sortDesc(notCharged), ...sortDesc(charged)];
+}
