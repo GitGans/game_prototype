@@ -34,9 +34,9 @@ export const PATTERNS: Record<string, SkillPattern> = {
     anchorRow: 1,
     anchorCol: 1,
     cells: [
-      [null, P(0.5), null],
-      [P(0.1), P(1.0), P(0.5)],
-      [null, P(0.1), null],
+      [null, P(0.2), null],
+      [P(0.2), P(1.0), P(0.2)],
+      [null, P(0.2), null],
     ],
   },
 
