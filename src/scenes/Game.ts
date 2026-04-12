@@ -1025,6 +1025,16 @@ export class Game extends Phaser.Scene {
       this.cellViews.get(cellKey(hc))?.setSkillPreview(multiplier, isHeal);
     }
 
+    if (activeUnit.skill.effectBlock) {
+      const effectCells = resolvePattern(coord, activeUnit.skill.effectBlock.pattern);
+      const isEffectHeal =
+        activeUnit.skill.actionType === "mass_enchantment" ||
+        activeUnit.skill.actionType === "self_enchantment";
+      for (const { coord: ec } of effectCells) {
+        this.cellViews.get(cellKey(ec))?.setEffectPreview(isEffectHeal);
+      }
+    }
+
     const previewParts: string[] = [];
     const seen = new Set<string>();
 
@@ -1606,6 +1616,7 @@ export class Game extends Phaser.Scene {
 
     for (const [key, cell] of this.cellViews) {
       cell.setHighlight(validKeys.has(key) ? targetHighlight : "none");
+      cell.clearEffectPreview();
     }
 
     if (activeUnit) {
