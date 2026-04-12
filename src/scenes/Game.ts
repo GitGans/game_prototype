@@ -35,6 +35,7 @@ import {
   getMeleeTargets,
   getRangedTargets,
   getFriendlyTargets,
+  getSelfTarget,
 } from "../battle/targeting";
 import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, EffectEvent } from "../battle/combat";
 import { resolvePattern, PATTERNS } from "../battle/skillPatterns";
@@ -68,8 +69,11 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
   const side = unit.anchor.side;
   const skill = unit.skill;
 
-  if (skill.actionType === "enchantment") {
-    const targets = getFriendlyTargets(side, state.occupancy);
+  if (skill.actionType === "mass_enchantment" || skill.actionType === "self_enchantment") {
+    const targets =
+      skill.actionType === "self_enchantment"
+        ? getSelfTarget(unit)
+        : getFriendlyTargets(side, state.occupancy);
     if (targets.length === 0) return state;
     const target = targets.reduce((best, coord) => {
       const u = state.occupancy.cellToUnit.get(cellKey(coord));
@@ -923,8 +927,10 @@ export class Game extends Phaser.Scene {
       }
 
       let validTargets: CellCoord[];
-      if (activeUnit.skill.actionType === "enchantment") {
+      if (activeUnit.skill.actionType === "mass_enchantment") {
         validTargets = getFriendlyTargets("player", state.occupancy);
+      } else if (activeUnit.skill.actionType === "self_enchantment") {
+        validTargets = getSelfTarget(activeUnit);
       } else if (activeUnit.skill.actionType === "ranged") {
         validTargets = getRangedTargets("player", state.occupancy);
       } else {
@@ -954,7 +960,7 @@ export class Game extends Phaser.Scene {
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
       this.setStatus(
-        activeUnit.skill.actionType === "enchantment"
+        (activeUnit.skill.actionType === "mass_enchantment" || activeUnit.skill.actionType === "self_enchantment")
           ? `${activeUnit.name} — Click on the green cell to heal`
           : `${activeUnit.name} — Click on the red cell to attack`,
       );
@@ -981,7 +987,9 @@ export class Game extends Phaser.Scene {
     this.refreshCells(state);
 
     const hitCells = getHitCells(activeUnit, coord);
-    const isHeal = activeUnit.skill.actionType === "enchantment";
+    const isHeal =
+      activeUnit.skill.actionType === "mass_enchantment" ||
+      activeUnit.skill.actionType === "self_enchantment";
 
     for (const { coord: hc, multiplier } of hitCells) {
       this.cellViews.get(cellKey(hc))?.setSkillPreview(multiplier, isHeal);
@@ -1031,7 +1039,10 @@ export class Game extends Phaser.Scene {
     const activeUnit = state.units.get(state.roundQueue[0]);
     const targetUnit = state.occupancy.cellToUnit.get(cellKey(coord));
 
-    if (activeUnit?.skill.actionType === "enchantment") {
+    if (
+      activeUnit?.skill.actionType === "mass_enchantment" ||
+      activeUnit?.skill.actionType === "self_enchantment"
+    ) {
       const healerView = this.unitViews.get(state.roundQueue[0]);
       healerView?.setSpriteState("attack");
       this.time.delayedCall(400, () => {
@@ -1162,7 +1173,10 @@ export class Game extends Phaser.Scene {
     const nextDelay = Game.DELAY_AUTO_NEXT;
 
     // ── Heal ────────────────────────────────────────────────────────────────
-    if (activeUnit.skill.actionType === "enchantment") {
+    if (
+      activeUnit.skill.actionType === "mass_enchantment" ||
+      activeUnit.skill.actionType === "self_enchantment"
+    ) {
       const healerView = this.unitViews.get(unitId);
       healerView?.setSpriteState("attack");
       this.time.delayedCall(400, () => {
@@ -1170,10 +1184,10 @@ export class Game extends Phaser.Scene {
         if (current && current.hp > 0) healerView?.setSpriteState("idle");
       });
 
-      const healTargets = getFriendlyTargets(
-        activeUnit.anchor.side,
-        state.occupancy,
-      );
+      const healTargets =
+        activeUnit.skill.actionType === "self_enchantment"
+          ? getSelfTarget(activeUnit)
+          : getFriendlyTargets(activeUnit.anchor.side, state.occupancy);
       if (healTargets.length === 0) {
         const next = this.advanceQueue(state);
         GameState.set(next);
@@ -1555,7 +1569,10 @@ export class Game extends Phaser.Scene {
     const validKeys = new Set(state.validTargets.map(cellKey));
     const activeUnit = state.units.get(state.roundQueue[0]);
     const targetHighlight =
-      activeUnit?.skill.actionType === "enchantment" ? "heal_target" : "target";
+      (activeUnit?.skill.actionType === "mass_enchantment" ||
+        activeUnit?.skill.actionType === "self_enchantment")
+        ? "heal_target"
+        : "target";
 
     for (const [key, cell] of this.cellViews) {
       cell.setHighlight(validKeys.has(key) ? targetHighlight : "none");

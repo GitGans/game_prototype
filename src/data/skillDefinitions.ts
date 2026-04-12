@@ -52,19 +52,32 @@ export const SKILLS: Record<string, Skill> = {
   basic_heal: {
     id: "basic_heal",
     name: "Heal",
-    actionType: "enchantment",
+    actionType: "mass_enchantment",
     damageBlock: { pattern: PATTERNS.single, damageType: "magical" },
   },
 
   heal_with_defence: {
     id: "heal_with_defence",
     name: "Protective Heal",
-    actionType: "enchantment",
+    actionType: "mass_enchantment",
     damageBlock: { pattern: PATTERNS.single, damageType: "magical" },
     effectBlock: {
       pattern: PATTERNS.single,
       effectName: "Defence",
       effect: EFFECTS.fortify,
+      duration: 2,
+    },
+  },
+
+  self_heal_mass_regeneration: {
+    id: "self_heal_mass_regeneration",
+    name: "Regenerative Heal",
+    actionType: "self_enchantment",
+    damageBlock: { pattern: PATTERNS.single, damageType: "magical" },
+    effectBlock: {
+      pattern: PATTERNS.cross,
+      effectName: "Regeneration",
+      effect: EFFECTS.regeneration,
       duration: 2,
     },
   },
