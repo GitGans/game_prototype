@@ -1,4 +1,4 @@
-import { ActiveEffect, BattleState, CellCoord, DamageType, ResolvedHitCell, Side, SkillEffectBlock, Unit } from './types';
+import { ActiveEffect, BattleState, CellCoord, DamageType, Effect, ResolvedHitCell, Side, SkillEffectBlock, SkillPattern, Unit } from './types';
 import { cellKey } from './field';
 import { buildOccupancy, removeUnit } from './occupancy';
 import { resolvePattern } from './skillPatterns';
@@ -11,10 +11,10 @@ export type CombatEvent =
 export type AttackResult = { state: BattleState; events: CombatEvent[] };
 
 export type EffectEvent =
-  | { type: 'effect_applied';     unitId: string; unitName: string; effectName: string }
-  | { type: 'effect_tick_heal';   unitId: string; unitName: string; effectName: string; amount: number }
-  | { type: 'effect_tick_damage'; unitId: string; unitName: string; effectName: string; amount: number }
-  | { type: 'effect_expired';     unitId: string; unitName: string; effectName: string };
+  | { type: 'effect_applied';     unitId: string; unitName: string; effectDisplayName: string }
+  | { type: 'effect_tick_heal';   unitId: string; unitName: string; effectDisplayName: string; amount: number }
+  | { type: 'effect_tick_damage'; unitId: string; unitName: string; effectDisplayName: string; amount: number }
+  | { type: 'effect_expired';     unitId: string; unitName: string; effectDisplayName: string };
 
 /**
  * Applies damage to all units in hitCells.
@@ -55,8 +55,10 @@ export function resolveAttack(
   const newUnits = new Map(state.units);
 
   for (const { unit, damage: rawDmg } of hitUnits.values()) {
-    const effectiveDodge = Math.min(unit.dodge, 90);
-    const effectiveBlock = Math.min(unit.block, 90);
+    const dodgeBonus = unit.activeEffects.reduce((sum, ae) => sum + (ae.effect.dodgeBonus ?? 0), 0);
+    const blockBonus = unit.activeEffects.reduce((sum, ae) => sum + (ae.effect.blockBonus ?? 0), 0);
+    const effectiveDodge = Math.min(unit.dodge + dodgeBonus, 90);
+    const effectiveBlock = Math.min(unit.block + blockBonus, 90);
 
     if (Math.random() * 100 < effectiveDodge) {
       events.push({ type: 'dodged', unitId: unit.id, unitName: unit.name });
@@ -118,13 +120,19 @@ export function resolveHeal(
  * Applies a SkillEffectBlock to all units hit by its pattern.
  * No dodge/block/defense — effects always apply 100%.
  * Each unit may carry at most 2 active effects; the oldest is evicted if full.
+ *
+ * resolvedEffect and computedPerTurn are resolved by the caller from LEVELED_EFFECTS
+ * using the skill's current level, so this function stays data-layer independent.
  */
 export function applyEffectBlock(
   block: SkillEffectBlock,
+  resolvedPattern: SkillPattern,
   targetAnchor: CellCoord,
   state: BattleState,
+  resolvedEffect: Effect,
+  computedPerTurn: number | undefined,
 ): { state: BattleState; events: EffectEvent[] } {
-  const hitCells = resolvePattern(targetAnchor, block.pattern);
+  const hitCells = resolvePattern(targetAnchor, resolvedPattern);
   const events: EffectEvent[] = [];
   const newUnits = new Map(state.units);
 
@@ -135,19 +143,20 @@ export function applyEffectBlock(
     seen.add(unit.id);
 
     const newEffect: ActiveEffect = {
-      effectName: block.effectName,
-      effect: block.effect,
+      effectDisplayName: block.effectDisplayName,
+      effect: resolvedEffect,
       remainingRounds: block.duration,
+      computedPerTurn,
     };
 
-    const effects = unit.activeEffects.filter(ae => ae.effect.id !== block.effect.id);
+    const effects = unit.activeEffects.filter(ae => ae.effect.id !== resolvedEffect.id);
     if (effects.length >= 2) {
       effects.shift(); // evict oldest (non-duplicate)
     }
     effects.push(newEffect);
 
     newUnits.set(unit.id, { ...unit, activeEffects: effects });
-    events.push({ type: 'effect_applied', unitId: unit.id, unitName: unit.name, effectName: block.effectName });
+    events.push({ type: 'effect_applied', unitId: unit.id, unitName: unit.name, effectDisplayName: block.effectDisplayName });
   }
 
   return { state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) }, events };
@@ -168,22 +177,21 @@ export function tickEffects(state: BattleState): { state: BattleState; events: E
     const nextEffects: ActiveEffect[] = [];
 
     for (const ae of unit.activeEffects) {
-      if (ae.effect.healPerTurn) {
-        const amount = ae.effect.healPerTurn;
-        hp = Math.min(unit.maxHp, hp + amount);
-        events.push({ type: 'effect_tick_heal', unitId: unit.id, unitName: unit.name, effectName: ae.effectName, amount });
-      }
-      if (ae.effect.damagePerTurn) {
-        const amount = ae.effect.damagePerTurn;
-        hp = Math.max(0, hp - amount);
-        events.push({ type: 'effect_tick_damage', unitId: unit.id, unitName: unit.name, effectName: ae.effectName, amount });
+      if (ae.computedPerTurn !== undefined) {
+        if (ae.effect.isBuff) {
+          hp = Math.min(unit.maxHp, hp + ae.computedPerTurn);
+          events.push({ type: 'effect_tick_heal', unitId: unit.id, unitName: unit.name, effectDisplayName: ae.effectDisplayName, amount: ae.computedPerTurn });
+        } else {
+          hp = Math.max(0, hp - ae.computedPerTurn);
+          events.push({ type: 'effect_tick_damage', unitId: unit.id, unitName: unit.name, effectDisplayName: ae.effectDisplayName, amount: ae.computedPerTurn });
+        }
       }
 
       const remaining = ae.remainingRounds - 1;
       if (remaining > 0) {
         nextEffects.push({ ...ae, remainingRounds: remaining });
       } else {
-        events.push({ type: 'effect_expired', unitId: unit.id, unitName: unit.name, effectName: ae.effectName });
+        events.push({ type: 'effect_expired', unitId: unit.id, unitName: unit.name, effectDisplayName: ae.effectDisplayName });
       }
     }
 

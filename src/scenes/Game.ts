@@ -21,8 +21,10 @@ import { UnitTooltip } from "../objects/UnitTooltip";
 import {
   BattleState,
   CellCoord,
+  Col,
   ResolvedHitCell,
   Side,
+  Skill,
   Unit,
   UnitBlueprint,
   SpriteSheetConfig,
@@ -39,8 +41,9 @@ import {
   getSelfTarget,
 } from "../battle/targeting";
 import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, EffectEvent } from "../battle/combat";
-import { resolvePattern, PATTERNS } from "../battle/skillPatterns";
-import { buildRoundQueue, pruneQueue } from "../battle/initiative";
+import { resolvePattern } from "../battle/skillPatterns";
+import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, DAMAGE_MATRICES } from "../data/skillDefinitions";
+import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/initiative";
 import {
   autoPlacePlayer,
   autoPlaceEnemies,
@@ -49,14 +52,66 @@ import {
   getPlayerAverageLevel,
 } from "../battle/autoPlace";
 
+/** Returns the currently active skill for a unit. */
+function activeSkill(unit: Unit): Skill {
+  return unit.skills[unit.activeSkillIndex] ?? unit.skills[0];
+}
+
 /**
- * Resolves the pattern of a unit's skill relative to a target anchor cell.
- * Falls back to PATTERNS.single if the unit has no skill attached.
+ * Resolves the pattern of a unit's active skill relative to a target anchor cell.
+ * Falls back to PATTERNS.single if the unit has no skill or damageBlock.
  * Used by all combat paths: manual, auto, quick.
  */
 function getHitCells(attacker: Unit, anchor: CellCoord): ResolvedHitCell[] {
-  const pattern = attacker.skill?.damageBlock?.pattern ?? PATTERNS.single;
+  const skill = activeSkill(attacker);
+  const pattern = skill?.damageBlock ? getSkillPattern(skill) : DAMAGE_MATRICES.single.levels[0];
   return resolvePattern(anchor, pattern);
+}
+
+/**
+ * Resolves the Effect object and computedPerTurn for a skill's effectBlock.
+ * For stat-based effects (regeneration / lose_health): computedPerTurn = casterStat × matrix multiplier.
+ * For defense-only effects (fortify / weaken / etc.): returns a copy of Effect with level-specific bonus.
+ * Pass the returned values directly to applyEffectBlock.
+ */
+function resolveEffectArgs(skill: Skill, caster: Unit): [import('../battle/types').Effect, number | undefined] {
+  const eb = skill.effectBlock!;
+  const def = LEVELED_EFFECTS[eb.effectName];
+
+  if (def.effectDamageType !== undefined) {
+    // Stat-based per-turn: regeneration / lose_health
+    const pattern = getEffectPattern(eb);
+    const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
+    const stat = def.effectDamageType === 'physical' ? caster.physicalDamage : caster.magicalDamage;
+    const computedPerTurn = Math.round(stat * anchorCell.damageMultiplier);
+    return [def.effect, computedPerTurn];
+  }
+
+  if (def.bonusByLevel !== undefined) {
+    // Defense-only: fortify / weaken / arcane_shield / arcane_vulnerability
+    const bonus = def.bonusByLevel[eb.level - 1] ?? def.bonusByLevel[0];
+    const resolvedEffect: import('../battle/types').Effect = {
+      ...def.effect,
+      physicalDefenseBonus: def.effect.physicalDefenseBonus !== undefined
+        ? Math.sign(def.effect.physicalDefenseBonus) * bonus
+        : undefined,
+      magicalDefenseBonus: def.effect.magicalDefenseBonus !== undefined
+        ? Math.sign(def.effect.magicalDefenseBonus) * bonus
+        : undefined,
+      dodgeBonus: def.effect.dodgeBonus !== undefined
+        ? Math.sign(def.effect.dodgeBonus) * bonus
+        : undefined,
+      blockBonus: def.effect.blockBonus !== undefined
+        ? Math.sign(def.effect.blockBonus) * bonus
+        : undefined,
+      initiativeBonus: def.effect.initiativeBonus !== undefined
+        ? Math.sign(def.effect.initiativeBonus) * bonus
+        : undefined,
+    };
+    return [resolvedEffect, undefined];
+  }
+
+  return [def.effect, undefined];
 }
 
 /**
@@ -68,7 +123,9 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
   if (!unit) return state;
 
   const side = unit.anchor.side;
-  const skill = unit.skill;
+  // Pick a random skill for this turn (quick battle)
+  unit.activeSkillIndex = Math.floor(Math.random() * unit.skills.length);
+  const skill = activeSkill(unit);
 
   if (skill.actionType === "mass_enchantment" || skill.actionType === "self_enchantment") {
     const targets =
@@ -83,7 +140,8 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
     });
     let next = resolveHeal(getHitCells(unit, target), unit.magicalDamage, state);
     if (skill.effectBlock) {
-      next = applyEffectBlock(skill.effectBlock, target, next).state;
+      const [eff, perTurn] = resolveEffectArgs(skill, unit);
+      next = applyEffectBlock(skill.effectBlock, getEffectPattern(skill.effectBlock), target, next, eff, perTurn).state;
     }
     return next;
   }
@@ -104,7 +162,8 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
     next = resolveAttack(getHitCells(unit, target), baseDamage, damageType, state).state;
   }
   if (skill.effectBlock) {
-    next = applyEffectBlock(skill.effectBlock, target, next).state;
+    const [eff, perTurn] = resolveEffectArgs(skill, unit);
+    next = applyEffectBlock(skill.effectBlock, getEffectPattern(skill.effectBlock), target, next, eff, perTurn).state;
   }
   return next;
 }
@@ -139,6 +198,7 @@ export class Game extends Phaser.Scene {
   private selectedFieldUnitId: string | null = null;
   private pendingTargetCoord: CellCoord | null = null;
   private lastClickCoordKey: string | null = null;
+  private skillIconContainers: Phaser.GameObjects.Container[] = [];
   private lastClickTime = 0;
 
   // Counter for generating unique unit IDs during placement
@@ -925,6 +985,7 @@ export class Game extends Phaser.Scene {
 
   private startActiveUnitTurn(state: BattleState): void {
     this.pendingTargetCoord = null;
+    this.clearSkillIcons();
     if (GameState.get().phase === "end") return;
     if (GameState.getBattleMode() === "quick") return;
     const activeId = state.roundQueue[0];
@@ -938,13 +999,23 @@ export class Game extends Phaser.Scene {
       return;
     }
 
+    // Reset to first skill at the start of each turn
+    if (activeUnit.activeSkillIndex !== 0) {
+      const updatedUnit = { ...activeUnit, activeSkillIndex: 0 };
+      const updatedUnits = new Map(state.units);
+      updatedUnits.set(activeId, updatedUnit);
+      state = { ...state, units: updatedUnits };
+      GameState.set(state);
+    }
+    const currentUnit = state.units.get(activeId)!;
+
     const mode = GameState.getBattleMode();
     this.updateManualButtons(state);
 
-    if (activeUnit.anchor.side === "player") {
+    if (currentUnit.anchor.side === "player") {
       // Auto / quick mode — player units act automatically
       if (mode === "auto") {
-        this.setStatus(`${activeUnit.name} turn… (auto)`);
+        this.setStatus(`${currentUnit.name} turn… (auto)`);
         const next: BattleState = {
           ...state,
           phase: "select_target",
@@ -957,20 +1028,20 @@ export class Game extends Phaser.Scene {
       }
 
       let validTargets: CellCoord[];
-      if (activeUnit.skill.actionType === "mass_enchantment") {
+      if (activeSkill(currentUnit).actionType === "mass_enchantment") {
         validTargets = getFriendlyTargets("player", state.occupancy);
-      } else if (activeUnit.skill.actionType === "self_enchantment") {
-        validTargets = getSelfTarget(activeUnit);
-      } else if (activeUnit.skill.actionType === "ranged") {
+      } else if (activeSkill(currentUnit).actionType === "self_enchantment") {
+        validTargets = getSelfTarget(currentUnit);
+      } else if (activeSkill(currentUnit).actionType === "ranged") {
         validTargets = getRangedTargets("player", state.occupancy);
       } else {
-        validTargets = getMeleeTargets(activeUnit, state.occupancy);
+        validTargets = getMeleeTargets(currentUnit, state.occupancy);
       }
 
       // Back-row melee blocked by own front row — auto-skip
-      if (validTargets.length === 0 && activeUnit.skill.actionType === "melee") {
+      if (validTargets.length === 0 && activeSkill(currentUnit).actionType === "melee") {
         this.battleLog.addEntry(
-          `${activeUnit.name} — blocked, skipping turn`,
+          `${currentUnit.name} — blocked, skipping turn`,
           "neutral",
         );
         const next = this.advanceQueue(state);
@@ -990,10 +1061,11 @@ export class Game extends Phaser.Scene {
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED, next);
       this.setStatus(
-        (activeUnit.skill.actionType === "mass_enchantment" || activeUnit.skill.actionType === "self_enchantment")
-          ? `${activeUnit.name} — Click on the green cell to heal`
-          : `${activeUnit.name} — Click on the red cell to attack`,
+        (activeSkill(currentUnit).actionType === "mass_enchantment" || activeSkill(currentUnit).actionType === "self_enchantment")
+          ? `${currentUnit.name} — Click on the green cell to heal`
+          : `${currentUnit.name} — Click on the red cell to attack`,
       );
+      this.showSkillIcons(currentUnit);
     } else {
       const next: BattleState = {
         ...state,
@@ -1018,18 +1090,18 @@ export class Game extends Phaser.Scene {
 
     const hitCells = getHitCells(activeUnit, coord);
     const isHeal =
-      activeUnit.skill.actionType === "mass_enchantment" ||
-      activeUnit.skill.actionType === "self_enchantment";
+      activeSkill(activeUnit).actionType === "mass_enchantment" ||
+      activeSkill(activeUnit).actionType === "self_enchantment";
 
     for (const { coord: hc, multiplier } of hitCells) {
       this.cellViews.get(cellKey(hc))?.setSkillPreview(multiplier, isHeal);
     }
 
-    if (activeUnit.skill.effectBlock) {
-      const effectCells = resolvePattern(coord, activeUnit.skill.effectBlock.pattern);
+    if (activeSkill(activeUnit).effectBlock) {
+      const effectCells = resolvePattern(coord, getEffectPattern(activeSkill(activeUnit).effectBlock!));
       const isEffectHeal =
-        activeUnit.skill.actionType === "mass_enchantment" ||
-        activeUnit.skill.actionType === "self_enchantment";
+        activeSkill(activeUnit).actionType === "mass_enchantment" ||
+        activeSkill(activeUnit).actionType === "self_enchantment";
       for (const { coord: ec } of effectCells) {
         this.cellViews.get(cellKey(ec))?.setEffectPreview(isEffectHeal);
       }
@@ -1047,7 +1119,7 @@ export class Game extends Phaser.Scene {
       }
     } else {
       const baseDamage = activeUnit.physicalDamage + activeUnit.magicalDamage;
-      const damageType = activeUnit.skill?.damageBlock?.damageType ?? "physical";
+      const damageType = activeSkill(activeUnit)?.damageBlock?.damageType ?? "physical";
 
       for (const { coord: hc, multiplier } of hitCells) {
         const unit = state.occupancy.cellToUnit.get(cellKey(hc));
@@ -1080,8 +1152,8 @@ export class Game extends Phaser.Scene {
     const targetUnit = state.occupancy.cellToUnit.get(cellKey(coord));
 
     if (
-      activeUnit?.skill.actionType === "mass_enchantment" ||
-      activeUnit?.skill.actionType === "self_enchantment"
+      (activeUnit && activeSkill(activeUnit).actionType === "mass_enchantment") ||
+      (activeUnit && activeSkill(activeUnit).actionType === "self_enchantment")
     ) {
       const healerView = this.unitViews.get(state.roundQueue[0]);
       healerView?.setSpriteState("attack");
@@ -1105,8 +1177,10 @@ export class Game extends Phaser.Scene {
         activeUnit?.magicalDamage ?? 0,
         state,
       );
-      if (activeUnit?.skill.effectBlock) {
-        const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, coord, next);
+      if (activeUnit?.skills && activeSkill(activeUnit).effectBlock) {
+        const skill = activeSkill(activeUnit);
+        const [eff, perTurn] = resolveEffectArgs(skill, activeUnit);
+        const { state: effState, events: effEvents } = applyEffectBlock(skill.effectBlock!, getEffectPattern(skill.effectBlock!), coord, next, eff, perTurn);
         next = effState;
         for (const e of effEvents) this.logEffectEvent(e);
       }
@@ -1128,7 +1202,7 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState("idle");
     });
 
-    const damageType = activeUnit?.skill.damageBlock?.damageType ?? "physical";
+    const damageType = activeUnit ? activeSkill(activeUnit)?.damageBlock?.damageType ?? "physical" : "physical";
     let { state: next, events } = resolveAttack(
       activeUnit
         ? getHitCells(activeUnit, coord)
@@ -1160,10 +1234,23 @@ export class Game extends Phaser.Scene {
       }
     }
 
-    if (activeUnit?.skill.effectBlock) {
-      const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, coord, next);
+    if (activeUnit && activeSkill(activeUnit).effectBlock) {
+      const skill = activeSkill(activeUnit);
+      const [eff, perTurn] = resolveEffectArgs(skill, activeUnit);
+      const { state: effState, events: effEvents } = applyEffectBlock(skill.effectBlock!, getEffectPattern(skill.effectBlock!), coord, next, eff, perTurn);
       next = effState;
       for (const e of effEvents) this.logEffectEvent(e);
+      if ((eff?.initiativeBonus ?? 0) !== 0) {
+        next = {
+          ...next,
+          roundQueue: rebuildRemainingQueue(
+            next.roundQueue[0],
+            next.roundQueue.slice(1),
+            this.chargedThisRound,
+            next.units
+          )
+        };
+      }
     }
 
     const winner = checkGameOver(next);
@@ -1186,11 +1273,11 @@ export class Game extends Phaser.Scene {
   }
 
   private autoTurn(): void {
-    const state = GameState.get();
+    let state = GameState.get();
     if (state.phase === "end") return;
 
     const unitId = state.roundQueue[0];
-    const activeUnit = state.units.get(unitId);
+    let activeUnit = state.units.get(unitId);
     const isEnemy = activeUnit?.anchor.side === "enemy";
 
     // Guard applies only to player units in non-auto mode.
@@ -1208,14 +1295,23 @@ export class Game extends Phaser.Scene {
       return;
     }
 
+    // Pick a random skill for this auto/enemy turn
+    const randomSkillIdx = Math.floor(Math.random() * activeUnit.skills.length);
+    const updatedUnit = { ...activeUnit, activeSkillIndex: randomSkillIdx };
+    const updatedUnits = new Map(state.units);
+    updatedUnits.set(unitId, updatedUnit);
+    state = { ...state, units: updatedUnits };
+    GameState.set(state);
+    activeUnit = updatedUnit;
+
     const isPlayer = activeUnit.anchor.side === "player";
     const logStyle = isPlayer ? "positive" : "negative";
     const nextDelay = Game.DELAY_AUTO_NEXT;
 
     // ── Heal ────────────────────────────────────────────────────────────────
     if (
-      activeUnit.skill.actionType === "mass_enchantment" ||
-      activeUnit.skill.actionType === "self_enchantment"
+      activeSkill(activeUnit).actionType === "mass_enchantment" ||
+      activeSkill(activeUnit).actionType === "self_enchantment"
     ) {
       const healerView = this.unitViews.get(unitId);
       healerView?.setSpriteState("attack");
@@ -1225,7 +1321,7 @@ export class Game extends Phaser.Scene {
       });
 
       const healTargets =
-        activeUnit.skill.actionType === "self_enchantment"
+        activeSkill(activeUnit).actionType === "self_enchantment"
           ? getSelfTarget(activeUnit)
           : getFriendlyTargets(activeUnit.anchor.side, state.occupancy);
       if (healTargets.length === 0) {
@@ -1268,12 +1364,12 @@ export class Game extends Phaser.Scene {
 
     // ── Attack ───────────────────────────────────────────────────────────────
     const targets =
-      activeUnit.skill.actionType === "ranged"
+      activeSkill(activeUnit).actionType === "ranged"
         ? getRangedTargets(activeUnit.anchor.side, state.occupancy)
         : getMeleeTargets(activeUnit, state.occupancy);
 
     if (targets.length === 0) {
-      if (activeUnit.skill.actionType === "melee")
+      if (activeSkill(activeUnit).actionType === "melee")
         this.battleLog.addEntry(
           `${activeUnit.name} — blocked, skipping turn`,
           "neutral",
@@ -1294,7 +1390,7 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState("idle");
     });
 
-    const autoAttackDmgType = activeUnit.skill.damageBlock?.damageType ?? "physical";
+    const autoAttackDmgType = activeSkill(activeUnit).damageBlock?.damageType ?? "physical";
     let { state: next, events } = resolveAttack(
       getHitCells(activeUnit, target),
       autoAttackDmgType === "physical"
@@ -1324,10 +1420,23 @@ export class Game extends Phaser.Scene {
       }
     }
 
-    if (activeUnit.skill.effectBlock) {
-      const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, target, next);
+    if (activeSkill(activeUnit).effectBlock) {
+      const skill = activeSkill(activeUnit);
+      const [eff, perTurn] = resolveEffectArgs(skill, activeUnit);
+      const { state: effState, events: effEvents } = applyEffectBlock(skill.effectBlock!, getEffectPattern(skill.effectBlock!), target, next, eff, perTurn);
       next = effState;
       for (const e of effEvents) this.logEffectEvent(e);
+      if ((eff?.initiativeBonus ?? 0) !== 0) {
+        next = {
+          ...next,
+          roundQueue: rebuildRemainingQueue(
+            next.roundQueue[0],
+            next.roundQueue.slice(1),
+            this.chargedThisRound,
+            next.units
+          )
+        };
+      }
     }
 
     const winner = checkGameOver(next);
@@ -1465,16 +1574,16 @@ export class Game extends Phaser.Scene {
   private logEffectEvent(e: EffectEvent): void {
     switch (e.type) {
       case 'effect_applied':
-        this.battleLog.addEntry(`${e.unitName} is affected by ${e.effectName}`, 'neutral');
+        this.battleLog.addEntry(`${e.unitName} is affected by ${e.effectDisplayName}`, 'neutral');
         break;
       case 'effect_tick_heal':
-        this.battleLog.addEntry(`${e.unitName} regenerates +${e.amount} HP (${e.effectName})`, 'positive');
+        this.battleLog.addEntry(`${e.unitName} regenerates +${e.amount} HP (${e.effectDisplayName})`, 'positive');
         break;
       case 'effect_tick_damage':
-        this.battleLog.addEntry(`${e.unitName} takes -${e.amount} HP (${e.effectName})`, 'negative');
+        this.battleLog.addEntry(`${e.unitName} takes -${e.amount} HP (${e.effectDisplayName})`, 'negative');
         break;
       case 'effect_expired':
-        this.battleLog.addEntry(`${e.effectName} expired on ${e.unitName}`, 'neutral');
+        this.battleLog.addEntry(`${e.effectDisplayName} expired on ${e.unitName}`, 'neutral');
         break;
     }
   }
@@ -1609,8 +1718,8 @@ export class Game extends Phaser.Scene {
     const validKeys = new Set(state.validTargets.map(cellKey));
     const activeUnit = state.units.get(state.roundQueue[0]);
     const targetHighlight =
-      (activeUnit?.skill.actionType === "mass_enchantment" ||
-        activeUnit?.skill.actionType === "self_enchantment")
+      (activeUnit && (activeSkill(activeUnit).actionType === "mass_enchantment" ||
+        activeSkill(activeUnit).actionType === "self_enchantment"))
         ? "heal_target"
         : "target";
 
@@ -1632,6 +1741,94 @@ export class Game extends Phaser.Scene {
       if (!view.active) continue;
       view.update(state.units.get(id) ?? null);
     }
+  }
+
+  // ─── Skill Icon UI ─────────────────────────────────────────────────────────
+
+  private showSkillIcons(unit: Unit): void {
+    this.clearSkillIcons();
+    if (unit.skills.length <= 1) return;
+
+    const iconSize = Math.round(28 * LAYOUT_SCALE);
+    const iconGap = Math.round(4 * LAYOUT_SCALE);
+
+    // Position icons to the right of the unit's rightmost occupied cell
+    const occupiedCells = getOccupiedCells(unit.anchor, unit.shape);
+    const rightmostCol = Math.max(...occupiedCells.map(c => c.col)) as Col;
+    const topRow = Math.min(...occupiedCells.map(c => c.row));
+    const bottomRow = Math.max(...occupiedCells.map(c => c.row));
+
+    const rightCellPos = this.cellPixelPos(unit.anchor.side, topRow, rightmostCol);
+    const iconX = rightCellPos.x + CELL_SIZE / 2 + iconGap + iconSize / 2;
+
+    const unitTopY = this.cellPixelPos(unit.anchor.side, topRow, rightmostCol).y - CELL_SIZE / 2;
+    const unitBottomY = this.cellPixelPos(unit.anchor.side, bottomRow, rightmostCol).y + CELL_SIZE / 2;
+    const unitCenterY = (unitTopY + unitBottomY) / 2;
+    const totalH = unit.skills.length * iconSize + (unit.skills.length - 1) * iconGap;
+    const startY = unitCenterY - totalH / 2 + iconSize / 2;
+
+    unit.skills.forEach((skill, i) => {
+      const iconY = startY + i * (iconSize + iconGap);
+      const isActive = i === unit.activeSkillIndex;
+
+      const bg = this.add.rectangle(0, 0, iconSize, iconSize, isActive ? 0xffcc00 : 0x444444)
+        .setStrokeStyle(2, isActive ? 0xffffff : 0x888888);
+      const label = this.add.text(0, 0, skill.name.substring(0, 3), {
+        fontSize: `${Math.round(8 * LAYOUT_SCALE)}px`,
+        color: '#ffffff',
+      }).setOrigin(0.5);
+
+      const container = this.add.container(iconX, iconY, [bg, label]);
+      container.setSize(iconSize, iconSize)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(10)
+        .on('pointerover', () => bg.setFillStyle(isActive ? 0xffdd44 : 0x666666))
+        .on('pointerout', () => bg.setFillStyle(isActive ? 0xffcc00 : 0x444444))
+        .on('pointerup', () => this.switchActiveSkill(i));
+
+      this.skillIconContainers.push(container);
+    });
+  }
+
+  private clearSkillIcons(): void {
+    for (const c of this.skillIconContainers) c.destroy();
+    this.skillIconContainers = [];
+  }
+
+  private switchActiveSkill(index: number): void {
+    const state = GameState.get();
+    const unitId = state.roundQueue[0];
+    const activeUnit = state.units.get(unitId);
+    if (!activeUnit || activeUnit.anchor.side !== 'player') return;
+
+    const updatedUnit: Unit = { ...activeUnit, activeSkillIndex: index };
+    const updatedUnits = new Map(state.units);
+    updatedUnits.set(unitId, updatedUnit);
+
+    const skill = updatedUnit.skills[index];
+    let validTargets: CellCoord[];
+    if (skill.actionType === 'mass_enchantment') {
+      validTargets = getFriendlyTargets('player', state.occupancy);
+    } else if (skill.actionType === 'self_enchantment') {
+      validTargets = getSelfTarget(updatedUnit);
+    } else if (skill.actionType === 'ranged') {
+      validTargets = getRangedTargets('player', state.occupancy);
+    } else {
+      validTargets = getMeleeTargets(updatedUnit, state.occupancy);
+    }
+
+    const next: BattleState = { ...state, units: updatedUnits, validTargets };
+    this.pendingTargetCoord = null;
+    GameState.set(next);
+    EventBus.emit(Events.STATE_CHANGED, next);
+
+    this.setStatus(
+      skill.actionType === 'mass_enchantment' || skill.actionType === 'self_enchantment'
+        ? `${updatedUnit.name} — Click on the green cell to heal`
+        : `${updatedUnit.name} — Click on the red cell to attack`,
+    );
+
+    this.showSkillIcons(updatedUnit);
   }
 
   // ─── Visual Effects ────────────────────────────────────────────────────────

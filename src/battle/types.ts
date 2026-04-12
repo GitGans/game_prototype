@@ -43,7 +43,7 @@ export interface UnitBlueprint {
   level: number;
   initiative: number;
   shape: UnitShape;
-  skill: Skill;
+  skills: Skill[];
   rowTrait: RowTrait;
   race?: UnitRace;
   unitClass: UnitClass;
@@ -65,7 +65,8 @@ export interface Unit {
   initiative: number;
   shape: UnitShape;
   anchor: CellCoord;
-  skill: Skill;
+  skills: Skill[];
+  activeSkillIndex: number;
   rowTrait: RowTrait;
   race?: UnitRace;
   templateId: string;
@@ -100,31 +101,36 @@ export type SkillActionType = 'melee' | 'ranged' | 'mass_enchantment' | 'self_en
 export interface Effect {
   id: string;
   isBuff: boolean;               // true = green square, false = red square
-  healPerTurn?: number;          // HP restored at round end while active
-  damagePerTurn?: number;        // HP lost at round end while active
   physicalDefenseBonus?: number; // flat additive modifier to physicalDefense while active
   magicalDefenseBonus?: number;  // flat additive modifier to magicalDefense while active
+  dodgeBonus?: number;           // flat % added to unit.dodge before 90% cap
+  blockBonus?: number;           // flat % added to unit.block before 90% cap
+  initiativeBonus?: number;      // flat added to unit.initiative for queue ordering
 }
 
 /** Live buff/debuff instance on a unit. */
 export interface ActiveEffect {
-  effectName: string;      // display name shown in log/UI (e.g. "Poisoned")
+  effectDisplayName: string; // display name shown in log/UI (e.g. "Poisoned")  (was: effectName)
   effect: Effect;
-  remainingRounds: number; // decremented at round end; removed when reaches 0
+  remainingRounds: number;   // decremented at round end; removed when reaches 0
+  computedPerTurn?: number;  // heal (isBuff) or damage per tick; undefined for defense-only effects
 }
 
 /** Skill block that deals damage. */
 export interface DamageBlock {
-  pattern: SkillPattern;
+  matrixName: string;   // key into DAMAGE_MATRICES (src/data/skillDefinitions.ts)
   damageType: DamageType;
+  level: number;        // which level of DAMAGE_MATRICES to use (1-based)
 }
 
 /** Skill block that applies a buff/debuff. Never deals damage. */
 export interface SkillEffectBlock {
-  pattern: SkillPattern;
-  effectName: string; // display name for the applied status (e.g. "Poisoned")
-  effect: Effect;
-  duration: number;  // number of rounds the effect lasts
+  effectMatrixName: string;   // key into EFFECT_MATRICES (src/data/skillDefinitions.ts)
+  level: number;              // which level of EFFECT_MATRICES to use (1-based)
+  effectDisplayName: string;  // display name for the applied status (e.g. "Poisoned")   (was: effectName)
+  effectName: string;         // key into LEVELED_EFFECTS                                (was: leveledEffectName)
+  duration: number;           // number of rounds the effect lasts
+  damageType: DamageType;     // kept for display / targeting context
 }
 
 /**
@@ -156,11 +162,27 @@ export interface SkillPattern {
   cells: (PatternCell | null)[][];
 }
 
+/** Damage matrix with per-level patterns. levels[0] = level 1, levels[1] = level 2, etc. */
+export interface LeveledDamageMatrix {
+  levels: SkillPattern[];
+}
+
+/**
+ * Effect definition. Two mutually exclusive modes:
+ * - effectDamageType present → per-turn value = casterStat × effect matrix multiplier (regeneration / lose_health)
+ * - bonusByLevel present     → fixed defense bonus per level; sign comes from base Effect (fortify / weaken / etc.)
+ */
+export interface LeveledEffectDef {
+  effect: Effect;
+  effectDamageType?: DamageType; // which caster stat drives computedPerTurn; present iff stat-based
+  bonusByLevel?: number[];       // fixed defense bonus magnitude per level (e.g. [10, 20, 30]); present iff defense-only
+}
+
 export interface Skill {
   id: string;
   name: string;
   actionType: SkillActionType;
-  // At least one of the two blocks must be present.
+  // level lives in damageBlock and/or effectBlock, not here
   damageBlock?: DamageBlock;
   effectBlock?: SkillEffectBlock;
 }
