@@ -92,7 +92,7 @@ export interface BattleState {
 // ─── Skill / Pattern System ───────────────────────────────────────────────
 
 export type DamageType = 'physical' | 'magical';
-export type SkillActionType = 'melee' | 'ranged' | 'enchantment';
+export type SkillActionType = 'melee' | 'ranged' | 'mass_enchantment' | 'self_enchantment';
 
 // ─── Effect System ────────────────────────────────────────────────────────────
 

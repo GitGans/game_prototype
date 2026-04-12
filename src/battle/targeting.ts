@@ -66,6 +66,15 @@ export function getFriendlyTargets(side: Side, occupancy: OccupancyMap): CellCoo
 }
 
 /**
+ * Returns a single-element array containing only the caster's own cell.
+ * Used for self_enchantment skills — the caster is always the origin,
+ * but the skill pattern may spread to surrounding allies from there.
+ */
+export function getSelfTarget(caster: Unit): CellCoord[] {
+  return [{ side: caster.anchor.side, row: caster.anchor.row, col: caster.anchor.col }];
+}
+
+/**
  * Returns all occupied enemy cells regardless of row.
  */
 export function getRangedTargets(attackerSide: Side, occupancy: OccupancyMap): CellCoord[] {
