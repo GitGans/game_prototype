@@ -140,9 +140,9 @@ export function applyEffectBlock(
       remainingRounds: block.duration,
     };
 
-    const effects = [...unit.activeEffects];
+    const effects = unit.activeEffects.filter(ae => ae.effect.id !== block.effect.id);
     if (effects.length >= 2) {
-      effects.shift(); // evict oldest
+      effects.shift(); // evict oldest (non-duplicate)
     }
     effects.push(newEffect);
 

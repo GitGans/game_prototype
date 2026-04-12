@@ -168,7 +168,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     templateId: "hieromonk",
     name: "Hieromonk",
     unitClass: "hieromonk" as UnitClass,
-    hp: 25,
+    hp: 55,
     physicalDamage: 0,
     magicalDamage: 8,
     physicalDefense: 0,
