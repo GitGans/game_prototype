@@ -1,16 +1,41 @@
-import { Effect, Skill } from "../battle/types";
+import { Effect, Skill, SkillPattern } from "../battle/types";
 import { PATTERNS } from "../battle/skillPatterns";
+
+// ─── Helper ───────────────────────────────────────────────────────────────────
+
+const P = (m: number) => ({ damageMultiplier: m });
+
+// ─── Effect Pattern Presets ───────────────────────────────────────────────────
+
+export const EFFECT_PATTERNS: Record<string, SkillPattern> = {
+  /**
+   * Cross pattern for effect application. All 5 cells have equal multiplier 0.2.
+   *
+   *   [ ]  [X]  [ ]
+   *   [X]  [X]  [X]   ← anchor at center (row 1, col 1)
+   *   [ ]  [X]  [ ]
+   */
+  cross: {
+    anchorRow: 1,
+    anchorCol: 1,
+    cells: [
+      [null,    P(0.2), null  ],
+      [P(0.2),  P(0.2), P(0.2)],
+      [null,    P(0.2), null  ],
+    ],
+  },
+};
+
+// ─── Effect Definitions ───────────────────────────────────────────────────────
 
 export const EFFECTS: Record<string, Effect> = {
   regeneration: {
     id: "regeneration",
     isBuff: true,
-    healPerTurn: 15,
   },
-  poison: {
-    id: "poison",
+  lose_health: {
+    id: "lose_health",
     isBuff: false,
-    damagePerTurn: 15,
   },
   fortify: {
     id: "fortify",
@@ -33,6 +58,8 @@ export const EFFECTS: Record<string, Effect> = {
     magicalDefenseBonus: -20,
   },
 };
+
+// ─── Skill Definitions ────────────────────────────────────────────────────────
 
 export const SKILLS: Record<string, Skill> = {
   basic_melee: {
@@ -66,6 +93,7 @@ export const SKILLS: Record<string, Skill> = {
       effectName: "Defence",
       effect: EFFECTS.fortify,
       duration: 2,
+      damageType: "physical",
     },
   },
 
@@ -79,6 +107,7 @@ export const SKILLS: Record<string, Skill> = {
       effectName: "Regeneration",
       effect: EFFECTS.regeneration,
       duration: 2,
+      damageType: "magical",
     },
   },
 
@@ -87,6 +116,13 @@ export const SKILLS: Record<string, Skill> = {
     name: "Arcane Cross",
     actionType: "ranged",
     damageBlock: { pattern: PATTERNS.cross, damageType: "magical" },
+    effectBlock: {
+      pattern: EFFECT_PATTERNS.cross,
+      effectName: "Arcane Burn",
+      effect: EFFECTS.lose_health,
+      duration: 2,
+      damageType: "magical",
+    },
   },
 
   row_strike: {
@@ -111,8 +147,9 @@ export const SKILLS: Record<string, Skill> = {
     effectBlock: {
       pattern: PATTERNS.single,
       effectName: "Poisoned",
-      effect: EFFECTS.poison,
+      effect: EFFECTS.lose_health,
       duration: 3,
+      damageType: "physical",
     },
   },
 
@@ -125,6 +162,7 @@ export const SKILLS: Record<string, Skill> = {
       effectName: "Weakened",
       effect: EFFECTS.weaken,
       duration: 2,
+      damageType: "physical",
     },
   },
 };

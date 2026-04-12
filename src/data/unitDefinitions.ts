@@ -155,7 +155,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 6,
     shape: SHAPES["1x1"],
-    skill: SKILLS.weaken_curse,
+    skill: SKILLS.arcane_cross,
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/stormbearer.png",

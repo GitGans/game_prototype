@@ -83,7 +83,7 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
     });
     let next = resolveHeal(getHitCells(unit, target), unit.magicalDamage, state);
     if (skill.effectBlock) {
-      next = applyEffectBlock(skill.effectBlock, target, next).state;
+      next = applyEffectBlock(skill.effectBlock, target, unit, next).state;
     }
     return next;
   }
@@ -104,7 +104,7 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
     next = resolveAttack(getHitCells(unit, target), baseDamage, damageType, state).state;
   }
   if (skill.effectBlock) {
-    next = applyEffectBlock(skill.effectBlock, target, next).state;
+    next = applyEffectBlock(skill.effectBlock, target, unit, next).state;
   }
   return next;
 }
@@ -1106,7 +1106,7 @@ export class Game extends Phaser.Scene {
         state,
       );
       if (activeUnit?.skill.effectBlock) {
-        const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, coord, next);
+        const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, coord, activeUnit, next);
         next = effState;
         for (const e of effEvents) this.logEffectEvent(e);
       }
@@ -1161,7 +1161,7 @@ export class Game extends Phaser.Scene {
     }
 
     if (activeUnit?.skill.effectBlock) {
-      const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, coord, next);
+      const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, coord, activeUnit, next);
       next = effState;
       for (const e of effEvents) this.logEffectEvent(e);
     }
@@ -1325,7 +1325,7 @@ export class Game extends Phaser.Scene {
     }
 
     if (activeUnit.skill.effectBlock) {
-      const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, target, next);
+      const { state: effState, events: effEvents } = applyEffectBlock(activeUnit.skill.effectBlock, target, activeUnit, next);
       next = effState;
       for (const e of effEvents) this.logEffectEvent(e);
     }

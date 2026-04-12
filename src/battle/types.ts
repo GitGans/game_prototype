@@ -100,17 +100,16 @@ export type SkillActionType = 'melee' | 'ranged' | 'mass_enchantment' | 'self_en
 export interface Effect {
   id: string;
   isBuff: boolean;               // true = green square, false = red square
-  healPerTurn?: number;          // HP restored at round end while active
-  damagePerTurn?: number;        // HP lost at round end while active
   physicalDefenseBonus?: number; // flat additive modifier to physicalDefense while active
   magicalDefenseBonus?: number;  // flat additive modifier to magicalDefense while active
 }
 
 /** Live buff/debuff instance on a unit. */
 export interface ActiveEffect {
-  effectName: string;      // display name shown in log/UI (e.g. "Poisoned")
+  effectName: string;       // display name shown in log/UI (e.g. "Poisoned")
   effect: Effect;
-  remainingRounds: number; // decremented at round end; removed when reaches 0
+  remainingRounds: number;  // decremented at round end; removed when reaches 0
+  computedPerTurn?: number; // heal (isBuff) or damage per tick; undefined for defense-only effects
 }
 
 /** Skill block that deals damage. */
@@ -122,9 +121,10 @@ export interface DamageBlock {
 /** Skill block that applies a buff/debuff. Never deals damage. */
 export interface SkillEffectBlock {
   pattern: SkillPattern;
-  effectName: string; // display name for the applied status (e.g. "Poisoned")
+  effectName: string;   // display name for the applied status (e.g. "Poisoned")
   effect: Effect;
-  duration: number;  // number of rounds the effect lasts
+  duration: number;     // number of rounds the effect lasts
+  damageType: DamageType; // which caster stat drives computedPerTurn (physical/magical)
 }
 
 /**

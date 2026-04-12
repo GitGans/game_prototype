@@ -118,18 +118,27 @@ export function resolveHeal(
  * Applies a SkillEffectBlock to all units hit by its pattern.
  * No dodge/block/defense — effects always apply 100%.
  * Each unit may carry at most 2 active effects; the oldest is evicted if full.
+ * computedPerTurn is calculated once here: caster stat × cell multiplier.
+ * Defense-only effects (physicalDefenseBonus / magicalDefenseBonus) get computedPerTurn = undefined.
  */
 export function applyEffectBlock(
   block: SkillEffectBlock,
   targetAnchor: CellCoord,
+  caster: Unit,
   state: BattleState,
 ): { state: BattleState; events: EffectEvent[] } {
   const hitCells = resolvePattern(targetAnchor, block.pattern);
   const events: EffectEvent[] = [];
   const newUnits = new Map(state.units);
 
+  const isPureDefenseEffect =
+    block.effect.physicalDefenseBonus !== undefined ||
+    block.effect.magicalDefenseBonus !== undefined;
+  const casterStat =
+    block.damageType === 'physical' ? caster.physicalDamage : caster.magicalDamage;
+
   const seen = new Set<string>();
-  for (const { coord } of hitCells) {
+  for (const { coord, multiplier } of hitCells) {
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
     if (!unit || seen.has(unit.id)) continue;
     seen.add(unit.id);
@@ -138,6 +147,9 @@ export function applyEffectBlock(
       effectName: block.effectName,
       effect: block.effect,
       remainingRounds: block.duration,
+      computedPerTurn: isPureDefenseEffect
+        ? undefined
+        : Math.round(casterStat * multiplier),
     };
 
     const effects = unit.activeEffects.filter(ae => ae.effect.id !== block.effect.id);
@@ -168,15 +180,14 @@ export function tickEffects(state: BattleState): { state: BattleState; events: E
     const nextEffects: ActiveEffect[] = [];
 
     for (const ae of unit.activeEffects) {
-      if (ae.effect.healPerTurn) {
-        const amount = ae.effect.healPerTurn;
-        hp = Math.min(unit.maxHp, hp + amount);
-        events.push({ type: 'effect_tick_heal', unitId: unit.id, unitName: unit.name, effectName: ae.effectName, amount });
-      }
-      if (ae.effect.damagePerTurn) {
-        const amount = ae.effect.damagePerTurn;
-        hp = Math.max(0, hp - amount);
-        events.push({ type: 'effect_tick_damage', unitId: unit.id, unitName: unit.name, effectName: ae.effectName, amount });
+      if (ae.computedPerTurn !== undefined) {
+        if (ae.effect.isBuff) {
+          hp = Math.min(unit.maxHp, hp + ae.computedPerTurn);
+          events.push({ type: 'effect_tick_heal', unitId: unit.id, unitName: unit.name, effectName: ae.effectName, amount: ae.computedPerTurn });
+        } else {
+          hp = Math.max(0, hp - ae.computedPerTurn);
+          events.push({ type: 'effect_tick_damage', unitId: unit.id, unitName: unit.name, effectName: ae.effectName, amount: ae.computedPerTurn });
+        }
       }
 
       const remaining = ae.remainingRounds - 1;
