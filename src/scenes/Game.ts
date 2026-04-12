@@ -1089,7 +1089,7 @@ export class Game extends Phaser.Scene {
     }
 
     if (activeSkill(activeUnit).effectBlock) {
-      const effectCells = resolvePattern(coord, activeSkill(activeUnit).effectBlock!.pattern);
+      const effectCells = resolvePattern(coord, getEffectPattern(activeSkill(activeUnit).effectBlock!));
       const isEffectHeal =
         activeSkill(activeUnit).actionType === "mass_enchantment" ||
         activeSkill(activeUnit).actionType === "self_enchantment";
