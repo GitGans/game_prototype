@@ -35,13 +35,8 @@ export function resolveAttack(
   for (const { coord, multiplier } of hitCells) {
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
     if (!unit) continue;
-    const baseDefense = damageType === 'physical' ? unit.physicalDefense : unit.magicalDefense;
-    const bonusDefense = unit.activeEffects.reduce((sum, ae) => {
-      return sum + (damageType === 'physical'
-        ? (ae.effect.physicalDefenseBonus ?? 0)
-        : (ae.effect.magicalDefenseBonus ?? 0));
-    }, 0);
-    const defense = baseDefense + bonusDefense;
+    const stats = effectiveStats(unit);
+    const defense = damageType === 'physical' ? stats.physicalDefense : stats.magicalDefense;
     // min base damage = 10 (before pattern multiplier)
     const effectiveBase = Math.max(10, Math.round(baseDamage * (1 - defense / 100)));
     const dmg = Math.round(effectiveBase * multiplier);
@@ -55,10 +50,9 @@ export function resolveAttack(
   const newUnits = new Map(state.units);
 
   for (const { unit, damage: rawDmg } of hitUnits.values()) {
-    const dodgeBonus = unit.activeEffects.reduce((sum, ae) => sum + (ae.effect.dodgeBonus ?? 0), 0);
-    const blockBonus = unit.activeEffects.reduce((sum, ae) => sum + (ae.effect.blockBonus ?? 0), 0);
-    const effectiveDodge = Math.min(unit.dodge + dodgeBonus, 90);
-    const effectiveBlock = Math.min(unit.block + blockBonus, 90);
+    const unitStats = effectiveStats(unit);
+    const effectiveDodge = Math.min(unitStats.dodge, 90);
+    const effectiveBlock = Math.min(unitStats.block, 90);
 
     if (Math.random() * 100 < effectiveDodge) {
       events.push({ type: 'dodged', unitId: unit.id, unitName: unit.name });
@@ -208,6 +202,40 @@ export function tickEffects(state: BattleState): { state: BattleState; events: E
   }
 
   return { state: { ...state, units: newUnits, occupancy }, events };
+}
+
+export interface EffectiveStats {
+  physicalDamage: number;
+  magicalDamage: number;
+  physicalDefense: number;
+  magicalDefense: number;
+  dodge: number;
+  block: number;
+  initiative: number;
+}
+
+/** Returns the unit's stats with all active effect bonuses applied. Pure, no side-effects. */
+export function effectiveStats(unit: Unit): EffectiveStats {
+  return unit.activeEffects.reduce<EffectiveStats>(
+    (acc, ae) => ({
+      physicalDamage:  acc.physicalDamage  + (ae.effect.physicalDamageBonus  ?? 0),
+      magicalDamage:   acc.magicalDamage   + (ae.effect.magicalDamageBonus   ?? 0),
+      physicalDefense: acc.physicalDefense + (ae.effect.physicalDefenseBonus ?? 0),
+      magicalDefense:  acc.magicalDefense  + (ae.effect.magicalDefenseBonus  ?? 0),
+      dodge:           acc.dodge           + (ae.effect.dodgeBonus            ?? 0),
+      block:           acc.block           + (ae.effect.blockBonus            ?? 0),
+      initiative:      acc.initiative      + (ae.effect.initiativeBonus       ?? 0),
+    }),
+    {
+      physicalDamage:  unit.physicalDamage,
+      magicalDamage:   unit.magicalDamage,
+      physicalDefense: unit.physicalDefense,
+      magicalDefense:  unit.magicalDefense,
+      dodge:           unit.dodge,
+      block:           unit.block,
+      initiative:      unit.initiative,
+    },
+  );
 }
 
 /** Returns the winning side when all units on one side are dead, or null. */

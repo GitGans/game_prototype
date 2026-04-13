@@ -18,6 +18,7 @@ import { UnitView } from "../objects/UnitView";
 import { InitiativeBar } from "../objects/InitiativeBar";
 import { BattleLog } from "../objects/BattleLog";
 import { UnitTooltip } from "../objects/UnitTooltip";
+import { EffectTooltip } from "../objects/EffectTooltip";
 import {
   BattleState,
   CellCoord,
@@ -175,6 +176,7 @@ export class Game extends Phaser.Scene {
   private statusText!: Phaser.GameObjects.Text;
   private battleLog!: BattleLog;
   private unitTooltip!: UnitTooltip;
+  private effectTooltip!: EffectTooltip;
   private logX = 0;
   private logY = 0;
   private logW = 0;
@@ -214,6 +216,7 @@ export class Game extends Phaser.Scene {
 
     this.buildGrid();
     this.unitTooltip = new UnitTooltip(this);
+    this.effectTooltip = new EffectTooltip(this);
     this.initBattle();
     this.buildUnitViews();
     this.buildUI();
@@ -336,6 +339,7 @@ export class Game extends Phaser.Scene {
       rowSpan,
       textureKey,
       spriteConfig,
+      this.effectTooltip,
     );
     this.unitViews.set(unit.id, view);
   }
@@ -539,15 +543,10 @@ export class Game extends Phaser.Scene {
     if (interactive) {
       container.setInteractive({ useHandCursor: true });
       container.on("pointerup", () => this.onBenchCardClick(idx));
-      container.on("pointerover", (pointer: Phaser.Input.Pointer) => {
+      container.on("pointerover", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(0x2a3a4a, 0.9);
         const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-        this.unitTooltip.showFromBlueprint(bp, level, "player", pointer.x, pointer.y);
-      });
-      container.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        if (!this.unitTooltip.visible) return;
-        const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-        this.unitTooltip.showFromBlueprint(bp, level, "player", pointer.x, pointer.y);
+        this.unitTooltip.showFromBlueprint(bp, level, "player", this.logX, this.logY, this.logW);
       });
       container.on("pointerout", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(fillColor, 0.9);
@@ -896,19 +895,11 @@ export class Game extends Phaser.Scene {
         }
       });
 
-      cell.on("pointerover", (pointer: Phaser.Input.Pointer) => {
+      cell.on("pointerover", () => {
         const state = GameState.get();
         const unit = state.occupancy.cellToUnit.get(cell.key);
         if (unit && unit.hp > 0) {
-          this.unitTooltip.show(unit, pointer.x, pointer.y);
-        }
-      });
-      cell.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        if (!this.unitTooltip.visible) return;
-        const state = GameState.get();
-        const unit = state.occupancy.cellToUnit.get(cell.key);
-        if (unit && unit.hp > 0) {
-          this.unitTooltip.show(unit, pointer.x, pointer.y);
+          this.unitTooltip.showFixed(unit, this.logX, this.logY, this.logW);
         }
       });
       cell.on("pointerout", () => {
@@ -918,6 +909,7 @@ export class Game extends Phaser.Scene {
   }
 
   private onCellClick(coord: CellCoord): void {
+    this.unitTooltip.hide();
     const state = GameState.get();
     if (state.phase !== "select_target") return;
 

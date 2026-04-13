@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CELL_SIZE, CELL_GAP, COLORS, LAYOUT_SCALE } from '../core/Constants';
 import { Unit, SpriteState, SpriteSheetConfig } from '../battle/types';
+import { EffectTooltip } from './EffectTooltip';
 
 export class UnitView extends Phaser.GameObjects.Container {
   private bgSprite: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
@@ -19,6 +20,7 @@ export class UnitView extends Phaser.GameObjects.Container {
   // Buff/debuff squares
   private effectSquares: Phaser.GameObjects.Rectangle[] = [];
   private effectLabels: Phaser.GameObjects.Text[] = [];
+  private effectTooltip?: EffectTooltip;
   private footprintW = 0;
   private footprintH = 0;
 
@@ -30,9 +32,11 @@ export class UnitView extends Phaser.GameObjects.Container {
     colSpan: number,
     rowSpan: number,
     textureKey?: string,
-    spriteConfig?: SpriteSheetConfig
+    spriteConfig?: SpriteSheetConfig,
+    effectTooltip?: EffectTooltip
   ) {
     super(scene, x, y);
+    this.effectTooltip = effectTooltip;
     this.isPlayer = unit.anchor.side === 'player';
 
     const pad   = Math.round(10 * LAYOUT_SCALE);
@@ -135,6 +139,8 @@ export class UnitView extends Phaser.GameObjects.Container {
   }
 
   private updateEffectSquares(unit: Unit): void {
+    this.effectTooltip?.hide();
+
     for (const sq of this.effectSquares) sq.destroy();
     this.effectSquares = [];
     for (const lbl of this.effectLabels) lbl.destroy();
@@ -156,6 +162,17 @@ export class UnitView extends Phaser.GameObjects.Container {
       const y = topY + i * (sqSize + gap);
 
       const sq = this.scene.add.rectangle(x, y, sqSize, sqSize, color, 0.9);
+      sq.setInteractive();
+
+      const worldX = this.x + x;
+      const worldY = this.y + y;
+      sq.on('pointerover', () => {
+        this.effectTooltip?.show(ae, worldX, worldY, this.isPlayer);
+      });
+      sq.on('pointerout', () => {
+        this.effectTooltip?.hide();
+      });
+
       this.add(sq);
       this.effectSquares.push(sq);
 

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
-import { LAYOUT_SCALE, COLORS } from "../core/Constants";
+import { LAYOUT_SCALE, COLORS, CELL_SIZE } from "../core/Constants";
 import { Unit, UnitBlueprint } from "../battle/types";
+import { effectiveStats } from "../battle/combat";
 
 const W = Math.round(200 * LAYOUT_SCALE);
 const PAD = Math.round(10 * LAYOUT_SCALE);
@@ -9,21 +10,38 @@ const LINE_H = Math.round(17 * LAYOUT_SCALE);
 const FONT_SM = `${Math.round(11 * LAYOUT_SCALE)}px`;
 const FONT_MD = `${Math.round(13 * LAYOUT_SCALE)}px`;
 
+interface StatValue {
+  value: number;
+  base: number;
+}
+
 interface TooltipData {
   templateId: string;
   name: string;
   side: "player" | "enemy";
   hp: number;
   maxHp: number;
-  physicalDamage: number;
-  magicalDamage: number;
-  physicalDefense: number;
-  magicalDefense: number;
-  dodge: number;
-  block: number;
-  initiative: number;
-  skill: { name: string; damageBlock?: { damageType: string } } | null;
+  physicalDamage: StatValue;
+  magicalDamage: StatValue;
+  physicalDefense: StatValue;
+  magicalDefense: StatValue;
+  dodge: StatValue;
+  block: StatValue;
+  initiative: StatValue;
+  skills: Array<{
+    name: string;
+    damageBlock?: { damageType: string };
+    isActive: boolean;
+  }>;
 }
+
+function statColor(sv: StatValue): string {
+  if (sv.value > sv.base) return "#44ff88"; // buffed → green
+  if (sv.value < sv.base) return "#ff4444"; // debuffed → red
+  return "#cccccc";                          // unchanged → grey
+}
+
+function flat(v: number): StatValue { return { value: v, base: v }; }
 
 export class UnitTooltip extends Phaser.GameObjects.Container {
   private bg: Phaser.GameObjects.Rectangle;
@@ -39,54 +57,88 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  show(unit: Unit, cursorX: number, cursorY: number): void {
+  show(unit: Unit, anchorX: number, anchorY: number): void {
+    const stats = effectiveStats(unit);
     this._render({
-      templateId: unit.templateId,
-      name: unit.name,
-      side: unit.anchor.side,
-      hp: unit.hp,
-      maxHp: unit.maxHp,
-      physicalDamage: unit.physicalDamage,
-      magicalDamage: unit.magicalDamage,
-      physicalDefense: unit.physicalDefense,
-      magicalDefense: unit.magicalDefense,
-      dodge: unit.dodge,
-      block: unit.block,
-      initiative: unit.initiative,
-      skill: unit.skill ?? null,
-    }, cursorX, cursorY);
+      templateId:      unit.templateId,
+      name:            unit.name,
+      side:            unit.anchor.side,
+      hp:              unit.hp,
+      maxHp:           unit.maxHp,
+      physicalDamage:  { value: stats.physicalDamage,  base: unit.physicalDamage  },
+      magicalDamage:   { value: stats.magicalDamage,   base: unit.magicalDamage   },
+      physicalDefense: { value: stats.physicalDefense, base: unit.physicalDefense },
+      magicalDefense:  { value: stats.magicalDefense,  base: unit.magicalDefense  },
+      dodge:           { value: stats.dodge,           base: unit.dodge           },
+      block:           { value: stats.block,           base: unit.block           },
+      initiative:      { value: stats.initiative,      base: unit.initiative      },
+      skills: unit.skills.map((s, i) => ({
+        name:        s.name,
+        damageBlock: s.damageBlock,
+        isActive:    i === unit.activeSkillIndex,
+      })),
+    }, anchorX, anchorY);
   }
 
   showFromBlueprint(
     bp: UnitBlueprint,
     level: number,
     side: "player" | "enemy",
-    cursorX: number,
-    cursorY: number,
+    anchorX: number,
+    anchorY: number,
+    overrideW?: number,
   ): void {
     const scale = 1 + 0.1 * (level - 1);
     this._render({
-      templateId: bp.templateId,
-      name: bp.name,
+      templateId:      bp.templateId,
+      name:            bp.name,
       side,
-      hp: Math.round(bp.hp * scale),
-      maxHp: Math.round(bp.hp * scale),
-      physicalDamage: Math.round(bp.physicalDamage * scale),
-      magicalDamage: Math.round(bp.magicalDamage * scale),
-      physicalDefense: bp.physicalDefense,
-      magicalDefense: bp.magicalDefense,
-      dodge: bp.dodge,
-      block: bp.block,
-      initiative: bp.initiative,
-      skill: bp.skill ?? null,
-    }, cursorX, cursorY);
+      hp:              Math.round(bp.hp * scale),
+      maxHp:           Math.round(bp.hp * scale),
+      physicalDamage:  flat(Math.round(bp.physicalDamage * scale)),
+      magicalDamage:   flat(Math.round(bp.magicalDamage  * scale)),
+      physicalDefense: flat(bp.physicalDefense),
+      magicalDefense:  flat(bp.magicalDefense),
+      dodge:           flat(bp.dodge),
+      block:           flat(bp.block),
+      initiative:      flat(bp.initiative),
+      skills: bp.skills.map(s => ({
+        name:        s.name,
+        damageBlock: s.damageBlock,
+        isActive:    false,
+      })),
+    }, anchorX, anchorY, overrideW);
   }
 
   hide(): void {
     this.setVisible(false);
   }
 
-  private _render(data: TooltipData, cursorX: number, cursorY: number): void {
+  showFixed(unit: Unit, x: number, y: number, w: number): void {
+    const stats = effectiveStats(unit);
+    this._render({
+      templateId:      unit.templateId,
+      name:            unit.name,
+      side:            unit.anchor.side,
+      hp:              unit.hp,
+      maxHp:           unit.maxHp,
+      physicalDamage:  { value: stats.physicalDamage,  base: unit.physicalDamage  },
+      magicalDamage:   { value: stats.magicalDamage,   base: unit.magicalDamage   },
+      physicalDefense: { value: stats.physicalDefense, base: unit.physicalDefense },
+      magicalDefense:  { value: stats.magicalDefense,  base: unit.magicalDefense  },
+      dodge:           { value: stats.dodge,           base: unit.dodge           },
+      block:           { value: stats.block,           base: unit.block           },
+      initiative:      { value: stats.initiative,      base: unit.initiative      },
+      skills: unit.skills.map((s, i) => ({
+        name:        s.name,
+        damageBlock: s.damageBlock,
+        isActive:    i === unit.activeSkillIndex,
+      })),
+    }, x, y, w);
+  }
+
+  private _render(data: TooltipData, anchorX: number, anchorY: number, overrideW?: number): void {
+    const panelW = overrideW ?? W;
     for (const obj of this.contents) obj.destroy();
     this.contents = [];
 
@@ -115,14 +167,14 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
       fontSize: FONT_MD,
       color: nameColor,
       fontStyle: "bold",
-      wordWrap: { width: W - SPRITE_SIZE - PAD * 3 },
+      wordWrap: { width: panelW - SPRITE_SIZE - PAD * 3 },
     });
     this.add(nameText);
     this.contents.push(nameText);
     y += SPRITE_SIZE + PAD;
 
     // ── Divider ───────────────────────────────────────────────────────
-    const divider = scene.add.rectangle(PAD, y, W - PAD * 2, 1, 0x445566);
+    const divider = scene.add.rectangle(PAD, y, panelW - PAD * 2, 1, 0x445566);
     divider.setOrigin(0, 0);
     this.add(divider);
     this.contents.push(divider);
@@ -136,20 +188,20 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
     this.contents.push(statsTitle);
     y += Math.round(18 * LAYOUT_SCALE);
 
-    const statLines = [
-      { label: "HP",         value: `${data.hp} / ${data.maxHp}` },
-      { label: "Phys Dmg",   value: String(data.physicalDamage) },
-      { label: "Magic Dmg",  value: String(data.magicalDamage) },
-      { label: "Phys Def",   value: `${data.physicalDefense}%` },
-      { label: "Magic Def",  value: `${data.magicalDefense}%` },
-      { label: "Dodge",      value: `${data.dodge}%` },
-      { label: "Block",      value: `${data.block}%` },
-      { label: "Initiative", value: String(data.initiative) },
+    const statLines: Array<{ label: string; display: string; color: string }> = [
+      { label: "HP",         display: `${data.hp} / ${data.maxHp}`,              color: "#cccccc"                   },
+      { label: "Phys Dmg",  display: String(data.physicalDamage.value),          color: statColor(data.physicalDamage)  },
+      { label: "Magic Dmg", display: String(data.magicalDamage.value),           color: statColor(data.magicalDamage)   },
+      { label: "Phys Def",  display: `${data.physicalDefense.value}%`,           color: statColor(data.physicalDefense) },
+      { label: "Magic Def", display: `${data.magicalDefense.value}%`,            color: statColor(data.magicalDefense)  },
+      { label: "Dodge",     display: `${data.dodge.value}%`,                     color: statColor(data.dodge)           },
+      { label: "Block",     display: `${data.block.value}%`,                     color: statColor(data.block)           },
+      { label: "Initiative",display: String(data.initiative.value),              color: statColor(data.initiative)      },
     ];
 
-    for (const { label, value } of statLines) {
-      const t = scene.add.text(PAD, y, `${label}: ${value}`, {
-        fontSize: FONT_SM, color: "#cccccc",
+    for (const { label, display, color } of statLines) {
+      const t = scene.add.text(PAD, y, `${label}: ${display}`, {
+        fontSize: FONT_SM, color,
       });
       this.add(t);
       this.contents.push(t);
@@ -158,56 +210,76 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
 
     y += Math.round(6 * LAYOUT_SCALE);
 
-    // ── Skill ─────────────────────────────────────────────────────────
-    const skillTitle = scene.add.text(PAD, y, "Skill", {
+    // ── Skills ────────────────────────────────────────────────────────
+    const skillTitle = scene.add.text(PAD, y, "Skills", {
       fontSize: FONT_MD, color: "#ffdd44", fontStyle: "bold",
     });
     this.add(skillTitle);
     this.contents.push(skillTitle);
     y += Math.round(18 * LAYOUT_SCALE);
 
-    if (data.skill) {
-      const skillName = scene.add.text(PAD, y, data.skill.name, {
-        fontSize: FONT_SM, color: "#ffffff",
-      });
-      this.add(skillName);
-      this.contents.push(skillName);
-      y += LINE_H;
-
-      const skillType = data.skill.damageBlock
-        ? `Damage: ${data.skill.damageBlock.damageType}`
-        : "Effect only";
-      const skillTypeText = scene.add.text(PAD, y, skillType, {
-        fontSize: FONT_SM, color: "#aaaaaa",
-      });
-      this.add(skillTypeText);
-      this.contents.push(skillTypeText);
-      y += LINE_H;
-    } else {
-      const noSkill = scene.add.text(PAD, y, "No skill", {
+    if (data.skills.length === 0) {
+      const noSkill = scene.add.text(PAD, y, "No skills", {
         fontSize: FONT_SM, color: "#555555",
       });
       this.add(noSkill);
       this.contents.push(noSkill);
       y += LINE_H;
+    } else {
+      for (const skill of data.skills) {
+        const nameCol = skill.isActive ? "#ffffff" : "#888888";
+        const skillName = scene.add.text(PAD, y, skill.name, {
+          fontSize: FONT_SM, color: nameCol,
+        });
+        this.add(skillName);
+        this.contents.push(skillName);
+        y += LINE_H;
+
+        const typeStr = skill.damageBlock
+          ? `Damage: ${skill.damageBlock.damageType}`
+          : "Effect only";
+        const skillType = scene.add.text(PAD + Math.round(8 * LAYOUT_SCALE), y, typeStr, {
+          fontSize: FONT_SM, color: "#666666",
+        });
+        this.add(skillType);
+        this.contents.push(skillType);
+        y += LINE_H;
+      }
     }
 
     y += PAD;
 
     // ── Resize background ─────────────────────────────────────────────
-    this.bg.setSize(W, y);
+    const tooltipH = y;
+    this.bg.setSize(panelW, tooltipH);
 
-    // ── Position tooltip (avoid screen edges) ─────────────────────────
+    // ── Fixed position — used by battle screen ────────────────────────
+    if (overrideW !== undefined) {
+      this.setPosition(anchorX, anchorY);
+      this.setVisible(true);
+      return;
+    }
+
+    // ── Auto-position: fixed to cell anchor, side-aware ───────────────
     const sceneW = scene.scale.width;
     const sceneH = scene.scale.height;
-    const OFFSET = Math.round(12 * LAYOUT_SCALE);
+    const OFFSET = Math.round(16 * LAYOUT_SCALE);
+    const halfCell = CELL_SIZE / 2;
 
-    let tx = cursorX + OFFSET;
-    let ty = cursorY - y - OFFSET;  // above cursor by default
+    let tx: number;
+    let ty = anchorY - tooltipH / 2; // vertically centred on the cell
 
-    if (tx + W > sceneW) tx = cursorX - W - OFFSET;
-    if (ty < 0) ty = cursorY + OFFSET;
-    if (ty + y > sceneH) ty = sceneH - y - PAD;
+    if (data.side === "player") {
+      tx = anchorX + halfCell + OFFSET;             // right of the cell
+    } else {
+      tx = anchorX - panelW - halfCell - OFFSET;    // left of the cell
+    }
+
+    // Clamp to screen edges
+    if (tx + panelW > sceneW) tx = sceneW - panelW - PAD;
+    if (tx < 0)               tx = PAD;
+    if (ty < 0)               ty = PAD;
+    if (ty + tooltipH > sceneH) ty = sceneH - tooltipH - PAD;
 
     this.setPosition(tx, ty);
     this.setVisible(true);

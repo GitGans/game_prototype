@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BattleState, Unit } from '../battle/types';
 import { COLORS, LAYOUT_SCALE } from '../core/Constants';
+import { effectiveStats } from '../battle/combat';
 
 const CARD_GAP    = Math.round(5  * LAYOUT_SCALE);
 const DIVIDER_GAP = Math.round(14 * LAYOUT_SCALE);
@@ -128,12 +129,16 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
           }
         ).setOrigin(0.5, 0).setAlpha(alpha);
 
+    const effInit = effectiveStats(unit).initiative;
+    const initColor = effInit > unit.initiative ? '#44ff88'
+                    : effInit < unit.initiative ? '#ff4444'
+                    : COLORS.textLight;
     const initText = this.scene.add.text(
       x + CARD_W / 2, y + CARD_H - Math.round(18 * LAYOUT_SCALE),
-      `★${unit.initiative}`,
+      `★${effInit}`,
       {
         fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-        color: COLORS.textLight,
+        color: initColor,
         fontStyle: 'bold',
         align: 'center',
       }
@@ -168,14 +173,15 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
   }
 
   private buildNextRound(units: Map<string, Unit>): Unit[] {
-    const alive = Array.from(units.values())
+    return Array.from(units.values())
       .filter(u => u.hp > 0)
       .sort((a, b) => {
-        if (b.initiative !== a.initiative) return b.initiative - a.initiative;
+        const ia = effectiveStats(a).initiative;
+        const ib = effectiveStats(b).initiative;
+        if (ib !== ia) return ib - ia;
         // same initiative: player first
         if (a.anchor.side !== b.anchor.side) return a.anchor.side === 'player' ? -1 : 1;
         return 0;
       });
-    return alive;
   }
 }
