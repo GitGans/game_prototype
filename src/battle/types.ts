@@ -106,6 +106,8 @@ export interface Effect {
   dodgeBonus?: number;           // flat % added to unit.dodge before 90% cap
   blockBonus?: number;           // flat % added to unit.block before 90% cap
   initiativeBonus?: number;      // flat added to unit.initiative for queue ordering
+  physicalDamageBonus?: number;  // flat additive modifier to physicalDamage while active
+  magicalDamageBonus?: number;   // flat additive modifier to magicalDamage while active
 }
 
 /** Live buff/debuff instance on a unit. */

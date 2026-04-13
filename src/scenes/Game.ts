@@ -539,15 +539,10 @@ export class Game extends Phaser.Scene {
     if (interactive) {
       container.setInteractive({ useHandCursor: true });
       container.on("pointerup", () => this.onBenchCardClick(idx));
-      container.on("pointerover", (pointer: Phaser.Input.Pointer) => {
+      container.on("pointerover", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(0x2a3a4a, 0.9);
         const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-        this.unitTooltip.showFromBlueprint(bp, level, "player", pointer.x, pointer.y);
-      });
-      container.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        if (!this.unitTooltip.visible) return;
-        const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-        this.unitTooltip.showFromBlueprint(bp, level, "player", pointer.x, pointer.y);
+        this.unitTooltip.showFromBlueprint(bp, level, "player", container.x, container.y);
       });
       container.on("pointerout", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(fillColor, 0.9);
@@ -896,19 +891,11 @@ export class Game extends Phaser.Scene {
         }
       });
 
-      cell.on("pointerover", (pointer: Phaser.Input.Pointer) => {
+      cell.on("pointerover", () => {
         const state = GameState.get();
         const unit = state.occupancy.cellToUnit.get(cell.key);
         if (unit && unit.hp > 0) {
-          this.unitTooltip.show(unit, pointer.x, pointer.y);
-        }
-      });
-      cell.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        if (!this.unitTooltip.visible) return;
-        const state = GameState.get();
-        const unit = state.occupancy.cellToUnit.get(cell.key);
-        if (unit && unit.hp > 0) {
-          this.unitTooltip.show(unit, pointer.x, pointer.y);
+          this.unitTooltip.show(unit, cell.x, cell.y);
         }
       });
       cell.on("pointerout", () => {
