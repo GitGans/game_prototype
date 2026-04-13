@@ -15,25 +15,18 @@ const P = (m: number) => ({ damageMultiplier: m });
 // ─── Base Effects ─────────────────────────────────────────────────────────────
 
 const EFFECTS: Record<string, Effect> = {
-  regeneration: { id: "regeneration", isBuff: true },
-  lose_health: { id: "lose_health", isBuff: false },
-  fortify: { id: "fortify", isBuff: true, physicalDefenseBonus: 1 },
-  weaken: { id: "weaken", isBuff: false, physicalDefenseBonus: -1 },
-  arcane_shield: { id: "arcane_shield", isBuff: true, magicalDefenseBonus: 1 },
-  arcane_vulnerability: {
-    id: "arcane_vulnerability",
-    isBuff: false,
-    magicalDefenseBonus: -1,
-  },
-  // Dodge effects
-  swift: { id: "swift", isBuff: true, dodgeBonus: 1 },
-  clumsy: { id: "clumsy", isBuff: false, dodgeBonus: -1 },
-  // Block effects
-  guard_stance: { id: "guard_stance", isBuff: true, blockBonus: 1 },
-  off_balance: { id: "off_balance", isBuff: false, blockBonus: -1 },
-  // Initiative effects
-  haste: { id: "haste", isBuff: true, initiativeBonus: 1 },
-  slow: { id: "slow", isBuff: false, initiativeBonus: -1 },
+  regeneration:         { id: "regeneration",         isBuff: true,  description: "Restores HP each round" },
+  lose_health:          { id: "lose_health",           isBuff: false, description: "Deals damage each round" },
+  fortify:              { id: "fortify",               isBuff: true,  physicalDefenseBonus:  1, description: "Increases physical defense" },
+  weaken:               { id: "weaken",                isBuff: false, physicalDefenseBonus: -1, description: "Reduces physical defense" },
+  arcane_shield:        { id: "arcane_shield",         isBuff: true,  magicalDefenseBonus:   1, description: "Increases magical defense" },
+  arcane_vulnerability: { id: "arcane_vulnerability",  isBuff: false, magicalDefenseBonus:  -1, description: "Reduces magical defense" },
+  swift:                { id: "swift",                 isBuff: true,  dodgeBonus:  1, description: "Increases dodge chance" },
+  clumsy:               { id: "clumsy",                isBuff: false, dodgeBonus: -1, description: "Reduces dodge chance" },
+  guard_stance:         { id: "guard_stance",          isBuff: true,  blockBonus:  1, description: "Increases block chance" },
+  off_balance:          { id: "off_balance",           isBuff: false, blockBonus: -1, description: "Reduces block chance" },
+  haste:                { id: "haste",                 isBuff: true,  initiativeBonus:  1, description: "Increases initiative" },
+  slow:                 { id: "slow",                  isBuff: false, initiativeBonus: -1, description: "Reduces initiative" },
 };
 
 // ─── Named Damage Matrices ────────────────────────────────────────────────────

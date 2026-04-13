@@ -86,6 +86,7 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
     side: "player" | "enemy",
     anchorX: number,
     anchorY: number,
+    overrideW?: number,
   ): void {
     const scale = 1 + 0.1 * (level - 1);
     this._render({
@@ -106,14 +107,38 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
         damageBlock: s.damageBlock,
         isActive:    false,
       })),
-    }, anchorX, anchorY);
+    }, anchorX, anchorY, overrideW);
   }
 
   hide(): void {
     this.setVisible(false);
   }
 
-  private _render(data: TooltipData, anchorX: number, anchorY: number): void {
+  showFixed(unit: Unit, x: number, y: number, w: number): void {
+    const stats = effectiveStats(unit);
+    this._render({
+      templateId:      unit.templateId,
+      name:            unit.name,
+      side:            unit.anchor.side,
+      hp:              unit.hp,
+      maxHp:           unit.maxHp,
+      physicalDamage:  { value: stats.physicalDamage,  base: unit.physicalDamage  },
+      magicalDamage:   { value: stats.magicalDamage,   base: unit.magicalDamage   },
+      physicalDefense: { value: stats.physicalDefense, base: unit.physicalDefense },
+      magicalDefense:  { value: stats.magicalDefense,  base: unit.magicalDefense  },
+      dodge:           { value: stats.dodge,           base: unit.dodge           },
+      block:           { value: stats.block,           base: unit.block           },
+      initiative:      { value: stats.initiative,      base: unit.initiative      },
+      skills: unit.skills.map((s, i) => ({
+        name:        s.name,
+        damageBlock: s.damageBlock,
+        isActive:    i === unit.activeSkillIndex,
+      })),
+    }, x, y, w);
+  }
+
+  private _render(data: TooltipData, anchorX: number, anchorY: number, overrideW?: number): void {
+    const panelW = overrideW ?? W;
     for (const obj of this.contents) obj.destroy();
     this.contents = [];
 
@@ -142,14 +167,14 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
       fontSize: FONT_MD,
       color: nameColor,
       fontStyle: "bold",
-      wordWrap: { width: W - SPRITE_SIZE - PAD * 3 },
+      wordWrap: { width: panelW - SPRITE_SIZE - PAD * 3 },
     });
     this.add(nameText);
     this.contents.push(nameText);
     y += SPRITE_SIZE + PAD;
 
     // ── Divider ───────────────────────────────────────────────────────
-    const divider = scene.add.rectangle(PAD, y, W - PAD * 2, 1, 0x445566);
+    const divider = scene.add.rectangle(PAD, y, panelW - PAD * 2, 1, 0x445566);
     divider.setOrigin(0, 0);
     this.add(divider);
     this.contents.push(divider);
@@ -226,9 +251,16 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
 
     // ── Resize background ─────────────────────────────────────────────
     const tooltipH = y;
-    this.bg.setSize(W, tooltipH);
+    this.bg.setSize(panelW, tooltipH);
 
-    // ── Position: fixed to cell anchor, side-aware ────────────────────
+    // ── Fixed position — used by battle screen ────────────────────────
+    if (overrideW !== undefined) {
+      this.setPosition(anchorX, anchorY);
+      this.setVisible(true);
+      return;
+    }
+
+    // ── Auto-position: fixed to cell anchor, side-aware ───────────────
     const sceneW = scene.scale.width;
     const sceneH = scene.scale.height;
     const OFFSET = Math.round(16 * LAYOUT_SCALE);
@@ -238,15 +270,15 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
     let ty = anchorY - tooltipH / 2; // vertically centred on the cell
 
     if (data.side === "player") {
-      tx = anchorX + halfCell + OFFSET;        // right of the cell
+      tx = anchorX + halfCell + OFFSET;             // right of the cell
     } else {
-      tx = anchorX - W - halfCell - OFFSET;    // left of the cell
+      tx = anchorX - panelW - halfCell - OFFSET;    // left of the cell
     }
 
     // Clamp to screen edges
-    if (tx + W > sceneW) tx = sceneW - W - PAD;
-    if (tx < 0)          tx = PAD;
-    if (ty < 0)          ty = PAD;
+    if (tx + panelW > sceneW) tx = sceneW - panelW - PAD;
+    if (tx < 0)               tx = PAD;
+    if (ty < 0)               ty = PAD;
     if (ty + tooltipH > sceneH) ty = sceneH - tooltipH - PAD;
 
     this.setPosition(tx, ty);
