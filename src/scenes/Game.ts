@@ -41,7 +41,7 @@ import {
   getFriendlyTargets,
   getSelfTarget,
 } from "../battle/targeting";
-import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, EffectEvent } from "../battle/combat";
+import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, effectiveStats, EffectEvent } from "../battle/combat";
 import { resolvePattern } from "../battle/skillPatterns";
 import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, DAMAGE_MATRICES } from "../data/skillDefinitions";
 import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/initiative";
@@ -108,6 +108,12 @@ function resolveEffectArgs(skill: Skill, caster: Unit): [import('../battle/types
       initiativeBonus: def.effect.initiativeBonus !== undefined
         ? Math.sign(def.effect.initiativeBonus) * bonus
         : undefined,
+      physicalDamageBonus: def.effect.physicalDamageBonus !== undefined
+        ? Math.sign(def.effect.physicalDamageBonus) * bonus
+        : undefined,
+      magicalDamageBonus: def.effect.magicalDamageBonus !== undefined
+        ? Math.sign(def.effect.magicalDamageBonus) * bonus
+        : undefined,
     };
     return [resolvedEffect, undefined];
   }
@@ -156,7 +162,8 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
 
   const target = targets[Math.floor(Math.random() * targets.length)];
   const damageType = skill.damageBlock?.damageType ?? "physical";
-  const baseDamage = damageType === "physical" ? unit.physicalDamage : unit.magicalDamage;
+  const casterStats = effectiveStats(unit);
+  const baseDamage = damageType === "physical" ? casterStats.physicalDamage : casterStats.magicalDamage;
 
   let next = state;
   if (skill.damageBlock) {
@@ -1200,8 +1207,8 @@ export class Game extends Phaser.Scene {
         ? getHitCells(activeUnit, coord)
         : [{ coord, multiplier: 1.0 }],
       damageType === "physical"
-        ? (activeUnit?.physicalDamage ?? 0)
-        : (activeUnit?.magicalDamage ?? 0),
+        ? (activeUnit ? effectiveStats(activeUnit).physicalDamage : 0)
+        : (activeUnit ? effectiveStats(activeUnit).magicalDamage : 0),
       damageType,
       state,
     );
@@ -1383,11 +1390,12 @@ export class Game extends Phaser.Scene {
     });
 
     const autoAttackDmgType = activeSkill(activeUnit).damageBlock?.damageType ?? "physical";
+    const activeUnitStats = effectiveStats(activeUnit);
     let { state: next, events } = resolveAttack(
       getHitCells(activeUnit, target),
       autoAttackDmgType === "physical"
-        ? activeUnit.physicalDamage
-        : activeUnit.magicalDamage,
+        ? activeUnitStats.physicalDamage
+        : activeUnitStats.magicalDamage,
       autoAttackDmgType,
       state,
     );
