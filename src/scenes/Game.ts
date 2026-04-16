@@ -181,6 +181,8 @@ export class Game extends Phaser.Scene {
   private unitViews: Map<string, UnitView> = new Map();
   private initiativeBar!: InitiativeBar;
   private statusText!: Phaser.GameObjects.Text;
+  private statusBaseY!: number;
+  private statusHeaderText!: Phaser.GameObjects.Text;
   private battleLog!: BattleLog;
   private unitTooltip!: UnitTooltip;
   private effectTooltip!: EffectTooltip;
@@ -409,9 +411,27 @@ export class Game extends Phaser.Scene {
         },
       )
       .setOrigin(0.5, 0);
+    this.statusBaseY = this.statusText.y;
+
+    this.statusHeaderText = this.add
+      .text(
+        this.logX + this.logW / 2,
+        this.statusBaseY,
+        "",
+        {
+          fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
+          color: COLORS.textLight,
+          align: "center",
+          wordWrap: { width: this.logW },
+        },
+      )
+      .setOrigin(0.5, 0)
+      .setVisible(false);
   }
 
   private setStatus(msg: string): void {
+    this.statusHeaderText?.setVisible(false);
+    this.statusText.setY(this.statusBaseY);
     this.statusText.setText(msg);
   }
 
@@ -1113,7 +1133,6 @@ export class Game extends Phaser.Scene {
     const skill = activeSkill(activeUnit);
 
     // ── Skill header ──────────────────────────────────────────────────────────
-    previewParts.push(`[${skill.name}]`);
 
     // ── Skill damage / heal lines ─────────────────────────────────────────────
     if (isHeal) {
@@ -1164,6 +1183,17 @@ export class Game extends Phaser.Scene {
     // ── Assemble status text ──────────────────────────────────────────────────
     const preview = `Preview:\n${previewParts.join("\n")}\n[click again to confirm]`;
     this.setStatus(preview);
+
+    const headerColor = skill.damageBlock?.damageType === 'magical' ? COLORS.skillMagical
+                      : skill.damageBlock?.damageType === 'physical' ? COLORS.skillPhysical
+                      : COLORS.textLight;
+    const lineH = Math.round(14 * LAYOUT_SCALE);
+    this.statusHeaderText
+      .setColor(headerColor)
+      .setText(skill.name)
+      .setY(this.statusBaseY)
+      .setVisible(true);
+    this.statusText.setY(this.statusBaseY + lineH);
   }
 
   private handleTargetSelect(coord: CellCoord, state: BattleState): void {
@@ -1805,7 +1835,7 @@ export class Game extends Phaser.Scene {
         .setDepth(10)
         .on('pointerover', () => {
           bg.setFillStyle(isActive ? 0xffdd44 : 0x666666);
-          this.showSkillNameTooltip(skill.name, iconX + iconSize / 2, iconY);
+          this.showSkillNameTooltip(skill.name, skill.damageBlock?.damageType, iconX + iconSize / 2, iconY);
         })
         .on('pointerout', () => {
           bg.setFillStyle(isActive ? 0xffcc00 : 0x444444);
@@ -1836,7 +1866,7 @@ export class Game extends Phaser.Scene {
       .setVisible(false);
   }
 
-  private showSkillNameTooltip(name: string, iconRightX: number, iconCenterY: number): void {
+  private showSkillNameTooltip(name: string, damageType: string | undefined, iconRightX: number, iconCenterY: number): void {
     if (!this.skillNameTooltip) return;
 
     const GAP = Math.round(6  * LAYOUT_SCALE);
@@ -1846,6 +1876,10 @@ export class Game extends Phaser.Scene {
     const txt = this.skillNameTooltip.list[1] as Phaser.GameObjects.Text;
     const bg  = this.skillNameTooltip.list[0] as Phaser.GameObjects.Rectangle;
 
+    const nameColor = damageType === 'magical' ? COLORS.skillMagical
+                    : damageType === 'physical' ? COLORS.skillPhysical
+                    : '#ffffff';
+    txt.setColor(nameColor);
     txt.setText(name);
 
     const textH  = txt.height;

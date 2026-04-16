@@ -227,22 +227,14 @@ export class UnitTooltip extends Phaser.GameObjects.Container {
       y += LINE_H;
     } else {
       for (const skill of data.skills) {
-        const nameCol = skill.isActive ? "#ffffff" : "#888888";
+        const nameCol = skill.damageBlock?.damageType === 'magical' ? COLORS.skillMagical
+                      : skill.damageBlock?.damageType === 'physical' ? COLORS.skillPhysical
+                      : (skill.isActive ? '#ffffff' : '#888888');
         const skillName = scene.add.text(PAD, y, skill.name, {
           fontSize: FONT_SM, color: nameCol,
         });
         this.add(skillName);
         this.contents.push(skillName);
-        y += LINE_H;
-
-        const typeStr = skill.damageBlock
-          ? `Damage: ${skill.damageBlock.damageType}`
-          : "Effect only";
-        const skillType = scene.add.text(PAD + Math.round(8 * LAYOUT_SCALE), y, typeStr, {
-          fontSize: FONT_SM, color: "#666666",
-        });
-        this.add(skillType);
-        this.contents.push(skillType);
         y += LINE_H;
       }
     }
