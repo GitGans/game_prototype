@@ -27,6 +27,10 @@ const EFFECTS: Record<string, Effect> = {
   off_balance:          { id: "off_balance",           isBuff: false, blockBonus: -1, description: "Reduces block chance" },
   haste:                { id: "haste",                 isBuff: true,  initiativeBonus:  1, description: "Increases initiative" },
   slow:                 { id: "slow",                  isBuff: false, initiativeBonus: -1, description: "Reduces initiative" },
+  empower:              { id: "empower",               isBuff: true,  physicalDamageBonus:  1, description: "Increases physical attack" },
+  enfeeble:             { id: "enfeeble",              isBuff: false, physicalDamageBonus: -1, description: "Reduces physical attack" },
+  arcane_surge:         { id: "arcane_surge",          isBuff: true,  magicalDamageBonus:   1, description: "Increases magical attack" },
+  arcane_drain:         { id: "arcane_drain",          isBuff: false, magicalDamageBonus:  -1, description: "Reduces magical attack" },
 };
 
 // ─── Named Damage Matrices ────────────────────────────────────────────────────
@@ -217,6 +221,26 @@ export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
   slow: {
     effect: EFFECTS.slow,
     bonusByLevel: [1, 2, 3], // initiativeBonus sign (-) inherited from EFFECTS.slow
+  },
+
+  empower: {
+    effect: EFFECTS.empower,
+    bonusByLevel: [10, 20, 30], // physicalDamageBonus sign (+) inherited from EFFECTS.empower
+  },
+
+  enfeeble: {
+    effect: EFFECTS.enfeeble,
+    bonusByLevel: [10, 20, 30], // physicalDamageBonus sign (-) inherited from EFFECTS.enfeeble
+  },
+
+  arcane_surge: {
+    effect: EFFECTS.arcane_surge,
+    bonusByLevel: [10, 20, 30], // magicalDamageBonus sign (+) inherited from EFFECTS.arcane_surge
+  },
+
+  arcane_drain: {
+    effect: EFFECTS.arcane_drain,
+    bonusByLevel: [10, 20, 30], // magicalDamageBonus sign (-) inherited from EFFECTS.arcane_drain
   },
 };
 
