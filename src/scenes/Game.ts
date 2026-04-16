@@ -208,6 +208,7 @@ export class Game extends Phaser.Scene {
   private pendingTargetCoord: CellCoord | null = null;
   private lastClickCoordKey: string | null = null;
   private skillIconContainers: Phaser.GameObjects.Container[] = [];
+  private skillNameTooltip: Phaser.GameObjects.Container | null = null;
   private lastClickTime = 0;
 
   // Counter for generating unique unit IDs during placement
@@ -224,6 +225,7 @@ export class Game extends Phaser.Scene {
     this.buildGrid();
     this.unitTooltip = new UnitTooltip(this);
     this.effectTooltip = new EffectTooltip(this);
+    this.createSkillNameTooltip();
     this.initBattle();
     this.buildUnitViews();
     this.buildUI();
@@ -1750,49 +1752,93 @@ export class Game extends Phaser.Scene {
     if (unit.skills.length <= 1) return;
 
     const iconSize = Math.round(28 * LAYOUT_SCALE);
-    const iconGap = Math.round(4 * LAYOUT_SCALE);
+    const iconGap  = Math.round(4  * LAYOUT_SCALE);
 
-    // Position icons to the right of the unit's rightmost occupied cell
     const occupiedCells = getOccupiedCells(unit.anchor, unit.shape);
-    const rightmostCol = Math.max(...occupiedCells.map(c => c.col)) as Col;
-    const topRow = Math.min(...occupiedCells.map(c => c.row));
-    const bottomRow = Math.max(...occupiedCells.map(c => c.row));
+    const rightmostCol  = Math.max(...occupiedCells.map(c => c.col)) as Col;
+    const topRow        = Math.min(...occupiedCells.map(c => c.row));
+    const bottomRow     = Math.max(...occupiedCells.map(c => c.row));
 
     const rightCellPos = this.cellPixelPos(unit.anchor.side, topRow, rightmostCol);
     const iconX = rightCellPos.x + CELL_SIZE / 2 + iconGap + iconSize / 2;
 
-    const unitTopY = this.cellPixelPos(unit.anchor.side, topRow, rightmostCol).y - CELL_SIZE / 2;
+    const unitTopY    = this.cellPixelPos(unit.anchor.side, topRow,    rightmostCol).y - CELL_SIZE / 2;
     const unitBottomY = this.cellPixelPos(unit.anchor.side, bottomRow, rightmostCol).y + CELL_SIZE / 2;
     const unitCenterY = (unitTopY + unitBottomY) / 2;
-    const totalH = unit.skills.length * iconSize + (unit.skills.length - 1) * iconGap;
-    const startY = unitCenterY - totalH / 2 + iconSize / 2;
+    const totalH      = unit.skills.length * iconSize + (unit.skills.length - 1) * iconGap;
+    const startY      = unitCenterY - totalH / 2 + iconSize / 2;
 
     unit.skills.forEach((skill, i) => {
-      const iconY = startY + i * (iconSize + iconGap);
+      const iconY    = startY + i * (iconSize + iconGap);
       const isActive = i === unit.activeSkillIndex;
 
       const bg = this.add.rectangle(0, 0, iconSize, iconSize, isActive ? 0xffcc00 : 0x444444)
         .setStrokeStyle(2, isActive ? 0xffffff : 0x888888);
-      const label = this.add.text(0, 0, skill.name.substring(0, 3), {
-        fontSize: `${Math.round(8 * LAYOUT_SCALE)}px`,
-        color: '#ffffff',
-      }).setOrigin(0.5);
 
-      const container = this.add.container(iconX, iconY, [bg, label]);
-      container.setSize(iconSize, iconSize)
+      const container = this.add.container(iconX, iconY, [bg])
+        .setSize(iconSize, iconSize)
         .setInteractive({ useHandCursor: true })
         .setDepth(10)
-        .on('pointerover', () => bg.setFillStyle(isActive ? 0xffdd44 : 0x666666))
-        .on('pointerout', () => bg.setFillStyle(isActive ? 0xffcc00 : 0x444444))
+        .on('pointerover', () => {
+          bg.setFillStyle(isActive ? 0xffdd44 : 0x666666);
+          this.showSkillNameTooltip(skill.name, iconX + iconSize / 2, iconY);
+        })
+        .on('pointerout', () => {
+          bg.setFillStyle(isActive ? 0xffcc00 : 0x444444);
+          this.skillNameTooltip?.setVisible(false);
+        })
         .on('pointerup', () => this.switchActiveSkill(i));
 
       this.skillIconContainers.push(container);
     });
   }
 
+  private createSkillNameTooltip(): void {
+    const TW  = Math.round(120 * LAYOUT_SCALE);
+    const PAD = Math.round(6   * LAYOUT_SCALE);
+    const FONT = `${Math.round(11 * LAYOUT_SCALE)}px`;
+
+    const bg = this.add.rectangle(0, 0, TW, PAD * 2 + Math.round(28 * LAYOUT_SCALE), 0x0d1520, 0.92)
+      .setOrigin(0, 0);
+
+    const txt = this.add.text(PAD, PAD, "", {
+      fontSize: FONT,
+      color: "#ffffff",
+      wordWrap: { width: TW - PAD * 2 },
+    }).setOrigin(0, 0);
+
+    this.skillNameTooltip = this.add.container(0, 0, [bg, txt])
+      .setDepth(200)
+      .setVisible(false);
+  }
+
+  private showSkillNameTooltip(name: string, iconRightX: number, iconCenterY: number): void {
+    if (!this.skillNameTooltip) return;
+
+    const GAP = Math.round(6  * LAYOUT_SCALE);
+    const TW  = Math.round(120 * LAYOUT_SCALE);
+    const PAD = Math.round(6   * LAYOUT_SCALE);
+
+    const txt = this.skillNameTooltip.list[1] as Phaser.GameObjects.Text;
+    const bg  = this.skillNameTooltip.list[0] as Phaser.GameObjects.Rectangle;
+
+    txt.setText(name);
+
+    const textH  = txt.height;
+    const totalH = PAD * 2 + textH;
+    bg.setSize(TW, totalH);
+
+    const tx = iconRightX + GAP;
+    const ty = iconCenterY - totalH / 2;
+
+    this.skillNameTooltip.setPosition(tx, ty);
+    this.skillNameTooltip.setVisible(true);
+  }
+
   private clearSkillIcons(): void {
     for (const c of this.skillIconContainers) c.destroy();
     this.skillIconContainers = [];
+    this.skillNameTooltip?.setVisible(false);
   }
 
   private switchActiveSkill(index: number): void {

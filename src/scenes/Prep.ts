@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { GameState } from "../core/GameState";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
-import { EquipSlot, UnitBlueprint } from "../battle/types";
+import { EquipSlot, UnitBlueprint, UnitClass } from "../battle/types";
 import { ITEM_DEFINITIONS } from "../data/itemDefinitions";
 import {
   equipItem,
@@ -12,7 +12,6 @@ import {
 } from "../battle/itemOps";
 
 export class Prep extends Phaser.Scene {
-  private _selectedItemId: string | null = null;
   private _itemDescPanel: Phaser.GameObjects.Container | null = null;
   private _activePanel: Phaser.GameObjects.Container | null = null;
   private battleBtn!: Phaser.GameObjects.Rectangle;
@@ -22,8 +21,9 @@ export class Prep extends Phaser.Scene {
     super("Prep");
   }
 
-  private _showItemDesc(
+  private _showItemHover(
     instanceId: string,
+    unitClass: UnitClass,
     anchorX: number,
     anchorY: number,
   ): void {
@@ -40,25 +40,33 @@ export class Prep extends Phaser.Scene {
       ["physicalDefense", "Phys Def"],
       ["magicalDefense", "Magic Def"],
     ];
-    const statLines = STAT_LABELS.filter(
-      ([k]) => (def.statBonuses[k] ?? 0) !== 0,
-    ).map(([k, label]) => `${label}: +${def.statBonuses[k]}`);
 
-    const lines = [def.name, ...statLines];
-    const panelW = Math.round(140 * LAYOUT_SCALE);
+    const statEntries = STAT_LABELS.filter(
+      ([k]) => (def.statBonuses[k] ?? 0) !== 0,
+    ).map(([k, label]) => ({ label, value: def.statBonuses[k] as number }));
+
+    const hasClassRestriction =
+      def.allowedClasses !== undefined && def.allowedClasses.length > 0;
+    const classLineColor = hasClassRestriction
+      ? def.allowedClasses!.includes(unitClass)
+        ? "#44ff88"
+        : "#ff4444"
+      : "#cccccc";
+
+    const totalLines = 1 + statEntries.length + (hasClassRestriction ? 1 : 0);
+
+    const panelW = Math.round(250 * LAYOUT_SCALE);
     const lineH = Math.round(16 * LAYOUT_SCALE);
     const padV = Math.round(8 * LAYOUT_SCALE);
     const padH = Math.round(8 * LAYOUT_SCALE);
-    const panelH = padV * 2 + lines.length * lineH;
+    const panelH = padV * 2 + totalLines * lineH;
 
-    const sceneW = this.scale.width;
-    let panelX = anchorX + Math.round(6 * LAYOUT_SCALE) + panelW / 2;
-    if (panelX + panelW / 2 > sceneW - 10) {
-      panelX = anchorX - Math.round(6 * LAYOUT_SCALE) - panelW / 2;
-    }
+    const GAP = Math.round(6 * LAYOUT_SCALE);
+    const panelX = anchorX + GAP + panelW / 2;
     const panelY = anchorY;
 
     const panel = this.add.container(0, 0).setDepth(50);
+
     panel.add(
       this.add
         .rectangle(panelX, panelY, panelW + 2, panelH + 2, 0x6666aa)
@@ -71,32 +79,65 @@ export class Prep extends Phaser.Scene {
         .setDepth(50),
     );
 
-    lines.forEach((line, i) => {
-      const isName = i === 0;
+    const textX = panelX - panelW / 2 + padH;
+    const topY = panelY - panelH / 2 + padV;
+    const valCol = Math.round(90 * LAYOUT_SCALE);
+
+    // Line 0: item name
+    panel.add(
+      this.add
+        .text(textX, topY, def.name, {
+          fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
+          color: "#ffdd44",
+          fontStyle: "bold",
+        })
+        .setDepth(51),
+    );
+
+    // Lines 1..N: stats — label (gray) + value (green if positive, red if negative)
+    statEntries.forEach(({ label, value }, i) => {
+      const y = topY + (i + 1) * lineH;
+      const valueColor = value > 0 ? "#44ff88" : "#ff4444";
+      const sign = value > 0 ? "+" : "";
+
       panel.add(
         this.add
-          .text(
-            panelX - panelW / 2 + padH,
-            panelY - panelH / 2 + padV + i * lineH,
-            line,
-            {
-              fontSize: `${Math.round((isName ? 12 : 11) * LAYOUT_SCALE)}px`,
-              color: isName ? "#ffdd44" : "#cccccc",
-              fontStyle: isName ? "bold" : "normal",
-            },
-          )
+          .text(textX, y, `${label}:`, {
+            fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
+            color: "#cccccc",
+          })
+          .setDepth(51),
+      );
+      panel.add(
+        this.add
+          .text(textX + valCol, y, `${sign}${value}`, {
+            fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
+            color: valueColor,
+          })
           .setDepth(51),
       );
     });
 
+    // Last line: class restriction
+    if (hasClassRestriction) {
+      const y = topY + (1 + statEntries.length) * lineH;
+      panel.add(
+        this.add
+          .text(textX, y, `Classes: ${def.allowedClasses!.join(", ")}`, {
+            fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
+            color: classLineColor,
+            wordWrap: { width: panelW - padH * 2 },
+          })
+          .setDepth(51),
+      );
+    }
+
     this._itemDescPanel = panel;
-    this._selectedItemId = instanceId;
   }
 
   private _clearItemDesc(): void {
     this._itemDescPanel?.destroy(true);
     this._itemDescPanel = null;
-    this._selectedItemId = null;
   }
 
   create(): void {
@@ -626,8 +667,14 @@ export class Prep extends Phaser.Scene {
         }
 
         cell.setInteractive({ useHandCursor: true });
-        cell.on("pointerover", () => cell.setFillStyle(0x2e2e4e));
-        cell.on("pointerout", () => cell.setFillStyle(bgColor));
+        cell.on("pointerover", () => {
+          cell.setFillStyle(0x2e2e4e);
+          this._showItemHover(equippedId!, bp.unitClass, cx + EQ_CELL / 2, cy);
+        });
+        cell.on("pointerout", () => {
+          cell.setFillStyle(bgColor);
+          this._clearItemDesc();
+        });
         cell.on(
           "pointerup",
           (
@@ -637,21 +684,17 @@ export class Prep extends Phaser.Scene {
             event: Phaser.Types.Input.EventData,
           ) => {
             event.stopPropagation();
-            if (this._selectedItemId === equippedId) {
-              this._clearItemDesc();
-              this.input.keyboard!.off("keydown-ESC", onEsc);
-              unequipItem(
-                bp.templateId,
-                slot,
-                GameState.itemContainers,
-                GameState.itemInstances,
-                ITEM_DEFINITIONS,
-              );
-              detail.destroy(true);
-              this.showUnitDetail(partyPanel, bp, w, h);
-            } else {
-              this._showItemDesc(equippedId!, cx + EQ_CELL / 2, cy);
-            }
+            this._clearItemDesc();
+            this.input.keyboard!.off("keydown-ESC", onEsc);
+            unequipItem(
+              bp.templateId,
+              slot,
+              GameState.itemContainers,
+              GameState.itemInstances,
+              ITEM_DEFINITIONS,
+            );
+            detail.destroy(true);
+            this.showUnitDetail(partyPanel, bp, w, h);
           },
         );
       }
@@ -759,7 +802,12 @@ export class Prep extends Phaser.Scene {
     if (skill) {
       const skillLines: { text: string; color: string }[] = [
         { text: skill.name, color: "#ffffff" },
-        { text: skill.damageBlock ? `Damage: ${skill.damageBlock.damageType}` : `Effect only`, color: "#aaaaaa" },
+        {
+          text: skill.damageBlock
+            ? `Damage: ${skill.damageBlock.damageType}`
+            : `Effect only`,
+          color: "#aaaaaa",
+        },
       ];
       skillLines.forEach(({ text, color }) => {
         detail.add(
@@ -842,8 +890,19 @@ export class Prep extends Phaser.Scene {
 
           if (allowed) {
             cell.setInteractive({ useHandCursor: true });
-            cell.on("pointerover", () => cell.setFillStyle(0x3a3a6a));
-            cell.on("pointerout", () => cell.setFillStyle(bgColor));
+            cell.on("pointerover", () => {
+              cell.setFillStyle(0x3a3a6a);
+              this._showItemHover(
+                instanceId!,
+                bp.unitClass,
+                cellCX + BP_CELL / 2,
+                cellCY,
+              );
+            });
+            cell.on("pointerout", () => {
+              cell.setFillStyle(bgColor);
+              this._clearItemDesc();
+            });
             cell.on(
               "pointerup",
               (
@@ -854,22 +913,18 @@ export class Prep extends Phaser.Scene {
               ) => {
                 if (!instanceId) return;
                 event.stopPropagation();
-                if (this._selectedItemId === instanceId) {
-                  this._clearItemDesc();
-                  this.input.keyboard!.off("keydown-ESC", onEsc);
-                  equipItem(
-                    bp.templateId,
-                    bp.unitClass,
-                    instanceId,
-                    GameState.itemContainers,
-                    GameState.itemInstances,
-                    ITEM_DEFINITIONS,
-                  );
-                  detail.destroy(true);
-                  this.showUnitDetail(partyPanel, bp, w, h);
-                } else {
-                  this._showItemDesc(instanceId, cellCX + BP_CELL / 2, cellCY);
-                }
+                this._clearItemDesc();
+                this.input.keyboard!.off("keydown-ESC", onEsc);
+                equipItem(
+                  bp.templateId,
+                  bp.unitClass,
+                  instanceId,
+                  GameState.itemContainers,
+                  GameState.itemInstances,
+                  ITEM_DEFINITIONS,
+                );
+                detail.destroy(true);
+                this.showUnitDetail(partyPanel, bp, w, h);
               },
             );
           }
