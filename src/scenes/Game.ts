@@ -1773,7 +1773,7 @@ export class Game extends Phaser.Scene {
 
   private showSkillIcons(unit: Unit): void {
     this.clearSkillIcons();
-    if (unit.skills.length <= 1) return;
+    if (unit.skills.length < 1) return;
 
     const iconSize = Math.round(28 * LAYOUT_SCALE);
     const iconGap  = Math.round(4  * LAYOUT_SCALE);
