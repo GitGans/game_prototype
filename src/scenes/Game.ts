@@ -1110,7 +1110,12 @@ export class Game extends Phaser.Scene {
 
     const previewParts: string[] = [];
     const seen = new Set<string>();
+    const skill = activeSkill(activeUnit);
 
+    // ── Skill header ──────────────────────────────────────────────────────────
+    previewParts.push(`[${skill.name}]`);
+
+    // ── Skill damage / heal lines ─────────────────────────────────────────────
     if (isHeal) {
       for (const { coord: hc } of hitCells) {
         const unit = state.occupancy.cellToUnit.get(cellKey(hc));
@@ -1120,7 +1125,7 @@ export class Game extends Phaser.Scene {
       }
     } else {
       const baseDamage = activeUnit.physicalDamage + activeUnit.magicalDamage;
-      const damageType = activeSkill(activeUnit)?.damageBlock?.damageType ?? "physical";
+      const damageType = skill.damageBlock?.damageType ?? "physical";
 
       for (const { coord: hc, multiplier } of hitCells) {
         const unit = state.occupancy.cellToUnit.get(cellKey(hc));
@@ -1133,12 +1138,31 @@ export class Game extends Phaser.Scene {
       }
     }
 
-    let preview: string;
-    if (previewParts.length === 0) {
-      preview = "Preview: no targets in range";
-    } else {
-      preview = `Preview:\n${previewParts.join("\n")}\n[click again to confirm]`;
+    // ── Effect block ──────────────────────────────────────────────────────────
+    if (skill.effectBlock) {
+      const eb = skill.effectBlock;
+      const [resolvedEffect, computedPerTurn] = resolveEffectArgs(skill, activeUnit);
+      const effectCellCoords = resolvePattern(coord, getEffectPattern(eb));
+
+      // Effect header
+      previewParts.push(`[${eb.effectDisplayName}]`);
+
+      // Per-unit lines only for stat-based effects (damage or heal per round)
+      if (computedPerTurn !== undefined) {
+        const seenEffect = new Set<string>();
+        const sign = resolvedEffect.isBuff ? "+" : "-";
+        for (const { coord: ec } of effectCellCoords) {
+          const unit = state.occupancy.cellToUnit.get(cellKey(ec));
+          if (!unit || seenEffect.has(unit.id)) continue;
+          seenEffect.add(unit.id);
+          previewParts.push(`${unit.name} ${sign}${computedPerTurn} HP/round`);
+        }
+      }
+      // Defense-only effects: no per-unit lines (no numeric HP value to show)
     }
+
+    // ── Assemble status text ──────────────────────────────────────────────────
+    const preview = `Preview:\n${previewParts.join("\n")}\n[click again to confirm]`;
     this.setStatus(preview);
   }
 
