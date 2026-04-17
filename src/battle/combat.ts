@@ -1,4 +1,4 @@
-import { ActiveEffect, BattleState, CellCoord, DamageType, Effect, ResolvedHitCell, Side, SkillEffectBlock, SkillPattern, Unit } from './types';
+import { ActiveEffect, BattleState, CellCoord, DamageType, Effect, InstantEffectBlock, InstantEffectEvent, ResolvedHitCell, Side, SkillEffectBlock, SkillPattern, Unit } from './types';
 import { cellKey } from './field';
 import { buildOccupancy, removeUnit } from './occupancy';
 import { resolvePattern } from './skillPatterns';
@@ -249,4 +249,70 @@ export function checkGameOver(state: BattleState): Side | null {
   if (!playerAlive) return 'player';
   if (!enemyAlive) return 'enemy';
   return null;
+}
+
+/**
+ * Resolves instant effects (provoke / distract) for all units in the pattern.
+ *
+ * For each resolved cell with a unit:
+ *   - Roll Math.random() against the cell's probability (multiplier field).
+ *   - If the roll fails → emit instant_effect_failed event, skip unit.
+ *   - If the unit is NOT in roundQueue[1..] (already acted) → skip silently.
+ *   - If success and unit is in queue → classify as provoked or distracted.
+ *
+ * Does NOT mutate roundQueue — caller handles queue removal and counter-attacks.
+ */
+export function resolveInstantEffects(
+  block: InstantEffectBlock,
+  pattern: SkillPattern,
+  targetAnchor: CellCoord,
+  state: BattleState,
+  roundQueue: string[],
+): {
+  events: InstantEffectEvent[];
+  provokedUnitIds: string[];
+  distractedUnitIds: string[];
+} {
+  const hitCells = resolvePattern(targetAnchor, pattern);
+
+  // Deduplicate — one application per unit per cast (same as applyEffectBlock)
+  const seen = new Set<string>();
+  const uniqueHits: ResolvedHitCell[] = [];
+  for (const hit of hitCells) {
+    const unit = state.occupancy.cellToUnit.get(cellKey(hit.coord));
+    if (!unit || seen.has(unit.id)) continue;
+    seen.add(unit.id);
+    uniqueHits.push(hit);
+  }
+
+  // Units that have NOT yet acted = roundQueue[1..] (index 0 is the caster)
+  const remainingSet = new Set(roundQueue.slice(1));
+
+  const events: InstantEffectEvent[] = [];
+  const provokedUnitIds: string[] = [];
+  const distractedUnitIds: string[] = [];
+
+  for (const { coord, multiplier: probability } of uniqueHits) {
+    const unit = state.occupancy.cellToUnit.get(cellKey(coord));
+    if (!unit) continue;
+
+    // Probability roll — no dodge/block/defense
+    if (Math.random() >= probability) {
+      events.push({ type: 'instant_effect_failed', unitId: unit.id, unitName: unit.name, displayName: block.displayName });
+      continue;
+    }
+
+    // Only affects units that still have a turn this round
+    if (!remainingSet.has(unit.id)) continue;
+
+    events.push({ type: 'instant_effect_applied', unitId: unit.id, unitName: unit.name, displayName: block.displayName });
+
+    if (block.instantEffectType === 'provoke') {
+      provokedUnitIds.push(unit.id);
+    } else {
+      distractedUnitIds.push(unit.id);
+    }
+  }
+
+  return { events, provokedUnitIds, distractedUnitIds };
 }

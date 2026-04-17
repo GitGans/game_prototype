@@ -86,7 +86,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 9,
     shape: SHAPES["1x1"],
-    skills: [SKILLS.poison_strike],
+    skills: [SKILLS.provoke_strike],
     rowTrait: "front",
     spriteSheet: {
       path: "assets/sprites/units/crusher.png",
@@ -132,7 +132,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 7,
     shape: SHAPES["1x1"],
-    skills: [SKILLS.basic_ranged],
+    skills: [SKILLS.distract_shot],
     rowTrait: "back",
     spriteSheet: {
       path: "assets/sprites/units/crossbowman.png",
