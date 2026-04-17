@@ -41,9 +41,9 @@ import {
   getFriendlyTargets,
   getSelfTarget,
 } from "../battle/targeting";
-import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, effectiveStats, EffectEvent } from "../battle/combat";
+import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, effectiveStats, EffectEvent, resolveInstantEffects } from "../battle/combat";
 import { resolvePattern } from "../battle/skillPatterns";
-import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, DAMAGE_MATRICES } from "../data/skillDefinitions";
+import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, getInstantEffectPattern, DAMAGE_MATRICES } from "../data/skillDefinitions";
 import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/initiative";
 import {
   autoPlacePlayer,
@@ -1308,6 +1308,10 @@ export class Game extends Phaser.Scene {
       }
     }
 
+    if (activeUnit && activeSkill(activeUnit).instantEffectBlock) {
+      next = this.applyInstantEffects(next, activeUnit.id, coord, activeSkill(activeUnit));
+    }
+
     const winner = checkGameOver(next);
     if (winner) {
       next = { ...next, phase: "end" };
@@ -1495,6 +1499,10 @@ export class Game extends Phaser.Scene {
       }
     }
 
+    if (activeSkill(activeUnit).instantEffectBlock) {
+      next = this.applyInstantEffects(next, activeUnit.id, target, activeSkill(activeUnit));
+    }
+
     const winner = checkGameOver(next);
     if (winner) {
       next = { ...next, phase: "end" };
@@ -1610,6 +1618,135 @@ export class Game extends Phaser.Scene {
     for (const btn of this.manualTurnButtons) btn.destroy();
     this.manualTurnButtons = [];
     this.chargeBtn = null;
+  }
+
+  /**
+   * Applies instant effects (provoke / distract) after a skill resolves.
+   * Removes affected units' turns from roundQueue.
+   * For provoked units, executes an immediate counter-attack using the unit's
+   * first melee/ranged skill. Normal dodge/block/defense apply to the counter-attack.
+   */
+  private applyInstantEffects(
+    state: BattleState,
+    casterId: string,
+    targetCoord: CellCoord,
+    skill: Skill,
+  ): BattleState {
+    if (!skill.instantEffectBlock) return state;
+
+    const block = skill.instantEffectBlock;
+    const pattern = getInstantEffectPattern(block);
+    const { events, provokedUnitIds, distractedUnitIds } = resolveInstantEffects(
+      block, pattern, targetCoord, state, state.roundQueue,
+    );
+
+    // Log instant effect results
+    for (const e of events) {
+      if (e.type === 'instant_effect_applied') {
+        this.battleLog.addEntry(`${e.unitName} is affected by ${e.displayName}!`, 'neutral');
+      } else if (e.type === 'instant_effect_failed') {
+        this.battleLog.addEntry(`${e.displayName} failed on ${e.unitName}`, 'neutral');
+      }
+    }
+
+    let next = state;
+
+    // ── Distracted units — remove from queue ─────────────────────────────
+    for (const unitId of distractedUnitIds) {
+      const unit = next.units.get(unitId);
+      if (!unit) continue;
+      next = { ...next, roundQueue: next.roundQueue.filter(id => id !== unitId) };
+      this.battleLog.addEntry(`${unit.name} is distracted and skips its turn!`, 'neutral');
+    }
+
+    // ── Provoked units — remove from queue, then counter-attack ──────────
+    for (const unitId of provokedUnitIds) {
+      const provokedUnit = next.units.get(unitId);
+      if (!provokedUnit) continue;
+
+      // Remove provoked unit's turn from the queue first
+      next = { ...next, roundQueue: next.roundQueue.filter(id => id !== unitId) };
+
+      // Check if caster is still alive
+      const caster = next.units.get(casterId);
+      if (!caster || caster.hp <= 0) {
+        this.battleLog.addEntry(
+          `${provokedUnit.name} was provoked but the provoker is gone — skips turn`,
+          'neutral',
+        );
+        continue;
+      }
+
+      // Find provoked unit's basic attack (first melee or ranged skill)
+      const basicSkill = provokedUnit.skills.find(
+        s => s.actionType === 'melee' || s.actionType === 'ranged',
+      );
+      if (!basicSkill || !basicSkill.damageBlock) {
+        this.battleLog.addEntry(
+          `${provokedUnit.name} was provoked but has no basic attack — skips turn`,
+          'neutral',
+        );
+        continue;
+      }
+
+      // Determine valid targets for the basic skill from the provoked unit's position
+      const validTargets =
+        basicSkill.actionType === 'melee'
+          ? getMeleeTargets(provokedUnit, next.occupancy)
+          : getRangedTargets(provokedUnit.anchor.side, next.occupancy);
+
+      // Check if caster's anchor is among valid targets
+      const casterIsReachable = validTargets.some(
+        c => c.side === caster.anchor.side && c.row === caster.anchor.row && c.col === caster.anchor.col,
+      );
+
+      if (!casterIsReachable) {
+        this.battleLog.addEntry(
+          `${provokedUnit.name} was provoked but can't reach ${caster.name} — skips turn`,
+          'neutral',
+        );
+        continue;
+      }
+
+      this.battleLog.addEntry(
+        `${provokedUnit.name} is provoked — counter-attacks ${caster.name}!`,
+        'neutral',
+      );
+
+      // Execute counter-attack: resolve basic skill pattern centered on caster's anchor
+      const counterPattern = getSkillPattern(basicSkill);
+      const hitCells = resolvePattern(caster.anchor, counterPattern);
+      const dmgType = basicSkill.damageBlock.damageType;
+      const provokedStats = effectiveStats(provokedUnit);
+      const baseDmg = dmgType === 'physical' ? provokedStats.physicalDamage : provokedStats.magicalDamage;
+
+      const { state: afterCounter, events: counterEvents } = resolveAttack(
+        hitCells, baseDmg, dmgType, next,
+      );
+      next = afterCounter;
+
+      for (const event of counterEvents) {
+        if (event.type === 'dodged') {
+          this.battleLog.addEntry(`${event.unitName} dodged the counter-attack!`, 'neutral');
+        } else {
+          const view = this.unitViews.get(event.unitId);
+          if (view) this.showFloatingDamage(view.x, view.y, event.damage);
+          if (event.type === 'blocked') {
+            this.battleLog.addEntry(
+              `${provokedUnit.name} counter-attacks ${event.unitName} — blocked! -${event.damage}`,
+              'neutral',
+            );
+          } else {
+            this.battleLog.addEntry(
+              `${provokedUnit.name} counter-attacks ${event.unitName} -${event.damage}`,
+              'neutral',
+            );
+          }
+        }
+      }
+    }
+
+    return next;
   }
 
   private advanceQueue(state: BattleState): BattleState {

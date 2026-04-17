@@ -181,6 +181,29 @@ export interface LeveledEffectDef {
   bonusByLevel?: number[];       // fixed defense bonus magnitude per level (e.g. [10, 20, 30]); present iff defense-only
 }
 
+// ─── Instant Effect System ────────────────────────────────────────────────────
+
+export type InstantEffectType = 'provoke' | 'distract';
+
+/**
+ * Skill block that fires instantly on the target.
+ * Unlike SkillEffectBlock, this leaves no ActiveEffect on the unit.
+ * The cell values in INSTANT_EFFECT_MATRICES are success probabilities (0–1).
+ * Dodge / block / defense do NOT apply to the probability roll.
+ */
+export interface InstantEffectBlock {
+  instantEffectMatrixName: string; // key into INSTANT_EFFECT_MATRICES
+  level: number;                   // 1-based index into matrix levels
+  instantEffectType: InstantEffectType;
+  displayName: string;             // shown in battleLog, e.g. "Provoke"
+}
+
+export type InstantEffectEvent =
+  | { type: 'instant_effect_applied'; unitId: string; unitName: string; displayName: string }
+  | { type: 'instant_effect_failed';  unitId: string; unitName: string; displayName: string }
+  | { type: 'provoke_skip';           unitId: string; unitName: string }
+  | { type: 'distract_skip';          unitId: string; unitName: string };
+
 export interface Skill {
   id: string;
   name: string;
@@ -188,6 +211,7 @@ export interface Skill {
   // level lives in damageBlock and/or effectBlock, not here
   damageBlock?: DamageBlock;
   effectBlock?: SkillEffectBlock;
+  instantEffectBlock?: InstantEffectBlock;
 }
 
 /**

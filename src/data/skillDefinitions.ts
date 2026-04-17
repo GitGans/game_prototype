@@ -1,6 +1,7 @@
 import {
   DamageType,
   Effect,
+  InstantEffectBlock,
   LeveledDamageMatrix,
   LeveledEffectDef,
   Skill,
@@ -15,22 +16,100 @@ const P = (m: number) => ({ damageMultiplier: m });
 // ─── Base Effects ─────────────────────────────────────────────────────────────
 
 const EFFECTS: Record<string, Effect> = {
-  regeneration:         { id: "regeneration",         isBuff: true,  description: "Restores HP each round" },
-  lose_health:          { id: "lose_health",           isBuff: false, description: "Deals damage each round" },
-  fortify:              { id: "fortify",               isBuff: true,  physicalDefenseBonus:  1, description: "Increases physical defense" },
-  weaken:               { id: "weaken",                isBuff: false, physicalDefenseBonus: -1, description: "Reduces physical defense" },
-  arcane_shield:        { id: "arcane_shield",         isBuff: true,  magicalDefenseBonus:   1, description: "Increases magical defense" },
-  arcane_vulnerability: { id: "arcane_vulnerability",  isBuff: false, magicalDefenseBonus:  -1, description: "Reduces magical defense" },
-  swift:                { id: "swift",                 isBuff: true,  dodgeBonus:  1, description: "Increases dodge chance" },
-  clumsy:               { id: "clumsy",                isBuff: false, dodgeBonus: -1, description: "Reduces dodge chance" },
-  guard_stance:         { id: "guard_stance",          isBuff: true,  blockBonus:  1, description: "Increases block chance" },
-  off_balance:          { id: "off_balance",           isBuff: false, blockBonus: -1, description: "Reduces block chance" },
-  haste:                { id: "haste",                 isBuff: true,  initiativeBonus:  1, description: "Increases initiative" },
-  slow:                 { id: "slow",                  isBuff: false, initiativeBonus: -1, description: "Reduces initiative" },
-  empower:              { id: "empower",               isBuff: true,  physicalDamageBonus:  1, description: "Increases physical attack" },
-  enfeeble:             { id: "enfeeble",              isBuff: false, physicalDamageBonus: -1, description: "Reduces physical attack" },
-  arcane_surge:         { id: "arcane_surge",          isBuff: true,  magicalDamageBonus:   1, description: "Increases magical attack" },
-  arcane_drain:         { id: "arcane_drain",          isBuff: false, magicalDamageBonus:  -1, description: "Reduces magical attack" },
+  regeneration: {
+    id: "regeneration",
+    isBuff: true,
+    description: "Restores HP each round",
+  },
+  lose_health: {
+    id: "lose_health",
+    isBuff: false,
+    description: "Deals damage each round",
+  },
+  fortify: {
+    id: "fortify",
+    isBuff: true,
+    physicalDefenseBonus: 1,
+    description: "Increases physical defense",
+  },
+  weaken: {
+    id: "weaken",
+    isBuff: false,
+    physicalDefenseBonus: -1,
+    description: "Reduces physical defense",
+  },
+  arcane_shield: {
+    id: "arcane_shield",
+    isBuff: true,
+    magicalDefenseBonus: 1,
+    description: "Increases magical defense",
+  },
+  arcane_vulnerability: {
+    id: "arcane_vulnerability",
+    isBuff: false,
+    magicalDefenseBonus: -1,
+    description: "Reduces magical defense",
+  },
+  swift: {
+    id: "swift",
+    isBuff: true,
+    dodgeBonus: 1,
+    description: "Increases dodge chance",
+  },
+  clumsy: {
+    id: "clumsy",
+    isBuff: false,
+    dodgeBonus: -1,
+    description: "Reduces dodge chance",
+  },
+  guard_stance: {
+    id: "guard_stance",
+    isBuff: true,
+    blockBonus: 1,
+    description: "Increases block chance",
+  },
+  off_balance: {
+    id: "off_balance",
+    isBuff: false,
+    blockBonus: -1,
+    description: "Reduces block chance",
+  },
+  haste: {
+    id: "haste",
+    isBuff: true,
+    initiativeBonus: 1,
+    description: "Increases initiative",
+  },
+  slow: {
+    id: "slow",
+    isBuff: false,
+    initiativeBonus: -1,
+    description: "Reduces initiative",
+  },
+  empower: {
+    id: "empower",
+    isBuff: true,
+    physicalDamageBonus: 1,
+    description: "Increases physical attack",
+  },
+  enfeeble: {
+    id: "enfeeble",
+    isBuff: false,
+    physicalDamageBonus: -1,
+    description: "Reduces physical attack",
+  },
+  arcane_surge: {
+    id: "arcane_surge",
+    isBuff: true,
+    magicalDamageBonus: 1,
+    description: "Increases magical attack",
+  },
+  arcane_drain: {
+    id: "arcane_drain",
+    isBuff: false,
+    magicalDamageBonus: -1,
+    description: "Reduces magical attack",
+  },
 };
 
 // ─── Named Damage Matrices ────────────────────────────────────────────────────
@@ -244,6 +323,43 @@ export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
   },
 };
 
+// ─── Named Instant Effect Matrices ───────────────────────────────────────────
+//
+// Cell values (damageMultiplier) represent success PROBABILITY (0–1).
+// Dodge / block / defense do NOT apply to this roll.
+// levels[0] = level 1, levels[1] = level 2, etc.
+
+export const INSTANT_EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
+  /** Single target. */
+  single: {
+    levels: [
+      { anchorRow: 0, anchorCol: 0, cells: [[P(0.3)]] }, // level 1 — 70%
+      { anchorRow: 0, anchorCol: 0, cells: [[P(0.5)]] }, // level 2 — 90%
+    ],
+  },
+
+  /**
+   * Cross: center + 4 orthogonal neighbours.
+   * Center has higher probability than neighbours.
+   *   [ ]  [X]  [ ]
+   *   [X]  [X]  [X]
+   *   [ ]  [X]  [ ]
+   */
+  cross: {
+    levels: [
+      {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.4), null],
+          [P(0.4), P(0.7), P(0.4)],
+          [null, P(0.4), null],
+        ],
+      },
+    ],
+  },
+};
+
 // ─── Runtime Resolution Helpers ───────────────────────────────────────────────
 
 /**
@@ -262,6 +378,17 @@ export function getSkillPattern(skill: Skill): SkillPattern {
  */
 export function getEffectPattern(block: SkillEffectBlock): SkillPattern {
   const matrix = EFFECT_MATRICES[block.effectMatrixName];
+  return matrix.levels[block.level - 1] ?? matrix.levels[0];
+}
+
+/**
+ * Returns the SkillPattern for an instantEffectBlock's level from INSTANT_EFFECT_MATRICES.
+ * Falls back to level 1 if level exceeds the matrix's defined levels.
+ */
+export function getInstantEffectPattern(
+  block: InstantEffectBlock,
+): SkillPattern {
+  const matrix = INSTANT_EFFECT_MATRICES[block.instantEffectMatrixName];
   return matrix.levels[block.level - 1] ?? matrix.levels[0];
 }
 
@@ -389,6 +516,32 @@ export const SKILLS: Record<string, Skill> = {
       effectName: "weaken",
       duration: 2,
       damageType: "physical",
+    },
+  },
+
+  provoke_strike: {
+    id: "provoke_strike",
+    name: "Provoke",
+    actionType: "melee",
+    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+    instantEffectBlock: {
+      instantEffectMatrixName: "single",
+      level: 1,
+      instantEffectType: "provoke",
+      displayName: "Provoke",
+    },
+  },
+
+  distract_shot: {
+    id: "distract_shot",
+    name: "Distract",
+    actionType: "ranged",
+    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+    instantEffectBlock: {
+      instantEffectMatrixName: "single",
+      level: 1,
+      instantEffectType: "distract",
+      displayName: "Distract",
     },
   },
 };
