@@ -2149,34 +2149,6 @@ export class Game extends Phaser.Scene {
     const fontSize = `${Math.round(18 * LAYOUT_SCALE)}px`;
 
     if (isVictory) {
-      // ── Level up all battle participants (field + bench), camp units excluded ──
-      const allBlueprints = [
-        ...PLAYER_UNITS,
-        ...Object.values(ENEMY_UNITS).flat(),
-      ];
-      const state = GameState.get();
-
-      // Field units — live Unit objects in state.units (camp units were never placed)
-      state.units.forEach((unit) => {
-        if (!unit.id.startsWith("p")) return;
-        unit.level += 1;
-        GameState.playerUnitLevels[unit.templateId] = unit.level;
-        const bp = allBlueprints.find(b => b.templateId === unit.templateId);
-        if (!bp) return;
-        const scale = 1 + 0.1 * (unit.level - 1);
-        unit.maxHp          = Math.round(bp.hp * scale);
-        unit.physicalDamage = Math.round(bp.physicalDamage * scale);
-        unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
-      });
-      GameState.set(state);
-
-      // Bench units — stored as UnitBlueprint | undefined (camp units were never benched)
-      state.benchUnits.forEach((bp) => {
-        if (!bp) return;
-        const currentLevel = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-        GameState.playerUnitLevels[bp.templateId] = currentLevel + 1;
-      });
-
       // ── Two buttons ──
       const gap    = Math.round(20 * LAYOUT_SCALE);
       const leftX  = w / 2 - btnW / 2 - gap / 2;
@@ -2206,7 +2178,36 @@ export class Game extends Phaser.Scene {
         .setDepth(32);
       exitBtn.on("pointerover", () => exitBtn.setFillStyle(0x3a8a3a));
       exitBtn.on("pointerout",  () => exitBtn.setFillStyle(0x2a6a2a));
-      exitBtn.on("pointerup",   () => this.scene.start("Prep"));
+      exitBtn.on("pointerup", () => {
+        const allBlueprints = [
+          ...PLAYER_UNITS,
+          ...Object.values(ENEMY_UNITS).flat(),
+        ];
+        const state = GameState.get();
+
+        // Field units — live Unit objects in state.units (camp units were never placed)
+        state.units.forEach((unit) => {
+          if (!unit.id.startsWith("p")) return;
+          unit.level += 1;
+          GameState.playerUnitLevels[unit.templateId] = unit.level;
+          const bp = allBlueprints.find(b => b.templateId === unit.templateId);
+          if (!bp) return;
+          const scale = 1 + 0.1 * (unit.level - 1);
+          unit.maxHp          = Math.round(bp.hp * scale);
+          unit.physicalDamage = Math.round(bp.physicalDamage * scale);
+          unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
+        });
+        GameState.set(state);
+
+        // Bench units — stored as UnitBlueprint | undefined (camp units were never benched)
+        state.benchUnits.forEach((bp) => {
+          if (!bp) return;
+          const currentLevel = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+          GameState.playerUnitLevels[bp.templateId] = currentLevel + 1;
+        });
+
+        this.scene.start("Prep");
+      });
     } else {
       // Defeat — single Restart Battle button, no level-up
       const restartBtn = this.add
