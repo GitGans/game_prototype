@@ -1,9 +1,13 @@
 import {
+  DamageModifierBlock,
+  DamageModifierType,
   DamageType,
   Effect,
   InstantEffectBlock,
   LeveledDamageMatrix,
   LeveledEffectDef,
+  PostDamageBlock,
+  PostDamageType,
   Skill,
   SkillEffectBlock,
   SkillPattern,
@@ -392,6 +396,34 @@ export function getInstantEffectPattern(
   return matrix.levels[block.level - 1] ?? matrix.levels[0];
 }
 
+// ─── Damage Modifier Levels ───────────────────────────────────────────────────
+// Values are percentages (0–100) of the stat that is IGNORED.
+// Index 0 = level 1, index 1 = level 2, etc.
+
+export const DAMAGE_MODIFIER_LEVELS: Record<DamageModifierType, number[]> = {
+  ignore_block: [25, 50, 75, 100],
+  ignore_dodge: [25, 50, 75, 100],
+  ignore_physical_defense: [25, 50, 75, 100],
+  ignore_magical_defense: [25, 50, 75, 100],
+};
+
+// ─── Vampirism Levels ─────────────────────────────────────────────────────────
+// Values are % of total real damage converted to HP.
+// Index 0 = level 1, index 1 = level 2, etc.
+
+export const VAMPIRISM_LEVELS: number[] = [25, 50, 100];
+
+/** Returns the ignore-% for a DamageModifierBlock (1-based level, clamped). */
+export function getDamageModifierPercent(block: DamageModifierBlock): number {
+  const levels = DAMAGE_MODIFIER_LEVELS[block.type];
+  return levels[Math.min(block.level, levels.length) - 1];
+}
+
+/** Returns the vampirism-% for a PostDamageBlock (1-based level, clamped). */
+export function getVampirismPercent(block: PostDamageBlock): number {
+  return VAMPIRISM_LEVELS[Math.min(block.level, VAMPIRISM_LEVELS.length) - 1];
+}
+
 // ─── Skill Definitions ────────────────────────────────────────────────────────
 
 export const SKILLS: Record<string, Skill> = {
@@ -543,5 +575,32 @@ export const SKILLS: Record<string, Skill> = {
       instantEffectType: "distract",
       displayName: "Distract",
     },
+  },
+
+  // ── Test skills for damageModifierBlocks + postDamageBlock ──────────────────
+
+  armor_pierce: {
+    id: "armor_pierce",
+    name: "Armor Pierce",
+    actionType: "melee",
+    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+    damageModifierBlocks: [{ type: "ignore_physical_defense", level: 3 }],
+  },
+
+  drain_strike: {
+    id: "drain_strike",
+    name: "Drain Strike",
+    actionType: "melee",
+    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+    postDamageBlock: { type: "mass_vampirism", level: 3 },
+  },
+
+  life_sweep: {
+    id: "life_sweep",
+    name: "Life Sweep",
+    actionType: "melee",
+    damageBlock: { matrixName: "row_sweep", damageType: "physical", level: 1 },
+    damageModifierBlocks: [{ type: "ignore_block", level: 2 }],
+    postDamageBlock: { type: "mass_vampirism", level: 1 },
   },
 };
