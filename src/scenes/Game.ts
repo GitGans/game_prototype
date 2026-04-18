@@ -41,9 +41,9 @@ import {
   getFriendlyTargets,
   getSelfTarget,
 } from "../battle/targeting";
-import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, effectiveStats, EffectEvent, resolveInstantEffects } from "../battle/combat";
+import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, effectiveStats, EffectEvent, resolveInstantEffects, applyVampirism, computeDamageVsUnit } from "../battle/combat";
 import { resolvePattern } from "../battle/skillPatterns";
-import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, getInstantEffectPattern, DAMAGE_MATRICES } from "../data/skillDefinitions";
+import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, getInstantEffectPattern, DAMAGE_MATRICES, getDamageModifierPercent } from "../data/skillDefinitions";
 import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/initiative";
 import {
   autoPlacePlayer,
@@ -167,7 +167,11 @@ function computeOneTurn(state: BattleState, unitId: string): BattleState {
 
   let next = state;
   if (skill.damageBlock) {
-    next = resolveAttack(getHitCells(unit, target), baseDamage, damageType, state).state;
+    const attackResult = resolveAttack(getHitCells(unit, target), baseDamage, damageType, state, skill.damageModifierBlocks);
+    next = attackResult.state;
+    if (skill.postDamageBlock && attackResult.totalRealDamage > 0) {
+      next = applyVampirism(skill.postDamageBlock, unit, attackResult.totalRealDamage, next).state;
+    }
   }
   if (skill.effectBlock) {
     const [eff, perTurn] = resolveEffectArgs(skill, unit);
@@ -1140,19 +1144,27 @@ export class Game extends Phaser.Scene {
         const unit = state.occupancy.cellToUnit.get(cellKey(hc));
         if (!unit || seen.has(unit.id)) continue;
         seen.add(unit.id);
-        previewParts.push(`${unit.name} +${activeUnit.magicalDamage}`);
+        previewParts.push(`${unit.name} +${effectiveStats(activeUnit).magicalDamage}`);
       }
     } else {
-      const baseDamage = activeUnit.physicalDamage + activeUnit.magicalDamage;
       const damageType = skill.damageBlock?.damageType ?? "physical";
+      const attackerStats = effectiveStats(activeUnit);
+      const baseDamage = damageType === "physical" ? attackerStats.physicalDamage : attackerStats.magicalDamage;
+
+      const ignorePercent: Partial<Record<string, number>> = {};
+      if (skill.damageModifierBlocks) {
+        for (const block of skill.damageModifierBlocks) {
+          ignorePercent[block.type] = getDamageModifierPercent(block);
+        }
+      }
+      const defIgnoreKey = damageType === "physical" ? "ignore_physical_defense" : "ignore_magical_defense";
+      const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
 
       for (const { coord: hc, multiplier } of hitCells) {
         const unit = state.occupancy.cellToUnit.get(cellKey(hc));
         if (!unit || seen.has(unit.id)) continue;
         seen.add(unit.id);
-        const defense = damageType === "physical" ? unit.physicalDefense : unit.magicalDefense;
-        const effectiveBase = Math.max(10, Math.round(baseDamage * (1 - defense / 100)));
-        const dmg = Math.round(effectiveBase * multiplier);
+        const dmg = computeDamageVsUnit(baseDamage, damageType, unit, multiplier, defIgnore);
         previewParts.push(`${unit.name} ~${dmg}`);
       }
     }
@@ -1258,7 +1270,8 @@ export class Game extends Phaser.Scene {
     });
 
     const damageType = activeUnit ? activeSkill(activeUnit)?.damageBlock?.damageType ?? "physical" : "physical";
-    let { state: next, events } = resolveAttack(
+    const activeSkillRef = activeUnit ? activeSkill(activeUnit) : undefined;
+    const attackResult2 = resolveAttack(
       activeUnit
         ? getHitCells(activeUnit, coord)
         : [{ coord, multiplier: 1.0 }],
@@ -1267,9 +1280,22 @@ export class Game extends Phaser.Scene {
         : (activeUnit ? effectiveStats(activeUnit).magicalDamage : 0),
       damageType,
       state,
+      activeSkillRef?.damageModifierBlocks,
     );
+    let { state: next, events } = attackResult2;
+    if (activeUnit && activeSkillRef?.postDamageBlock && attackResult2.totalRealDamage > 0) {
+      const { state: afterVamp, events: vampEvents } = applyVampirism(activeSkillRef.postDamageBlock, activeUnit, attackResult2.totalRealDamage, next);
+      next = afterVamp;
+      events = [...events, ...vampEvents];
+    }
 
     for (const event of events) {
+      if (event.type === "vampirism_heal") {
+        const view = this.unitViews.get(event.unitId);
+        if (view) this.showFloatingHeal(view.x, view.y, event.amount);
+        this.battleLog.addEntry(`${event.unitName} restored ${event.amount} HP (vampirism)`, "positive");
+        continue;
+      }
       if (event.type === "dodged") {
         this.battleLog.addEntry(`${event.unitName} dodged the attack!`, "neutral");
       } else {
@@ -1451,16 +1477,30 @@ export class Game extends Phaser.Scene {
 
     const autoAttackDmgType = activeSkill(activeUnit).damageBlock?.damageType ?? "physical";
     const activeUnitStats = effectiveStats(activeUnit);
-    let { state: next, events } = resolveAttack(
+    const autoSkill = activeSkill(activeUnit);
+    const attackResult3 = resolveAttack(
       getHitCells(activeUnit, target),
       autoAttackDmgType === "physical"
         ? activeUnitStats.physicalDamage
         : activeUnitStats.magicalDamage,
       autoAttackDmgType,
       state,
+      autoSkill?.damageModifierBlocks,
     );
+    let { state: next, events } = attackResult3;
+    if (autoSkill?.postDamageBlock && attackResult3.totalRealDamage > 0) {
+      const { state: afterVamp, events: vampEvents } = applyVampirism(autoSkill.postDamageBlock, activeUnit, attackResult3.totalRealDamage, next);
+      next = afterVamp;
+      events = [...events, ...vampEvents];
+    }
 
     for (const event of events) {
+      if (event.type === "vampirism_heal") {
+        const view = this.unitViews.get(event.unitId);
+        if (view) this.showFloatingHeal(view.x, view.y, event.amount);
+        this.battleLog.addEntry(`${event.unitName} restored ${event.amount} HP (vampirism)`, "positive");
+        continue;
+      }
       if (event.type === "dodged") {
         this.battleLog.addEntry(`${event.unitName} dodged the attack!`, "neutral");
       } else {
@@ -1726,6 +1766,7 @@ export class Game extends Phaser.Scene {
       next = afterCounter;
 
       for (const event of counterEvents) {
+        if (event.type === 'vampirism_heal') continue;
         if (event.type === 'dodged') {
           this.battleLog.addEntry(`${event.unitName} dodged the counter-attack!`, 'neutral');
         } else {

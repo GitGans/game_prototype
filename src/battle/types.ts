@@ -204,6 +204,38 @@ export type InstantEffectEvent =
   | { type: 'provoke_skip';           unitId: string; unitName: string }
   | { type: 'distract_skip';          unitId: string; unitName: string };
 
+// ─── Damage Modifier Block ────────────────────────────────────────────────────
+
+export type DamageModifierType =
+  | 'ignore_block'
+  | 'ignore_dodge'
+  | 'ignore_physical_defense'
+  | 'ignore_magical_defense';
+
+/**
+ * Modifies how the skill's damage is calculated against each target.
+ * `level` maps into DAMAGE_MODIFIER_LEVELS[type] (1-based).
+ * Multiple modifiers on one skill → use an array.
+ */
+export interface DamageModifierBlock {
+  type: DamageModifierType;
+  level: number;
+}
+
+// ─── Post-Damage Block ────────────────────────────────────────────────────────
+
+export type PostDamageType = 'self_vampirism' | 'mass_vampirism';
+
+/**
+ * Fires after resolveAttack completes.
+ * Converts a % of total REAL damage dealt (no overkill) into HP.
+ * `level` maps into VAMPIRISM_LEVELS (1-based).
+ */
+export interface PostDamageBlock {
+  type: PostDamageType;
+  level: number;
+}
+
 export interface Skill {
   id: string;
   name: string;
@@ -212,6 +244,8 @@ export interface Skill {
   damageBlock?: DamageBlock;
   effectBlock?: SkillEffectBlock;
   instantEffectBlock?: InstantEffectBlock;
+  damageModifierBlocks?: DamageModifierBlock[];
+  postDamageBlock?: PostDamageBlock;
 }
 
 /**

@@ -1,14 +1,16 @@
-import { ActiveEffect, BattleState, CellCoord, DamageType, Effect, InstantEffectBlock, InstantEffectEvent, ResolvedHitCell, Side, SkillEffectBlock, SkillPattern, Unit } from './types';
+import { ActiveEffect, BattleState, CellCoord, DamageModifierBlock, DamageType, Effect, InstantEffectBlock, InstantEffectEvent, PostDamageBlock, ResolvedHitCell, Side, SkillEffectBlock, SkillPattern, Unit } from './types';
 import { cellKey } from './field';
 import { buildOccupancy, removeUnit } from './occupancy';
 import { resolvePattern } from './skillPatterns';
+import { getDamageModifierPercent, getVampirismPercent } from '../data/skillDefinitions';
 
 export type CombatEvent =
-  | { type: 'hit';     unitId: string; unitName: string; damage: number }
-  | { type: 'dodged';  unitId: string; unitName: string }
-  | { type: 'blocked'; unitId: string; unitName: string; damage: number };
+  | { type: 'hit';            unitId: string; unitName: string; damage: number }
+  | { type: 'dodged';         unitId: string; unitName: string }
+  | { type: 'blocked';        unitId: string; unitName: string; damage: number }
+  | { type: 'vampirism_heal'; unitId: string; unitName: string; amount: number };
 
-export type AttackResult = { state: BattleState; events: CombatEvent[] };
+export type AttackResult = { state: BattleState; events: CombatEvent[]; totalRealDamage: number };
 
 export type EffectEvent =
   | { type: 'effect_applied';     unitId: string; unitName: string; effectDisplayName: string }
@@ -24,22 +26,49 @@ export type EffectEvent =
  * Min hit chance = 10% (dodge capped at 90). Min unblocked chance = 10% (block capped at 90).
  * Active effect defense bonuses (physicalDefenseBonus / magicalDefenseBonus) are applied.
  */
+/**
+ * Returns the raw damage a single hit would deal to `target` before dodge/block.
+ * Used by both resolveAttack (combat) and showSkillPreview (display) to keep formulas in sync.
+ */
+export function computeDamageVsUnit(
+  baseDamage: number,
+  damageType: DamageType,
+  target: Unit,
+  multiplier: number,
+  defIgnorePercent: number,
+): number {
+  const stats = effectiveStats(target);
+  const rawDefense = damageType === 'physical' ? stats.physicalDefense : stats.magicalDefense;
+  const defense = rawDefense * (1 - defIgnorePercent / 100);
+  const minDamage = Math.round(baseDamage * 0.1);
+  const effectiveBase = Math.max(minDamage, Math.round(baseDamage * (1 - defense / 100)));
+  return Math.round(effectiveBase * multiplier);
+}
+
 export function resolveAttack(
   hitCells: ResolvedHitCell[],
   baseDamage: number,
   damageType: DamageType,
   state: BattleState,
+  damageModifierBlocks?: DamageModifierBlock[],
 ): AttackResult {
+  // Build a quick lookup: modifier type → ignore percent
+  const ignorePercent: Partial<Record<string, number>> = {};
+  if (damageModifierBlocks) {
+    for (const block of damageModifierBlocks) {
+      ignorePercent[block.type] = getDamageModifierPercent(block);
+    }
+  }
+
   const hitUnits = new Map<string, { unit: Unit; damage: number }>();
 
   for (const { coord, multiplier } of hitCells) {
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
     if (!unit) continue;
-    const stats = effectiveStats(unit);
-    const defense = damageType === 'physical' ? stats.physicalDefense : stats.magicalDefense;
-    // min base damage = 10 (before pattern multiplier)
-    const effectiveBase = Math.max(10, Math.round(baseDamage * (1 - defense / 100)));
-    const dmg = Math.round(effectiveBase * multiplier);
+
+    const defIgnoreKey = damageType === 'physical' ? 'ignore_physical_defense' : 'ignore_magical_defense';
+    const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
+    const dmg = computeDamageVsUnit(baseDamage, damageType, unit, multiplier, defIgnore);
     const existing = hitUnits.get(unit.id);
     if (!existing || dmg > existing.damage) {
       hitUnits.set(unit.id, { unit, damage: dmg });
@@ -48,11 +77,18 @@ export function resolveAttack(
 
   const events: CombatEvent[] = [];
   const newUnits = new Map(state.units);
+  let totalRealDamage = 0;
 
   for (const { unit, damage: rawDmg } of hitUnits.values()) {
     const unitStats = effectiveStats(unit);
-    const effectiveDodge = Math.min(unitStats.dodge, 90);
-    const effectiveBlock = Math.min(unitStats.block, 90);
+
+    // Apply ignore_dodge
+    const dodgeIgnore = ignorePercent['ignore_dodge'] ?? 0;
+    const effectiveDodge = Math.min(unitStats.dodge * (1 - dodgeIgnore / 100), 90);
+
+    // Apply ignore_block
+    const blockIgnore = ignorePercent['ignore_block'] ?? 0;
+    const effectiveBlock = Math.min(unitStats.block * (1 - blockIgnore / 100), 90);
 
     if (Math.random() * 100 < effectiveDodge) {
       events.push({ type: 'dodged', unitId: unit.id, unitName: unit.name });
@@ -67,6 +103,9 @@ export function resolveAttack(
       events.push({ type: 'hit', unitId: unit.id, unitName: unit.name, damage: finalDmg });
     }
 
+    // Real damage = capped at current HP (no overkill for vampirism)
+    totalRealDamage += Math.min(finalDmg, unit.hp);
+
     newUnits.set(unit.id, { ...unit, hp: Math.max(0, unit.hp - finalDmg) });
   }
 
@@ -78,7 +117,59 @@ export function resolveAttack(
     }
   }
 
-  return { state: { ...state, units: newUnits, occupancy }, events };
+  return { state: { ...state, units: newUnits, occupancy }, events, totalRealDamage };
+}
+
+/**
+ * Applies vampirism healing after resolveAttack.
+ * - self_vampirism: heals only the caster.
+ * - mass_vampirism: divides healPool equally among all friendly units with missing HP.
+ * Healing never exceeds maxHp.
+ */
+export function applyVampirism(
+  postDamageBlock: PostDamageBlock,
+  caster: Unit,
+  totalRealDamage: number,
+  state: BattleState,
+): { state: BattleState; events: CombatEvent[] } {
+  const percent = getVampirismPercent(postDamageBlock);
+  const healPool = Math.floor(totalRealDamage * percent / 100);
+
+  if (healPool <= 0) return { state, events: [] };
+
+  const events: CombatEvent[] = [];
+  const newUnits = new Map(state.units);
+
+  if (postDamageBlock.type === 'self_vampirism') {
+    const currentCaster = newUnits.get(caster.id);
+    if (currentCaster && currentCaster.hp > 0) {
+      const healed = Math.min(healPool, currentCaster.maxHp - currentCaster.hp);
+      if (healed > 0) {
+        newUnits.set(caster.id, { ...currentCaster, hp: currentCaster.hp + healed });
+        events.push({ type: 'vampirism_heal', unitId: caster.id, unitName: caster.name, amount: healed });
+      }
+    }
+  } else {
+    // mass_vampirism: find all friendly alive units with missing HP
+    const friendlySide = caster.anchor.side;
+    const targets = [...newUnits.values()].filter(
+      u => u.anchor.side === friendlySide && u.hp > 0 && u.hp < u.maxHp,
+    );
+    if (targets.length > 0) {
+      const healPerUnit = Math.floor(healPool / targets.length);
+      if (healPerUnit > 0) {
+        for (const target of targets) {
+          const healed = Math.min(healPerUnit, target.maxHp - target.hp);
+          if (healed > 0) {
+            newUnits.set(target.id, { ...target, hp: target.hp + healed });
+            events.push({ type: 'vampirism_heal', unitId: target.id, unitName: target.name, amount: healed });
+          }
+        }
+      }
+    }
+  }
+
+  return { state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) }, events };
 }
 
 /**
