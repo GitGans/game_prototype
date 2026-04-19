@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { GameState } from "../core/GameState";
+import { PhaseManager } from "../core/PhaseManager";
 
 export class MainMenu extends Phaser.Scene {
   constructor() {
@@ -42,6 +43,16 @@ export class MainMenu extends Phaser.Scene {
 
     btn.on("pointerover", () => btn.setFillStyle(0x3a8a3a));
     btn.on("pointerout",  () => btn.setFillStyle(0x2a6a2a));
-    btn.on("pointerup",   () => this.scene.start("Prep"));
+    btn.on("pointerup",   () => PhaseManager.transition({ type: 'play' }));
+
+    const debugBtnY = btnY + Math.round(70 * LAYOUT_SCALE);
+    const debugBtn = this.add
+      .rectangle(w / 2, debugBtnY, btnW, btnH, 0x444444)
+      .setInteractive({ useHandCursor: true });
+    this.add.text(w / 2, debugBtnY, "Debug Battle", {
+      fontSize: `${Math.round(20 * LAYOUT_SCALE)}px`,
+      color: "#aaaaaa",
+    }).setOrigin(0.5);
+    debugBtn.on("pointerup", () => PhaseManager.transition({ type: 'debug' }));
   }
 }

@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
+import { PhaseManager } from '../core/PhaseManager';
 
 export class Boot extends Phaser.Scene {
-  constructor() {
-    super('Boot');
-  }
+  constructor() { super('Boot'); }
 
   create(): void {
-    this.scene.start('Preloader');
+    PhaseManager.init(this.game);
+    this.scene.start('Preloader'); // exempt: infrastructure bootstrap
   }
 }

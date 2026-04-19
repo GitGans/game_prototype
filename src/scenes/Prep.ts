@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { GameState } from "../core/GameState";
+import { PhaseManager } from "../core/PhaseManager";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
 import { EquipSlot, UnitBlueprint, UnitClass } from "../battle/types";
 import { ITEM_DEFINITIONS } from "../data/itemDefinitions";
@@ -14,6 +15,7 @@ import {
 export class Prep extends Phaser.Scene {
   private _itemDescPanel: Phaser.GameObjects.Container | null = null;
   private _activePanel: Phaser.GameObjects.Container | null = null;
+  private _isCampMode = false;
   private battleBtn!: Phaser.GameObjects.Rectangle;
   private battleBtnText!: Phaser.GameObjects.Text;
 
@@ -141,6 +143,9 @@ export class Prep extends Phaser.Scene {
   }
 
   create(): void {
+    const phase = PhaseManager.getPhase();
+    this._isCampMode = phase.type === 'camp';
+
     const w = this.scale.width;
     const h = this.scale.height;
 
@@ -220,7 +225,16 @@ export class Prep extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.battleBtn.on("pointerup", () => this.scene.start("Game"));
+    if (this._isCampMode) {
+      this.battleBtnText.setText('Exit Camp');
+      this.battleBtn.setFillStyle(0x2a6a2a);
+      this.battleBtn.setInteractive({ useHandCursor: true });
+      this.battleBtn.on('pointerup', () =>
+        PhaseManager.transition({ type: 'exit_camp' })
+      );
+    } else {
+      this.battleBtn.on('pointerup', () => this._showEnemyGroupSelector());
+    }
     this.refreshBattleButton();
   }
 
@@ -231,6 +245,8 @@ export class Prep extends Phaser.Scene {
   }
 
   private refreshBattleButton(): void {
+    if (this._isCampMode) return;
+
     const active = this.getActiveCount();
     const valid = active > 0 && active <= 9;
     const excess = active - 9;
@@ -996,5 +1012,51 @@ export class Prep extends Phaser.Scene {
       this._activePanel = null;
     });
     panel.add([closeBtn, closeText]);
+  }
+
+  private _showEnemyGroupSelector(): void {
+    if (this._activePanel) {
+      this._activePanel.destroy();
+      this._activePanel = null;
+      return;
+    }
+
+    const races: { label: string; groupId: string }[] = [
+      { label: 'Orcs',   groupId: 'orc_patrol'  },
+      { label: 'Demons', groupId: 'demon_patrol' },
+      { label: 'Undead', groupId: 'undead_horde' },
+    ];
+
+    const panelW = 200;
+    const panelH = races.length * 50 + 20;
+    const panelX = this.scale.width / 2 - panelW / 2;
+    const panelY = this.scale.height - panelH - 80;
+
+    const container = this.add.container(panelX, panelY);
+    container.add(
+      this.add.rectangle(panelW / 2, panelH / 2, panelW, panelH, 0x222244, 0.95)
+    );
+
+    races.forEach(({ label, groupId }, i) => {
+      const btnY = 20 + i * 50 + 15;
+      const btn = this.add
+        .rectangle(panelW / 2, btnY, 160, 38, 0x334466)
+        .setInteractive({ useHandCursor: true });
+      const txt = this.add.text(panelW / 2, btnY, label, {
+        fontSize: '18px', color: '#ffffff',
+      }).setOrigin(0.5);
+
+      btn.on('pointerover', () => btn.setFillStyle(0x4455aa));
+      btn.on('pointerout',  () => btn.setFillStyle(0x334466));
+      btn.on('pointerup',   () => {
+        container.destroy();
+        this._activePanel = null;
+        PhaseManager.transition({ type: 'start_battle', enemyGroupId: groupId });
+      });
+
+      container.add([btn, txt]);
+    });
+
+    this._activePanel = container;
   }
 }

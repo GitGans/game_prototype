@@ -7,6 +7,7 @@ import {
   ItemInstance,
   ItemContainer,
 } from "../battle/types";
+import { SubMapState } from '../world/types';
 import { buildOccupancy } from "../battle/occupancy";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
 
@@ -28,11 +29,13 @@ class GameStateManager {
   // Survive reset() — shared across scene restarts
   playerUnitLevels: Record<string, number> = {}; // templateId → level
   lastEnemyRace: UnitRace | null = null; // race from last battle (for Replay)
+  lastEnemyPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }> | null = null; // enemy lineup snapshot for Restart Battle
   playerUnitPlacements: Record<string, CellCoord> = {}; // templateId → anchor, survives reset()
   playerBenchIds: string[] | null = null; // templateIds on bench; null = first battle, use defaults
   campUnitIds: string[] = []; // templateIds of units in camp (fully excluded from battle)
   itemInstances: Record<string, ItemInstance> = {}; // all item instances in the world
   itemContainers: Record<string, ItemContainer> = {}; // all item containers (backpacks, equipment slots)
+  subMapStates: Record<string, SubMapState> = {}; // persists entity (mob) alive/dead state per submap
 
   get(): BattleState {
     return this.state;
@@ -45,7 +48,7 @@ class GameStateManager {
   reset(): void {
     this.state = emptyState();
     this.battleMode = "manual";
-    // playerUnitLevels and lastEnemyRace are intentionally NOT cleared here
+    // playerUnitLevels, lastEnemyRace, lastEnemyPlacements are intentionally NOT cleared here
   }
 
   setPhase(phase: Phase): void {
