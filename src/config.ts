@@ -13,7 +13,6 @@ export const config: Phaser.Types.Core.GameConfig = {
   height: window.innerHeight,
   backgroundColor: '#1a1a2e',
   pixelArt: true,
-  resolution: window.devicePixelRatio,
   scene: [Boot, Preloader, MainMenu, WorldMap, Prep, Game, MapVictory],
   parent: document.body,
   scale: {

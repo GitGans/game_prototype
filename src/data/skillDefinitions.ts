@@ -1,13 +1,11 @@
 import {
   DamageModifierBlock,
   DamageModifierType,
-  DamageType,
   Effect,
   InstantEffectBlock,
   LeveledDamageMatrix,
   LeveledEffectDef,
   PostDamageBlock,
-  PostDamageType,
   Skill,
   SkillEffectBlock,
   SkillPattern,

@@ -3,6 +3,7 @@ import { PhaseManager } from '../core/PhaseManager';
 import { GameState } from '../core/GameState';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { canMove, resolveCell, initSubMapState } from '../world/mapLogic';
+import { Button } from '../ui/Button';
 import {
   SubMapDefinition,
   SubMapState,
@@ -118,19 +119,17 @@ export class WorldMap extends Phaser.Scene {
   }
 
   private buildDebugButton(): void {
-    const x = 80;
-    const y = 30;
-    const btn = this.add.rectangle(x, y, 120, 36, 0x333366).setInteractive({ useHandCursor: true });
-    this.add.text(x, y, 'Debug Battle', { fontSize: '14px', color: '#ffffff' }).setOrigin(0.5);
-    btn.on('pointerup', () => PhaseManager.transition({ type: 'debug' }));
+    new Button({
+      scene: this, x: 80, y: 30, w: 120, h: 36,
+      label: "Debug Battle", style: "dark",
+      onClick: () => PhaseManager.transition({ type: 'debug' }),
+    });
 
-    const mx = this.scale.width - 90;
-    const my = 30;
-    const menuBtn = this.add.rectangle(mx, my, 140, 36, 0x662222).setInteractive({ useHandCursor: true });
-    this.add.text(mx, my, 'Main Menu', { fontSize: '14px', color: '#ffffff' }).setOrigin(0.5);
-    menuBtn.on('pointerover', () => menuBtn.setFillStyle(0x882222));
-    menuBtn.on('pointerout',  () => menuBtn.setFillStyle(0x662222));
-    menuBtn.on('pointerup',   () => PhaseManager.transition({ type: 'exit_to_menu' }));
+    new Button({
+      scene: this, x: this.scale.width - 90, y: 30, w: 140, h: 36,
+      label: "Main Menu", style: "danger",
+      onClick: () => PhaseManager.transition({ type: 'exit_to_menu' }),
+    });
   }
 
   private handleKey(event: KeyboardEvent): void {

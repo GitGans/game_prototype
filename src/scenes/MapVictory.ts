@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
+import { Button } from '../ui/Button';
 
 export class MapVictory extends Phaser.Scene {
   constructor() {
@@ -34,19 +35,10 @@ export class MapVictory extends Phaser.Scene {
     const btnH = Math.round(56 * LAYOUT_SCALE);
     const btnY = h / 2 + Math.round(60 * LAYOUT_SCALE);
 
-    const btn = this.add
-      .rectangle(w / 2, btnY, btnW, btnH, 0x2a2a6a)
-      .setInteractive({ useHandCursor: true });
-    this.add
-      .text(w / 2, btnY, 'Main Menu', {
-        fontSize: `${Math.round(26 * LAYOUT_SCALE)}px`,
-        color: '#ffffff',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
-
-    btn.on('pointerover', () => btn.setFillStyle(0x3a3a8a));
-    btn.on('pointerout',  () => btn.setFillStyle(0x2a2a6a));
-    btn.on('pointerup',   () => PhaseManager.transition({ type: 'exit_to_menu' }));
+    new Button({
+      scene: this, x: w / 2, y: btnY, w: btnW, h: btnH,
+      label: "Main Menu", style: "navy",
+      onClick: () => PhaseManager.transition({ type: 'exit_to_menu' }),
+    });
   }
 }

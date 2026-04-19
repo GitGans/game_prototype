@@ -1,4 +1,4 @@
-import { OccupancyMap, Unit } from './types';
+import { CellCoord, OccupancyMap, Unit } from './types';
 import { cellKey } from './field';
 import { getOccupiedCells } from './shapes';
 

@@ -4,7 +4,12 @@ export type Col = 0 | 1 | 2;
 
 export type RowTrait = 'front' | 'back';
 export type UnitRace = 'orc' | 'demon' | 'undead';
-export type UnitClass = 'warrior' | 'ranger' | 'mage' | 'priest';
+export type UnitClass =
+  | 'warrior' | 'ranger' | 'mage' | 'priest'
+  | 'pikeman' | 'halberdist' | 'crusher'
+  | 'archer' | 'crossbowman' | 'stormbearer'
+  | 'hieromonk' | 'warcryer' | 'therapist' | 'schemamonk'
+  | 'tank';
 
 export interface CellCoord {
   side: Side;

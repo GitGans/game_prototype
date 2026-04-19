@@ -32,6 +32,8 @@ import {
   UnitRace,
 } from "../battle/types";
 import { PhaseManager } from '../core/PhaseManager';
+import { Button } from '../ui/Button';
+import { SkillTooltip } from '../objects/SkillTooltip';
 import { ENEMY_GROUPS } from '../data/enemyGroupDefinitions';
 import { PLAYER_UNITS, ENEMY_UNITS } from "../data/unitDefinitions";
 import { cellKey } from "../battle/field";
@@ -208,17 +210,17 @@ export class Game extends Phaser.Scene {
 
   // Placement phase UI
   private benchCards: Phaser.GameObjects.Container[] = [];
-  private startBattleBtn: Phaser.GameObjects.Container | null = null;
-  private autoBattleButtons: Phaser.GameObjects.Container[] = [];
+  private startBattleBtn: Button | null = null;
+  private autoBattleButtons: Button[] = [];
   private chargedThisRound = new Set<string>();
-  private manualTurnButtons: Phaser.GameObjects.Container[] = [];
-  private chargeBtn: Phaser.GameObjects.Container | null = null;
+  private manualTurnButtons: Button[] = [];
+  private chargeBtn: Button | null = null;
   private selectedBenchIdx: number | null = null;
   private selectedFieldUnitId: string | null = null;
   private pendingTargetCoord: CellCoord | null = null;
   private lastClickCoordKey: string | null = null;
   private skillIconContainers: Phaser.GameObjects.Container[] = [];
-  private skillNameTooltip: Phaser.GameObjects.Container | null = null;
+  private skillNameTooltip: SkillTooltip | null = null;
   private lastClickTime = 0;
 
   // Counter for generating unique unit IDs during placement
@@ -235,7 +237,7 @@ export class Game extends Phaser.Scene {
     this.buildGrid();
     this.unitTooltip = new UnitTooltip(this);
     this.effectTooltip = new EffectTooltip(this);
-    this.createSkillNameTooltip();
+    this.skillNameTooltip = new SkillTooltip(this);
     this.initBattle();
     this.buildUnitViews();
     this.buildUI();
@@ -417,7 +419,7 @@ export class Game extends Phaser.Scene {
     this.logY = this.cellPixelPos("enemy", 0, 2).y - CELL_SIZE / 2;
     this.logW = this.scale.width - this.logX - logGap;
     this.logH = this.cellPixelPos("enemy", 0, 0).y + CELL_SIZE / 2 - this.logY;
-    this.battleLog = new BattleLog(this, this.logX, this.logY, this.logW, this.logH);
+    this.battleLog = new BattleLog(this, this.logX, this.logY, this.logW);
     this.battleLog.setVisible(false);
 
     this.statusText = this.add
@@ -664,26 +666,11 @@ export class Game extends Phaser.Scene {
     const btnX = this.logX + this.logW / 2;
     const btnY = this.logY + this.logH / 2;
 
-    const rect = this.add
-      .rectangle(0, 0, btnW, btnH, 0x2a6a2a)
-      .setStrokeStyle(Math.round(2 * LAYOUT_SCALE), 0x44aa44);
-    const label = this.add
-      .text(0, 0, "⚔\nBattle", {
-        fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-        color: "#ffffff",
-        fontStyle: "bold",
-        align: "center",
-      })
-      .setOrigin(0.5);
-
-    const btn = this.add.container(btnX, btnY, [rect, label]);
-    btn.setSize(btnW, btnH);
-    btn.setInteractive({ useHandCursor: true });
-    btn.on("pointerover", () => rect.setFillStyle(0x3a8a3a));
-    btn.on("pointerout",  () => rect.setFillStyle(0x2a6a2a));
-    btn.on("pointerup",   () => this.startBattle());
-
-    this.startBattleBtn = btn;
+    this.startBattleBtn = new Button({
+      scene: this, x: btnX, y: btnY, w: btnW, h: btnH,
+      label: "⚔\nBattle", style: "primary", fontKey: "xl",
+      onClick: () => this.startBattle(),
+    });
   }
 
   private clearPlacementHighlights(): void {
@@ -1609,61 +1596,43 @@ export class Game extends Phaser.Scene {
   private buildAutoBattleButtons(): void {
     const btnW = Math.round(44 * LAYOUT_SCALE);
     const btnH = Math.round(34 * LAYOUT_SCALE);
-    const gap = Math.round(8 * LAYOUT_SCALE);
-    const y = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
-    const x1 = btnW / 2 + Math.round(12 * LAYOUT_SCALE);
-    const x2 = x1 + btnW + gap;
+    const gap  = Math.round(8  * LAYOUT_SCALE);
+    const y    = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
+    const x1   = btnW / 2 + Math.round(12 * LAYOUT_SCALE);
+    const x2   = x1 + btnW + gap;
 
-    const makeBtn = (
-      x: number,
-      label: string,
-      color: number,
-      cb: () => void,
-    ) => {
-      const rect = this.add
-        .rectangle(0, 0, btnW, btnH, color)
-        .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), 0xaaaaaa);
-      const txt = this.add
-        .text(0, 0, label, {
-          fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-          color: "#ffffff",
-          fontStyle: "bold",
-        })
-        .setOrigin(0.5);
-
-      const btn = this.add.container(x, y, [rect, txt]);
-      btn.setSize(btnW, btnH).setInteractive({ useHandCursor: true });
-      btn.setAlpha(0.4);
-      btn.on("pointerover", () => { rect.setFillStyle(color + 0x111111); btn.setAlpha(0.85); });
-      btn.on("pointerout", () => { rect.setFillStyle(color); btn.setAlpha(0.4); });
-      btn.on("pointerup", cb);
-      return btn;
-    };
-
-    const autoBtn = makeBtn(x1, "▶▶", 0x1a3a5a, () => {
-      if (GameState.getBattleMode() === "auto") {
-        GameState.setBattleMode("manual");
-        this.updateManualButtons(GameState.get());
-        return;
-      }
-      if (GameState.getBattleMode() !== "manual") return;
-      GameState.setBattleMode("auto");
-      this.updateManualButtons(GameState.get());
-      const s = GameState.get();
-      if (s.phase === "select_target") {
-        const active = s.units.get(s.roundQueue[0]);
-        if (active?.anchor.side === "player") {
-          const next: BattleState = { ...s, validTargets: [] };
-          GameState.set(next);
-          EventBus.emit(Events.STATE_CHANGED, next);
-          this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
+    const autoBtn = new Button({
+      scene: this, x: x1, y, w: btnW, h: btnH,
+      label: "▶▶", style: "navy", fontKey: "lg", idle: true,
+      onClick: () => {
+        if (GameState.getBattleMode() === "auto") {
+          GameState.setBattleMode("manual");
+          this.updateManualButtons(GameState.get());
+          return;
         }
-      }
+        if (GameState.getBattleMode() !== "manual") return;
+        GameState.setBattleMode("auto");
+        this.updateManualButtons(GameState.get());
+        const s = GameState.get();
+        if (s.phase === "select_target") {
+          const active = s.units.get(s.roundQueue[0]);
+          if (active?.anchor.side === "player") {
+            const next: BattleState = { ...s, validTargets: [] };
+            GameState.set(next);
+            EventBus.emit(Events.STATE_CHANGED, next);
+            this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
+          }
+        }
+      },
     });
 
-    const quickBtn = makeBtn(x2, "⚡", 0x3a1a5a, () => {
-      GameState.setBattleMode("quick");
-      this.runQuickBattle();
+    const quickBtn = new Button({
+      scene: this, x: x2, y, w: btnW, h: btnH,
+      label: "⚡", style: "neutral", fontKey: "lg", idle: true,
+      onClick: () => {
+        GameState.setBattleMode("quick");
+        this.runQuickBattle();
+      },
     });
 
     this.autoBattleButtons = [autoBtn, quickBtn];
@@ -1901,53 +1870,35 @@ export class Game extends Phaser.Scene {
     for (const btn of this.manualTurnButtons) btn.setVisible(show);
     if (show && this.chargeBtn) {
       const used = this.chargedThisRound.has(state.roundQueue[0]);
-      this.chargeBtn.setAlpha(used ? 0.2 : 0.4);
-      if (used) this.chargeBtn.disableInteractive();
-      else this.chargeBtn.setInteractive({ useHandCursor: true });
+      this.chargeBtn.setDisabled(used);
+      if (used) this.chargeBtn.setAlpha(0.2);
     }
   }
 
   private buildManualTurnButtons(): void {
-    const btnW = Math.round(44 * LAYOUT_SCALE);
-    const btnH = Math.round(34 * LAYOUT_SCALE);
-    const gap = Math.round(8 * LAYOUT_SCALE);
-    const y = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
-    const xSkip = this.scale.width - btnW / 2 - Math.round(12 * LAYOUT_SCALE);
+    const btnW    = Math.round(44 * LAYOUT_SCALE);
+    const btnH    = Math.round(34 * LAYOUT_SCALE);
+    const gap     = Math.round(8  * LAYOUT_SCALE);
+    const y       = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
+    const xSkip   = this.scale.width - btnW / 2 - Math.round(12 * LAYOUT_SCALE);
     const xCharge = xSkip - btnW - gap;
 
-    const makeBtn = (
-      x: number,
-      label: string,
-      color: number,
-      cb: () => void,
-    ) => {
-      const rect = this.add
-        .rectangle(0, 0, btnW, btnH, color)
-        .setStrokeStyle(Math.round(1 * LAYOUT_SCALE), 0xaaaaaa);
-      const txt = this.add
-        .text(0, 0, label, {
-          fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-          color: "#ffffff",
-          fontStyle: "bold",
-        })
-        .setOrigin(0.5);
-      const btn = this.add.container(x, y, [rect, txt]);
-      btn.setSize(btnW, btnH).setInteractive({ useHandCursor: true });
-      btn.setAlpha(0.4);
-      btn.on("pointerover", () => { rect.setFillStyle(color + 0x111111); btn.setAlpha(0.85); });
-      btn.on("pointerout", () => { rect.setFillStyle(color); btn.setAlpha(0.4); });
-      btn.on("pointerup", cb);
-      return { btn, rect };
-    };
-
-    const { btn: skipBtn } = makeBtn(xSkip, "🛡️", 0x5a5a2a, () => {
-      if (GameState.getBattleMode() !== "manual") return;
-      this.handleSkipTurn();
+    const skipBtn = new Button({
+      scene: this, x: xSkip, y, w: btnW, h: btnH,
+      label: "🛡️", style: "ghost", fontKey: "lg", idle: true,
+      onClick: () => {
+        if (GameState.getBattleMode() !== "manual") return;
+        this.handleSkipTurn();
+      },
     });
 
-    const { btn: chargeBtn } = makeBtn(xCharge, "⏳", 0x2a5a3a, () => {
-      if (GameState.getBattleMode() !== "manual") return;
-      this.handleChargeTurn();
+    const chargeBtn = new Button({
+      scene: this, x: xCharge, y, w: btnW, h: btnH,
+      label: "⏳", style: "primary", fontKey: "lg", idle: true,
+      onClick: () => {
+        if (GameState.getBattleMode() !== "manual") return;
+        this.handleChargeTurn();
+      },
     });
 
     this.chargeBtn = chargeBtn;
@@ -2031,11 +1982,11 @@ export class Game extends Phaser.Scene {
         .setDepth(10)
         .on('pointerover', () => {
           bg.setFillStyle(isActive ? 0xffdd44 : 0x666666);
-          this.showSkillNameTooltip(skill.name, skill.damageBlock?.damageType, iconX + iconSize / 2, iconY);
+          this.skillNameTooltip?.show({ name: skill.name, damageType: skill.damageBlock?.damageType }, iconX + iconSize / 2, iconY, "right");
         })
         .on('pointerout', () => {
           bg.setFillStyle(isActive ? 0xffcc00 : 0x444444);
-          this.skillNameTooltip?.setVisible(false);
+          this.skillNameTooltip?.hide();
         })
         .on('pointerup', () => this.switchActiveSkill(i));
 
@@ -2043,56 +1994,10 @@ export class Game extends Phaser.Scene {
     });
   }
 
-  private createSkillNameTooltip(): void {
-    const TW  = Math.round(120 * LAYOUT_SCALE);
-    const PAD = Math.round(6   * LAYOUT_SCALE);
-    const FONT = `${Math.round(11 * LAYOUT_SCALE)}px`;
-
-    const bg = this.add.rectangle(0, 0, TW, PAD * 2 + Math.round(28 * LAYOUT_SCALE), 0x0d1520, 0.92)
-      .setOrigin(0, 0);
-
-    const txt = this.add.text(PAD, PAD, "", {
-      fontSize: FONT,
-      color: "#ffffff",
-      wordWrap: { width: TW - PAD * 2 },
-    }).setOrigin(0, 0);
-
-    this.skillNameTooltip = this.add.container(0, 0, [bg, txt])
-      .setDepth(200)
-      .setVisible(false);
-  }
-
-  private showSkillNameTooltip(name: string, damageType: string | undefined, iconRightX: number, iconCenterY: number): void {
-    if (!this.skillNameTooltip) return;
-
-    const GAP = Math.round(6  * LAYOUT_SCALE);
-    const TW  = Math.round(120 * LAYOUT_SCALE);
-    const PAD = Math.round(6   * LAYOUT_SCALE);
-
-    const txt = this.skillNameTooltip.list[1] as Phaser.GameObjects.Text;
-    const bg  = this.skillNameTooltip.list[0] as Phaser.GameObjects.Rectangle;
-
-    const nameColor = damageType === 'magical' ? COLORS.skillMagical
-                    : damageType === 'physical' ? COLORS.skillPhysical
-                    : '#ffffff';
-    txt.setColor(nameColor);
-    txt.setText(name);
-
-    const textH  = txt.height;
-    const totalH = PAD * 2 + textH;
-    bg.setSize(TW, totalH);
-
-    const tx = iconRightX + GAP;
-    const ty = iconCenterY - totalH / 2;
-
-    this.skillNameTooltip.setPosition(tx, ty);
-    this.skillNameTooltip.setVisible(true);
-  }
-
   private clearSkillIcons(): void {
     for (const c of this.skillIconContainers) c.destroy();
     this.skillIconContainers = [];
-    this.skillNameTooltip?.setVisible(false);
+    this.skillNameTooltip?.hide();
   }
 
   private switchActiveSkill(index: number): void {
@@ -2205,7 +2110,6 @@ export class Game extends Phaser.Scene {
     const btnW = Math.round(180 * LAYOUT_SCALE);
     const btnH = Math.round(46 * LAYOUT_SCALE);
     const btnY = h / 2 + Math.round(40 * LAYOUT_SCALE);
-    const fontSize = `${Math.round(18 * LAYOUT_SCALE)}px`;
 
     if (isVictory) {
       // ── Two buttons ──
@@ -2213,31 +2117,16 @@ export class Game extends Phaser.Scene {
       const leftX  = w / 2 - btnW / 2 - gap / 2;
       const rightX = w / 2 + btnW / 2 + gap / 2;
 
-      // Restart Battle (same enemies, units already leveled up above)
-      const restartBtn = this.add
-        .rectangle(leftX, btnY, btnW, btnH, 0x4a4a6a)
-        .setDepth(31)
-        .setInteractive({ useHandCursor: true });
-      this.add
-        .text(leftX, btnY, "Restart Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
-        .setOrigin(0.5)
-        .setDepth(32);
-      restartBtn.on("pointerover", () => restartBtn.setFillStyle(0x6a6a8a));
-      restartBtn.on("pointerout",  () => restartBtn.setFillStyle(0x4a4a6a));
-      restartBtn.on("pointerup",   () => PhaseManager.transition({ type: 'replay' }));
+      new Button({
+        scene: this, x: leftX, y: btnY, w: btnW, h: btnH,
+        label: "Restart Battle", style: "neutral",
+        onClick: () => PhaseManager.transition({ type: 'replay' }),
+      }).setDepth(31);
 
-      // Exit Battle — return to prep screen
-      const exitBtn = this.add
-        .rectangle(rightX, btnY, btnW, btnH, 0x2a6a2a)
-        .setDepth(31)
-        .setInteractive({ useHandCursor: true });
-      this.add
-        .text(rightX, btnY, "Exit Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
-        .setOrigin(0.5)
-        .setDepth(32);
-      exitBtn.on("pointerover", () => exitBtn.setFillStyle(0x3a8a3a));
-      exitBtn.on("pointerout",  () => exitBtn.setFillStyle(0x2a6a2a));
-      exitBtn.on("pointerup", () => {
+      new Button({
+        scene: this, x: rightX, y: btnY, w: btnW, h: btnH,
+        label: "Exit Battle", style: "primary",
+        onClick: () => {
         const allBlueprints = [
           ...PLAYER_UNITS,
           ...Object.values(ENEMY_UNITS).flat(),
@@ -2266,7 +2155,8 @@ export class Game extends Phaser.Scene {
         });
 
         PhaseManager.transition({ type: 'exit_battle' });
-      });
+        },
+      }).setDepth(31);
     } else {
       // Defeat — Restart Battle + optional Exit Battle (debug mode)
       const phase = PhaseManager.getPhase();
@@ -2276,30 +2166,18 @@ export class Game extends Phaser.Scene {
       const leftX  = isDebugBattle ? w / 2 - btnW / 2 - gap / 2 : w / 2;
       const rightX = w / 2 + btnW / 2 + gap / 2;
 
-      const restartBtn = this.add
-        .rectangle(leftX, btnY, btnW, btnH, 0x2a4a7a)
-        .setDepth(31)
-        .setInteractive({ useHandCursor: true });
-      this.add
-        .text(leftX, btnY, "Restart Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
-        .setOrigin(0.5)
-        .setDepth(32);
-      restartBtn.on("pointerover", () => restartBtn.setFillStyle(0x3a6aaa));
-      restartBtn.on("pointerout",  () => restartBtn.setFillStyle(0x2a4a7a));
-      restartBtn.on("pointerup",   () => PhaseManager.transition({ type: 'replay' }));
+      new Button({
+        scene: this, x: leftX, y: btnY, w: btnW, h: btnH,
+        label: "Restart Battle", style: "navy",
+        onClick: () => PhaseManager.transition({ type: 'replay' }),
+      }).setDepth(31);
 
       if (isDebugBattle) {
-        const exitBtn = this.add
-          .rectangle(rightX, btnY, btnW, btnH, 0x2a6a2a)
-          .setDepth(31)
-          .setInteractive({ useHandCursor: true });
-        this.add
-          .text(rightX, btnY, "Exit Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
-          .setOrigin(0.5)
-          .setDepth(32);
-        exitBtn.on("pointerover", () => exitBtn.setFillStyle(0x3a8a3a));
-        exitBtn.on("pointerout",  () => exitBtn.setFillStyle(0x2a6a2a));
-        exitBtn.on("pointerup",   () => PhaseManager.transition({ type: 'exit_battle' }));
+        new Button({
+          scene: this, x: rightX, y: btnY, w: btnW, h: btnH,
+          label: "Exit Battle", style: "primary",
+          onClick: () => PhaseManager.transition({ type: 'exit_battle' }),
+        }).setDepth(31);
       }
     }
   }
