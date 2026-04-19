@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { GameState } from "../core/GameState";
 import { PhaseManager } from "../core/PhaseManager";
+import { Button } from "../ui/Button";
 
 export class MainMenu extends Phaser.Scene {
   constructor() {
@@ -30,29 +31,16 @@ export class MainMenu extends Phaser.Scene {
     const btnH = Math.round(56 * LAYOUT_SCALE);
     const btnY = h / 2 + Math.round(40 * LAYOUT_SCALE);
 
-    const btn = this.add
-      .rectangle(w / 2, btnY, btnW, btnH, 0x2a6a2a)
-      .setInteractive({ useHandCursor: true });
-    this.add
-      .text(w / 2, btnY, "Play", {
-        fontSize: `${Math.round(26 * LAYOUT_SCALE)}px`,
-        color: "#ffffff",
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5);
+    new Button({
+      scene: this, x: w / 2, y: btnY, w: btnW, h: btnH,
+      label: "Play", style: "primary",
+      onClick: () => PhaseManager.transition({ type: 'play' }),
+    });
 
-    btn.on("pointerover", () => btn.setFillStyle(0x3a8a3a));
-    btn.on("pointerout",  () => btn.setFillStyle(0x2a6a2a));
-    btn.on("pointerup",   () => PhaseManager.transition({ type: 'play' }));
-
-    const debugBtnY = btnY + Math.round(70 * LAYOUT_SCALE);
-    const debugBtn = this.add
-      .rectangle(w / 2, debugBtnY, btnW, btnH, 0x444444)
-      .setInteractive({ useHandCursor: true });
-    this.add.text(w / 2, debugBtnY, "Debug Battle", {
-      fontSize: `${Math.round(20 * LAYOUT_SCALE)}px`,
-      color: "#aaaaaa",
-    }).setOrigin(0.5);
-    debugBtn.on("pointerup", () => PhaseManager.transition({ type: 'debug' }));
+    new Button({
+      scene: this, x: w / 2, y: btnY + Math.round(70 * LAYOUT_SCALE), w: btnW, h: btnH,
+      label: "Debug Battle", style: "dark",
+      onClick: () => PhaseManager.transition({ type: 'debug' }),
+    });
   }
 }

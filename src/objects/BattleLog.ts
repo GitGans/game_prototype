@@ -46,7 +46,6 @@ export class BattleLog extends Phaser.GameObjects.Container {
     x: number,
     y: number,
     width: number,
-    height: number,
   ) {
     super(scene, x, y);
     this.panelW = width;

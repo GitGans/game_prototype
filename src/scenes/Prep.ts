@@ -11,9 +11,11 @@ import {
   canUnitEquipItem,
   getEquippedBonuses,
 } from "../battle/itemOps";
+import { Button } from "../ui/Button";
+import { ItemTooltip, ItemTooltipData } from "../objects/ItemTooltip";
 
 export class Prep extends Phaser.Scene {
-  private _itemDescPanel: Phaser.GameObjects.Container | null = null;
+  private itemTooltip!: ItemTooltip;
   private _activePanel: Phaser.GameObjects.Container | null = null;
   private _isCampMode = false;
   private battleBtn!: Phaser.GameObjects.Rectangle;
@@ -23,123 +25,32 @@ export class Prep extends Phaser.Scene {
     super("Prep");
   }
 
-  private _showItemHover(
-    instanceId: string,
-    unitClass: UnitClass,
-    anchorX: number,
-    anchorY: number,
-  ): void {
-    this._itemDescPanel?.destroy(true);
-
+  private _buildItemTooltipData(instanceId: string, unitClass: UnitClass): ItemTooltipData | null {
     const inst = GameState.itemInstances[instanceId];
-    const def = inst ? ITEM_DEFINITIONS[inst.definitionId] : undefined;
-    if (!def) return;
+    const def  = inst ? ITEM_DEFINITIONS[inst.definitionId] : undefined;
+    if (!def) return null;
 
     const STAT_LABELS: [keyof typeof def.statBonuses, string][] = [
-      ["hp", "HP"],
-      ["physicalDamage", "Phys Dmg"],
-      ["magicalDamage", "Magic Dmg"],
+      ["hp",              "HP"],
+      ["physicalDamage",  "Phys Dmg"],
+      ["magicalDamage",   "Magic Dmg"],
       ["physicalDefense", "Phys Def"],
-      ["magicalDefense", "Magic Def"],
+      ["magicalDefense",  "Magic Def"],
     ];
 
-    const statEntries = STAT_LABELS.filter(
-      ([k]) => (def.statBonuses[k] ?? 0) !== 0,
-    ).map(([k, label]) => ({ label, value: def.statBonuses[k] as number }));
+    const stats = STAT_LABELS
+      .filter(([k]) => (def.statBonuses[k] ?? 0) !== 0)
+      .map(([k, label]) => ({ label, value: def.statBonuses[k] as number }));
 
-    const hasClassRestriction =
-      def.allowedClasses !== undefined && def.allowedClasses.length > 0;
-    const classLineColor = hasClassRestriction
-      ? def.allowedClasses!.includes(unitClass)
-        ? "#44ff88"
-        : "#ff4444"
-      : "#cccccc";
+    const hasRestriction = (def.allowedClasses?.length ?? 0) > 0;
+    const classAllowed   = hasRestriction ? def.allowedClasses!.includes(unitClass) : null;
 
-    const totalLines = 1 + statEntries.length + (hasClassRestriction ? 1 : 0);
-
-    const panelW = Math.round(250 * LAYOUT_SCALE);
-    const lineH = Math.round(16 * LAYOUT_SCALE);
-    const padV = Math.round(8 * LAYOUT_SCALE);
-    const padH = Math.round(8 * LAYOUT_SCALE);
-    const panelH = padV * 2 + totalLines * lineH;
-
-    const GAP = Math.round(6 * LAYOUT_SCALE);
-    const panelX = anchorX + GAP + panelW / 2;
-    const panelY = anchorY;
-
-    const panel = this.add.container(0, 0).setDepth(50);
-
-    panel.add(
-      this.add
-        .rectangle(panelX, panelY, panelW + 2, panelH + 2, 0x6666aa)
-        .setDepth(49),
-    );
-    panel.add(
-      this.add
-        .rectangle(panelX, panelY, panelW, panelH, 0x111122)
-        .setAlpha(0.95)
-        .setDepth(50),
-    );
-
-    const textX = panelX - panelW / 2 + padH;
-    const topY = panelY - panelH / 2 + padV;
-    const valCol = Math.round(90 * LAYOUT_SCALE);
-
-    // Line 0: item name
-    panel.add(
-      this.add
-        .text(textX, topY, def.name, {
-          fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
-          fontStyle: "bold",
-        })
-        .setDepth(51),
-    );
-
-    // Lines 1..N: stats — label (gray) + value (green if positive, red if negative)
-    statEntries.forEach(({ label, value }, i) => {
-      const y = topY + (i + 1) * lineH;
-      const valueColor = value > 0 ? "#44ff88" : "#ff4444";
-      const sign = value > 0 ? "+" : "";
-
-      panel.add(
-        this.add
-          .text(textX, y, `${label}:`, {
-            fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-            color: "#cccccc",
-          })
-          .setDepth(51),
-      );
-      panel.add(
-        this.add
-          .text(textX + valCol, y, `${sign}${value}`, {
-            fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-            color: valueColor,
-          })
-          .setDepth(51),
-      );
-    });
-
-    // Last line: class restriction
-    if (hasClassRestriction) {
-      const y = topY + (1 + statEntries.length) * lineH;
-      panel.add(
-        this.add
-          .text(textX, y, `Classes: ${def.allowedClasses!.join(", ")}`, {
-            fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-            color: classLineColor,
-            wordWrap: { width: panelW - padH * 2 },
-          })
-          .setDepth(51),
-      );
-    }
-
-    this._itemDescPanel = panel;
-  }
-
-  private _clearItemDesc(): void {
-    this._itemDescPanel?.destroy(true);
-    this._itemDescPanel = null;
+    return {
+      name:             def.name,
+      stats,
+      classRestriction: hasRestriction ? def.allowedClasses!.join(", ") : null,
+      classAllowed,
+    };
   }
 
   create(): void {
@@ -148,6 +59,8 @@ export class Prep extends Phaser.Scene {
 
     const w = this.scale.width;
     const h = this.scale.height;
+
+    this.itemTooltip = new ItemTooltip(this);
 
     this.add.rectangle(w / 2, h / 2, w, h, 0x1a1a2e);
     this.add
@@ -495,12 +408,12 @@ export class Prep extends Phaser.Scene {
     w: number,
     h: number,
   ): void {
-    this._clearItemDesc();
+    this.itemTooltip.hide();
     const detail = this.add.container(0, 0).setDepth(20);
 
     const onEsc = () => {
       detail.destroy(true);
-      this._clearItemDesc();
+      this.itemTooltip.hide();
       this.refreshPartyPanel(partyPanel, w, h);
       partyPanel.setVisible(true);
       this._activePanel = partyPanel;
@@ -514,7 +427,7 @@ export class Prep extends Phaser.Scene {
       .setDepth(19);
     detail.add(overlay);
     overlay.on("pointerup", () => {
-      this._clearItemDesc();
+      this.itemTooltip.hide();
     });
 
     // ── Window ────────────────────────────────────────────────────────────────
@@ -685,11 +598,12 @@ export class Prep extends Phaser.Scene {
         cell.setInteractive({ useHandCursor: true });
         cell.on("pointerover", () => {
           cell.setFillStyle(0x2e2e4e);
-          this._showItemHover(equippedId!, bp.unitClass, cx + EQ_CELL / 2, cy);
+          const data = this._buildItemTooltipData(equippedId!, bp.unitClass);
+          if (data) this.itemTooltip.show(data, cx + EQ_CELL / 2, cy, "right");
         });
         cell.on("pointerout", () => {
           cell.setFillStyle(bgColor);
-          this._clearItemDesc();
+          this.itemTooltip.hide();
         });
         cell.on(
           "pointerup",
@@ -700,7 +614,7 @@ export class Prep extends Phaser.Scene {
             event: Phaser.Types.Input.EventData,
           ) => {
             event.stopPropagation();
-            this._clearItemDesc();
+            this.itemTooltip.hide();
             this.input.keyboard!.off("keydown-ESC", onEsc);
             unequipItem(
               bp.templateId,
@@ -814,7 +728,7 @@ export class Prep extends Phaser.Scene {
     );
     rightY += Math.round(20 * LAYOUT_SCALE);
 
-    const skill = bp.skill;
+    const skill = bp.skills[0];
     if (skill) {
       const skillLines: { text: string; color: string }[] = [
         { text: skill.name, color: "#ffffff" },
@@ -908,16 +822,12 @@ export class Prep extends Phaser.Scene {
             cell.setInteractive({ useHandCursor: true });
             cell.on("pointerover", () => {
               cell.setFillStyle(0x3a3a6a);
-              this._showItemHover(
-                instanceId!,
-                bp.unitClass,
-                cellCX + BP_CELL / 2,
-                cellCY,
-              );
+              const data = this._buildItemTooltipData(instanceId!, bp.unitClass);
+              if (data) this.itemTooltip.show(data, cellCX + BP_CELL / 2, cellCY, "right");
             });
             cell.on("pointerout", () => {
               cell.setFillStyle(bgColor);
-              this._clearItemDesc();
+              this.itemTooltip.hide();
             });
             cell.on(
               "pointerup",
@@ -929,7 +839,7 @@ export class Prep extends Phaser.Scene {
               ) => {
                 if (!instanceId) return;
                 event.stopPropagation();
-                this._clearItemDesc();
+                this.itemTooltip.hide();
                 this.input.keyboard!.off("keydown-ESC", onEsc);
                 equipItem(
                   bp.templateId,
@@ -950,33 +860,18 @@ export class Prep extends Phaser.Scene {
 
     // ── Back button ───────────────────────────────────────────────────────────
     const backBtnY = winCY + WIN_H / 2 - Math.round(24 * LAYOUT_SCALE);
-    const backBtn = this.add
-      .rectangle(
-        w / 2,
-        backBtnY,
-        Math.round(120 * LAYOUT_SCALE),
-        Math.round(30 * LAYOUT_SCALE),
-        0x4a4a6a,
-      )
-      .setInteractive({ useHandCursor: true })
-      .setDepth(21);
+    const backBtn = new Button({
+      scene: this,
+      x: w / 2, y: backBtnY,
+      w: Math.round(120 * LAYOUT_SCALE), h: Math.round(30 * LAYOUT_SCALE),
+      label: "← Back", style: "neutral",
+      onClick: () => {
+        this.input.keyboard!.off("keydown-ESC", onEsc);
+        detail.destroy(true);
+        this.refreshPartyPanel(partyPanel, w, h);
+      },
+    }).setDepth(21);
     detail.add(backBtn);
-    detail.add(
-      this.add
-        .text(w / 2, backBtnY, "← Back", {
-          fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-          color: "#ffffff",
-        })
-        .setOrigin(0.5)
-        .setDepth(22),
-    );
-    backBtn.on("pointerover", () => backBtn.setFillStyle(0x5a5a8a));
-    backBtn.on("pointerout", () => backBtn.setFillStyle(0x4a4a6a));
-    backBtn.on("pointerup", () => {
-      this.input.keyboard!.off("keydown-ESC", onEsc);
-      detail.destroy(true);
-      this.refreshPartyPanel(partyPanel, w, h);
-    });
   }
 
   // ── Shared helpers ──────────────────────────────────────────────────────────
@@ -988,30 +883,17 @@ export class Prep extends Phaser.Scene {
   ): void {
     const x = w / 2 + Math.round(220 * LAYOUT_SCALE);
     const y = h / 2 - Math.round(185 * LAYOUT_SCALE);
+    const sz = Math.round(36 * LAYOUT_SCALE);
 
-    const closeBtn = this.add
-      .rectangle(
-        x,
-        y,
-        Math.round(36 * LAYOUT_SCALE),
-        Math.round(36 * LAYOUT_SCALE),
-        0x6a2a2a,
-      )
-      .setInteractive({ useHandCursor: true })
-      .setDepth(11);
-    const closeText = this.add
-      .text(x, y, "✕", {
-        fontSize: `${Math.round(16 * LAYOUT_SCALE)}px`,
-        color: "#ffffff",
-      })
-      .setOrigin(0.5)
-      .setDepth(12);
-
-    closeBtn.on("pointerup", () => {
-      panel.setVisible(false);
-      this._activePanel = null;
-    });
-    panel.add([closeBtn, closeText]);
+    const closeBtn = new Button({
+      scene: this, x, y, w: sz, h: sz,
+      label: "✕", style: "danger",
+      onClick: () => {
+        panel.setVisible(false);
+        this._activePanel = null;
+      },
+    }).setDepth(11);
+    panel.add(closeBtn);
   }
 
   private _showEnemyGroupSelector(): void {
@@ -1039,22 +921,16 @@ export class Prep extends Phaser.Scene {
 
     races.forEach(({ label, groupId }, i) => {
       const btnY = 20 + i * 50 + 15;
-      const btn = this.add
-        .rectangle(panelW / 2, btnY, 160, 38, 0x334466)
-        .setInteractive({ useHandCursor: true });
-      const txt = this.add.text(panelW / 2, btnY, label, {
-        fontSize: '18px', color: '#ffffff',
-      }).setOrigin(0.5);
-
-      btn.on('pointerover', () => btn.setFillStyle(0x4455aa));
-      btn.on('pointerout',  () => btn.setFillStyle(0x334466));
-      btn.on('pointerup',   () => {
-        container.destroy();
-        this._activePanel = null;
-        PhaseManager.transition({ type: 'start_battle', enemyGroupId: groupId });
+      const btn = new Button({
+        scene: this, x: panelW / 2, y: btnY, w: 160, h: 38,
+        label, style: "ghost",
+        onClick: () => {
+          container.destroy();
+          this._activePanel = null;
+          PhaseManager.transition({ type: 'start_battle', enemyGroupId: groupId });
+        },
       });
-
-      container.add([btn, txt]);
+      container.add(btn);
     });
 
     this._activePanel = container;

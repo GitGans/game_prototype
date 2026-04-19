@@ -167,7 +167,7 @@ export class UnitView extends Phaser.GameObjects.Container {
       const worldX = this.x + x;
       const worldY = this.y + y;
       sq.on('pointerover', () => {
-        this.effectTooltip?.show(ae, worldX, worldY, this.isPlayer);
+        this.effectTooltip?.show(ae, worldX, worldY, this.isPlayer ? "left" : "right");
       });
       sq.on('pointerout', () => {
         this.effectTooltip?.hide();

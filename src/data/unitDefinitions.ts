@@ -1,4 +1,4 @@
-import { UnitBlueprint, UnitClass, UnitRace } from "../battle/types";
+import { UnitBlueprint, UnitRace } from "../battle/types";
 import { SHAPES } from "../battle/shapes";
 import { SKILLS } from "./skillDefinitions";
 
@@ -6,7 +6,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "pikeman",
     name: "Pikeman",
-    unitClass: "pikeman" as UnitClass,
+    unitClass: "pikeman",
     hp: 55,
     physicalDamage: 10,
     magicalDamage: 0,
@@ -29,7 +29,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "warrior",
     name: "Warrior",
-    unitClass: "warrior" as UnitClass,
+    unitClass: "warrior",
     hp: 50,
     physicalDamage: 12,
     magicalDamage: 0,
@@ -52,7 +52,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "halberdist",
     name: "Halberdist",
-    unitClass: "halberdist" as UnitClass,
+    unitClass: "halberdist",
     hp: 80,
     physicalDamage: 8,
     magicalDamage: 0,
@@ -75,7 +75,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "crusher",
     name: "Crusher",
-    unitClass: "crusher" as UnitClass,
+    unitClass: "crusher",
     hp: 25,
     physicalDamage: 18,
     magicalDamage: 0,
@@ -98,7 +98,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "archer",
     name: "Archer",
-    unitClass: "archer" as UnitClass,
+    unitClass: "archer",
     hp: 20,
     physicalDamage: 10,
     magicalDamage: 0,
@@ -121,7 +121,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "crossbowman",
     name: "Crossbowman",
-    unitClass: "crossbowman" as UnitClass,
+    unitClass: "crossbowman",
     hp: 25,
     physicalDamage: 8,
     magicalDamage: 0,
@@ -144,7 +144,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "stormbearer",
     name: "Stormbearer",
-    unitClass: "stormbearer" as UnitClass,
+    unitClass: "stormbearer",
     hp: 15,
     physicalDamage: 0,
     magicalDamage: 15,
@@ -167,7 +167,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "hieromonk",
     name: "Hieromonk",
-    unitClass: "hieromonk" as UnitClass,
+    unitClass: "hieromonk",
     hp: 55,
     physicalDamage: 8,
     magicalDamage: 8,
@@ -190,7 +190,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "warcryer",
     name: "Warcryer",
-    unitClass: "warcryer" as UnitClass,
+    unitClass: "warcryer",
     hp: 35,
     physicalDamage: 20,
     magicalDamage: 15,
@@ -213,7 +213,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "therapist",
     name: "Therapist",
-    unitClass: "therapist" as UnitClass,
+    unitClass: "therapist",
     hp: 25,
     physicalDamage: 0,
     magicalDamage: 10,
@@ -236,7 +236,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "schemamonk",
     name: "Schemamonk",
-    unitClass: "schemamonk" as UnitClass,
+    unitClass: "schemamonk",
     hp: 20,
     physicalDamage: 0,
     magicalDamage: 11,
@@ -259,7 +259,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "tank",
     name: "Tank",
-    unitClass: "tank" as UnitClass,
+    unitClass: "tank",
     hp: 60,
     physicalDamage: 14,
     magicalDamage: 0,
@@ -302,7 +302,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_tank",
       name: "Orc Guardian",
-      unitClass: "warrior" as UnitClass,
+      unitClass: "warrior",
       hp: 90,
       physicalDamage: 9,
       magicalDamage: 0,
@@ -320,7 +320,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_dd",
       name: "Orc Fighter",
-      unitClass: "warrior" as UnitClass,
+      unitClass: "warrior",
       hp: 45,
       physicalDamage: 13,
       magicalDamage: 0,
@@ -338,7 +338,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_archer",
       name: "Orc Archer",
-      unitClass: "ranger" as UnitClass,
+      unitClass: "ranger",
       hp: 22,
       physicalDamage: 10,
       magicalDamage: 0,
@@ -356,7 +356,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_mage",
       name: "Shaman",
-      unitClass: "mage" as UnitClass,
+      unitClass: "mage",
       hp: 20,
       physicalDamage: 0,
       magicalDamage: 11,
@@ -374,7 +374,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_healer",
       name: "Orc Healer",
-      unitClass: "priest" as UnitClass,
+      unitClass: "priest",
       hp: 22,
       physicalDamage: 0,
       magicalDamage: 10,
@@ -394,7 +394,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_tank",
       name: "Demon Guardian",
-      unitClass: "warrior" as UnitClass,
+      unitClass: "warrior",
       hp: 70,
       physicalDamage: 5,
       magicalDamage: 5,
@@ -412,7 +412,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_dd",
       name: "Demon",
-      unitClass: "warrior" as UnitClass,
+      unitClass: "warrior",
       hp: 40,
       physicalDamage: 8,
       magicalDamage: 0,
@@ -430,7 +430,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_archer",
       name: "Demon Archer",
-      unitClass: "ranger" as UnitClass,
+      unitClass: "ranger",
       hp: 18,
       physicalDamage: 9,
       magicalDamage: 0,
@@ -448,7 +448,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_mage",
       name: "Warlock",
-      unitClass: "mage" as UnitClass,
+      unitClass: "mage",
       hp: 22,
       physicalDamage: 0,
       magicalDamage: 6,
@@ -466,7 +466,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_healer",
       name: "Fallen Priest",
-      unitClass: "priest" as UnitClass,
+      unitClass: "priest",
       hp: 18,
       physicalDamage: 0,
       magicalDamage: 15,
@@ -486,7 +486,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_tank",
       name: "Bone Guardian",
-      unitClass: "warrior" as UnitClass,
+      unitClass: "warrior",
       hp: 60,
       physicalDamage: 5,
       magicalDamage: 0,
@@ -504,7 +504,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_dd",
       name: "Zombie",
-      unitClass: "warrior" as UnitClass,
+      unitClass: "warrior",
       hp: 35,
       physicalDamage: 10,
       magicalDamage: 0,
@@ -522,7 +522,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_archer",
       name: "Skeleton Archer",
-      unitClass: "ranger" as UnitClass,
+      unitClass: "ranger",
       hp: 15,
       physicalDamage: 9,
       magicalDamage: 0,
@@ -540,7 +540,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_mage",
       name: "Necromancer",
-      unitClass: "mage" as UnitClass,
+      unitClass: "mage",
       hp: 18,
       physicalDamage: 0,
       magicalDamage: 10,
@@ -558,7 +558,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_healer",
       name: "Lich",
-      unitClass: "priest" as UnitClass,
+      unitClass: "priest",
       hp: 18,
       physicalDamage: 0,
       magicalDamage: 10,

@@ -1,12 +1,11 @@
 import { ItemDefinition, ItemStatBonuses } from "../battle/types";
 
 const STAT_LABELS: Record<keyof ItemStatBonuses, string> = {
-  hp:              "HP",
-  physicalDamage:  "Physical Damage",
-  magicalDamage:   "Magical Damage",
+  hp: "HP",
+  physicalDamage: "Physical Damage",
+  magicalDamage: "Magical Damage",
   physicalDefense: "Physical Defense",
-  magicalDefense:  "Magical Defense",
-  healAmount:      "Heal Amount",
+  magicalDefense: "Magical Defense",
 };
 
 export function getItemDescription(def: ItemDefinition): string {
