@@ -29,7 +29,10 @@ import {
   Unit,
   UnitBlueprint,
   SpriteSheetConfig,
+  UnitRace,
 } from "../battle/types";
+import { PhaseManager } from '../core/PhaseManager';
+import { ENEMY_GROUPS } from '../data/enemyGroupDefinitions';
 import { PLAYER_UNITS, ENEMY_UNITS } from "../data/unitDefinitions";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
@@ -48,6 +51,7 @@ import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/in
 import {
   autoPlacePlayer,
   autoPlaceEnemies,
+  replayPlaceEnemies,
   createUnitInstance,
   blueprintFromUnit,
   getPlayerAverageLevel,
@@ -294,16 +298,30 @@ export class Game extends Phaser.Scene {
   // ─── Battle Initialisation ─────────────────────────────────────────────────
 
   private initBattle(): void {
-    const data = this.scene.settings.data as { replay?: boolean } | undefined;
-    const isReplay = data?.replay === true;
-
     let state = GameState.get();
     state = autoPlacePlayer(state);
-    state = autoPlaceEnemies(
-      state,
-      getPlayerAverageLevel(state),
-      isReplay ? (GameState.lastEnemyRace ?? undefined) : undefined,
-    );
+
+    const playerAvgLevel = getPlayerAverageLevel(state);
+    const phase = PhaseManager.getPhase();
+    let forceRace: UnitRace | undefined;
+    let enemyLevel: number | undefined;
+    if (phase.type === 'battle') {
+      const group = ENEMY_GROUPS[phase.enemyGroupId];
+      if (group) {
+        forceRace = group.race;
+        enemyLevel = group.levelOverride;
+      }
+    }
+
+    const saved = GameState.lastEnemyPlacements;
+    if (saved) {
+      state = replayPlaceEnemies(state, saved);
+    } else {
+      state = autoPlaceEnemies(state, enemyLevel ?? playerAvgLevel, forceRace);
+      GameState.lastEnemyPlacements = [...state.units.values()]
+        .filter(u => u.id.startsWith('e'))
+        .map(u => ({ templateId: u.templateId, anchor: u.anchor, level: u.level }));
+    }
 
     // Determine the highest player instance counter used so we can continue from there
     this.playerIdCounter = state.units.size; // rough upper bound; refined below
@@ -2206,7 +2224,7 @@ export class Game extends Phaser.Scene {
         .setDepth(32);
       restartBtn.on("pointerover", () => restartBtn.setFillStyle(0x6a6a8a));
       restartBtn.on("pointerout",  () => restartBtn.setFillStyle(0x4a4a6a));
-      restartBtn.on("pointerup",   () => this.scene.restart({ replay: true }));
+      restartBtn.on("pointerup",   () => PhaseManager.transition({ type: 'replay' }));
 
       // Exit Battle — return to prep screen
       const exitBtn = this.add
@@ -2247,21 +2265,42 @@ export class Game extends Phaser.Scene {
           GameState.playerUnitLevels[bp.templateId] = currentLevel + 1;
         });
 
-        this.scene.start("Prep");
+        PhaseManager.transition({ type: 'exit_battle' });
       });
     } else {
-      // Defeat — single Restart Battle button, no level-up
+      // Defeat — Restart Battle + optional Exit Battle (debug mode)
+      const phase = PhaseManager.getPhase();
+      const isDebugBattle = phase.type === 'battle' && phase.returnPhase.type === 'main_menu';
+
+      const gap    = Math.round(20 * LAYOUT_SCALE);
+      const leftX  = isDebugBattle ? w / 2 - btnW / 2 - gap / 2 : w / 2;
+      const rightX = w / 2 + btnW / 2 + gap / 2;
+
       const restartBtn = this.add
-        .rectangle(w / 2, btnY, btnW, btnH, 0x2a4a7a)
+        .rectangle(leftX, btnY, btnW, btnH, 0x2a4a7a)
         .setDepth(31)
         .setInteractive({ useHandCursor: true });
       this.add
-        .text(w / 2, btnY, "Restart Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
+        .text(leftX, btnY, "Restart Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
         .setOrigin(0.5)
         .setDepth(32);
       restartBtn.on("pointerover", () => restartBtn.setFillStyle(0x3a6aaa));
       restartBtn.on("pointerout",  () => restartBtn.setFillStyle(0x2a4a7a));
-      restartBtn.on("pointerup",   () => this.scene.restart({ replay: true }));
+      restartBtn.on("pointerup",   () => PhaseManager.transition({ type: 'replay' }));
+
+      if (isDebugBattle) {
+        const exitBtn = this.add
+          .rectangle(rightX, btnY, btnW, btnH, 0x2a6a2a)
+          .setDepth(31)
+          .setInteractive({ useHandCursor: true });
+        this.add
+          .text(rightX, btnY, "Exit Battle", { fontSize, color: "#ffffff", fontStyle: "bold" })
+          .setOrigin(0.5)
+          .setDepth(32);
+        exitBtn.on("pointerover", () => exitBtn.setFillStyle(0x3a8a3a));
+        exitBtn.on("pointerout",  () => exitBtn.setFillStyle(0x2a6a2a));
+        exitBtn.on("pointerup",   () => PhaseManager.transition({ type: 'exit_battle' }));
+      }
     }
   }
 }

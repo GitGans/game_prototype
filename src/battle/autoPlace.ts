@@ -135,6 +135,23 @@ export function autoPlacePlayer(state: BattleState): BattleState {
   return { ...state, benchUnits: paddedBench };
 }
 
+export function replayPlaceEnemies(
+  state: BattleState,
+  savedPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }>,
+): BattleState {
+  const allEnemyBlueprints = Object.values(ENEMY_UNITS).flat();
+  let counter = 1;
+  for (const saved of savedPlacements) {
+    const blueprint = allEnemyBlueprints.find(b => b.templateId === saved.templateId);
+    if (!blueprint) continue;
+    const unit = createUnitInstance(blueprint, `e${counter++}`, saved.anchor, saved.level);
+    if (canPlace(saved.anchor, blueprint.shape, state, 'enemy')) {
+      state = placeUnit(unit, state);
+    }
+  }
+  return state;
+}
+
 export function autoPlaceEnemies(
   state: BattleState,
   playerAvgLevel: number = 1,

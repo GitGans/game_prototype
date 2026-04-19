@@ -337,8 +337,8 @@ export const INSTANT_EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
   /** Single target. */
   single: {
     levels: [
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.3)]] }, // level 1 — 70%
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.5)]] }, // level 2 — 90%
+      { anchorRow: 0, anchorCol: 0, cells: [[P(0.3)]] }, // level 1 — 30%
+      { anchorRow: 0, anchorCol: 0, cells: [[P(0.5)]] }, // level 2 — 50%
     ],
   },
 
@@ -427,22 +427,29 @@ export function getVampirismPercent(block: PostDamageBlock): number {
 // ─── Skill Definitions ────────────────────────────────────────────────────────
 
 export const SKILLS: Record<string, Skill> = {
-  basic_melee: {
-    id: "basic_melee",
+  p_melee_basic: {
+    id: "p_melee_basic",
     name: "Strike",
     actionType: "melee",
     damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
   },
 
-  basic_ranged: {
-    id: "basic_ranged",
+  p_ranged_basic: {
+    id: "p_ranged_basic",
     name: "Shot",
     actionType: "ranged",
     damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
   },
 
-  slowing_ranged: {
-    id: "slowing_ranged",
+  m_ranged_basic: {
+    id: "m_ranged_basic",
+    name: "Magic Shot",
+    actionType: "ranged",
+    damageBlock: { matrixName: "single", damageType: "magical", level: 1 },
+  },
+
+  p_ranged_slowing: {
+    id: "p_ranged_slowing",
     name: "Arrow that breaks legs",
     actionType: "ranged",
     damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
@@ -456,8 +463,8 @@ export const SKILLS: Record<string, Skill> = {
     },
   },
 
-  basic_heal: {
-    id: "basic_heal",
+  m_heal_basic: {
+    id: "m_heal_basic",
     name: "Heal",
     actionType: "mass_enchantment",
     damageBlock: { matrixName: "single", damageType: "magical", level: 1 },

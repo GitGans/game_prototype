@@ -1,0 +1,86 @@
+import { SubMapDefinition } from "../world/types";
+
+const test01: SubMapDefinition = {
+  id: "test_01",
+  startPos: { x: 2, y: 8 },
+  layout: [
+    [
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+    ],
+    ["wall", null, null, null, null, null, null, null, null, "wall"],
+    [
+      "wall",
+      null,
+      { type: "mob", id: "orc_patrol" },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "wall",
+    ],
+    ["wall", null, null, null, "wall", null, null, null, null, "wall"],
+    [
+      "wall",
+      null,
+      null,
+      "wall",
+      { type: "camp", id: "main" },
+      null,
+      null,
+      null,
+      null,
+      "wall",
+    ],
+    ["wall", null, null, "wall", null, null, null, null, null, "wall"],
+    [
+      "wall",
+      null,
+      "wall",
+      null,
+      null,
+      { type: "mob", id: "demon_patrol" },
+      null,
+      null,
+      null,
+      "wall",
+    ],
+    ["wall", null, null, null, null, null, null, null, "wall", "wall"],
+    ["wall", null, null, null, null, null, null, null, null, "wall"],
+    [
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+    ],
+  ],
+  entities: {
+    mob: {
+      orc_patrol: { enemyGroupId: "orc_patrol" },
+      demon_patrol: { enemyGroupId: "demon_patrol" },
+    },
+    camp: {
+      main: {},
+    },
+  },
+};
+
+export const MAP_DEFINITIONS: Record<string, SubMapDefinition> = {
+  test_01: test01,
+};

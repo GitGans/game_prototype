@@ -2,8 +2,10 @@ import Phaser from 'phaser';
 import { Boot }      from './scenes/Boot';
 import { Preloader } from './scenes/Preloader';
 import { MainMenu }  from './scenes/MainMenu';
+import { WorldMap }  from './scenes/WorldMap';
 import { Prep }      from './scenes/Prep';
-import { Game }      from './scenes/Game';
+import { Game }       from './scenes/Game';
+import { MapVictory } from './scenes/MapVictory';
 
 export const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -12,7 +14,7 @@ export const config: Phaser.Types.Core.GameConfig = {
   backgroundColor: '#1a1a2e',
   pixelArt: true,
   resolution: window.devicePixelRatio,
-  scene: [Boot, Preloader, MainMenu, Prep, Game],
+  scene: [Boot, Preloader, MainMenu, WorldMap, Prep, Game, MapVictory],
   parent: document.body,
   scale: {
     mode: Phaser.Scale.NONE,
