@@ -2,10 +2,4 @@ node_modules/
 dist/
 .claude/
 .agents/
-*.claude.md
-CLAUDE.md
-*.CLAUDE.md
 iterations/
-package-lock.json
-package.json
-skills-lock.json
