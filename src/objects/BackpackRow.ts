@@ -1,7 +1,7 @@
-import Phaser from 'phaser';
-import { BackpackSnapshot, ItemSlotSnapshot } from '../battle/types';
-import { ItemTooltip } from './ItemTooltip';
-import { ItemCell } from './ItemCell';
+import Phaser from "phaser";
+import { BackpackSnapshot, ItemSlotSnapshot } from "../battle/types";
+import { ItemTooltip } from "./ItemTooltip";
+import { ItemCell } from "./ItemCell";
 
 export class BackpackRow extends Phaser.GameObjects.Container {
   private cells: ItemCell[] = [];
@@ -38,11 +38,16 @@ export class BackpackRow extends Phaser.GameObjects.Container {
         y: cellWorldY,
         size: cellSize,
         slotKey: String(i),
-        slotLabel: String(i + 1),
+        slotLabel: "",
         item,
         tooltip,
         onClick: (it) => {
-          if (it) onItemClick(it, cellWorldX + cellSize / 2, cellWorldY + cellSize / 2);
+          if (it)
+            onItemClick(
+              it,
+              cellWorldX + cellSize / 2,
+              cellWorldY + cellSize / 2,
+            );
         },
       });
       this.cells.push(cell);
