@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
 import { GameState } from '../core/GameState';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
@@ -124,11 +125,25 @@ export class WorldMap extends Phaser.Scene {
       label: "Debug Battle", style: "dark",
       onClick: () => PhaseManager.transition({ type: 'debug' }),
     });
+    this.buildCharactersButton();
 
     new Button({
       scene: this, x: this.scale.width - 90, y: 30, w: 140, h: 36,
       label: "Main Menu", style: "danger",
       onClick: () => PhaseManager.transition({ type: 'exit_to_menu' }),
+    });
+  }
+
+  private buildCharactersButton(): void {
+    new Button({
+      scene: this,
+      x: Math.round(70  * LAYOUT_SCALE),
+      y: Math.round(75  * LAYOUT_SCALE),
+      w: Math.round(130 * LAYOUT_SCALE),
+      h: Math.round(36  * LAYOUT_SCALE),
+      label: 'Characters',
+      style: 'navy',
+      onClick: () => PhaseManager.transition({ type: 'open_equip_screen', unitTemplateId: '' }),
     });
   }
 

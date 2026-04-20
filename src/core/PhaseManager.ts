@@ -59,12 +59,14 @@ class PhaseManagerClass {
           GameState.itemInstances,
           ITEM_DEFINITIONS,
         );
-        const unitEquipment = buildEquipmentSnapshot(
-          phase.selectedUnitTemplateId,
-          GameState.itemContainers,
-          GameState.itemInstances,
-          ITEM_DEFINITIONS,
-        );
+        const unitEquipment = phase.selectedUnitTemplateId
+          ? buildEquipmentSnapshot(
+              phase.selectedUnitTemplateId,
+              GameState.itemContainers,
+              GameState.itemInstances,
+              ITEM_DEFINITIONS,
+            )
+          : EMPTY_EQUIP_SNAPSHOT;
         const availableUnits: UnitTabSnapshot[] = PLAYER_UNITS.map(bp => ({
           templateId: bp.templateId,
           name: bp.name,
@@ -276,7 +278,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
     // ── Equip screen navigation ──────────────────────────────────────────────
 
     case 'open_equip_screen':
-      if (current.type !== 'world_map') return null;
+      if (current.type !== 'world_map' && current.type !== 'debug_prep' && current.type !== 'camp') return null;
       return {
         type: 'equip_screen',
         selectedUnitTemplateId: action.unitTemplateId,
@@ -321,7 +323,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
 // ─── Helpers (kept for future shop phase) ─────────────────────────────────────
 
 function _findFreeBackpackSlotKey(container: any): string | null {
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 10; i++) {
     if (container.slots[String(i)] === undefined) return String(i);
   }
   return null;

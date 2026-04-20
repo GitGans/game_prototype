@@ -101,6 +101,35 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.setVisible(true);
   }
 
+  showFixedFromBlueprint(
+    bp:      UnitBlueprint,
+    level:   number,
+    bonuses: Partial<import('../battle/types').BattleStatBonuses>,
+    x: number, y: number, w: number,
+  ): void {
+    const scale = 1 + 0.1 * (level - 1);
+    const data: TooltipData = {
+      templateId:      bp.templateId,
+      name:            bp.name,
+      side:            'player',
+      hp:              Math.round(bp.hp * scale) + (bonuses.hp ?? 0),
+      maxHp:           Math.round(bp.hp * scale) + (bonuses.hp ?? 0),
+      physicalDamage:  { value: Math.round(bp.physicalDamage  * scale) + (bonuses.physicalDamage  ?? 0), base: Math.round(bp.physicalDamage  * scale) },
+      magicalDamage:   { value: Math.round(bp.magicalDamage   * scale) + (bonuses.magicalDamage   ?? 0), base: Math.round(bp.magicalDamage   * scale) },
+      physicalDefense: { value: bp.physicalDefense + (bonuses.physicalDefense ?? 0), base: bp.physicalDefense },
+      magicalDefense:  { value: bp.magicalDefense  + (bonuses.magicalDefense  ?? 0), base: bp.magicalDefense  },
+      dodge:           flat(bp.dodge),
+      block:           flat(bp.block),
+      initiative:      flat(bp.initiative),
+      skills: bp.skills.map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+    };
+    this.clearContent();
+    const h = this.buildContent(data);
+    this.bg.setSize(w, h);
+    this.setPosition(x, y);
+    this.setVisible(true);
+  }
+
   // ── Content builder ────────────────────────────────────────────────────────
 
   protected buildContent(data: TooltipData): number {

@@ -29,7 +29,7 @@ export function canPlace(
 
   if (container.kind === 'backpack') {
     const idx = parseInt(slotKey, 10);
-    return Number.isInteger(idx) && idx >= 0 && idx < 24;
+    return Number.isInteger(idx) && idx >= 0 && idx < 10;
   }
 
   if (container.kind === 'equipment') {
@@ -64,7 +64,7 @@ export function canUnitEquipItem(
  * Returns the first free slot key in a backpack ('0'–'23'), or null if full.
  */
 export function findFreeBackpackSlot(container: ItemContainer): string | null {
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 10; i++) {
     if (container.slots[String(i)] === undefined) return String(i);
   }
   return null;
@@ -364,10 +364,10 @@ export function buildBackpackSnapshot(
   definitions: Record<string, ItemDefinition>,
 ): BackpackSnapshot {
   const backpack = containers['backpack_shared'];
-  const slots: Array<ItemSlotSnapshot | null> = Array(24).fill(null);
+  const slots: Array<ItemSlotSnapshot | null> = Array(10).fill(null);
   if (!backpack) return { slots };
 
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 10; i++) {
     const instanceId = backpack.slots[String(i)];
     if (!instanceId) continue;
     const instance = instances[instanceId];

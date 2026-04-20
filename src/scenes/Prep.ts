@@ -3,16 +3,9 @@ import { LAYOUT_SCALE } from "../core/Constants";
 import { GameState } from "../core/GameState";
 import { PhaseManager } from "../core/PhaseManager";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
-import { UnitBlueprint } from "../battle/types";
-import { ITEM_DEFINITIONS } from "../data/itemDefinitions";
-import {
-  getEquippedBonuses,
-} from "../battle/itemOps";
 import { Button } from "../ui/Button";
-import { ItemTooltip } from "../objects/ItemTooltip";
 
 export class Prep extends Phaser.Scene {
-  private itemTooltip!: ItemTooltip;
   private _activePanel: Phaser.GameObjects.Container | null = null;
   private _isCampMode = false;
   private battleBtn!: Phaser.GameObjects.Rectangle;
@@ -28,8 +21,6 @@ export class Prep extends Phaser.Scene {
 
     const w = this.scale.width;
     const h = this.scale.height;
-
-    this.itemTooltip = new ItemTooltip(this);
 
     this.add.rectangle(w / 2, h / 2, w, h, 0x1a1a2e);
     this.add
@@ -363,250 +354,12 @@ export class Prep extends Phaser.Scene {
 
       row.on("pointerover", () => row.setFillStyle(0x4444aa));
       row.on("pointerout", () => row.setFillStyle(0x333366));
-      row.on("pointerup", () => this.showUnitDetail(panel, bp, w, h));
+      row.on("pointerup", () =>
+        PhaseManager.transition({ type: 'open_equip_screen', unitTemplateId: bp.templateId })
+      );
 
       panel.add([row, rowLabel]);
     });
-  }
-
-  // ── Unit Detail ─────────────────────────────────────────────────────────────
-
-  private showUnitDetail(
-    partyPanel: Phaser.GameObjects.Container,
-    bp: UnitBlueprint,
-    w: number,
-    h: number,
-  ): void {
-    this.itemTooltip.hide();
-    const detail = this.add.container(0, 0).setDepth(20);
-
-    const onEsc = () => {
-      detail.destroy(true);
-      this.itemTooltip.hide();
-      this.refreshPartyPanel(partyPanel, w, h);
-      partyPanel.setVisible(true);
-      this._activePanel = partyPanel;
-    };
-    this.input.keyboard!.once("keydown-ESC", onEsc);
-
-    // ── Transparent overlay: click empty area → close description panel ───────
-    const overlay = this.add
-      .rectangle(w / 2, h / 2, w, h, 0x000000, 0)
-      .setInteractive()
-      .setDepth(19);
-    detail.add(overlay);
-    overlay.on("pointerup", () => {
-      this.itemTooltip.hide();
-    });
-
-    // ── Window ────────────────────────────────────────────────────────────────
-    const WIN_W = Math.round(860 * LAYOUT_SCALE);
-    const WIN_H = Math.round(560 * LAYOUT_SCALE);
-    const winCY = Math.max(WIN_H / 2 + 10, h / 2);
-    detail.add(
-      this.add.rectangle(w / 2, winCY, WIN_W, WIN_H, 0x1a1a3a).setDepth(20),
-    );
-
-    // ── Close button (×) ─────────────────────────────────────────────────────
-    const closeBtn = this.add
-      .text(
-        w / 2 - WIN_W / 2 + WIN_W - Math.round(10 * LAYOUT_SCALE),
-        winCY - WIN_H / 2 + Math.round(18 * LAYOUT_SCALE),
-        "×",
-        { fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`, color: "#aaaaaa" },
-      )
-      .setOrigin(1, 0.5)
-      .setDepth(23)
-      .setInteractive({ useHandCursor: true });
-    detail.add(closeBtn);
-    closeBtn.on("pointerover", () => closeBtn.setColor("#ffffff"));
-    closeBtn.on("pointerout", () => closeBtn.setColor("#aaaaaa"));
-    closeBtn.on("pointerup", () => {
-      this.input.keyboard!.off("keydown-ESC", onEsc);
-      onEsc();
-    });
-
-    // ── Header ────────────────────────────────────────────────────────────────
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-    const scale = 1 + 0.1 * (level - 1);
-    const bonuses = getEquippedBonuses(
-      bp.templateId,
-      GameState.itemContainers,
-      GameState.itemInstances,
-      ITEM_DEFINITIONS,
-    );
-    detail.add(
-      this.add
-        .text(
-          w / 2,
-          winCY - WIN_H / 2 + Math.round(16 * LAYOUT_SCALE),
-          `${bp.name}  —  Level ${level}`,
-          {
-            fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-            color: "#ffdd44",
-            fontStyle: "bold",
-          },
-        )
-        .setOrigin(0.5, 0)
-        .setDepth(21),
-    );
-
-    // ── Layout constants ──────────────────────────────────────────────────────
-    const PAD = Math.round(16 * LAYOUT_SCALE);
-    const EQ_COL_STEP = Math.round(72 * LAYOUT_SCALE); // col stride (64 + 8 gap)
-    const SPRITE_SIZE = Math.round(256 * LAYOUT_SCALE);
-    const HEADER_H = Math.round(36 * LAYOUT_SCALE);
-
-    const winLeft = w / 2 - WIN_W / 2;
-    const contentTopY = winCY - WIN_H / 2 + HEADER_H + PAD;
-
-    // Sprite block center X
-    const EQ_BLOCK_W = 3 * EQ_COL_STEP;
-    const spriteX = winLeft + PAD + EQ_BLOCK_W + PAD + SPRITE_SIZE / 2;
-    const spriteY = contentTopY + SPRITE_SIZE / 2;
-    // Skill block X start
-    const skillX = spriteX + SPRITE_SIZE / 2 + PAD;
-    const skillY = contentTopY;
-    const rightPanelW = winLeft + WIN_W - PAD - skillX;
-
-    // ── CENTER: Unit sprite ───────────────────────────────────────────────────
-    const textureKey = `sprite-${bp.templateId}`;
-    if (this.textures.exists(textureKey)) {
-      detail.add(
-        this.add
-          .image(spriteX, spriteY, textureKey, 0)
-          .setDisplaySize(SPRITE_SIZE, SPRITE_SIZE)
-          .setDepth(21),
-      );
-    } else {
-      detail.add(
-        this.add
-          .rectangle(spriteX, spriteY, SPRITE_SIZE, SPRITE_SIZE, 0x4a4a6a)
-          .setDepth(21),
-      );
-    }
-
-    // ── RIGHT: Stats + Skill ─────────────────────────────────────────────────
-    const lineH = Math.round(18 * LAYOUT_SCALE);
-    let rightY = skillY;
-
-    detail.add(
-      this.add
-        .text(skillX, rightY, "Stats", {
-          fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
-          fontStyle: "bold",
-          wordWrap: { width: rightPanelW },
-        })
-        .setDepth(21),
-    );
-    rightY += Math.round(20 * LAYOUT_SCALE);
-
-    const statLines: { label: string; value: string }[] = [
-      {
-        label: "HP",
-        value: String(Math.round(bp.hp * scale) + (bonuses.hp ?? 0)),
-      },
-      {
-        label: "Phys Dmg",
-        value: String(
-          Math.round(bp.physicalDamage * scale) + (bonuses.physicalDamage ?? 0),
-        ),
-      },
-      {
-        label: "Magic Dmg",
-        value: String(
-          Math.round(bp.magicalDamage * scale) + (bonuses.magicalDamage ?? 0),
-        ),
-      },
-      {
-        label: "Phys Def",
-        value: `${bp.physicalDefense + (bonuses.physicalDefense ?? 0)}%`,
-      },
-      {
-        label: "Magic Def",
-        value: `${bp.magicalDefense + (bonuses.magicalDefense ?? 0)}%`,
-      },
-      { label: "Dodge", value: `${bp.dodge}%` },
-      { label: "Block", value: `${bp.block}%` },
-      { label: "Initiative", value: String(bp.initiative) },
-      // rowTrait is intentionally not displayed — it is an internal auto-placement hint, not a player-facing stat
-    ];
-    statLines.forEach(({ label, value }) => {
-      detail.add(
-        this.add
-          .text(skillX, rightY, `${label}: ${value}`, {
-            fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
-            color: "#cccccc",
-            wordWrap: { width: rightPanelW },
-          })
-          .setDepth(21),
-      );
-      rightY += lineH;
-    });
-
-    rightY += Math.round(8 * LAYOUT_SCALE);
-    detail.add(
-      this.add
-        .text(skillX, rightY, "Skill", {
-          fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
-          fontStyle: "bold",
-          wordWrap: { width: rightPanelW },
-        })
-        .setDepth(21),
-    );
-    rightY += Math.round(20 * LAYOUT_SCALE);
-
-    const skill = bp.skills[0];
-    if (skill) {
-      const skillLines: { text: string; color: string }[] = [
-        { text: skill.name, color: "#ffffff" },
-        {
-          text: skill.damageBlock
-            ? `Damage: ${skill.damageBlock.damageType}`
-            : `Effect only`,
-          color: "#aaaaaa",
-        },
-      ];
-      skillLines.forEach(({ text, color }) => {
-        detail.add(
-          this.add
-            .text(skillX, rightY, text, {
-              fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
-              color,
-              wordWrap: { width: rightPanelW },
-            })
-            .setDepth(21),
-        );
-        rightY += lineH;
-      });
-    } else {
-      detail.add(
-        this.add
-          .text(skillX, rightY, "No skill", {
-            fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
-            color: "#555555",
-            wordWrap: { width: rightPanelW },
-          })
-          .setDepth(21),
-      );
-    }
-
-    // ── Back button ───────────────────────────────────────────────────────────
-    const backBtnY = winCY + WIN_H / 2 - Math.round(24 * LAYOUT_SCALE);
-    const backBtn = new Button({
-      scene: this,
-      x: w / 2, y: backBtnY,
-      w: Math.round(120 * LAYOUT_SCALE), h: Math.round(30 * LAYOUT_SCALE),
-      label: "← Back", style: "neutral",
-      onClick: () => {
-        this.input.keyboard!.off("keydown-ESC", onEsc);
-        detail.destroy(true);
-        this.refreshPartyPanel(partyPanel, w, h);
-      },
-    }).setDepth(21);
-    detail.add(backBtn);
   }
 
   // ── Shared helpers ──────────────────────────────────────────────────────────

@@ -56,7 +56,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     id: 'healing_belt',
     name: 'Healing Belt',
     usage: 'equip_and_activate',
-    equipSlot: 'belt',
+    equipSlot: 'activatable',
     buyPrice: 120,
     battleStatBonuses: { hp: 10, physicalDamage: 0, magicalDamage: 0, physicalDefense: 0, magicalDefense: 0 },
     useEffect: { type: 'heal', amount: 50 },

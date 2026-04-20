@@ -279,7 +279,8 @@ export type EquipSlot =
   | 'gloves'
   | 'belt'
   | 'boots'
-  | 'artifact';
+  | 'artifact'
+  | 'activatable';
 
 export interface BattleStatBonuses {
   hp: number;
@@ -333,7 +334,7 @@ export interface ItemSlotSnapshot {
 }
 
 export interface BackpackSnapshot {
-  // 24 slots in order; null = empty slot
+  // 10 slots in order; null = empty slot
   slots: Array<ItemSlotSnapshot | null>;
 }
 
