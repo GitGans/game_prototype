@@ -1,4 +1,9 @@
-import { EquipSlot, ItemContainer, ItemDefinition, ItemInstance, ItemStatBonuses, UnitClass } from './types';
+import {
+  EquipSlot, ItemContainer, ItemDefinition, ItemInstance,
+  BattleStatBonuses, UnitClass,
+  BackpackSnapshot, EquipmentSnapshot, ItemSlotSnapshot,
+  UnitActivatableAbility, UnitBlueprint,
+} from './types';
 
 // ─── Low-level ────────────────────────────────────────────────────────────────
 
@@ -24,7 +29,7 @@ export function canPlace(
 
   if (container.kind === 'backpack') {
     const idx = parseInt(slotKey, 10);
-    return Number.isInteger(idx) && idx >= 0 && idx < 24;
+    return Number.isInteger(idx) && idx >= 0 && idx < 10;
   }
 
   if (container.kind === 'equipment') {
@@ -59,7 +64,7 @@ export function canUnitEquipItem(
  * Returns the first free slot key in a backpack ('0'–'23'), or null if full.
  */
 export function findFreeBackpackSlot(container: ItemContainer): string | null {
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 10; i++) {
     if (container.slots[String(i)] === undefined) return String(i);
   }
   return null;
@@ -254,26 +259,138 @@ export function getEquippedItems(
     .filter((inst): inst is ItemInstance => inst !== undefined);
 }
 
-/**
- * Sums stat bonuses from all equipped items.
- * Safe: returns {} if no container exists — never throws.
- */
 export function getEquippedBonuses(
   unitTemplateId: string,
   containers: Record<string, ItemContainer>,
   instances: Record<string, ItemInstance>,
   definitions: Record<string, ItemDefinition>,
-): ItemStatBonuses {
+): BattleStatBonuses {
   const equipped = getEquippedItems(unitTemplateId, containers, instances);
-  const bonuses: ItemStatBonuses = {};
-
+  const bonuses: BattleStatBonuses = {
+    hp: 0, physicalDamage: 0, magicalDamage: 0, physicalDefense: 0, magicalDefense: 0,
+  };
   for (const inst of equipped) {
     const def = definitions[inst.definitionId];
     if (!def) continue;
-    for (const [key, value] of Object.entries(def.statBonuses) as [keyof ItemStatBonuses, number][]) {
-      bonuses[key] = (bonuses[key] ?? 0) + value;
+    bonuses.hp              += def.battleStatBonuses.hp;
+    bonuses.physicalDamage  += def.battleStatBonuses.physicalDamage;
+    bonuses.magicalDamage   += def.battleStatBonuses.magicalDamage;
+    bonuses.physicalDefense += def.battleStatBonuses.physicalDefense;
+    bonuses.magicalDefense  += def.battleStatBonuses.magicalDefense;
+  }
+  return bonuses;
+}
+
+export function getSellPrice(def: ItemDefinition): number {
+  return Math.floor(def.buyPrice / 4);
+}
+
+export function computeUnitBattleStats(
+  blueprint: UnitBlueprint,
+  level: number,
+  containers: Record<string, ItemContainer>,
+  instances: Record<string, ItemInstance>,
+  definitions: Record<string, ItemDefinition>,
+  permanentBonuses: Record<string, Partial<BattleStatBonuses>>,
+): BattleStatBonuses {
+  const scale = 1 + 0.1 * (level - 1);
+  const equip = getEquippedBonuses(blueprint.templateId, containers, instances, definitions);
+  const perm  = permanentBonuses[blueprint.templateId] ?? {};
+  return {
+    hp:              Math.round(blueprint.hp             * scale) + equip.hp              + (perm.hp              ?? 0),
+    physicalDamage:  Math.round(blueprint.physicalDamage * scale) + equip.physicalDamage  + (perm.physicalDamage  ?? 0),
+    magicalDamage:   Math.round(blueprint.magicalDamage  * scale) + equip.magicalDamage   + (perm.magicalDamage   ?? 0),
+    physicalDefense: blueprint.physicalDefense                    + equip.physicalDefense + (perm.physicalDefense ?? 0),
+    magicalDefense:  blueprint.magicalDefense                     + equip.magicalDefense  + (perm.magicalDefense  ?? 0),
+  };
+}
+
+export function snapshotActivatableAbilities(
+  unitTemplateId: string,
+  containers: Record<string, ItemContainer>,
+  instances: Record<string, ItemInstance>,
+  definitions: Record<string, ItemDefinition>,
+): UnitActivatableAbility[] {
+  const equipped = getEquippedItems(unitTemplateId, containers, instances);
+  const result: UnitActivatableAbility[] = [];
+  for (const inst of equipped) {
+    const def = definitions[inst.definitionId];
+    if (def?.usage === 'equip_and_activate' && def.useEffect) {
+      result.push({
+        sourceItemDefinitionId: def.id,
+        name: def.name,
+        useEffect: def.useEffect,
+        usesRemaining: 1,
+      });
     }
   }
+  return result;
+}
 
-  return bonuses;
+export function useItem(
+  instanceId: string,
+  unitTemplateId: string,
+  containers: Record<string, ItemContainer>,
+  instances: Record<string, ItemInstance>,
+  permanentBonuses: Record<string, Partial<BattleStatBonuses>>,
+  definitions: Record<string, ItemDefinition>,
+): boolean {
+  const instance = instances[instanceId];
+  if (!instance) return false;
+  const def = definitions[instance.definitionId];
+  if (!def?.useEffect) return false;
+
+  if (def.useEffect.type === 'permanent_stat_boost' && def.useEffect.stat) {
+    const existing = permanentBonuses[unitTemplateId] ?? {};
+    permanentBonuses[unitTemplateId] = {
+      ...existing,
+      [def.useEffect.stat]: (existing[def.useEffect.stat] ?? 0) + def.useEffect.amount,
+    };
+  }
+  // 'heal' in non-battle context is a no-op for now (requires BattleState access)
+
+  for (const container of Object.values(containers)) {
+    for (const [slot, id] of Object.entries(container.slots)) {
+      if (id === instanceId) { delete container.slots[slot]; break; }
+    }
+  }
+  delete instances[instanceId];
+  return true;
+}
+
+export function buildBackpackSnapshot(
+  containers: Record<string, ItemContainer>,
+  instances: Record<string, ItemInstance>,
+  definitions: Record<string, ItemDefinition>,
+): BackpackSnapshot {
+  const backpack = containers['backpack_shared'];
+  const slots: Array<ItemSlotSnapshot | null> = Array(24).fill(null);
+  if (!backpack) return { slots };
+
+  for (let i = 0; i < 24; i++) {
+    const instanceId = backpack.slots[String(i)];
+    if (!instanceId) continue;
+    const instance = instances[instanceId];
+    const definition = instance ? definitions[instance.definitionId] : undefined;
+    if (instance && definition) slots[i] = { instanceId, definition };
+  }
+  return { slots };
+}
+
+export function buildEquipmentSnapshot(
+  unitTemplateId: string,
+  containers: Record<string, ItemContainer>,
+  instances: Record<string, ItemInstance>,
+  definitions: Record<string, ItemDefinition>,
+): EquipmentSnapshot {
+  const equipContainer = containers[`equip_${unitTemplateId}`];
+  if (!equipContainer) return { slots: {} };
+
+  const slots: Partial<Record<string, ItemSlotSnapshot>> = {};
+  for (const [slotKey, instanceId] of Object.entries(equipContainer.slots)) {
+    const instance = instances[instanceId];
+    const definition = instance ? definitions[instance.definitionId] : undefined;
+    if (instance && definition) slots[slotKey] = { instanceId, definition };
+  }
+  return { slots };
 }

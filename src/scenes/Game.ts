@@ -19,6 +19,7 @@ import { InitiativeBar } from "../objects/InitiativeBar";
 import { BattleLog } from "../objects/BattleLog";
 import { UnitTooltip } from "../objects/UnitTooltip";
 import { EffectTooltip } from "../objects/EffectTooltip";
+import { TOOLTIP } from "../ui/theme";
 import {
   BattleState,
   CellCoord,
@@ -33,6 +34,7 @@ import {
 } from "../battle/types";
 import { PhaseManager } from '../core/PhaseManager';
 import { Button } from '../ui/Button';
+import { VALUE_COLOR, BTN, ALPHA } from '../ui/theme';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { ENEMY_GROUPS } from '../data/enemyGroupDefinitions';
 import { PLAYER_UNITS, ENEMY_UNITS } from "../data/unitDefinitions";
@@ -235,7 +237,7 @@ export class Game extends Phaser.Scene {
     this.unitViews.clear();
 
     this.buildGrid();
-    this.unitTooltip = new UnitTooltip(this);
+    this.unitTooltip = new UnitTooltip(this, TOOLTIP.bg, TOOLTIP.bgAlpha);
     this.effectTooltip = new EffectTooltip(this);
     this.skillNameTooltip = new SkillTooltip(this);
     this.initBattle();
@@ -597,7 +599,7 @@ export class Game extends Phaser.Scene {
       container.setInteractive({ useHandCursor: true });
       container.on("pointerup", () => this.onBenchCardClick(idx));
       container.on("pointerover", () => {
-        if (this.selectedBenchIdx !== idx) bg.setFillStyle(0x2a3a4a, 0.9);
+        if (this.selectedBenchIdx !== idx) bg.setFillStyle(COLORS.benchHover, 0.9);
         const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
         this.unitTooltip.showFromBlueprint(bp, level, "player", this.logX, this.logY, this.logW);
       });
@@ -1973,19 +1975,23 @@ export class Game extends Phaser.Scene {
       const iconY    = startY + i * (iconSize + iconGap);
       const isActive = i === unit.activeSkillIndex;
 
-      const bg = this.add.rectangle(0, 0, iconSize, iconSize, isActive ? 0xffcc00 : 0x444444)
-        .setStrokeStyle(2, isActive ? 0xffffff : 0x888888);
+      const baseColor  = isActive ? 0xffcc00 : BTN.dark.base;
+      const hoverColor = isActive ? 0xffdd44 : BTN.dark.hover;
+      const strokeColor = isActive ? 0xffffff : 0x888888;
+
+      const bg = this.add.rectangle(0, 0, iconSize, iconSize, baseColor)
+        .setStrokeStyle(2, strokeColor);
 
       const container = this.add.container(iconX, iconY, [bg])
         .setSize(iconSize, iconSize)
         .setInteractive({ useHandCursor: true })
         .setDepth(10)
         .on('pointerover', () => {
-          bg.setFillStyle(isActive ? 0xffdd44 : 0x666666);
+          bg.setFillStyle(hoverColor);
           this.skillNameTooltip?.show({ name: skill.name, damageType: skill.damageBlock?.damageType }, iconX + iconSize / 2, iconY, "right");
         })
         .on('pointerout', () => {
-          bg.setFillStyle(isActive ? 0xffcc00 : 0x444444);
+          bg.setFillStyle(baseColor);
           this.skillNameTooltip?.hide();
         })
         .on('pointerup', () => this.switchActiveSkill(i));

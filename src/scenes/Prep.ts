@@ -3,19 +3,10 @@ import { LAYOUT_SCALE } from "../core/Constants";
 import { GameState } from "../core/GameState";
 import { PhaseManager } from "../core/PhaseManager";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
-import { EquipSlot, UnitBlueprint, UnitClass } from "../battle/types";
-import { ITEM_DEFINITIONS } from "../data/itemDefinitions";
-import {
-  equipItem,
-  unequipItem,
-  canUnitEquipItem,
-  getEquippedBonuses,
-} from "../battle/itemOps";
 import { Button } from "../ui/Button";
-import { ItemTooltip, ItemTooltipData } from "../objects/ItemTooltip";
+import { VALUE_COLOR, SCENE_BG, BTN, ALPHA } from "../ui/theme";
 
 export class Prep extends Phaser.Scene {
-  private itemTooltip!: ItemTooltip;
   private _activePanel: Phaser.GameObjects.Container | null = null;
   private _isCampMode = false;
   private battleBtn!: Phaser.GameObjects.Rectangle;
@@ -25,34 +16,6 @@ export class Prep extends Phaser.Scene {
     super("Prep");
   }
 
-  private _buildItemTooltipData(instanceId: string, unitClass: UnitClass): ItemTooltipData | null {
-    const inst = GameState.itemInstances[instanceId];
-    const def  = inst ? ITEM_DEFINITIONS[inst.definitionId] : undefined;
-    if (!def) return null;
-
-    const STAT_LABELS: [keyof typeof def.statBonuses, string][] = [
-      ["hp",              "HP"],
-      ["physicalDamage",  "Phys Dmg"],
-      ["magicalDamage",   "Magic Dmg"],
-      ["physicalDefense", "Phys Def"],
-      ["magicalDefense",  "Magic Def"],
-    ];
-
-    const stats = STAT_LABELS
-      .filter(([k]) => (def.statBonuses[k] ?? 0) !== 0)
-      .map(([k, label]) => ({ label, value: def.statBonuses[k] as number }));
-
-    const hasRestriction = (def.allowedClasses?.length ?? 0) > 0;
-    const classAllowed   = hasRestriction ? def.allowedClasses!.includes(unitClass) : null;
-
-    return {
-      name:             def.name,
-      stats,
-      classRestriction: hasRestriction ? def.allowedClasses!.join(", ") : null,
-      classAllowed,
-    };
-  }
-
   create(): void {
     const phase = PhaseManager.getPhase();
     this._isCampMode = phase.type === 'camp';
@@ -60,13 +23,11 @@ export class Prep extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    this.itemTooltip = new ItemTooltip(this);
-
-    this.add.rectangle(w / 2, h / 2, w, h, 0x1a1a2e);
+    this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.default);
     this.add
       .text(w / 2, Math.round(60 * LAYOUT_SCALE), "PREPARATION", {
         fontSize: `${Math.round(32 * LAYOUT_SCALE)}px`,
-        color: "#cccccc",
+        color: VALUE_COLOR.neutral,
         fontStyle: "bold",
       })
       .setOrigin(0.5);
@@ -106,12 +67,12 @@ export class Prep extends Phaser.Scene {
       this.add
         .text(x, iconY, label, {
           fontSize: `${Math.round(14 * LAYOUT_SCALE)}px`,
-          color: "#ffffff",
+          color: VALUE_COLOR.white,
         })
         .setOrigin(0.5);
 
-      icon.on("pointerover", () => icon.setAlpha(0.8));
-      icon.on("pointerout", () => icon.setAlpha(1));
+      icon.on("pointerover", () => icon.setAlpha(ALPHA.hover));
+      icon.on("pointerout", () => icon.setAlpha(ALPHA.active));
       icon.on("pointerup", () => {
         Object.values(panels).forEach((p) => p.setVisible(false));
         panels[key].setVisible(true);
@@ -127,12 +88,12 @@ export class Prep extends Phaser.Scene {
     const btnY = h / 2 + Math.round(160 * LAYOUT_SCALE);
 
     this.battleBtn = this.add
-      .rectangle(w / 2, btnY, btnW, btnH, 0x2a6a2a)
+      .rectangle(w / 2, btnY, btnW, btnH, BTN.primary.base)
       .setInteractive({ useHandCursor: true });
     this.battleBtnText = this.add
       .text(w / 2, btnY, "Go to Battle", {
         fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-        color: "#ffffff",
+        color: VALUE_COLOR.white,
         fontStyle: "bold",
         align: "center",
       })
@@ -140,7 +101,7 @@ export class Prep extends Phaser.Scene {
 
     if (this._isCampMode) {
       this.battleBtnText.setText('Exit Camp');
-      this.battleBtn.setFillStyle(0x2a6a2a);
+      this.battleBtn.setFillStyle(BTN.primary.base);
       this.battleBtn.setInteractive({ useHandCursor: true });
       this.battleBtn.on('pointerup', () =>
         PhaseManager.transition({ type: 'exit_camp' })
@@ -164,7 +125,7 @@ export class Prep extends Phaser.Scene {
     const valid = active > 0 && active <= 9;
     const excess = active - 9;
 
-    this.battleBtn.setFillStyle(valid ? 0x2a6a2a : 0x6a2a2a);
+    this.battleBtn.setFillStyle(valid ? BTN.primary.base : BTN.danger.base);
 
     let label = "Go to Battle";
     if (active === 0) {
@@ -191,14 +152,14 @@ export class Prep extends Phaser.Scene {
         h / 2,
         Math.round(500 * LAYOUT_SCALE),
         Math.round(400 * LAYOUT_SCALE),
-        0x222244,
+        SCENE_BG.panel,
       ),
     );
     panel.add(
       this.add
         .text(w / 2, h / 2 - Math.round(170 * LAYOUT_SCALE), "Camp", {
           fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
+          color: VALUE_COLOR.highlight,
           fontStyle: "bold",
         })
         .setOrigin(0.5),
@@ -211,7 +172,7 @@ export class Prep extends Phaser.Scene {
           "Units in camp don't join battle",
           {
             fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-            color: "#aaaaaa",
+            color: VALUE_COLOR.muted,
           },
         )
         .setOrigin(0.5),
@@ -246,11 +207,11 @@ export class Prep extends Phaser.Scene {
           w / 2 - Math.round(180 * LAYOUT_SCALE),
           y,
           `${bp.name}  Lv.${level}`,
-          { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: "#ffffff" },
+          { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: VALUE_COLOR.white },
         )
         .setDepth(11);
 
-      const toggleColor = inCamp ? 0x884444 : 0x448844;
+      const toggleColor = inCamp ? BTN.danger.base : BTN.primary.base;
       const toggleLabel = inCamp ? "In Camp" : "Active";
       const toggleBtnX = w / 2 + Math.round(150 * LAYOUT_SCALE);
       const toggleBtnY = y + Math.round(8 * LAYOUT_SCALE);
@@ -268,7 +229,7 @@ export class Prep extends Phaser.Scene {
       const toggleText = this.add
         .text(toggleBtnX, toggleBtnY, toggleLabel, {
           fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-          color: "#ffffff",
+          color: VALUE_COLOR.white,
         })
         .setOrigin(0.5)
         .setDepth(12);
@@ -301,14 +262,14 @@ export class Prep extends Phaser.Scene {
         h / 2,
         Math.round(500 * LAYOUT_SCALE),
         Math.round(400 * LAYOUT_SCALE),
-        0x222244,
+        SCENE_BG.panel,
       ),
     );
     panel.add(
       this.add
         .text(w / 2, h / 2 - Math.round(160 * LAYOUT_SCALE), "Shop", {
           fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
+          color: VALUE_COLOR.highlight,
           fontStyle: "bold",
         })
         .setOrigin(0.5),
@@ -317,7 +278,7 @@ export class Prep extends Phaser.Scene {
       this.add
         .text(w / 2, h / 2, "Coming soon...", {
           fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-          color: "#888888",
+          color: VALUE_COLOR.inactive,
         })
         .setOrigin(0.5),
     );
@@ -335,14 +296,14 @@ export class Prep extends Phaser.Scene {
         h / 2,
         Math.round(500 * LAYOUT_SCALE),
         Math.round(420 * LAYOUT_SCALE),
-        0x222244,
+        SCENE_BG.panel,
       ),
     );
     panel.add(
       this.add
         .text(w / 2, h / 2 - Math.round(180 * LAYOUT_SCALE), "Party", {
           fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
+          color: VALUE_COLOR.highlight,
           fontStyle: "bold",
         })
         .setOrigin(0.5),
@@ -379,7 +340,7 @@ export class Prep extends Phaser.Scene {
           y + Math.round(10 * LAYOUT_SCALE),
           Math.round(420 * LAYOUT_SCALE),
           Math.round(32 * LAYOUT_SCALE),
-          0x333366,
+          BTN.ghost.base,
         )
         .setInteractive({ useHandCursor: true })
         .setDepth(11);
@@ -388,490 +349,18 @@ export class Prep extends Phaser.Scene {
           w / 2 - Math.round(190 * LAYOUT_SCALE),
           y,
           `${bp.name}  Lv.${level}${status}`,
-          { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: "#ffffff" },
+          { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: VALUE_COLOR.white },
         )
         .setDepth(12);
 
-      row.on("pointerover", () => row.setFillStyle(0x4444aa));
-      row.on("pointerout", () => row.setFillStyle(0x333366));
-      row.on("pointerup", () => this.showUnitDetail(panel, bp, w, h));
+      row.on("pointerover", () => row.setFillStyle(BTN.ghost.hover));
+      row.on("pointerout", () => row.setFillStyle(BTN.ghost.base));
+      row.on("pointerup", () =>
+        PhaseManager.transition({ type: 'open_equip_screen', unitTemplateId: bp.templateId })
+      );
 
       panel.add([row, rowLabel]);
     });
-  }
-
-  // ── Unit Detail ─────────────────────────────────────────────────────────────
-
-  private showUnitDetail(
-    partyPanel: Phaser.GameObjects.Container,
-    bp: UnitBlueprint,
-    w: number,
-    h: number,
-  ): void {
-    this.itemTooltip.hide();
-    const detail = this.add.container(0, 0).setDepth(20);
-
-    const onEsc = () => {
-      detail.destroy(true);
-      this.itemTooltip.hide();
-      this.refreshPartyPanel(partyPanel, w, h);
-      partyPanel.setVisible(true);
-      this._activePanel = partyPanel;
-    };
-    this.input.keyboard!.once("keydown-ESC", onEsc);
-
-    // ── Transparent overlay: click empty area → close description panel ───────
-    const overlay = this.add
-      .rectangle(w / 2, h / 2, w, h, 0x000000, 0)
-      .setInteractive()
-      .setDepth(19);
-    detail.add(overlay);
-    overlay.on("pointerup", () => {
-      this.itemTooltip.hide();
-    });
-
-    // ── Window ────────────────────────────────────────────────────────────────
-    const WIN_W = Math.round(860 * LAYOUT_SCALE);
-    const WIN_H = Math.round(560 * LAYOUT_SCALE);
-    const winCY = Math.max(WIN_H / 2 + 10, h / 2);
-    detail.add(
-      this.add.rectangle(w / 2, winCY, WIN_W, WIN_H, 0x1a1a3a).setDepth(20),
-    );
-
-    // ── Close button (×) ─────────────────────────────────────────────────────
-    const closeBtn = this.add
-      .text(
-        w / 2 - WIN_W / 2 + WIN_W - Math.round(10 * LAYOUT_SCALE),
-        winCY - WIN_H / 2 + Math.round(18 * LAYOUT_SCALE),
-        "×",
-        { fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`, color: "#aaaaaa" },
-      )
-      .setOrigin(1, 0.5)
-      .setDepth(23)
-      .setInteractive({ useHandCursor: true });
-    detail.add(closeBtn);
-    closeBtn.on("pointerover", () => closeBtn.setColor("#ffffff"));
-    closeBtn.on("pointerout", () => closeBtn.setColor("#aaaaaa"));
-    closeBtn.on("pointerup", () => {
-      this.input.keyboard!.off("keydown-ESC", onEsc);
-      onEsc();
-    });
-
-    // ── Header ────────────────────────────────────────────────────────────────
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-    const scale = 1 + 0.1 * (level - 1);
-    const bonuses = getEquippedBonuses(
-      bp.templateId,
-      GameState.itemContainers,
-      GameState.itemInstances,
-      ITEM_DEFINITIONS,
-    );
-    detail.add(
-      this.add
-        .text(
-          w / 2,
-          winCY - WIN_H / 2 + Math.round(16 * LAYOUT_SCALE),
-          `${bp.name}  —  Level ${level}`,
-          {
-            fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-            color: "#ffdd44",
-            fontStyle: "bold",
-          },
-        )
-        .setOrigin(0.5, 0)
-        .setDepth(21),
-    );
-
-    // ── Layout constants ──────────────────────────────────────────────────────
-    const PAD = Math.round(16 * LAYOUT_SCALE);
-    const EQ_CELL = Math.round(64 * LAYOUT_SCALE); // equipment cell size
-    const EQ_COL_STEP = Math.round(72 * LAYOUT_SCALE); // col stride (64 + 8 gap)
-    const EQ_ROW_STEP = Math.round(72 * LAYOUT_SCALE); // row stride (64 + 8 gap)
-    const SPRITE_SIZE = Math.round(256 * LAYOUT_SCALE);
-    const BP_CELL = Math.round(64 * LAYOUT_SCALE);
-    const BP_GAP = Math.round(6 * LAYOUT_SCALE);
-    const BP_COLS = 10;
-    const BP_ROWS = 1;
-    const HEADER_H = Math.round(36 * LAYOUT_SCALE);
-
-    const winLeft = w / 2 - WIN_W / 2;
-    const contentTopY = winCY - WIN_H / 2 + HEADER_H + PAD;
-
-    // Equipment block: column centers, relative to window left
-    const eqColCenters = [
-      winLeft + PAD + EQ_CELL / 2,
-      winLeft + PAD + EQ_CELL / 2 + EQ_COL_STEP,
-      winLeft + PAD + EQ_CELL / 2 + 2 * EQ_COL_STEP,
-    ];
-    // Sprite block center X
-    const EQ_BLOCK_W = 3 * EQ_COL_STEP;
-    const spriteX = winLeft + PAD + EQ_BLOCK_W + PAD + SPRITE_SIZE / 2;
-    const spriteY = contentTopY + SPRITE_SIZE / 2;
-    // Skill block X start
-    const skillX = spriteX + SPRITE_SIZE / 2 + PAD;
-    const skillY = contentTopY;
-    const rightPanelW = winLeft + WIN_W - PAD - skillX;
-
-    // ── LEFT: Equipment silhouette ────────────────────────────────────────────
-    const EQUIP_SILHOUETTE: { slot: EquipSlot; col: 0 | 1 | 2; row: number }[] =
-      [
-        { slot: "necklace", col: 0, row: 0 },
-        { slot: "helmet", col: 1, row: 0 },
-        { slot: "artifact", col: 2, row: 0 },
-        { slot: "hand_left", col: 0, row: 1 },
-        { slot: "armor", col: 1, row: 1 },
-        { slot: "hand_right", col: 2, row: 1 },
-        { slot: "ring_1", col: 0, row: 2 },
-        { slot: "belt", col: 1, row: 2 },
-        { slot: "ring_2", col: 2, row: 2 },
-        { slot: "gloves", col: 0, row: 3 },
-        { slot: "boots", col: 1, row: 3 },
-        // col 2, row 3 → empty placeholder (drawn separately below)
-      ];
-
-    const SLOT_ICONS: Partial<Record<EquipSlot, string>> = {
-      helmet: "🪖",
-      necklace: "📿",
-      armor: "🥋",
-      belt: "▬",
-      hand_left: "🛡️",
-      hand_right: "⚔️",
-      gloves: "🧤",
-      ring_1: "💍",
-      ring_2: "💍",
-      boots: "👢",
-      artifact: "🔮",
-    };
-
-    const equipContainer = GameState.itemContainers[`equip_${bp.templateId}`];
-
-    EQUIP_SILHOUETTE.forEach(({ slot, col, row }) => {
-      const cx = eqColCenters[col];
-      const cy = contentTopY + row * EQ_ROW_STEP + EQ_CELL / 2;
-
-      const equippedId = equipContainer?.slots[slot];
-      const equippedInst = equippedId
-        ? GameState.itemInstances[equippedId]
-        : undefined;
-      const equippedDef = equippedInst
-        ? ITEM_DEFINITIONS[equippedInst.definitionId]
-        : undefined;
-      const bgColor = 0x1e1e2e;
-
-      const cell = this.add
-        .rectangle(cx, cy, EQ_CELL, EQ_CELL, bgColor)
-        .setDepth(21);
-      detail.add(cell);
-
-      if (!equippedDef) {
-        const icon = SLOT_ICONS[slot];
-        if (icon) {
-          detail.add(
-            this.add
-              .text(cx, cy, icon, {
-                fontSize: `${Math.round(28 * LAYOUT_SCALE)}px`,
-              })
-              .setOrigin(0.5)
-              .setDepth(22)
-              .setAlpha(0.5),
-          );
-        }
-        detail.add(
-          this.add
-            .rectangle(cx, cy, EQ_CELL, EQ_CELL, 0x000000)
-            .setAlpha(0.45)
-            .setDepth(23),
-        );
-      }
-
-      if (equippedDef) {
-        const itemSpriteKey = `sprite-item-${equippedInst!.definitionId}`;
-        if (this.textures.exists(itemSpriteKey)) {
-          detail.add(
-            this.add
-              .image(cx, cy, itemSpriteKey)
-              .setDisplaySize(EQ_CELL, EQ_CELL)
-              .setDepth(22),
-          );
-        }
-
-        cell.setInteractive({ useHandCursor: true });
-        cell.on("pointerover", () => {
-          cell.setFillStyle(0x2e2e4e);
-          const data = this._buildItemTooltipData(equippedId!, bp.unitClass);
-          if (data) this.itemTooltip.show(data, cx + EQ_CELL / 2, cy, "right");
-        });
-        cell.on("pointerout", () => {
-          cell.setFillStyle(bgColor);
-          this.itemTooltip.hide();
-        });
-        cell.on(
-          "pointerup",
-          (
-            _p: Phaser.Input.Pointer,
-            _lx: number,
-            _ly: number,
-            event: Phaser.Types.Input.EventData,
-          ) => {
-            event.stopPropagation();
-            this.itemTooltip.hide();
-            this.input.keyboard!.off("keydown-ESC", onEsc);
-            unequipItem(
-              bp.templateId,
-              slot,
-              GameState.itemContainers,
-              GameState.itemInstances,
-              ITEM_DEFINITIONS,
-            );
-            detail.destroy(true);
-            this.showUnitDetail(partyPanel, bp, w, h);
-          },
-        );
-      }
-    });
-
-    // Empty placeholder cell at col 2, row 3
-    {
-      const cx = eqColCenters[2];
-      const cy = contentTopY + 3 * EQ_ROW_STEP + EQ_CELL / 2;
-      detail.add(
-        this.add.rectangle(cx, cy, EQ_CELL, EQ_CELL, 0x1e1e2e).setDepth(21),
-      );
-    }
-
-    // ── CENTER: Unit sprite ───────────────────────────────────────────────────
-    const textureKey = `sprite-${bp.templateId}`;
-    if (this.textures.exists(textureKey)) {
-      detail.add(
-        this.add
-          .image(spriteX, spriteY, textureKey, 0)
-          .setDisplaySize(SPRITE_SIZE, SPRITE_SIZE)
-          .setDepth(21),
-      );
-    } else {
-      detail.add(
-        this.add
-          .rectangle(spriteX, spriteY, SPRITE_SIZE, SPRITE_SIZE, 0x4a4a6a)
-          .setDepth(21),
-      );
-    }
-
-    // ── RIGHT: Stats + Skill ─────────────────────────────────────────────────
-    const lineH = Math.round(18 * LAYOUT_SCALE);
-    let rightY = skillY;
-
-    detail.add(
-      this.add
-        .text(skillX, rightY, "Stats", {
-          fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
-          fontStyle: "bold",
-          wordWrap: { width: rightPanelW },
-        })
-        .setDepth(21),
-    );
-    rightY += Math.round(20 * LAYOUT_SCALE);
-
-    const statLines: { label: string; value: string }[] = [
-      {
-        label: "HP",
-        value: String(Math.round(bp.hp * scale) + (bonuses.hp ?? 0)),
-      },
-      {
-        label: "Phys Dmg",
-        value: String(
-          Math.round(bp.physicalDamage * scale) + (bonuses.physicalDamage ?? 0),
-        ),
-      },
-      {
-        label: "Magic Dmg",
-        value: String(
-          Math.round(bp.magicalDamage * scale) + (bonuses.magicalDamage ?? 0),
-        ),
-      },
-      {
-        label: "Phys Def",
-        value: `${bp.physicalDefense + (bonuses.physicalDefense ?? 0)}%`,
-      },
-      {
-        label: "Magic Def",
-        value: `${bp.magicalDefense + (bonuses.magicalDefense ?? 0)}%`,
-      },
-      { label: "Dodge", value: `${bp.dodge}%` },
-      { label: "Block", value: `${bp.block}%` },
-      { label: "Initiative", value: String(bp.initiative) },
-      // rowTrait is intentionally not displayed — it is an internal auto-placement hint, not a player-facing stat
-    ];
-    statLines.forEach(({ label, value }) => {
-      detail.add(
-        this.add
-          .text(skillX, rightY, `${label}: ${value}`, {
-            fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
-            color: "#cccccc",
-            wordWrap: { width: rightPanelW },
-          })
-          .setDepth(21),
-      );
-      rightY += lineH;
-    });
-
-    rightY += Math.round(8 * LAYOUT_SCALE);
-    detail.add(
-      this.add
-        .text(skillX, rightY, "Skill", {
-          fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
-          fontStyle: "bold",
-          wordWrap: { width: rightPanelW },
-        })
-        .setDepth(21),
-    );
-    rightY += Math.round(20 * LAYOUT_SCALE);
-
-    const skill = bp.skills[0];
-    if (skill) {
-      const skillLines: { text: string; color: string }[] = [
-        { text: skill.name, color: "#ffffff" },
-        {
-          text: skill.damageBlock
-            ? `Damage: ${skill.damageBlock.damageType}`
-            : `Effect only`,
-          color: "#aaaaaa",
-        },
-      ];
-      skillLines.forEach(({ text, color }) => {
-        detail.add(
-          this.add
-            .text(skillX, rightY, text, {
-              fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
-              color,
-              wordWrap: { width: rightPanelW },
-            })
-            .setDepth(21),
-        );
-        rightY += lineH;
-      });
-    } else {
-      detail.add(
-        this.add
-          .text(skillX, rightY, "No skill", {
-            fontSize: `${Math.round(12 * LAYOUT_SCALE)}px`,
-            color: "#555555",
-            wordWrap: { width: rightPanelW },
-          })
-          .setDepth(21),
-      );
-    }
-
-    // ── BOTTOM: Shared backpack ───────────────────────────────────────────────
-    const backpackTopY = contentTopY + 4 * EQ_ROW_STEP + PAD;
-    const bpGridX = winLeft + PAD;
-    const bpGridY = backpackTopY + Math.round(20 * LAYOUT_SCALE);
-    const backpackContainer = GameState.itemContainers["backpack_shared"];
-
-    detail.add(
-      this.add
-        .text(bpGridX, backpackTopY, "Backpack", {
-          fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
-          fontStyle: "bold",
-        })
-        .setDepth(21),
-    );
-
-    for (let row = 0; row < BP_ROWS; row++) {
-      for (let col = 0; col < BP_COLS; col++) {
-        const slotKey = String(row * BP_COLS + col);
-        const cellCX = bpGridX + col * (BP_CELL + BP_GAP) + BP_CELL / 2;
-        const cellCY = bpGridY + row * (BP_CELL + BP_GAP) + BP_CELL / 2;
-        const instanceId = backpackContainer?.slots[slotKey];
-        const instance = instanceId
-          ? GameState.itemInstances[instanceId]
-          : undefined;
-        const def = instance
-          ? ITEM_DEFINITIONS[instance.definitionId]
-          : undefined;
-        const allowed = def
-          ? canUnitEquipItem(
-              bp.unitClass,
-              instanceId!,
-              GameState.itemInstances,
-              ITEM_DEFINITIONS,
-            )
-          : true;
-        const bgColor = def ? (allowed ? 0x2a2a4a : 0x252535) : 0x1e1e2e;
-
-        const cell = this.add
-          .rectangle(cellCX, cellCY, BP_CELL, BP_CELL, bgColor)
-          .setDepth(21);
-        detail.add(cell);
-
-        if (def) {
-          const itemSpriteKey = `sprite-item-${instance!.definitionId}`;
-          if (this.textures.exists(itemSpriteKey)) {
-            detail.add(
-              this.add
-                .image(cellCX, cellCY, itemSpriteKey)
-                .setDisplaySize(BP_CELL, BP_CELL)
-                .setAlpha(allowed ? 1 : 0.4)
-                .setDepth(22),
-            );
-          }
-
-          if (allowed) {
-            cell.setInteractive({ useHandCursor: true });
-            cell.on("pointerover", () => {
-              cell.setFillStyle(0x3a3a6a);
-              const data = this._buildItemTooltipData(instanceId!, bp.unitClass);
-              if (data) this.itemTooltip.show(data, cellCX + BP_CELL / 2, cellCY, "right");
-            });
-            cell.on("pointerout", () => {
-              cell.setFillStyle(bgColor);
-              this.itemTooltip.hide();
-            });
-            cell.on(
-              "pointerup",
-              (
-                _p: Phaser.Input.Pointer,
-                _lx: number,
-                _ly: number,
-                event: Phaser.Types.Input.EventData,
-              ) => {
-                if (!instanceId) return;
-                event.stopPropagation();
-                this.itemTooltip.hide();
-                this.input.keyboard!.off("keydown-ESC", onEsc);
-                equipItem(
-                  bp.templateId,
-                  bp.unitClass,
-                  instanceId,
-                  GameState.itemContainers,
-                  GameState.itemInstances,
-                  ITEM_DEFINITIONS,
-                );
-                detail.destroy(true);
-                this.showUnitDetail(partyPanel, bp, w, h);
-              },
-            );
-          }
-        }
-      }
-    }
-
-    // ── Back button ───────────────────────────────────────────────────────────
-    const backBtnY = winCY + WIN_H / 2 - Math.round(24 * LAYOUT_SCALE);
-    const backBtn = new Button({
-      scene: this,
-      x: w / 2, y: backBtnY,
-      w: Math.round(120 * LAYOUT_SCALE), h: Math.round(30 * LAYOUT_SCALE),
-      label: "← Back", style: "neutral",
-      onClick: () => {
-        this.input.keyboard!.off("keydown-ESC", onEsc);
-        detail.destroy(true);
-        this.refreshPartyPanel(partyPanel, w, h);
-      },
-    }).setDepth(21);
-    detail.add(backBtn);
   }
 
   // ── Shared helpers ──────────────────────────────────────────────────────────

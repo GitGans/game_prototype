@@ -29,6 +29,7 @@ export const COLORS = {
   label: "#aaddff",
   labelEnemy: "#ffaaaa",
   bench: 0x1a2a3a,
+  benchHover: 0x2a3a4a,
   benchSelected: 0x2a5a1a,
   benchBorder: 0x3a5a7a,
   benchEmpty: 0x0d1a26,

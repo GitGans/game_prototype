@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { CELL_SIZE, COLORS, LAYOUT_SCALE } from "../core/Constants";
 import { CellCoord } from "../battle/types";
 import { cellKey } from "../battle/field";
+import { SKILL_PREVIEW } from "../ui/theme";
 
 type HighlightType = "none" | "selected" | "target" | "heal_target";
 type CellMode = "placement" | "battle";
@@ -111,8 +112,8 @@ export class CellView extends Phaser.GameObjects.Container {
   }
 
   setSkillPreview(multiplier: number, isHeal = false): void {
-    const dim = isHeal ? 0x0a2a0a : 0x2a1a00;
-    const bright = isHeal ? 0x44dd44 : 0xff8800;
+    const dim    = isHeal ? SKILL_PREVIEW.healDim    : SKILL_PREVIEW.damageDim;
+    const bright = isHeal ? SKILL_PREVIEW.healBright : SKILL_PREVIEW.damageBright;
     this.bg.setFillStyle(lerpColor(dim, bright, multiplier)).setAlpha(0.85);
   }
 

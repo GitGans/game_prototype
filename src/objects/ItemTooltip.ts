@@ -17,7 +17,7 @@ export interface ItemTooltipData {
 
 export class ItemTooltip extends BaseTooltip<ItemTooltipData> {
   constructor(scene: Phaser.Scene) {
-    super(scene, TW);
+    super(scene, TW, TOOLTIP.bg, TOOLTIP.bgAlpha);
   }
 
   // Prep.ts calls: itemTooltip.show(data, anchorX, anchorY, "right")

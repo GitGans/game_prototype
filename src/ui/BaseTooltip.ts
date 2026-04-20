@@ -5,10 +5,15 @@ export abstract class BaseTooltip<T> extends Phaser.GameObjects.Container {
   protected bg:           Phaser.GameObjects.Rectangle;
   protected contentItems: Phaser.GameObjects.GameObject[] = [];
 
-  constructor(scene: Phaser.Scene, protected readonly tooltipW: number) {
+  constructor(
+    scene: Phaser.Scene,
+    protected readonly tooltipW: number,
+    bgColor: number = TOOLTIP.bg,
+    bgAlpha: number = 0,
+  ) {
     super(scene, 0, 0);
 
-    this.bg = scene.add.rectangle(0, 0, tooltipW, 20, TOOLTIP.bg, TOOLTIP.bgAlpha);
+    this.bg = scene.add.rectangle(0, 0, tooltipW, 20, bgColor, bgAlpha);
     this.bg.setOrigin(0, 0);
     this.add(this.bg);
 

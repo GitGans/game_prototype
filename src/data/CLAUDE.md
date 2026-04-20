@@ -1,101 +1,50 @@
 # data/
 
 ## Role
-
-Static game content layer. Contains all definitions for units, items, and skills. No logic — only constant data consumed by the rest of the system.
-
----
+Static game content layer. Contains all definitions for units, items, skills, maps, and enemy encounter groups. No runtime logic — only constant data consumed by the rest of the system.
 
 ## Responsibilities
-
-- Define all player and enemy unit blueprints
-- Define the player's starting lineup and bench
-- Define all equippable items and their stat bonuses
-- Define all named skills and their patterns and damage types
-- Group enemy blueprints by race for battle initialization
-
----
+- Define all player and enemy unit blueprints with stats, shapes, and skill references
+- Define the player's starting party composition
+- Define all equippable and consumable items with stat bonuses and use effects
+- Define all named skills with AoE damage matrices and effect patterns
+- Define world map layouts with terrain grids and entity placements
+- Group enemy units into named encounter compositions
 
 ## Key Files
-
-| File                  | Purpose                                                               |
-| --------------------- | --------------------------------------------------------------------- |
-| `unitDefinitions.ts`  | All unit blueprints — player units, starting IDs, enemy pools by race |
-| `itemDefinitions.ts`  | All item definitions — slots, stat bonuses, class restrictions        |
-| `skillDefinitions.ts` | All named skills — pattern reference, damage type, effect type        |
-
-### unitDefinitions.ts
-
-- `PLAYER_UNITS` — array of all 9 playable unit blueprints
-- `PLAYER_STARTING_IDS` — 5 unit `templateId`s placed on field at start; rest go to bench
-- `ENEMY_UNITS` — map of `UnitRace` → enemy blueprint array (orc, demon, undead)
-
-### itemDefinitions.ts
-
-- `ITEM_DEFINITIONS` — `Record<string, ItemDefinition>` of all equippable items
-
-### skillDefinitions.ts
-
-- `SKILLS` — `Record<string, Skill>` of all named skills; each references a `SkillPattern` from `battle/skillPatterns.ts`
-
----
+- `unitDefinitions.ts` — player unit blueprints (`PLAYER_UNITS`, `PLAYER_STARTING_IDS`) and enemy pools (`ENEMY_UNITS` keyed by race)
+- `skillDefinitions.ts` — skill records (`SKILLS`), AoE grids (`DAMAGE_MATRICES`, `EFFECT_MATRICES`, `INSTANT_EFFECT_MATRICES`), leveled modifiers, and pure pattern lookup helpers
+- `itemDefinitions.ts` — item records (`ITEM_DEFINITIONS`) and `getItemDescription()` display helper
+- `mapDefinitions.ts` — world map layouts (`MAP_DEFINITIONS`) with terrain and entity placement grids
+- `enemyGroupDefinitions.ts` — named encounter groups (`ENEMY_GROUPS`) with race references and optional level overrides
 
 ## Structural Role
-
-```
-data/ → static content (blueprints and definitions, no runtime state)
-```
-
----
+`data/` → single source of truth for all static game content; no logic, no state
 
 ## Data Flow
-
-```
-Static definitions defined here
+Static constant definitions
 ↓
-battle/autoPlace.ts reads unit blueprints to create instances
+Imported by `GameState`, `autoPlace`, `Prep`, `Game`, `mapLogic` at startup
 ↓
-scenes/Prep.ts reads item/unit data for display and equip UI
-↓
-battle/combat.ts and targeting.ts use skill/pattern data at runtime
-```
+Instantiated into live unit, item, and map objects at runtime
 
----
+## Dependencies
+- depends on: `src/battle/types.ts` (type definitions), `src/battle/shapes.ts` (SHAPES)
+- used by: `src/core/GameState.ts`, `src/battle/autoPlace.ts`, `src/scenes/Prep.ts`, `src/scenes/Game.ts`, `src/world/mapLogic.ts`
 
-## Key Dependencies
-
-**data/ depends on:**
-
-- `battle/shapes.ts` — `SHAPES` used in unit `shape` fields
-- `battle/skillPatterns.ts` — `PATTERNS` used in skill `pattern` fields
-- `battle/types.ts` — type definitions (`UnitBlueprint`, `ItemDefinition`, `Skill`, `UnitRace`, `EquipSlot`)
-
-**Depends on data/:**
-
-- `battle/autoPlace.ts` — consumes `PLAYER_UNITS`, `ENEMY_UNITS`
-- `scenes/Prep.ts` — reads unit and item definitions for UI
-- `core/GameState.ts` — references `PLAYER_STARTING_IDS` via `autoPlace`
-
----
-
-## Critical Invariants
-
-- All `templateId` values in `PLAYER_UNITS` and `ENEMY_UNITS` must be globally unique
-- All `shape` references must exist in `SHAPES`
-- All `skill` references in unit blueprints must exist in `SKILLS`
-- All `pattern` references in `SKILLS` must exist in `PATTERNS`
-- `PLAYER_STARTING_IDS` must only contain valid `templateId`s from `PLAYER_UNITS`
-- `ITEM_DEFINITIONS` keys must match each item's `id` field
-
----
+## Invariants
+- No runtime logic — only data declarations and pure lookup helpers
+- May only import from `src/battle/types.ts` and `src/battle/shapes.ts`; no Phaser, no other layers
+- All `templateId`, item `id`, skill `id`, and map `id` values must be globally unique
+- `PLAYER_STARTING_IDS` must only reference `templateId`s that exist in `PLAYER_UNITS`
+- Sprite paths must match actual assets under `public/assets/sprites/`
 
 ## Where to Modify
-
-| What to change            | File                                              |
-| ------------------------- | ------------------------------------------------- |
-| Add or edit a player unit | `unitDefinitions.ts` → `PLAYER_UNITS`             |
-| Change starting lineup    | `unitDefinitions.ts` → `PLAYER_STARTING_IDS`      |
-| Add or edit an enemy unit | `unitDefinitions.ts` → `ENEMY_UNITS`              |
-| Add or edit an item       | `itemDefinitions.ts` → `ITEM_DEFINITIONS`         |
-| Add or edit a skill       | `skillDefinitions.ts` → `SKILLS`                  |
-| Add a new skill pattern   | `battle/skillPatterns.ts` → `PATTERNS` (not here) |
+- add or edit a player unit → `unitDefinitions.ts` → `PLAYER_UNITS`
+- change starting party → `unitDefinitions.ts` → `PLAYER_STARTING_IDS`
+- add or edit an enemy unit → `unitDefinitions.ts` → `ENEMY_UNITS`
+- add or edit an item → `itemDefinitions.ts` → `ITEM_DEFINITIONS`
+- add or edit a skill → `skillDefinitions.ts` → `SKILLS`
+- add an AoE damage or effect pattern → `skillDefinitions.ts` → `DAMAGE_MATRICES` / `EFFECT_MATRICES`
+- add or edit a map → `mapDefinitions.ts` → `MAP_DEFINITIONS`
+- add or edit an encounter group → `enemyGroupDefinitions.ts` → `ENEMY_GROUPS`

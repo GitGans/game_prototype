@@ -5,7 +5,7 @@ import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
 import { BENCH_SLOTS } from '../core/Constants';
 import { GameState } from '../core/GameState';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
-import { getEquippedBonuses } from './itemOps';
+import { computeUnitBattleStats, snapshotActivatableAbilities } from './itemOps';
 
 export function getPlayerAverageLevel(state: BattleState): number {
   const playerUnits = [...state.units.values()].filter(u => u.id.startsWith('p'));
@@ -21,14 +21,14 @@ export function createUnitInstance(
   levelOverride?: number,
 ): Unit {
   const level = levelOverride ?? blueprint.level;
-  const scale = 1 + 0.1 * (level - 1);
-
-  // Base stats scaled by level
-  const scaledHp         = Math.round(blueprint.hp * scale);
-  const scaledPhysDmg    = Math.round(blueprint.physicalDamage * scale);
-  const scaledMagicDmg   = Math.round(blueprint.magicalDamage * scale);
-  // Flat bonuses from equipped items (returns {} for enemies — no containers)
-  const bonuses = getEquippedBonuses(
+  const stats = computeUnitBattleStats(
+    blueprint, level,
+    GameState.itemContainers,
+    GameState.itemInstances,
+    ITEM_DEFINITIONS,
+    GameState.unitPermanentBonuses,
+  );
+  const activatableAbilities = snapshotActivatableAbilities(
     blueprint.templateId,
     GameState.itemContainers,
     GameState.itemInstances,
@@ -37,25 +37,26 @@ export function createUnitInstance(
 
   return {
     id,
-    name:            blueprint.name,
-    hp:              scaledHp         + (bonuses.hp              ?? 0),
-    maxHp:           scaledHp         + (bonuses.hp              ?? 0),
-    physicalDamage:  scaledPhysDmg    + (bonuses.physicalDamage  ?? 0),
-    magicalDamage:   scaledMagicDmg   + (bonuses.magicalDamage   ?? 0),
-    physicalDefense: blueprint.physicalDefense + (bonuses.physicalDefense ?? 0),
-    magicalDefense:  blueprint.magicalDefense  + (bonuses.magicalDefense  ?? 0),
-    dodge:           blueprint.dodge,
-    block:           blueprint.block,
+    name:                blueprint.name,
+    hp:                  stats.hp,
+    maxHp:               stats.hp,
+    physicalDamage:      stats.physicalDamage,
+    magicalDamage:       stats.magicalDamage,
+    physicalDefense:     stats.physicalDefense,
+    magicalDefense:      stats.magicalDefense,
+    dodge:               blueprint.dodge,
+    block:               blueprint.block,
     level,
-    initiative:  blueprint.initiative,
-    shape:       blueprint.shape,
+    initiative:          blueprint.initiative,
+    shape:               blueprint.shape,
     anchor,
-    skills:        blueprint.skills,
-    activeSkillIndex: 0,
-    rowTrait:      blueprint.rowTrait,
-    race:          blueprint.race,
-    templateId:    blueprint.templateId,
-    activeEffects: [],
+    skills:              blueprint.skills,
+    activeSkillIndex:    0,
+    rowTrait:            blueprint.rowTrait,
+    race:                blueprint.race,
+    templateId:          blueprint.templateId,
+    activeEffects:       [],
+    activatableAbilities,
   };
 }
 

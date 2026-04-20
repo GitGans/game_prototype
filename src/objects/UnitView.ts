@@ -2,14 +2,14 @@ import Phaser from 'phaser';
 import { CELL_SIZE, CELL_GAP, COLORS, LAYOUT_SCALE } from '../core/Constants';
 import { Unit, SpriteState, SpriteSheetConfig } from '../battle/types';
 import { EffectTooltip } from './EffectTooltip';
+import { fontSize, VALUE_COLOR, HP_COLOR } from '../ui/theme';
+import { HpBar } from '../ui/HpBar';
 
 export class UnitView extends Phaser.GameObjects.Container {
   private bgSprite: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
   private nameText: Phaser.GameObjects.Text;
   private hpText: Phaser.GameObjects.Text;
-  private hpBarBg: Phaser.GameObjects.Rectangle;
-  private hpBarFg: Phaser.GameObjects.Rectangle;
-  private barH = 6;
+  private hpBar: HpBar;
 
   private readonly isPlayer: boolean;
 
@@ -63,7 +63,7 @@ export class UnitView extends Phaser.GameObjects.Container {
 
     const labelColor = this.isPlayer ? COLORS.label : COLORS.labelEnemy;
     this.nameText = scene.add.text(0, -h / 2 + Math.round(10 * LAYOUT_SCALE), unit.name, {
-      fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
+      fontSize: fontSize('md'),
       color: labelColor,
       fontStyle: 'bold',
       align: 'center',
@@ -72,7 +72,7 @@ export class UnitView extends Phaser.GameObjects.Container {
     }).setOrigin(0.5, 0);
 
     this.hpText = scene.add.text(0, h / 2 - Math.round(24 * LAYOUT_SCALE), `${unit.hp}/${unit.maxHp}`, {
-      fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
+      fontSize: fontSize('sm'),
       color: COLORS.textDark,
       align: 'center',
       stroke: '#000000',
@@ -81,13 +81,14 @@ export class UnitView extends Phaser.GameObjects.Container {
 
     const barW = w - Math.round(12 * LAYOUT_SCALE);
     const barH = Math.round(6 * LAYOUT_SCALE);
-    this.barH = barH;
-    this.hpBarBg = scene.add.rectangle(0, h / 2 - Math.round(10 * LAYOUT_SCALE), barW, barH, COLORS.hpBarBg);
-    this.hpBarFg = scene.add.rectangle(
-      -barW / 2, h / 2 - Math.round(10 * LAYOUT_SCALE), barW * (unit.hp / unit.maxHp), barH, COLORS.hpBarFg
-    ).setOrigin(0, 0.5);
+    this.hpBar = new HpBar({
+      scene, x: 0, y: h / 2 - Math.round(10 * LAYOUT_SCALE),
+      width: barW, height: barH,
+      ratio: unit.hp / unit.maxHp,
+      tricolor: false,
+    });
 
-    this.add([this.bgSprite, this.nameText, this.hpText, this.hpBarBg, this.hpBarFg]);
+    this.add([this.bgSprite, this.nameText, this.hpText, this.hpBar]);
     scene.add.existing(this as unknown as Phaser.GameObjects.GameObject);
   }
 
@@ -120,7 +121,7 @@ export class UnitView extends Phaser.GameObjects.Container {
 
       this.nameText.setAlpha(0.4);
       this.hpText.setText('DEAD').setAlpha(0.5);
-      this.hpBarFg.setDisplaySize(0, this.barH);
+      this.hpBar.setRatio(0);
 
       for (const sq of this.effectSquares) sq.destroy();
       this.effectSquares = [];
@@ -130,9 +131,7 @@ export class UnitView extends Phaser.GameObjects.Container {
     }
 
     // Unit alive — only update HP display; Game.ts manages attack/idle transitions via setState()
-    const maxW = this.hpBarBg.width;
-    const ratio = unit.hp / unit.maxHp;
-    this.hpBarFg.setDisplaySize(maxW * ratio, this.barH);
+    this.hpBar.setRatio(unit.hp / unit.maxHp);
     this.hpText.setText(`${unit.hp}/${unit.maxHp}`);
 
     this.updateEffectSquares(unit);
@@ -157,7 +156,7 @@ export class UnitView extends Phaser.GameObjects.Container {
       :  this.footprintW / 2 - sqSize / 2;  // enemy  → top-right
 
     unit.activeEffects.forEach((ae, i) => {
-      const color = ae.effect.isBuff ? 0x22cc44 : 0xcc2222;
+      const color = ae.effect.isBuff ? HP_COLOR.high : HP_COLOR.low;
       const x = baseX;
       const y = topY + i * (sqSize + gap);
 
@@ -177,8 +176,8 @@ export class UnitView extends Phaser.GameObjects.Container {
       this.effectSquares.push(sq);
 
       const lbl = this.scene.add.text(x, y, String(ae.remainingRounds), {
-        fontSize: `${Math.round(10 * LAYOUT_SCALE)}px`,
-        color: '#ffffff',
+        fontSize: fontSize('xs'),
+        color: VALUE_COLOR.white,
         fontStyle: 'bold',
         stroke: '#000000',
         strokeThickness: Math.round(2 * LAYOUT_SCALE),

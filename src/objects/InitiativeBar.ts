@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { BattleState, Unit } from '../battle/types';
 import { COLORS, LAYOUT_SCALE } from '../core/Constants';
 import { effectiveStats } from '../battle/combat';
+import { fontSize, VALUE_COLOR, INITIATIVE } from '../ui/theme';
+import { HpBar } from '../ui/HpBar';
 
 const CARD_GAP    = Math.round(5  * LAYOUT_SCALE);
 const DIVIDER_GAP = Math.round(14 * LAYOUT_SCALE);
@@ -61,7 +63,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
         -Math.round(4 * LAYOUT_SCALE),
         Math.round(2 * LAYOUT_SCALE),
         CARD_H + Math.round(8 * LAYOUT_SCALE),
-        0x8899bb
+        INITIATIVE.divider
       );
       this.add(divider);
       curX = divX + DIVIDER_GAP;
@@ -123,53 +125,43 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
           x + CARD_W / 2, y + Math.round(10 * LAYOUT_SCALE),
           unit.name,
           {
-            fontSize: `${Math.round(10 * LAYOUT_SCALE)}px`,
+            fontSize: fontSize('xs'),
             color: isPlayer ? COLORS.label : COLORS.labelEnemy,
             align: 'center',
           }
         ).setOrigin(0.5, 0).setAlpha(alpha);
 
     const effInit = effectiveStats(unit).initiative;
-    const initColor = effInit > unit.initiative ? '#44ff88'
-                    : effInit < unit.initiative ? '#ff4444'
+    const initColor = effInit > unit.initiative ? VALUE_COLOR.positive
+                    : effInit < unit.initiative ? VALUE_COLOR.negative
                     : COLORS.textLight;
     const initText = this.scene.add.text(
       x + CARD_W / 2, y + CARD_H - Math.round(18 * LAYOUT_SCALE),
       `★${effInit}`,
       {
-        fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
+        fontSize: fontSize('sm'),
         color: initColor,
         fontStyle: 'bold',
         align: 'center',
       }
     ).setOrigin(0.5, 0).setAlpha(alpha);
 
-    // HP bar background — added before fill so fill renders on top
     const hpBgH = Math.max(3, Math.round(4 * LAYOUT_SCALE));
     const barInnerW = CARD_W - Math.round(3 * LAYOUT_SCALE);
-    const hpBg = this.scene.add.rectangle(
-      x + CARD_W / 2, y + CARD_H - hpBgH / 2,
-      barInnerW, hpBgH,
-      0x333333, alpha
-    );
+    const hpBar = new HpBar({
+      scene: this.scene,
+      x: x + CARD_W / 2,
+      y: y + CARD_H - hpBgH / 2,
+      width: barInnerW,
+      height: hpBgH,
+      ratio: unit.hp / unit.maxHp,
+      alpha,
+      tricolor: true,
+    });
 
-    const toAdd: Phaser.GameObjects.GameObject[] = [border, bg, initText, hpBg];
+    const toAdd: Phaser.GameObjects.GameObject[] = [border, bg, initText, hpBar];
     if (nameText) toAdd.splice(2, 0, nameText);
     this.add(toAdd);
-
-    // HP fill — added after hpBg so it renders on top
-    const hpRatio = Math.max(0, unit.hp / unit.maxHp);
-    const fillW = Math.round(barInnerW * hpRatio);
-    if (fillW > 0) {
-      const fillColor = hpRatio > 0.5 ? 0x44cc44 : hpRatio > 0.25 ? 0xddaa00 : 0xdd2222;
-      const hpFill = this.scene.add.rectangle(
-        x + Math.round(1.5 * LAYOUT_SCALE) + fillW / 2,
-        y + CARD_H - hpBgH / 2,
-        fillW, hpBgH,
-        fillColor, alpha
-      );
-      this.add(hpFill);
-    }
   }
 
   private buildNextRound(units: Map<string, Unit>): Unit[] {
