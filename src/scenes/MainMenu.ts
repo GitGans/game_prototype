@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { PhaseManager } from "../core/PhaseManager";
 import { Button } from "../ui/Button";
+import { VALUE_COLOR, SCENE_BG } from "../ui/theme";
 
 export class MainMenu extends Phaser.Scene {
   constructor() {
@@ -12,12 +13,12 @@ export class MainMenu extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    this.add.rectangle(w / 2, h / 2, w, h, 0x1a1a2e);
+    this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.default);
 
     this.add
       .text(w / 2, h / 2 - Math.round(80 * LAYOUT_SCALE), "BATTLE TACTICS", {
         fontSize: `${Math.round(56 * LAYOUT_SCALE)}px`,
-        color: "#ffdd44",
+        color: VALUE_COLOR.highlight,
         fontStyle: "bold",
         stroke: "#000000",
         strokeThickness: Math.round(5 * LAYOUT_SCALE),

@@ -55,4 +55,62 @@ export const VALUE_COLOR = {
   highlight: "#ffdd44",
   white:     "#ffffff",
   muted:     "#aaaaaa",
+  inactive:  "#888888",
+} as const;
+
+// ─── HP bar fill colors ───────────────────────────────────────────────────────
+export const HP_COLOR = {
+  high:   0x44cc44,  // > 50%
+  medium: 0xddaa00,  // 25–50%
+  low:    0xdd2222,  // < 25%
+  bg:     0x333333,
+} as const;
+
+// ─── Skill preview overlay colors ────────────────────────────────────────────
+export const SKILL_PREVIEW = {
+  healDim:      0x0a2a0a,
+  healBright:   0x44dd44,
+  damageDim:    0x2a1a00,
+  damageBright: 0xff8800,
+} as const;
+
+// ─── BattleLog colors (lighter palette, intentionally distinct) ───────────────
+export const BATTLE_LOG = {
+  bg:       0xd8d8d8,
+  positive: "#1a8c1a",
+  negative: "#aa2222",
+  neutral:  "#555555",
+  btn:      "#333333",
+} as const;
+
+// ─── ItemCell slot background ────────────────────────────────────────────────
+export const ITEM_CELL = {
+  bg:          0x2a2a3a,
+  hoverBorder: 0xffffff,
+  emptySlot:   "#555566",
+} as const;
+
+// ─── Scene backgrounds ───────────────────────────────────────────────────────
+export const SCENE_BG = {
+  default: 0x1a1a2e,
+  victory: 0x1a2e1a,
+  panel:   0x222244,
+} as const;
+
+// ─── WorldMap cell type colors ───────────────────────────────────────────────
+export const WORLD_MAP_CELL = {
+  empty:    0x555555,
+  forest:   0x4a7c3f,
+  enemy:    0xcc3333,
+  camp:     0xcc9933,
+  town:     0x3355cc,
+  dungeon:  0x9933cc,
+  start:    0xffffff,
+  fog:      0x888888,
+  party:    0x4488ff,
+} as const;
+
+// ─── Initiative bar ──────────────────────────────────────────────────────────
+export const INITIATIVE = {
+  divider: 0x8899bb,
 } as const;

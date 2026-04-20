@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
 import { Button } from '../ui/Button';
+import { VALUE_COLOR, SCENE_BG } from '../ui/theme';
 
 export class MapVictory extends Phaser.Scene {
   constructor() {
@@ -12,12 +13,12 @@ export class MapVictory extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    this.add.rectangle(w / 2, h / 2, w, h, 0x1a2e1a);
+    this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.victory);
 
     this.add
       .text(w / 2, h / 2 - Math.round(80 * LAYOUT_SCALE), 'VICTORY!', {
         fontSize: `${Math.round(64 * LAYOUT_SCALE)}px`,
-        color: '#ffdd44',
+        color: VALUE_COLOR.highlight,
         fontStyle: 'bold',
         stroke: '#000000',
         strokeThickness: Math.round(5 * LAYOUT_SCALE),
@@ -27,7 +28,7 @@ export class MapVictory extends Phaser.Scene {
     this.add
       .text(w / 2, h / 2 - Math.round(20 * LAYOUT_SCALE), 'All enemies have been defeated.', {
         fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-        color: '#aaffaa',
+        color: VALUE_COLOR.positive,
       })
       .setOrigin(0.5);
 

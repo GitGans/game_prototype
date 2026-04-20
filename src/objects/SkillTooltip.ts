@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE, COLORS } from "../core/Constants";
-import { TOOLTIP, fontSize } from "../ui/theme";
+import { TOOLTIP, fontSize, VALUE_COLOR } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
 
 const TW = Math.round(140 * LAYOUT_SCALE);
@@ -23,7 +23,7 @@ export class SkillTooltip extends BaseTooltip<SkillTooltipData> {
     const color =
       data.damageType === "magical"  ? COLORS.skillMagical  :
       data.damageType === "physical" ? COLORS.skillPhysical :
-      "#ffffff";
+      VALUE_COLOR.white;
 
     const t = this.addText(pad, pad, data.name, {
       fontSize:  fontSize("sm"),

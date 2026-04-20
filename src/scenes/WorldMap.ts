@@ -5,6 +5,7 @@ import { GameState } from '../core/GameState';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { canMove, resolveCell, initSubMapState } from '../world/mapLogic';
 import { Button } from '../ui/Button';
+import { VALUE_COLOR, WORLD_MAP_CELL } from '../ui/theme';
 import {
   SubMapDefinition,
   SubMapState,
@@ -73,26 +74,26 @@ export class WorldMap extends Phaser.Scene {
 
   private cellColor(x: number, y: number, mapState: SubMapState): number {
     const cell = this.mapDef.layout[y]?.[x];
-    if (cell === 'wall' || cell === 'tree') return 0x555555;
-    if (cell === null || cell === undefined) return 0x4a7c3f;
+    if (cell === 'wall' || cell === 'tree') return WORLD_MAP_CELL.empty;
+    if (cell === null || cell === undefined) return WORLD_MAP_CELL.forest;
 
     const key = `${x},${y}`;
     const es = mapState.entityStates[key];
-    if (es && !es.alive) return 0x888888;
+    if (es && !es.alive) return WORLD_MAP_CELL.fog;
 
     switch (cell.type) {
-      case 'mob':    return 0xcc3333;
-      case 'camp':   return 0xcc9933;
-      case 'portal': return 0x3355cc;
-      case 'shop':   return 0x9933cc;
-      default:       return 0xffffff;
+      case 'mob':    return WORLD_MAP_CELL.enemy;
+      case 'camp':   return WORLD_MAP_CELL.camp;
+      case 'portal': return WORLD_MAP_CELL.town;
+      case 'shop':   return WORLD_MAP_CELL.dungeon;
+      default:       return WORLD_MAP_CELL.start;
     }
   }
 
   private buildPartyMarker(): void {
     const px = this.offsetX + this.partyX * CELL + CELL / 2;
     const py = this.offsetY + this.partyY * CELL + CELL / 2;
-    this.partyMarker = this.add.rectangle(px, py, CELL - 16, CELL - 16, 0x4488ff).setDepth(1);
+    this.partyMarker = this.add.rectangle(px, py, CELL - 16, CELL - 16, WORLD_MAP_CELL.party).setDepth(1);
   }
 
   private movePartyMarker(): void {
@@ -104,7 +105,7 @@ export class WorldMap extends Phaser.Scene {
   private buildInteractPrompt(): void {
     this.interactPrompt = this.add
       .text(this.scale.width / 2, this.offsetY - 30, '', {
-        fontSize: '20px', color: '#ffdd44', stroke: '#000', strokeThickness: 3,
+        fontSize: '20px', color: VALUE_COLOR.highlight, stroke: '#000', strokeThickness: 3,
       })
       .setOrigin(0.5)
       .setDepth(2)

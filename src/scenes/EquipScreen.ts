@@ -9,7 +9,7 @@ import { getEquippedBonuses } from '../battle/itemOps';
 import { ItemSlotSnapshot, UnitTabSnapshot } from '../battle/types';
 import { Button } from '../ui/Button';
 import { ContextMenu } from '../ui/ContextMenu';
-import { fontSize } from '../ui/theme';
+import { fontSize, VALUE_COLOR, BTN, SCENE_BG } from '../ui/theme';
 import { ItemTooltip } from '../objects/ItemTooltip';
 import { UnitTooltip } from '../objects/UnitTooltip';
 import { EquipmentMatrix } from '../objects/EquipmentMatrix';
@@ -43,7 +43,7 @@ export class EquipScreen extends Phaser.Scene {
 
     const w = this.scale.width;
     const h = this.scale.height;
-    this.add.rectangle(w / 2, h / 2, w, h, 0x1a1a2e);
+    this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.default);
 
     this.itemTooltip = new ItemTooltip(this);
 
@@ -60,6 +60,10 @@ export class EquipScreen extends Phaser.Scene {
     EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
   }
 
+  destroy(): void {
+    EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
+  }
+
   // ── Mode A: unit selection ─────────────────────────────────────────────────
 
   private renderSelectionMode(phase: EquipScreenPhase): void {
@@ -67,11 +71,11 @@ export class EquipScreen extends Phaser.Scene {
     const h = this.scale.height;
 
     this.add.text(w / 2, Math.round(40 * LAYOUT_SCALE), 'Select a character', {
-      fontSize: fontSize('lg'), color: '#cccccc', fontStyle: 'bold',
+      fontSize: fontSize('lg'), color: VALUE_COLOR.neutral, fontStyle: 'bold',
     }).setOrigin(0.5);
 
     const units = phase.availableUnits;
-    const rows  = [units.slice(0, 5), units.slice(5)].filter(r => r.length > 0);
+    const rows  = [units.slice(0, 6), units.slice(6, 12)].filter(r => r.length > 0);
     const startY = Math.round(100 * LAYOUT_SCALE);
 
     rows.forEach((row, ri) => {
@@ -99,12 +103,12 @@ export class EquipScreen extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .on('pointerup', onClick);
     } else {
-      this.add.rectangle(x + size / 2, y + size / 2, size, size, 0x4a4a6a)
+      this.add.rectangle(x + size / 2, y + size / 2, size, size, BTN.neutral.base)
         .setInteractive({ useHandCursor: true })
         .on('pointerup', onClick);
     }
     this.add.text(x + size / 2, y + size + Math.round(4 * LAYOUT_SCALE), name, {
-      fontSize: fontSize('sm'), color: '#cccccc',
+      fontSize: fontSize('sm'), color: VALUE_COLOR.neutral,
     }).setOrigin(0.5, 0);
   }
 
@@ -120,10 +124,13 @@ export class EquipScreen extends Phaser.Scene {
     const matrixH = 4 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const contentTopY = PORTRAIT_TAB + PAD * 2;
 
-    const matrixX  = PAD;
-    const spriteX  = matrixX + matrixW + PAD;
-    const statsX   = spriteX + SPRITE_SZ + PAD;
-    this.statsPanelW = Math.max(w - statsX - PAD, Math.round(150 * LAYOUT_SCALE));
+    const STATS_W = Math.round(200 * LAYOUT_SCALE);
+    const totalContentW = matrixW + PAD + SPRITE_SZ + PAD + STATS_W;
+    const startX   = Math.round((w - totalContentW) / 2);
+    const matrixX  = startX;
+    const spriteX  = startX + matrixW + PAD;
+    const statsX   = startX + matrixW + PAD + SPRITE_SZ + PAD;
+    this.statsPanelW = STATS_W;
     this.statsPanelX = statsX;
     this.statsPanelY = contentTopY;
 
@@ -143,10 +150,13 @@ export class EquipScreen extends Phaser.Scene {
 
     // Backpack (below the three columns)
     const backpackY = contentTopY + Math.max(matrixH, SPRITE_SZ) + PAD;
+    const backpackW = 10 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+    const backpackX = Math.round((w - backpackW) / 2);
     this.backpackRow = new BackpackRow(
-      this, PAD, backpackY, CELL_SIZE, CELL_GAP,
+      this, backpackX, backpackY, CELL_SIZE, CELL_GAP,
       phase.backpack, this.itemTooltip,
       (item, cellX, cellY) => this.onBackpackItemClick(item, cellX, cellY),
+      10,
     );
 
     this.renderBackButton(w, h);
@@ -156,7 +166,7 @@ export class EquipScreen extends Phaser.Scene {
     units.forEach((u, i) => {
       const tabX = PAD + i * (PORTRAIT_TAB + CELL_GAP);
       const isSelected = u.templateId === this.selectedTemplateId;
-      const baseColor  = isSelected ? 0x4a6a9a : 0x2a2a4a;
+      const baseColor  = isSelected ? BTN.navy.hover : BTN.navy.base;
 
       const rect = this.add.rectangle(
         tabX + PORTRAIT_TAB / 2, PAD + PORTRAIT_TAB / 2,
@@ -164,13 +174,13 @@ export class EquipScreen extends Phaser.Scene {
       ).setInteractive({ useHandCursor: !isSelected });
 
       if (!isSelected) {
-        rect.on('pointerover', () => rect.setFillStyle(0x3a3a6a));
+        rect.on('pointerover', () => rect.setFillStyle(BTN.neutral.base));
         rect.on('pointerout',  () => rect.setFillStyle(baseColor));
         rect.on('pointerup',   () => PhaseManager.transition({ type: 'switch_equip_unit', templateId: u.templateId }));
       }
 
       this.add.text(tabX + PORTRAIT_TAB / 2, PAD + PORTRAIT_TAB / 2, u.name.charAt(0), {
-        fontSize: fontSize('sm'), color: '#cccccc', fontStyle: 'bold',
+        fontSize: fontSize('sm'), color: VALUE_COLOR.neutral, fontStyle: 'bold',
       }).setOrigin(0.5);
     });
   }
@@ -266,7 +276,8 @@ export class EquipScreen extends Phaser.Scene {
   }
 
   private onStateChanged(): void {
-    const phase = PhaseManager.getPhase() as EquipScreenPhase;
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'equip_screen') return;
     this.equipMatrix?.refresh(phase.unitEquipment);
     this.backpackRow?.refresh(phase.backpack);
     this.refreshStatsPanel(phase);

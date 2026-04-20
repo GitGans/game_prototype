@@ -7,7 +7,6 @@ import { effectiveStats } from "../battle/combat";
 
 const W           = Math.round(200 * LAYOUT_SCALE);
 const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
-const LINE_H      = Math.round(17  * LAYOUT_SCALE);
 
 interface StatValue { value: number; base: number }
 function flat(v: number): StatValue { return { value: v, base: v }; }
@@ -186,7 +185,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 
     for (const { label, display, color } of statLines) {
       this.addText(pad, y, `${label}: ${display}`, { fontSize: fontSize("sm"), color });
-      y += LINE_H;
+      y += TOOLTIP.lineH;
     }
 
     y += Math.round(6 * LAYOUT_SCALE);
@@ -198,16 +197,16 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     y += Math.round(18 * LAYOUT_SCALE);
 
     if (data.skills.length === 0) {
-      this.addText(pad, y, "No skills", { fontSize: fontSize("sm"), color: "#555555" });
-      y += LINE_H;
+      this.addText(pad, y, "No skills", { fontSize: fontSize("sm"), color: VALUE_COLOR.muted });
+      y += TOOLTIP.lineH;
     } else {
       for (const skill of data.skills) {
         const nameCol =
           skill.damageBlock?.damageType === "magical"  ? COLORS.skillMagical  :
           skill.damageBlock?.damageType === "physical" ? COLORS.skillPhysical :
-          (skill.isActive ? VALUE_COLOR.white : "#888888");
+          (skill.isActive ? VALUE_COLOR.white : VALUE_COLOR.inactive);
         this.addText(pad, y, skill.name, { fontSize: fontSize("sm"), color: nameCol });
-        y += LINE_H;
+        y += TOOLTIP.lineH;
       }
     }
 

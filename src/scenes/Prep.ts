@@ -4,6 +4,7 @@ import { GameState } from "../core/GameState";
 import { PhaseManager } from "../core/PhaseManager";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
 import { Button } from "../ui/Button";
+import { VALUE_COLOR, SCENE_BG, BTN, ALPHA } from "../ui/theme";
 
 export class Prep extends Phaser.Scene {
   private _activePanel: Phaser.GameObjects.Container | null = null;
@@ -22,11 +23,11 @@ export class Prep extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    this.add.rectangle(w / 2, h / 2, w, h, 0x1a1a2e);
+    this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.default);
     this.add
       .text(w / 2, Math.round(60 * LAYOUT_SCALE), "PREPARATION", {
         fontSize: `${Math.round(32 * LAYOUT_SCALE)}px`,
-        color: "#cccccc",
+        color: VALUE_COLOR.neutral,
         fontStyle: "bold",
       })
       .setOrigin(0.5);
@@ -66,12 +67,12 @@ export class Prep extends Phaser.Scene {
       this.add
         .text(x, iconY, label, {
           fontSize: `${Math.round(14 * LAYOUT_SCALE)}px`,
-          color: "#ffffff",
+          color: VALUE_COLOR.white,
         })
         .setOrigin(0.5);
 
-      icon.on("pointerover", () => icon.setAlpha(0.8));
-      icon.on("pointerout", () => icon.setAlpha(1));
+      icon.on("pointerover", () => icon.setAlpha(ALPHA.hover));
+      icon.on("pointerout", () => icon.setAlpha(ALPHA.active));
       icon.on("pointerup", () => {
         Object.values(panels).forEach((p) => p.setVisible(false));
         panels[key].setVisible(true);
@@ -87,12 +88,12 @@ export class Prep extends Phaser.Scene {
     const btnY = h / 2 + Math.round(160 * LAYOUT_SCALE);
 
     this.battleBtn = this.add
-      .rectangle(w / 2, btnY, btnW, btnH, 0x2a6a2a)
+      .rectangle(w / 2, btnY, btnW, btnH, BTN.primary.base)
       .setInteractive({ useHandCursor: true });
     this.battleBtnText = this.add
       .text(w / 2, btnY, "Go to Battle", {
         fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-        color: "#ffffff",
+        color: VALUE_COLOR.white,
         fontStyle: "bold",
         align: "center",
       })
@@ -100,7 +101,7 @@ export class Prep extends Phaser.Scene {
 
     if (this._isCampMode) {
       this.battleBtnText.setText('Exit Camp');
-      this.battleBtn.setFillStyle(0x2a6a2a);
+      this.battleBtn.setFillStyle(BTN.primary.base);
       this.battleBtn.setInteractive({ useHandCursor: true });
       this.battleBtn.on('pointerup', () =>
         PhaseManager.transition({ type: 'exit_camp' })
@@ -124,7 +125,7 @@ export class Prep extends Phaser.Scene {
     const valid = active > 0 && active <= 9;
     const excess = active - 9;
 
-    this.battleBtn.setFillStyle(valid ? 0x2a6a2a : 0x6a2a2a);
+    this.battleBtn.setFillStyle(valid ? BTN.primary.base : BTN.danger.base);
 
     let label = "Go to Battle";
     if (active === 0) {
@@ -151,14 +152,14 @@ export class Prep extends Phaser.Scene {
         h / 2,
         Math.round(500 * LAYOUT_SCALE),
         Math.round(400 * LAYOUT_SCALE),
-        0x222244,
+        SCENE_BG.panel,
       ),
     );
     panel.add(
       this.add
         .text(w / 2, h / 2 - Math.round(170 * LAYOUT_SCALE), "Camp", {
           fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
+          color: VALUE_COLOR.highlight,
           fontStyle: "bold",
         })
         .setOrigin(0.5),
@@ -171,7 +172,7 @@ export class Prep extends Phaser.Scene {
           "Units in camp don't join battle",
           {
             fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-            color: "#aaaaaa",
+            color: VALUE_COLOR.muted,
           },
         )
         .setOrigin(0.5),
@@ -206,11 +207,11 @@ export class Prep extends Phaser.Scene {
           w / 2 - Math.round(180 * LAYOUT_SCALE),
           y,
           `${bp.name}  Lv.${level}`,
-          { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: "#ffffff" },
+          { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: VALUE_COLOR.white },
         )
         .setDepth(11);
 
-      const toggleColor = inCamp ? 0x884444 : 0x448844;
+      const toggleColor = inCamp ? BTN.danger.base : BTN.primary.base;
       const toggleLabel = inCamp ? "In Camp" : "Active";
       const toggleBtnX = w / 2 + Math.round(150 * LAYOUT_SCALE);
       const toggleBtnY = y + Math.round(8 * LAYOUT_SCALE);
@@ -228,7 +229,7 @@ export class Prep extends Phaser.Scene {
       const toggleText = this.add
         .text(toggleBtnX, toggleBtnY, toggleLabel, {
           fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-          color: "#ffffff",
+          color: VALUE_COLOR.white,
         })
         .setOrigin(0.5)
         .setDepth(12);
@@ -261,14 +262,14 @@ export class Prep extends Phaser.Scene {
         h / 2,
         Math.round(500 * LAYOUT_SCALE),
         Math.round(400 * LAYOUT_SCALE),
-        0x222244,
+        SCENE_BG.panel,
       ),
     );
     panel.add(
       this.add
         .text(w / 2, h / 2 - Math.round(160 * LAYOUT_SCALE), "Shop", {
           fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
+          color: VALUE_COLOR.highlight,
           fontStyle: "bold",
         })
         .setOrigin(0.5),
@@ -277,7 +278,7 @@ export class Prep extends Phaser.Scene {
       this.add
         .text(w / 2, h / 2, "Coming soon...", {
           fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-          color: "#888888",
+          color: VALUE_COLOR.inactive,
         })
         .setOrigin(0.5),
     );
@@ -295,14 +296,14 @@ export class Prep extends Phaser.Scene {
         h / 2,
         Math.round(500 * LAYOUT_SCALE),
         Math.round(420 * LAYOUT_SCALE),
-        0x222244,
+        SCENE_BG.panel,
       ),
     );
     panel.add(
       this.add
         .text(w / 2, h / 2 - Math.round(180 * LAYOUT_SCALE), "Party", {
           fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
+          color: VALUE_COLOR.highlight,
           fontStyle: "bold",
         })
         .setOrigin(0.5),
@@ -339,7 +340,7 @@ export class Prep extends Phaser.Scene {
           y + Math.round(10 * LAYOUT_SCALE),
           Math.round(420 * LAYOUT_SCALE),
           Math.round(32 * LAYOUT_SCALE),
-          0x333366,
+          BTN.ghost.base,
         )
         .setInteractive({ useHandCursor: true })
         .setDepth(11);
@@ -348,12 +349,12 @@ export class Prep extends Phaser.Scene {
           w / 2 - Math.round(190 * LAYOUT_SCALE),
           y,
           `${bp.name}  Lv.${level}${status}`,
-          { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: "#ffffff" },
+          { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: VALUE_COLOR.white },
         )
         .setDepth(12);
 
-      row.on("pointerover", () => row.setFillStyle(0x4444aa));
-      row.on("pointerout", () => row.setFillStyle(0x333366));
+      row.on("pointerover", () => row.setFillStyle(BTN.ghost.hover));
+      row.on("pointerout", () => row.setFillStyle(BTN.ghost.base));
       row.on("pointerup", () =>
         PhaseManager.transition({ type: 'open_equip_screen', unitTemplateId: bp.templateId })
       );

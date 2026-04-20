@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { fontSize } from '../ui/theme';
+import { fontSize, VALUE_COLOR, ITEM_CELL } from '../ui/theme';
 import { ItemSlotSnapshot } from '../battle/types';
 import { ItemTooltip, ItemTooltipData } from './ItemTooltip';
 
@@ -43,12 +43,12 @@ export class ItemCell extends Phaser.GameObjects.Container {
     this.currentItem = cfg.item;
 
     // Background
-    const bgRect = cfg.scene.add.rectangle(0, 0, cfg.size, cfg.size, 0x2a2a3a).setOrigin(0, 0);
+    const bgRect = cfg.scene.add.rectangle(0, 0, cfg.size, cfg.size, ITEM_CELL.bg).setOrigin(0, 0);
     this.add(bgRect);
 
     // Hover border (initially invisible)
     this.borderRect = cfg.scene.add.rectangle(0, 0, cfg.size, cfg.size, 0x000000, 0).setOrigin(0, 0);
-    this.borderRect.setStrokeStyle(1, 0xffffff, 0);
+    this.borderRect.setStrokeStyle(1, ITEM_CELL.hoverBorder, 0);
     this.add(this.borderRect);
 
     this.buildContent(cfg.item);
@@ -57,7 +57,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
     this.setInteractive({ useHandCursor: !!cfg.onClick });
 
     this.on('pointerover', () => {
-      this.borderRect.setStrokeStyle(1, 0xffffff, 1);
+      this.borderRect.setStrokeStyle(1, ITEM_CELL.hoverBorder, 1);
       if (this.currentItem) this.showTooltip(this.currentItem);
     });
     this.on('pointerout', () => {
@@ -84,7 +84,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
     if (!item) {
       const label = scene.add.text(size / 2, size / 2, slotLabel, {
         fontSize: fontSize('xs'),
-        color: '#555566',
+        color: ITEM_CELL.emptySlot,
       }).setOrigin(0.5);
       this.add(label);
       this.contentObjects.push(label);
@@ -103,7 +103,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
       const rect = scene.add.rectangle(0, 0, size, size, color).setOrigin(0, 0);
       const letter = scene.add.text(size / 2, size / 2, item.definition.name.charAt(0), {
         fontSize: fontSize('md'),
-        color: '#ffffff',
+        color: VALUE_COLOR.white,
         fontStyle: 'bold',
       }).setOrigin(0.5);
       this.add(rect);
