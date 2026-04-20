@@ -3,16 +3,13 @@ import { LAYOUT_SCALE } from "../core/Constants";
 import { GameState } from "../core/GameState";
 import { PhaseManager } from "../core/PhaseManager";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
-import { EquipSlot, UnitBlueprint, UnitClass } from "../battle/types";
+import { UnitBlueprint } from "../battle/types";
 import { ITEM_DEFINITIONS } from "../data/itemDefinitions";
 import {
-  equipItem,
-  unequipItem,
-  canUnitEquipItem,
   getEquippedBonuses,
 } from "../battle/itemOps";
 import { Button } from "../ui/Button";
-import { ItemTooltip, ItemTooltipData } from "../objects/ItemTooltip";
+import { ItemTooltip } from "../objects/ItemTooltip";
 
 export class Prep extends Phaser.Scene {
   private itemTooltip!: ItemTooltip;
@@ -23,34 +20,6 @@ export class Prep extends Phaser.Scene {
 
   constructor() {
     super("Prep");
-  }
-
-  private _buildItemTooltipData(instanceId: string, unitClass: UnitClass): ItemTooltipData | null {
-    const inst = GameState.itemInstances[instanceId];
-    const def  = inst ? ITEM_DEFINITIONS[inst.definitionId] : undefined;
-    if (!def) return null;
-
-    const STAT_LABELS: [keyof typeof def.statBonuses, string][] = [
-      ["hp",              "HP"],
-      ["physicalDamage",  "Phys Dmg"],
-      ["magicalDamage",   "Magic Dmg"],
-      ["physicalDefense", "Phys Def"],
-      ["magicalDefense",  "Magic Def"],
-    ];
-
-    const stats = STAT_LABELS
-      .filter(([k]) => (def.statBonuses[k] ?? 0) !== 0)
-      .map(([k, label]) => ({ label, value: def.statBonuses[k] as number }));
-
-    const hasRestriction = (def.allowedClasses?.length ?? 0) > 0;
-    const classAllowed   = hasRestriction ? def.allowedClasses!.includes(unitClass) : null;
-
-    return {
-      name:             def.name,
-      stats,
-      classRestriction: hasRestriction ? def.allowedClasses!.join(", ") : null,
-      classAllowed,
-    };
   }
 
   create(): void {
@@ -484,25 +453,13 @@ export class Prep extends Phaser.Scene {
 
     // ── Layout constants ──────────────────────────────────────────────────────
     const PAD = Math.round(16 * LAYOUT_SCALE);
-    const EQ_CELL = Math.round(64 * LAYOUT_SCALE); // equipment cell size
     const EQ_COL_STEP = Math.round(72 * LAYOUT_SCALE); // col stride (64 + 8 gap)
-    const EQ_ROW_STEP = Math.round(72 * LAYOUT_SCALE); // row stride (64 + 8 gap)
     const SPRITE_SIZE = Math.round(256 * LAYOUT_SCALE);
-    const BP_CELL = Math.round(64 * LAYOUT_SCALE);
-    const BP_GAP = Math.round(6 * LAYOUT_SCALE);
-    const BP_COLS = 10;
-    const BP_ROWS = 1;
     const HEADER_H = Math.round(36 * LAYOUT_SCALE);
 
     const winLeft = w / 2 - WIN_W / 2;
     const contentTopY = winCY - WIN_H / 2 + HEADER_H + PAD;
 
-    // Equipment block: column centers, relative to window left
-    const eqColCenters = [
-      winLeft + PAD + EQ_CELL / 2,
-      winLeft + PAD + EQ_CELL / 2 + EQ_COL_STEP,
-      winLeft + PAD + EQ_CELL / 2 + 2 * EQ_COL_STEP,
-    ];
     // Sprite block center X
     const EQ_BLOCK_W = 3 * EQ_COL_STEP;
     const spriteX = winLeft + PAD + EQ_BLOCK_W + PAD + SPRITE_SIZE / 2;
@@ -511,133 +468,6 @@ export class Prep extends Phaser.Scene {
     const skillX = spriteX + SPRITE_SIZE / 2 + PAD;
     const skillY = contentTopY;
     const rightPanelW = winLeft + WIN_W - PAD - skillX;
-
-    // ── LEFT: Equipment silhouette ────────────────────────────────────────────
-    const EQUIP_SILHOUETTE: { slot: EquipSlot; col: 0 | 1 | 2; row: number }[] =
-      [
-        { slot: "necklace", col: 0, row: 0 },
-        { slot: "helmet", col: 1, row: 0 },
-        { slot: "artifact", col: 2, row: 0 },
-        { slot: "hand_left", col: 0, row: 1 },
-        { slot: "armor", col: 1, row: 1 },
-        { slot: "hand_right", col: 2, row: 1 },
-        { slot: "ring_1", col: 0, row: 2 },
-        { slot: "belt", col: 1, row: 2 },
-        { slot: "ring_2", col: 2, row: 2 },
-        { slot: "gloves", col: 0, row: 3 },
-        { slot: "boots", col: 1, row: 3 },
-        // col 2, row 3 → empty placeholder (drawn separately below)
-      ];
-
-    const SLOT_ICONS: Partial<Record<EquipSlot, string>> = {
-      helmet: "🪖",
-      necklace: "📿",
-      armor: "🥋",
-      belt: "▬",
-      hand_left: "🛡️",
-      hand_right: "⚔️",
-      gloves: "🧤",
-      ring_1: "💍",
-      ring_2: "💍",
-      boots: "👢",
-      artifact: "🔮",
-    };
-
-    const equipContainer = GameState.itemContainers[`equip_${bp.templateId}`];
-
-    EQUIP_SILHOUETTE.forEach(({ slot, col, row }) => {
-      const cx = eqColCenters[col];
-      const cy = contentTopY + row * EQ_ROW_STEP + EQ_CELL / 2;
-
-      const equippedId = equipContainer?.slots[slot];
-      const equippedInst = equippedId
-        ? GameState.itemInstances[equippedId]
-        : undefined;
-      const equippedDef = equippedInst
-        ? ITEM_DEFINITIONS[equippedInst.definitionId]
-        : undefined;
-      const bgColor = 0x1e1e2e;
-
-      const cell = this.add
-        .rectangle(cx, cy, EQ_CELL, EQ_CELL, bgColor)
-        .setDepth(21);
-      detail.add(cell);
-
-      if (!equippedDef) {
-        const icon = SLOT_ICONS[slot];
-        if (icon) {
-          detail.add(
-            this.add
-              .text(cx, cy, icon, {
-                fontSize: `${Math.round(28 * LAYOUT_SCALE)}px`,
-              })
-              .setOrigin(0.5)
-              .setDepth(22)
-              .setAlpha(0.5),
-          );
-        }
-        detail.add(
-          this.add
-            .rectangle(cx, cy, EQ_CELL, EQ_CELL, 0x000000)
-            .setAlpha(0.45)
-            .setDepth(23),
-        );
-      }
-
-      if (equippedDef) {
-        const itemSpriteKey = `sprite-item-${equippedInst!.definitionId}`;
-        if (this.textures.exists(itemSpriteKey)) {
-          detail.add(
-            this.add
-              .image(cx, cy, itemSpriteKey)
-              .setDisplaySize(EQ_CELL, EQ_CELL)
-              .setDepth(22),
-          );
-        }
-
-        cell.setInteractive({ useHandCursor: true });
-        cell.on("pointerover", () => {
-          cell.setFillStyle(0x2e2e4e);
-          const data = this._buildItemTooltipData(equippedId!, bp.unitClass);
-          if (data) this.itemTooltip.show(data, cx + EQ_CELL / 2, cy, "right");
-        });
-        cell.on("pointerout", () => {
-          cell.setFillStyle(bgColor);
-          this.itemTooltip.hide();
-        });
-        cell.on(
-          "pointerup",
-          (
-            _p: Phaser.Input.Pointer,
-            _lx: number,
-            _ly: number,
-            event: Phaser.Types.Input.EventData,
-          ) => {
-            event.stopPropagation();
-            this.itemTooltip.hide();
-            this.input.keyboard!.off("keydown-ESC", onEsc);
-            unequipItem(
-              bp.templateId,
-              slot,
-              GameState.itemContainers,
-              GameState.itemInstances,
-              ITEM_DEFINITIONS,
-            );
-            detail.destroy(true);
-            this.showUnitDetail(partyPanel, bp, w, h);
-          },
-        );
-      }
-    });
-
-    // Empty placeholder cell at col 2, row 3
-    {
-      const cx = eqColCenters[2];
-      const cy = contentTopY + 3 * EQ_ROW_STEP + EQ_CELL / 2;
-      detail.add(
-        this.add.rectangle(cx, cy, EQ_CELL, EQ_CELL, 0x1e1e2e).setDepth(21),
-      );
-    }
 
     // ── CENTER: Unit sprite ───────────────────────────────────────────────────
     const textureKey = `sprite-${bp.templateId}`;
@@ -761,101 +591,6 @@ export class Prep extends Phaser.Scene {
           })
           .setDepth(21),
       );
-    }
-
-    // ── BOTTOM: Shared backpack ───────────────────────────────────────────────
-    const backpackTopY = contentTopY + 4 * EQ_ROW_STEP + PAD;
-    const bpGridX = winLeft + PAD;
-    const bpGridY = backpackTopY + Math.round(20 * LAYOUT_SCALE);
-    const backpackContainer = GameState.itemContainers["backpack_shared"];
-
-    detail.add(
-      this.add
-        .text(bpGridX, backpackTopY, "Backpack", {
-          fontSize: `${Math.round(13 * LAYOUT_SCALE)}px`,
-          color: "#ffdd44",
-          fontStyle: "bold",
-        })
-        .setDepth(21),
-    );
-
-    for (let row = 0; row < BP_ROWS; row++) {
-      for (let col = 0; col < BP_COLS; col++) {
-        const slotKey = String(row * BP_COLS + col);
-        const cellCX = bpGridX + col * (BP_CELL + BP_GAP) + BP_CELL / 2;
-        const cellCY = bpGridY + row * (BP_CELL + BP_GAP) + BP_CELL / 2;
-        const instanceId = backpackContainer?.slots[slotKey];
-        const instance = instanceId
-          ? GameState.itemInstances[instanceId]
-          : undefined;
-        const def = instance
-          ? ITEM_DEFINITIONS[instance.definitionId]
-          : undefined;
-        const allowed = def
-          ? canUnitEquipItem(
-              bp.unitClass,
-              instanceId!,
-              GameState.itemInstances,
-              ITEM_DEFINITIONS,
-            )
-          : true;
-        const bgColor = def ? (allowed ? 0x2a2a4a : 0x252535) : 0x1e1e2e;
-
-        const cell = this.add
-          .rectangle(cellCX, cellCY, BP_CELL, BP_CELL, bgColor)
-          .setDepth(21);
-        detail.add(cell);
-
-        if (def) {
-          const itemSpriteKey = `sprite-item-${instance!.definitionId}`;
-          if (this.textures.exists(itemSpriteKey)) {
-            detail.add(
-              this.add
-                .image(cellCX, cellCY, itemSpriteKey)
-                .setDisplaySize(BP_CELL, BP_CELL)
-                .setAlpha(allowed ? 1 : 0.4)
-                .setDepth(22),
-            );
-          }
-
-          if (allowed) {
-            cell.setInteractive({ useHandCursor: true });
-            cell.on("pointerover", () => {
-              cell.setFillStyle(0x3a3a6a);
-              const data = this._buildItemTooltipData(instanceId!, bp.unitClass);
-              if (data) this.itemTooltip.show(data, cellCX + BP_CELL / 2, cellCY, "right");
-            });
-            cell.on("pointerout", () => {
-              cell.setFillStyle(bgColor);
-              this.itemTooltip.hide();
-            });
-            cell.on(
-              "pointerup",
-              (
-                _p: Phaser.Input.Pointer,
-                _lx: number,
-                _ly: number,
-                event: Phaser.Types.Input.EventData,
-              ) => {
-                if (!instanceId) return;
-                event.stopPropagation();
-                this.itemTooltip.hide();
-                this.input.keyboard!.off("keydown-ESC", onEsc);
-                equipItem(
-                  bp.templateId,
-                  bp.unitClass,
-                  instanceId,
-                  GameState.itemContainers,
-                  GameState.itemInstances,
-                  ITEM_DEFINITIONS,
-                );
-                detail.destroy(true);
-                this.showUnitDetail(partyPanel, bp, w, h);
-              },
-            );
-          }
-        }
-      }
     }
 
     // ── Back button ───────────────────────────────────────────────────────────

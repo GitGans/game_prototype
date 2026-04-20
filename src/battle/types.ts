@@ -9,7 +9,9 @@ export type UnitClass =
   | 'pikeman' | 'halberdist' | 'crusher'
   | 'archer' | 'crossbowman' | 'stormbearer'
   | 'hieromonk' | 'warcryer' | 'therapist' | 'schemamonk'
-  | 'tank';
+  | 'tank'
+  | 'soldier' | 'guard' | 'brawler' | 'marksman' | 'forest_ranger'
+  | 'elementalist' | 'monk' | 'troublemaker' | 'healer' | 'shaman' | 'destroyer';
 
 export interface CellCoord {
   side: Side;
@@ -76,6 +78,7 @@ export interface Unit {
   race?: UnitRace;
   templateId: string;
   activeEffects: ActiveEffect[]; // runtime only; max 2; ordered oldest-first
+  activatableAbilities: UnitActivatableAbility[]; // [] for enemies
 }
 
 export interface OccupancyMap {
@@ -278,22 +281,71 @@ export type EquipSlot =
   | 'boots'
   | 'artifact';
 
-export interface ItemStatBonuses {
-  hp?: number;
-  physicalDamage?: number;
-  magicalDamage?: number;
-  physicalDefense?: number;
-  magicalDefense?: number;
+export interface BattleStatBonuses {
+  hp: number;
+  physicalDamage: number;
+  magicalDamage: number;
+  physicalDefense: number;
+  magicalDefense: number;
+}
+
+export type ItemUsage = 'equip' | 'consume' | 'equip_and_activate';
+
+export interface MapStatBonuses {
+  movementPoints?: number;
+  // extend as map mechanics are confirmed
+}
+
+export type ItemUseEffectType = 'heal' | 'permanent_stat_boost';
+
+export interface ItemUseEffect {
+  type: ItemUseEffectType;
+  stat?: keyof BattleStatBonuses; // used by permanent_stat_boost
+  amount: number;
 }
 
 export interface ItemDefinition {
   id: string;
   name: string;
-  equipSlot: EquipSlot | null;  // null = can only live in backpack (e.g. future consumables)
-  subclass?: string;             // e.g. 'robe' | 'medium_armor' | 'heavy_armor' — plain string, extend freely in data
-  allowedClasses?: UnitClass[];  // absent or [] = usable by all classes
-  statBonuses: ItemStatBonuses;
-  sprite?: string;  // path from public/, e.g. 'assets/sprites/items/wooden_ring.png'
+  usage: ItemUsage;
+  equipSlot: EquipSlot | null;       // null = backpack-only (consumables)
+  subclass?: string;
+  allowedClasses?: UnitClass[];
+  battleStatBonuses: BattleStatBonuses; // renamed from statBonuses
+  mapStatBonuses?: MapStatBonuses;
+  buyPrice: number;                     // sellPrice = floor(buyPrice/4), computed
+  useEffect?: ItemUseEffect;            // required for consume + equip_and_activate
+  sprite?: string;
+}
+
+export interface UnitActivatableAbility {
+  sourceItemDefinitionId: string;
+  name: string;
+  useEffect: ItemUseEffect;
+  usesRemaining: number; // starts at 1; set to 0 after activation
+}
+
+// ─── Snapshot Types (read-only projections for scene rendering) ──────────────
+
+export interface ItemSlotSnapshot {
+  instanceId: string;
+  definition: ItemDefinition;
+}
+
+export interface BackpackSnapshot {
+  // 24 slots in order; null = empty slot
+  slots: Array<ItemSlotSnapshot | null>;
+}
+
+export interface EquipmentSnapshot {
+  // keyed by EquipSlot strings (ring_1, helmet, etc.); absent key = empty slot
+  slots: Partial<Record<string, ItemSlotSnapshot>>;
+}
+
+export interface UnitTabSnapshot {
+  templateId: string;
+  name: string;
+  unitClass: UnitClass;
 }
 
 export interface ItemInstance {

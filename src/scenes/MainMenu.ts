@@ -1,6 +1,5 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
-import { GameState } from "../core/GameState";
 import { PhaseManager } from "../core/PhaseManager";
 import { Button } from "../ui/Button";
 
@@ -10,8 +9,6 @@ export class MainMenu extends Phaser.Scene {
   }
 
   create(): void {
-    GameState.initItemsIfNeeded();
-
     const w = this.scale.width;
     const h = this.scale.height;
 
@@ -34,7 +31,7 @@ export class MainMenu extends Phaser.Scene {
     new Button({
       scene: this, x: w / 2, y: btnY, w: btnW, h: btnH,
       label: "Play", style: "primary",
-      onClick: () => PhaseManager.transition({ type: 'play' }),
+      onClick: () => PhaseManager.transition({ type: 'new_game' }),
     });
 
     new Button({

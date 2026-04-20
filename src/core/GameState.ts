@@ -6,10 +6,10 @@ import {
   CellCoord,
   ItemInstance,
   ItemContainer,
+  BattleStatBonuses,
 } from "../battle/types";
 import { SubMapState } from '../world/types';
 import { buildOccupancy } from "../battle/occupancy";
-import { PLAYER_UNITS } from "../data/unitDefinitions";
 
 function emptyState(): BattleState {
   return {
@@ -20,6 +20,18 @@ function emptyState(): BattleState {
     validTargets: [],
     benchUnits: [],
   };
+}
+
+export interface CampaignState {
+  money: number;
+  itemInstances: Record<string, ItemInstance>;
+  itemContainers: Record<string, ItemContainer>;
+  unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>>;
+  playerUnitLevels: Record<string, number>;
+  playerUnitPlacements: Record<string, CellCoord>;
+  playerBenchIds: string[] | null;
+  campUnitIds: string[];
+  subMapStates: Record<string, SubMapState>;
 }
 
 class GameStateManager {
@@ -36,6 +48,8 @@ class GameStateManager {
   itemInstances: Record<string, ItemInstance> = {}; // all item instances in the world
   itemContainers: Record<string, ItemContainer> = {}; // all item containers (backpacks, equipment slots)
   subMapStates: Record<string, SubMapState> = {}; // persists entity (mob) alive/dead state per submap
+  money: number = 0;
+  unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>> = {};
 
   get(): BattleState {
     return this.state;
@@ -63,39 +77,18 @@ class GameStateManager {
     this.battleMode = mode;
   }
 
-  initItemsIfNeeded(): void {
-    // Idempotent — safe to call multiple times
-    if (Object.keys(this.itemContainers).length > 0) return;
-
-    // One shared backpack for all player units
-    this.itemContainers["backpack_shared"] = {
-      id: "backpack_shared",
-      kind: "backpack",
-      slots: {},
+  get campaign(): CampaignState {
+    return {
+      money: this.money,
+      itemInstances: this.itemInstances,
+      itemContainers: this.itemContainers,
+      unitPermanentBonuses: this.unitPermanentBonuses,
+      playerUnitLevels: this.playerUnitLevels,
+      playerUnitPlacements: this.playerUnitPlacements,
+      playerBenchIds: this.playerBenchIds,
+      campUnitIds: this.campUnitIds,
+      subMapStates: this.subMapStates,
     };
-
-    // Per-unit equipment containers
-    for (const bp of PLAYER_UNITS) {
-      const tid = bp.templateId;
-      this.itemContainers[`equip_${tid}`] = {
-        id: `equip_${tid}`,
-        kind: "equipment",
-        ownerTemplateId: tid,
-        slots: {},
-      };
-    }
-
-    // Place starting items into the shared backpack
-    let counter = 1;
-    const addToSharedBackpack = (slotKey: string, definitionId: string) => {
-      const id = `item_${String(counter++).padStart(3, "0")}`;
-      this.itemInstances[id] = { id, definitionId };
-      this.itemContainers["backpack_shared"].slots[slotKey] = id;
-    };
-
-    addToSharedBackpack("0", "bronze_ring");
-    addToSharedBackpack("1", "iron_ring");
-    addToSharedBackpack("2", "bronze_necklace");
   }
 }
 
