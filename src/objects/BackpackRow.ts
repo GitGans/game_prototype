@@ -34,8 +34,8 @@ export class BackpackRow extends Phaser.GameObjects.Container {
 
       const cell = new ItemCell({
         scene,
-        x: cx,
-        y: cy,
+        x: cellWorldX,
+        y: cellWorldY,
         size: cellSize,
         slotKey: String(i),
         slotLabel: String(i + 1),
@@ -45,7 +45,6 @@ export class BackpackRow extends Phaser.GameObjects.Container {
           if (it) onItemClick(it, cellWorldX + cellSize / 2, cellWorldY + cellSize / 2);
         },
       });
-      this.add(cell);
       this.cells.push(cell);
     }
 

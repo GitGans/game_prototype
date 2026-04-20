@@ -49,8 +49,8 @@ export class EquipmentMatrix extends Phaser.GameObjects.Container {
 
         const cell = new ItemCell({
           scene,
-          x: cx,
-          y: cy,
+          x: x + cx,
+          y: y + cy,
           size: cellSize,
           slotKey: slot,
           slotLabel: SLOT_LABELS[slot] ?? slot,
@@ -58,7 +58,6 @@ export class EquipmentMatrix extends Phaser.GameObjects.Container {
           tooltip,
           onClick: (it) => onSlotClick(slot, it),
         });
-        this.add(cell);
         this.cells[slot] = cell;
       });
     });
