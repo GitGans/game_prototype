@@ -362,8 +362,9 @@ export function buildBackpackSnapshot(
   containers: Record<string, ItemContainer>,
   instances: Record<string, ItemInstance>,
   definitions: Record<string, ItemDefinition>,
+  containerId = 'backpack_shared',
 ): BackpackSnapshot {
-  const backpack = containers['backpack_shared'];
+  const backpack = containers[containerId];
   const slots: Array<ItemSlotSnapshot | null> = Array(24).fill(null);
   if (!backpack) return { slots };
 

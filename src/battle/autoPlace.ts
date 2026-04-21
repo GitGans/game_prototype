@@ -1,4 +1,4 @@
-import { BattleState, CellCoord, Col, Row, Unit, UnitBlueprint, UnitRace } from './types';
+import { BattleState, CellCoord, Col, Row, Unit, UnitBlueprint, UnitRace, ItemInstance, ItemContainer, BattleStatBonuses } from './types';
 import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
 import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
@@ -6,6 +6,16 @@ import { BENCH_SLOTS } from '../core/Constants';
 import { GameState } from '../core/GameState';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from './itemOps';
+
+export interface PlayerBattleSetup {
+  unitLevels: Record<string, number>;
+  campUnitIds: string[];
+  itemContainers: Record<string, ItemContainer>;
+  itemInstances: Record<string, ItemInstance>;
+  playerUnitPlacements: Record<string, CellCoord>;
+  playerBenchIds: string[] | null;
+  unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>>;
+}
 
 export function getPlayerAverageLevel(state: BattleState): number {
   const playerUnits = [...state.units.values()].filter(u => u.id.startsWith('p'));
@@ -19,19 +29,23 @@ export function createUnitInstance(
   id: string,
   anchor: CellCoord,
   levelOverride?: number,
+  setup?: Pick<PlayerBattleSetup, 'itemContainers' | 'itemInstances' | 'unitPermanentBonuses'>,
 ): Unit {
   const level = levelOverride ?? blueprint.level;
+  const containers = setup?.itemContainers ?? GameState.itemContainers;
+  const instances  = setup?.itemInstances  ?? GameState.itemInstances;
+  const bonuses    = setup?.unitPermanentBonuses ?? GameState.unitPermanentBonuses;
   const stats = computeUnitBattleStats(
     blueprint, level,
-    GameState.itemContainers,
-    GameState.itemInstances,
+    containers,
+    instances,
     ITEM_DEFINITIONS,
-    GameState.unitPermanentBonuses,
+    bonuses,
   );
   const activatableAbilities = snapshotActivatableAbilities(
     blueprint.templateId,
-    GameState.itemContainers,
-    GameState.itemInstances,
+    containers,
+    instances,
     ITEM_DEFINITIONS,
   );
 
@@ -72,10 +86,10 @@ export function blueprintFromUnit(unit: Unit): UnitBlueprint {
   };
 }
 
-export function autoPlacePlayer(state: BattleState): BattleState {
-  const campIds        = GameState.campUnitIds;
-  const savedBenchIds  = GameState.playerBenchIds;
-  const saved          = GameState.playerUnitPlacements;
+export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): BattleState {
+  const campIds        = setup?.campUnitIds        ?? GameState.campUnitIds;
+  const savedBenchIds  = setup?.playerBenchIds     ?? GameState.playerBenchIds;
+  const saved          = setup?.playerUnitPlacements ?? GameState.playerUnitPlacements;
   const availableUnits = PLAYER_UNITS.filter(u => !campIds.includes(u.templateId));
 
   let counter = 1;
@@ -91,11 +105,12 @@ export function autoPlacePlayer(state: BattleState): BattleState {
 
   // Returns true if the unit was placed on the field.
   const tryPlaceOnField = (def: UnitBlueprint): boolean => {
-    const level = GameState.playerUnitLevels[def.templateId] ?? def.level;
+    const levelMap = setup?.unitLevels ?? GameState.playerUnitLevels;
+    const level = levelMap[def.templateId] ?? def.level;
     // 1. Try saved position
     const savedAnchor = saved[def.templateId];
     if (savedAnchor && canPlace(savedAnchor, def.shape, state, 'player')) {
-      state = placeUnit(createUnitInstance(def, `p${counter++}`, savedAnchor, level), state);
+      state = placeUnit(createUnitInstance(def, `p${counter++}`, savedAnchor, level, setup), state);
       return true;
     }
     // 2. Auto-placement: preferred row first, then the other row
@@ -104,7 +119,7 @@ export function autoPlacePlayer(state: BattleState): BattleState {
       for (const col of [0, 1, 2] as Col[]) {
         const anchor: CellCoord = { side: 'player', row, col };
         if (canPlace(anchor, def.shape, state, 'player')) {
-          state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level), state);
+          state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level, setup), state);
           return true;
         }
       }
