@@ -21,6 +21,8 @@ import {
   UnitTabSnapshot,
   Skill,
 } from '../battle/types';
+import { PlayerUnitState } from './GameState';
+import { PlayerBattleSetup } from '../battle/autoPlace';
 
 function buildSkillDescription(skill: Skill): string {
   if (skill.effectBlock) return `${skill.actionType} · applies ${skill.effectBlock.effectDisplayName}`;
@@ -44,6 +46,27 @@ class PhaseManagerClass {
 
   getDebugState(): DebugBattleState | null {
     return this.debugState;
+  }
+
+  buildDebugBattleSetup(): PlayerBattleSetup {
+    const ds = this.debugState!;
+    const playerUnits: Record<string, PlayerUnitState> = {};
+    for (const bp of PLAYER_UNITS) {
+      const tier0 = bp.skillTiers.find(t => t.unlocksAtLevel === 0);
+      playerUnits[bp.templateId] = {
+        level:            ds.level,
+        isInCamp:         ds.campUnitIds.includes(bp.templateId),
+        lastPlacement:    ds.playerUnitPlacements?.[bp.templateId] ?? null,
+        permanentBonuses: ds.unitPermanentBonuses[bp.templateId] ?? {},
+        chosenSkills:     ds.chosenSkills[bp.templateId]
+                            ?? (tier0 ? { 0: tier0.options[0].id } : {}),
+      };
+    }
+    return {
+      playerUnits,
+      itemContainers: ds.itemContainers,
+      itemInstances:  ds.itemInstances,
+    };
   }
 
   transition(action: PhaseAction): void {

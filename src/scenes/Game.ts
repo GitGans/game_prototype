@@ -34,8 +34,9 @@ import {
 } from "../battle/types";
 import { PhaseManager } from '../core/PhaseManager';
 import { Button } from '../ui/Button';
-import { VALUE_COLOR, BTN, ALPHA } from '../ui/theme';
+import { VALUE_COLOR, ALPHA } from '../ui/theme';
 import { SkillTooltip } from '../objects/SkillTooltip';
+import { SkillBar } from '../objects/SkillBar';
 import { ENEMY_GROUPS } from '../data/enemyGroupDefinitions';
 import { PLAYER_UNITS, ENEMY_UNITS } from "../data/unitDefinitions";
 import { cellKey } from "../battle/field";
@@ -222,8 +223,7 @@ export class Game extends Phaser.Scene {
   private selectedFieldUnitId: string | null = null;
   private pendingTargetCoord: CellCoord | null = null;
   private lastClickCoordKey: string | null = null;
-  private skillIconContainers: Phaser.GameObjects.Container[] = [];
-  private skillNameTooltip: SkillTooltip | null = null;
+  private skillBar!: SkillBar;
   private lastClickTime = 0;
 
   // Counter for generating unique unit IDs during placement
@@ -240,7 +240,7 @@ export class Game extends Phaser.Scene {
     this.buildGrid();
     this.unitTooltip = new UnitTooltip(this, TOOLTIP.bg, TOOLTIP.bgAlpha);
     this.effectTooltip = new EffectTooltip(this);
-    this.skillNameTooltip = new SkillTooltip(this);
+    this.skillBar = new SkillBar(this, new SkillTooltip(this));
     this.initBattle();
     this.buildUnitViews();
     this.buildUI();
@@ -308,25 +308,7 @@ export class Game extends Phaser.Scene {
     const isDebug = phase.type === 'battle' && phase.isDebug;
 
     if (isDebug) {
-      const ds = PhaseManager.getDebugState()!;
-      // Build PlayerUnitState records from debug state
-      const debugPlayerUnits: Record<string, import('../core/GameState').PlayerUnitState> = {};
-      for (const bp of PLAYER_UNITS) {
-        const tier0 = bp.skillTiers.find(t => t.unlocksAtLevel === 0);
-        debugPlayerUnits[bp.templateId] = {
-          level: ds.level,
-          isInCamp: ds.campUnitIds.includes(bp.templateId),
-          lastPlacement: ds.playerUnitPlacements?.[bp.templateId] ?? null,
-          permanentBonuses: ds.unitPermanentBonuses[bp.templateId] ?? {},
-          chosenSkills: tier0 ? { 0: tier0.options[0].id } : {},
-        };
-      }
-      const debugSetup: PlayerBattleSetup = {
-        playerUnits: debugPlayerUnits,
-        itemContainers: ds.itemContainers,
-        itemInstances: ds.itemInstances,
-      };
-      state = autoPlacePlayer(state, debugSetup);
+      state = autoPlacePlayer(state, PhaseManager.buildDebugBattleSetup());
     } else {
       GameState.reset();
       state = GameState.get();
@@ -1975,11 +1957,11 @@ export class Game extends Phaser.Scene {
   // ─── Skill Icon UI ─────────────────────────────────────────────────────────
 
   private showSkillIcons(unit: Unit): void {
-    this.clearSkillIcons();
-    if (unit.skills.length < 1) return;
+    if (unit.skills.length < 1) { this.skillBar.hide(); return; }
 
-    const iconSize = Math.round(28 * LAYOUT_SCALE);
-    const iconGap  = Math.round(4  * LAYOUT_SCALE);
+    // 6 icons × 20px + 5 gaps × 3px = 135px — fits within one CELL_SIZE (126*LAYOUT_SCALE).
+    const iconSize = Math.round(20 * LAYOUT_SCALE);
+    const iconGap  = Math.round(3  * LAYOUT_SCALE);
 
     const occupiedCells = getOccupiedCells(unit.anchor, unit.shape);
     const rightmostCol  = Math.max(...occupiedCells.map(c => c.col)) as Col;
@@ -1987,7 +1969,7 @@ export class Game extends Phaser.Scene {
     const bottomRow     = Math.max(...occupiedCells.map(c => c.row));
 
     const rightCellPos = this.cellPixelPos(unit.anchor.side, topRow, rightmostCol);
-    const iconX = rightCellPos.x + CELL_SIZE / 2 + iconGap + iconSize / 2;
+    const iconX        = rightCellPos.x + CELL_SIZE / 2 + iconGap + iconSize / 2;
 
     const unitTopY    = this.cellPixelPos(unit.anchor.side, topRow,    rightmostCol).y - CELL_SIZE / 2;
     const unitBottomY = this.cellPixelPos(unit.anchor.side, bottomRow, rightmostCol).y + CELL_SIZE / 2;
@@ -1995,39 +1977,11 @@ export class Game extends Phaser.Scene {
     const totalH      = unit.skills.length * iconSize + (unit.skills.length - 1) * iconGap;
     const startY      = unitCenterY - totalH / 2 + iconSize / 2;
 
-    unit.skills.forEach((skill, i) => {
-      const iconY    = startY + i * (iconSize + iconGap);
-      const isActive = i === unit.activeSkillIndex;
-
-      const baseColor  = isActive ? 0xffcc00 : BTN.dark.base;
-      const hoverColor = isActive ? 0xffdd44 : BTN.dark.hover;
-      const strokeColor = isActive ? 0xffffff : 0x888888;
-
-      const bg = this.add.rectangle(0, 0, iconSize, iconSize, baseColor)
-        .setStrokeStyle(2, strokeColor);
-
-      const container = this.add.container(iconX, iconY, [bg])
-        .setSize(iconSize, iconSize)
-        .setInteractive({ useHandCursor: true })
-        .setDepth(10)
-        .on('pointerover', () => {
-          bg.setFillStyle(hoverColor);
-          this.skillNameTooltip?.show({ name: skill.name, damageType: skill.damageBlock?.damageType }, iconX + iconSize / 2, iconY, "right");
-        })
-        .on('pointerout', () => {
-          bg.setFillStyle(baseColor);
-          this.skillNameTooltip?.hide();
-        })
-        .on('pointerup', () => this.switchActiveSkill(i));
-
-      this.skillIconContainers.push(container);
-    });
+    this.skillBar.show(unit, iconX, startY, iconSize, iconGap, i => this.switchActiveSkill(i));
   }
 
   private clearSkillIcons(): void {
-    for (const c of this.skillIconContainers) c.destroy();
-    this.skillIconContainers = [];
-    this.skillNameTooltip?.hide();
+    this.skillBar.hide();
   }
 
   private switchActiveSkill(index: number): void {
