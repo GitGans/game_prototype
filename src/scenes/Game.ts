@@ -58,7 +58,7 @@ import {
   replayPlaceEnemies,
   createUnitInstance,
   blueprintFromUnit,
-  getPlayerAverageLevel,
+  getPlayerMaxLevel,
   PlayerBattleSetup,
 } from "../battle/autoPlace";
 
@@ -309,14 +309,22 @@ export class Game extends Phaser.Scene {
 
     if (isDebug) {
       const ds = PhaseManager.getDebugState()!;
+      // Build PlayerUnitState records from debug state
+      const debugPlayerUnits: Record<string, import('../core/GameState').PlayerUnitState> = {};
+      for (const bp of PLAYER_UNITS) {
+        const tier0 = bp.skillTiers.find(t => t.unlocksAtLevel === 0);
+        debugPlayerUnits[bp.templateId] = {
+          level: ds.level,
+          isInCamp: ds.campUnitIds.includes(bp.templateId),
+          lastPlacement: ds.playerUnitPlacements?.[bp.templateId] ?? null,
+          permanentBonuses: ds.unitPermanentBonuses[bp.templateId] ?? {},
+          chosenSkills: tier0 ? { 0: tier0.options[0].id } : {},
+        };
+      }
       const debugSetup: PlayerBattleSetup = {
-        unitLevels: Object.fromEntries(PLAYER_UNITS.map(bp => [bp.templateId, ds.level])),
-        campUnitIds: ds.campUnitIds,
+        playerUnits: debugPlayerUnits,
         itemContainers: ds.itemContainers,
         itemInstances: ds.itemInstances,
-        playerUnitPlacements: ds.playerUnitPlacements,
-        playerBenchIds: ds.playerBenchIds,
-        unitPermanentBonuses: ds.unitPermanentBonuses,
       };
       state = autoPlacePlayer(state, debugSetup);
     } else {
@@ -325,7 +333,7 @@ export class Game extends Phaser.Scene {
       state = autoPlacePlayer(state);
     }
 
-    const playerAvgLevel = getPlayerAverageLevel(state);
+    const playerMaxLevel = getPlayerMaxLevel(GameState.playerUnits);
     let forceRace: UnitRace | undefined;
     let enemyLevel: number | undefined;
     if (phase.type === 'battle') {
@@ -340,7 +348,7 @@ export class Game extends Phaser.Scene {
     if (saved) {
       state = replayPlaceEnemies(state, saved);
     } else {
-      state = autoPlaceEnemies(state, enemyLevel ?? playerAvgLevel, forceRace);
+      state = autoPlaceEnemies(state, enemyLevel ?? playerMaxLevel, forceRace);
       if (!isDebug) {
         GameState.lastEnemyPlacements = [...state.units.values()]
           .filter(u => u.id.startsWith('e'))
@@ -589,7 +597,7 @@ export class Game extends Phaser.Scene {
     ).setOrigin(0.5, 0);
 
     // HP text + HP bar
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
     const scaledHp = Math.round(bp.hp * (1 + 0.1 * (level - 1)));
     const barW = BENCH_PANEL_WIDTH - Math.round(12 * LAYOUT_SCALE);
     const barH = Math.round(6 * LAYOUT_SCALE);
@@ -621,7 +629,7 @@ export class Game extends Phaser.Scene {
       container.on("pointerup", () => this.onBenchCardClick(idx));
       container.on("pointerover", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(COLORS.benchHover, 0.9);
-        const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+        const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
         this.unitTooltip.showFromBlueprint(bp, level, "player", this.logX, this.logY, this.logW);
       });
       container.on("pointerout", () => {
@@ -771,7 +779,7 @@ export class Game extends Phaser.Scene {
   ): void {
     let state = GameState.get();
     const newId = `p${++this.playerIdCounter}`;
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
     const unit = createUnitInstance(bp, newId, anchor, level);
 
     if (!canPlace(anchor, bp.shape, state, "player")) return;
@@ -806,7 +814,7 @@ export class Game extends Phaser.Scene {
     }
 
     const newId = `p${++this.playerIdCounter}`;
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
     const newUnit = createUnitInstance(bp, newId, anchor, level);
     state = placeUnit(newUnit, state);
 
@@ -1012,16 +1020,11 @@ export class Game extends Phaser.Scene {
     let state = GameState.get();
 
     // Save player unit positions so they can be restored next battle
-    const placements: Record<string, CellCoord> = {};
     for (const unit of state.units.values()) {
-      if (unit.anchor.side === 'player') {
-        placements[unit.templateId] = unit.anchor;
-      }
+      if (unit.anchor.side !== 'player') continue;
+      const us = GameState.playerUnits[unit.templateId];
+      if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
     }
-    GameState.playerUnitPlacements = placements;
-    GameState.playerBenchIds = state.benchUnits
-      .filter((bp): bp is UnitBlueprint => bp !== undefined)
-      .map(bp => bp.templateId);
 
     const queue = buildRoundQueue(state.units);
     state = { ...state, roundQueue: queue, phase: "select_target" };
@@ -2164,7 +2167,8 @@ export class Game extends Phaser.Scene {
         state.units.forEach((unit) => {
           if (!unit.id.startsWith("p")) return;
           unit.level += 1;
-          GameState.playerUnitLevels[unit.templateId] = unit.level;
+          const us = GameState.playerUnits[unit.templateId];
+          if (us) GameState.playerUnits[unit.templateId] = { ...us, level: unit.level };
           const bp = allBlueprints.find(b => b.templateId === unit.templateId);
           if (!bp) return;
           const scale = 1 + 0.1 * (unit.level - 1);
@@ -2177,8 +2181,8 @@ export class Game extends Phaser.Scene {
         // Bench units — stored as UnitBlueprint | undefined (camp units were never benched)
         state.benchUnits.forEach((bp) => {
           if (!bp) return;
-          const currentLevel = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-          GameState.playerUnitLevels[bp.templateId] = currentLevel + 1;
+          const us = GameState.playerUnits[bp.templateId];
+          if (us) GameState.playerUnits[bp.templateId] = { ...us, level: us.level + 1 };
         });
 
         PhaseManager.transition({ type: 'exit_battle' });

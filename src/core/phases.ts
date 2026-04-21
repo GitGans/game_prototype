@@ -12,6 +12,19 @@ export interface CampUnitSnapshot {
   inCamp:     boolean;
 }
 
+export interface SkillOptionSnapshot {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface SkillTierSnapshot {
+  tierId: 0 | 5 | 10 | 15 | 20;
+  options: SkillOptionSnapshot[];
+  chosenSkillId: string | null; // null = not yet chosen (level reached)
+  isLocked: boolean;            // true = level not yet reached
+}
+
 export type GamePhase =
   | { type: 'main_menu' }
   | { type: 'world_map'; mapId: string; partyPos: { x: number; y: number } }
@@ -34,6 +47,7 @@ export type GamePhase =
       unitEquipment: EquipmentSnapshot;
       unitStats: { level: number; equippedBonuses: BattleStatBonuses } | null;
       campUnitIds: string[];
+      skillTiers: SkillTierSnapshot[];
     }
   | {
       type: 'equip_screen';
@@ -43,6 +57,7 @@ export type GamePhase =
       unitEquipment: EquipmentSnapshot;
       availableUnits: UnitTabSnapshot[];
       unitStats: { level: number; equippedBonuses: BattleStatBonuses } | null;
+      skillTiers: SkillTierSnapshot[];
     };
 
 export type PhaseAction =
@@ -68,6 +83,7 @@ export type PhaseAction =
   | { type: 'buy_item'; definitionId: string }
   | { type: 'sell_item'; instanceId: string }
   | { type: 'toggle_camp_unit'; templateId: string }
+  | { type: 'choose_skill'; templateId: string; tierId: 0 | 5 | 10 | 15 | 20; skillId: string }
   // ── Debug battle ──────────────────────────────────────────────
   | { type: 'init_debug'; level: number }
   | { type: 'switch_debug_unit'; templateId: string }

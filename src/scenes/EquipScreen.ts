@@ -13,6 +13,7 @@ import { UnitTooltip } from '../objects/UnitTooltip';
 import { EquipmentMatrix } from '../objects/EquipmentMatrix';
 import { BackpackRow } from '../objects/BackpackRow';
 import { EnemyGroupSelector } from '../objects/EnemyGroupSelector';
+import { SkillTierPanel } from '../objects/SkillTierPanel';
 
 type EquipScreenPhase = Extract<ReturnType<typeof PhaseManager.getPhase>, { type: 'equip_screen' }>;
 type DebugEquipScreenPhase = Extract<ReturnType<typeof PhaseManager.getPhase>, { type: 'debug_equip_screen' }>;
@@ -32,11 +33,12 @@ export class EquipScreen extends Phaser.Scene {
   private equipMatrix?: EquipmentMatrix;
   private backpackRow?: BackpackRow;
   private statsPanel?: UnitTooltip;
-  private skillsPanel?: UnitTooltip;
+  private skillTierPanel?: SkillTierPanel;
   private statsPanelX = 0;
   private statsPanelY = 0;
   private statsPanelW = 0;
   private skillsPanelX = 0;
+  private skillsPanelY = 0;
   private skillsPanelW = 0;
   private itemTooltip!: ItemTooltip;
   private activeContextMenu: ContextMenu | null = null;
@@ -215,6 +217,7 @@ export class EquipScreen extends Phaser.Scene {
     this.statsPanelY = contentTopY;
     this.statsPanelW = STATS_W;
     this.skillsPanelX = skillsX;
+    this.skillsPanelY = contentTopY;
     this.skillsPanelW = SKILLS_W;
 
     // Stats panel (leftmost column)
@@ -236,7 +239,7 @@ export class EquipScreen extends Phaser.Scene {
     this.renderUnitSprite(phase.selectedUnitTemplateId, spriteX, contentTopY);
 
     // Skills panel (rightmost column)
-    this.skillsPanel = new UnitTooltip(this);
+    this.skillTierPanel = new SkillTierPanel(this, skillsX, contentTopY, SKILLS_W);
     this.refreshPanels(phase);
 
     // Backpack (below the four columns)
@@ -345,7 +348,14 @@ export class EquipScreen extends Phaser.Scene {
     if (!bp) return;
     const { level, equippedBonuses } = phase.unitStats;
     this.statsPanel?.showFixedStatsOnly(bp, level, equippedBonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
-    this.skillsPanel?.showFixedSkillsOnly(bp, level, this.skillsPanelX, this.statsPanelY, this.skillsPanelW);
+
+    if (this.skillTierPanel) {
+      const templateId = phase.selectedUnitTemplateId;
+      this.skillTierPanel.setPosition(this.skillsPanelX, this.skillsPanelY);
+      this.skillTierPanel.render(phase.skillTiers, (tierId, skillId) => {
+        PhaseManager.transition({ type: 'choose_skill', templateId, tierId, skillId });
+      });
+    }
   }
 
   private renderBackButton(w: number, backpackBottomY: number): void {
@@ -439,6 +449,8 @@ export class EquipScreen extends Phaser.Scene {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'equip_screen' && phase.type !== 'debug_equip_screen') return;
     if (!phase.selectedUnitTemplateId) {
+      this.skillTierPanel?.destroy();
+      this.skillTierPanel = undefined;
       this.renderSelectionMode(phase);
       return;
     }

@@ -1,27 +1,40 @@
-import { BattleState, CellCoord, Col, Row, Unit, UnitBlueprint, UnitRace, ItemInstance, ItemContainer, BattleStatBonuses } from './types';
+import { BattleState, CellCoord, Col, Row, Skill, Unit, UnitBlueprint, UnitRace, ItemInstance, ItemContainer } from './types';
 import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
 import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
 import { BENCH_SLOTS } from '../core/Constants';
-import { GameState } from '../core/GameState';
+import { GameState, PlayerUnitState } from '../core/GameState';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from './itemOps';
 
 export interface PlayerBattleSetup {
-  unitLevels: Record<string, number>;
-  campUnitIds: string[];
+  playerUnits: Record<string, PlayerUnitState>;
   itemContainers: Record<string, ItemContainer>;
   itemInstances: Record<string, ItemInstance>;
-  playerUnitPlacements: Record<string, CellCoord>;
-  playerBenchIds: string[] | null;
-  unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>>;
 }
 
-export function getPlayerAverageLevel(state: BattleState): number {
-  const playerUnits = [...state.units.values()].filter(u => u.id.startsWith('p'));
-  if (playerUnits.length === 0) return 1;
-  const total = playerUnits.reduce((sum, u) => sum + u.level, 0);
-  return Math.round(total / playerUnits.length);
+function resolvePlayerSkills(blueprint: UnitBlueprint, unitState: PlayerUnitState): Skill[] {
+  const skills: Skill[] = [];
+  for (const tier of blueprint.skillTiers) {
+    const chosenId = unitState.chosenSkills[tier.unlocksAtLevel];
+    if (chosenId) {
+      const skill = tier.options.find(s => s.id === chosenId);
+      if (skill) skills.push(skill);
+    } else if (tier.unlocksAtLevel === 0 && tier.options.length > 0) {
+      skills.push(tier.options[0]); // fallback: auto-assign tier 0
+    }
+  }
+  return skills;
+}
+
+function resolveEnemySkills(blueprint: UnitBlueprint, level: number): Skill[] {
+  const base = blueprint.skillTiers
+    .filter(t => t.unlocksAtLevel === 0)
+    .flatMap(t => t.options.slice(0, 1));
+  const leveled = (blueprint.levelSkills ?? [])
+    .filter(ls => ls.unlocksAtLevel <= level)
+    .map(ls => ls.skill);
+  return [...base, ...leveled];
 }
 
 export function createUnitInstance(
@@ -29,25 +42,28 @@ export function createUnitInstance(
   id: string,
   anchor: CellCoord,
   levelOverride?: number,
-  setup?: Pick<PlayerBattleSetup, 'itemContainers' | 'itemInstances' | 'unitPermanentBonuses'>,
+  setup?: Pick<PlayerBattleSetup, 'itemContainers' | 'itemInstances'> & {
+    unitState?: PlayerUnitState;
+  },
 ): Unit {
-  const level = levelOverride ?? blueprint.level;
+  const level = levelOverride ?? setup?.unitState?.level ?? blueprint.level;
   const containers = setup?.itemContainers ?? GameState.itemContainers;
   const instances  = setup?.itemInstances  ?? GameState.itemInstances;
-  const bonuses    = setup?.unitPermanentBonuses ?? GameState.unitPermanentBonuses;
+  const bonuses    = setup?.unitState?.permanentBonuses ?? {};
   const stats = computeUnitBattleStats(
     blueprint, level,
     containers,
     instances,
     ITEM_DEFINITIONS,
-    bonuses,
+    { [blueprint.templateId]: bonuses },
   );
-  const activatableAbilities = snapshotActivatableAbilities(
-    blueprint.templateId,
-    containers,
-    instances,
-    ITEM_DEFINITIONS,
-  );
+  const activatableAbilities = setup?.unitState
+    ? snapshotActivatableAbilities(blueprint.templateId, containers, instances, ITEM_DEFINITIONS)
+    : [];
+
+  const skills = setup?.unitState
+    ? resolvePlayerSkills(blueprint, setup.unitState)
+    : resolveEnemySkills(blueprint, level);
 
   return {
     id,
@@ -64,7 +80,7 @@ export function createUnitInstance(
     initiative:          blueprint.initiative,
     shape:               blueprint.shape,
     anchor,
-    skills:              blueprint.skills,
+    skills,
     activeSkillIndex:    0,
     rowTrait:            blueprint.rowTrait,
     race:                blueprint.race,
@@ -81,21 +97,23 @@ export function blueprintFromUnit(unit: Unit): UnitBlueprint {
   ];
   const originalBp = allBlueprints.find(b => b.templateId === unit.templateId)!;
   return {
-    ...originalBp,       // unscaled base stats from static definition
-    level: unit.level,   // preserve current level
+    ...originalBp,
+    level: unit.level,
   };
 }
 
+export function getPlayerMaxLevel(playerUnits: Record<string, PlayerUnitState>): number {
+  const levels = Object.values(playerUnits).map(u => u.level);
+  return levels.length > 0 ? Math.max(...levels) : 1;
+}
+
 export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): BattleState {
-  const campIds        = setup?.campUnitIds        ?? GameState.campUnitIds;
-  const savedBenchIds  = setup?.playerBenchIds     ?? GameState.playerBenchIds;
-  const saved          = setup?.playerUnitPlacements ?? GameState.playerUnitPlacements;
-  const availableUnits = PLAYER_UNITS.filter(u => !campIds.includes(u.templateId));
+  const playerUnitsState = setup?.playerUnits ?? GameState.playerUnits;
+  const availableUnits = PLAYER_UNITS.filter(u => !playerUnitsState[u.templateId]?.isInCamp);
 
   let counter = 1;
   const paddedBench: (UnitBlueprint | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
 
-  // Returns true if a bench slot was free and the unit was added.
   const addToBench = (def: UnitBlueprint): boolean => {
     const slot = paddedBench.indexOf(undefined);
     if (slot === -1) return false;
@@ -103,14 +121,19 @@ export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): 
     return true;
   };
 
-  // Returns true if the unit was placed on the field.
   const tryPlaceOnField = (def: UnitBlueprint): boolean => {
-    const levelMap = setup?.unitLevels ?? GameState.playerUnitLevels;
-    const level = levelMap[def.templateId] ?? def.level;
+    const unitState = playerUnitsState[def.templateId];
+    const level = unitState?.level ?? def.level;
+    const instanceSetup = {
+      itemContainers: setup?.itemContainers ?? GameState.itemContainers,
+      itemInstances: setup?.itemInstances ?? GameState.itemInstances,
+      unitState,
+    };
+
     // 1. Try saved position
-    const savedAnchor = saved[def.templateId];
+    const savedAnchor = unitState?.lastPlacement ?? null;
     if (savedAnchor && canPlace(savedAnchor, def.shape, state, 'player')) {
-      state = placeUnit(createUnitInstance(def, `p${counter++}`, savedAnchor, level, setup), state);
+      state = placeUnit(createUnitInstance(def, `p${counter++}`, savedAnchor, level, instanceSetup), state);
       return true;
     }
     // 2. Auto-placement: preferred row first, then the other row
@@ -119,7 +142,7 @@ export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): 
       for (const col of [0, 1, 2] as Col[]) {
         const anchor: CellCoord = { side: 'player', row, col };
         if (canPlace(anchor, def.shape, state, 'player')) {
-          state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level, setup), state);
+          state = placeUnit(createUnitInstance(def, `p${counter++}`, anchor, level, instanceSetup), state);
           return true;
         }
       }
@@ -131,19 +154,13 @@ export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): 
   const toBench: UnitBlueprint[] = [];
 
   for (const def of availableUnits) {
-    if (savedBenchIds !== null && savedBenchIds.includes(def.templateId)) {
-      toBench.push(def);   // was on bench last battle → restore to bench
-    } else {
-      toField.push(def);   // was on field (or first battle) → try field
-    }
+    toField.push(def);
   }
 
-  // Place field units; failures spill into the bench queue
   for (const def of toField) {
     if (!tryPlaceOnField(def)) toBench.push(def);
   }
 
-  // Fill bench; overflow goes to field
   for (const def of toBench) {
     if (!addToBench(def)) tryPlaceOnField(def);
   }
@@ -170,7 +187,7 @@ export function replayPlaceEnemies(
 
 export function autoPlaceEnemies(
   state: BattleState,
-  playerAvgLevel: number = 1,
+  playerMaxLevel: number = 1,
   forceRace?: UnitRace,
 ): BattleState {
   const races: UnitRace[] = ['orc', 'demon', 'undead'];
@@ -185,25 +202,23 @@ export function autoPlaceEnemies(
   let counter = 1;
   const cols: Col[] = [0, 1, 2];
 
-  // Fill front row
   for (const col of cols) {
     const anchor: CellCoord = { side: 'enemy', row: 0, col };
     if (state.occupancy.cellToUnit.has(cellKey(anchor))) continue;
     if (frontPool.length === 0) continue;
     const def = frontPool[Math.floor(Math.random() * frontPool.length)];
-    const unit = createUnitInstance(def, `e${counter++}`, anchor, playerAvgLevel);
+    const unit = createUnitInstance(def, `e${counter++}`, anchor, playerMaxLevel);
     if (canPlace(anchor, def.shape, state, 'enemy')) {
       state = placeUnit(unit, state);
     }
   }
 
-  // Fill remaining back row cells
   for (const col of cols) {
     const anchor: CellCoord = { side: 'enemy', row: 1, col };
     if (state.occupancy.cellToUnit.has(cellKey(anchor))) continue;
     if (backPool.length === 0) continue;
     const def = backPool[Math.floor(Math.random() * backPool.length)];
-    const unit = createUnitInstance(def, `e${counter++}`, anchor, playerAvgLevel);
+    const unit = createUnitInstance(def, `e${counter++}`, anchor, playerMaxLevel);
     if (canPlace(anchor, def.shape, state, 'enemy')) {
       state = placeUnit(unit, state);
     }
