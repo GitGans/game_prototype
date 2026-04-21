@@ -6,13 +6,17 @@ import { PLAYER_UNITS } from '../data/unitDefinitions';
 import { ItemSlotSnapshot, UnitTabSnapshot } from '../battle/types';
 import { Button } from '../ui/Button';
 import { ContextMenu } from '../ui/ContextMenu';
+import { UnitCampButton } from '../ui/UnitCampButton';
 import { fontSize, VALUE_COLOR, BTN, SCENE_BG } from '../ui/theme';
 import { ItemTooltip } from '../objects/ItemTooltip';
 import { UnitTooltip } from '../objects/UnitTooltip';
 import { EquipmentMatrix } from '../objects/EquipmentMatrix';
 import { BackpackRow } from '../objects/BackpackRow';
+import { EnemyGroupSelector } from '../objects/EnemyGroupSelector';
 
 type EquipScreenPhase = Extract<ReturnType<typeof PhaseManager.getPhase>, { type: 'equip_screen' }>;
+type DebugEquipScreenPhase = Extract<ReturnType<typeof PhaseManager.getPhase>, { type: 'debug_equip_screen' }>;
+type AnyEquipPhase = EquipScreenPhase | DebugEquipScreenPhase;
 
 const CELL_SIZE    = Math.round(56  * LAYOUT_SCALE);
 const CELL_GAP     = Math.round(6   * LAYOUT_SCALE);
@@ -23,6 +27,8 @@ const PAD = Math.round(16 * LAYOUT_SCALE);
 
 export class EquipScreen extends Phaser.Scene {
   private selectedTemplateId = "";
+  private _selectorPanel: EnemyGroupSelector | null = null;
+  private _selectionContainer: Phaser.GameObjects.Container | null = null;
   private equipMatrix?: EquipmentMatrix;
   private backpackRow?: BackpackRow;
   private statsPanel?: UnitTooltip;
@@ -40,7 +46,7 @@ export class EquipScreen extends Phaser.Scene {
   }
 
   create(): void {
-    const phase = PhaseManager.getPhase() as EquipScreenPhase;
+    const phase = PhaseManager.getPhase() as AnyEquipPhase;
     this.selectedTemplateId = phase.selectedUnitTemplateId;
 
     const w = this.scale.width;
@@ -52,7 +58,7 @@ export class EquipScreen extends Phaser.Scene {
     if (!this.selectedTemplateId) {
       this.renderSelectionMode(phase);
     } else {
-      this.renderCharacterMenu(phase);
+      this.renderCharacterMenu(phase as AnyEquipPhase);
     }
 
     EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);
@@ -60,6 +66,8 @@ export class EquipScreen extends Phaser.Scene {
 
   shutdown(): void {
     EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
+    this._selectorPanel = null;
+    this._selectionContainer = null;
   }
 
   destroy(): void {
@@ -68,17 +76,24 @@ export class EquipScreen extends Phaser.Scene {
 
   // ── Mode A: unit selection ─────────────────────────────────────────────────
 
-  private renderSelectionMode(phase: EquipScreenPhase): void {
+  private renderSelectionMode(phase: AnyEquipPhase): void {
     const w = this.scale.width;
     const h = this.scale.height;
+    const isDebug = phase.type === 'debug_equip_screen';
 
-    this.add
-      .text(w / 2, Math.round(40 * LAYOUT_SCALE), "Select a character", {
+    // Destroy and recreate on refresh (e.g. after camp toggle)
+    this._selectionContainer?.destroy();
+    const c = this.add.container(0, 0);
+    this._selectionContainer = c;
+
+    const title = this.add
+      .text(w / 2, Math.round(40 * LAYOUT_SCALE), isDebug ? "Debug — Select character" : "Select a character", {
         fontSize: fontSize("lg"),
         color: VALUE_COLOR.neutral,
         fontStyle: "bold",
       })
       .setOrigin(0.5);
+    c.add(title);
 
     const units = phase.availableUnits;
     const rows = [units.slice(0, 6), units.slice(6, 12)].filter(
@@ -91,22 +106,64 @@ export class EquipScreen extends Phaser.Scene {
       const totalW = row.length * (PORTRAIT_SEL + PAD) - PAD;
       const startX = (w - totalW) / 2;
       row.forEach((u, i) => {
-        this.addPortrait(
-          startX + i * (PORTRAIT_SEL + PAD),
-          rowY,
-          PORTRAIT_SEL,
-          u.templateId,
-          u.name,
-          () =>
-            PhaseManager.transition({
-              type: "switch_equip_unit",
-              templateId: u.templateId,
-            }),
+        const px = startX + i * (PORTRAIT_SEL + PAD);
+        this.addPortrait(px, rowY, PORTRAIT_SEL, u.templateId, u.name, c,
+          () => PhaseManager.transition(
+            isDebug
+              ? { type: 'switch_debug_unit', templateId: u.templateId }
+              : { type: 'switch_equip_unit', templateId: u.templateId },
+          ),
         );
+
+        if (isDebug) {
+          const campIds = (phase as DebugEquipScreenPhase).campUnitIds;
+          const inCamp = campIds.includes(u.templateId);
+          const btn = new UnitCampButton(
+            this,
+            px + PORTRAIT_SEL / 2,
+            rowY + PORTRAIT_SEL - Math.round(11 * LAYOUT_SCALE),
+            inCamp,
+            () => PhaseManager.transition({ type: 'toggle_debug_camp', templateId: u.templateId }),
+          );
+          c.add(btn);
+        }
       });
     });
 
-    this.renderBackButton(w, h - Math.round(16 * LAYOUT_SCALE));
+    if (isDebug) {
+      this.renderGoToBattleButton(w, h, c);
+    } else {
+      this.renderBackButton(w, h - Math.round(16 * LAYOUT_SCALE));
+    }
+  }
+
+  private renderGoToBattleButton(w: number, h: number, container: Phaser.GameObjects.Container): void {
+    const phase = PhaseManager.getPhase() as DebugEquipScreenPhase;
+    const activeCount = phase.availableUnits.filter(u => !phase.campUnitIds.includes(u.templateId)).length;
+    const tooMany = activeCount > 9;
+
+    const BTN_W = Math.round(160 * LAYOUT_SCALE);
+    const BTN_H = Math.round(44 * LAYOUT_SCALE);
+    const btnY = h - Math.round(36 * LAYOUT_SCALE);
+    const btn = new Button({
+      scene: this,
+      x: w / 2,
+      y: btnY,
+      w: BTN_W,
+      h: BTN_H,
+      label: 'Go to Battle →',
+      style: tooMany ? 'danger' : 'primary',
+      onClick: () => {
+        if (tooMany) return;
+        if (this._selectorPanel) {
+          this._selectorPanel.destroy();
+          this._selectorPanel = null;
+          return;
+        }
+        this._selectorPanel = new EnemyGroupSelector(this, w / 2 - 100, btnY - 190);
+      },
+    });
+    container.add(btn);
   }
 
   private addPortrait(
@@ -115,36 +172,31 @@ export class EquipScreen extends Phaser.Scene {
     size: number,
     templateId: string,
     name: string,
+    container: Phaser.GameObjects.Container | null,
     onClick: () => void,
   ): void {
     const spriteKey = `sprite-${templateId}`;
-    if (this.textures.exists(spriteKey)) {
-      this.add
-        .image(x + size / 2, y + size / 2, spriteKey)
-        .setDisplaySize(size, size)
-        .setInteractive({ useHandCursor: true })
-        .on("pointerup", onClick);
-    } else {
-      this.add
-        .rectangle(x + size / 2, y + size / 2, size, size, BTN.neutral.base)
-        .setInteractive({ useHandCursor: true })
-        .on("pointerup", onClick);
-    }
-    this.add
+    const img = this.textures.exists(spriteKey)
+      ? this.add.image(x + size / 2, y + size / 2, spriteKey).setDisplaySize(size, size).setInteractive({ useHandCursor: true }).on("pointerup", onClick)
+      : this.add.rectangle(x + size / 2, y + size / 2, size, size, BTN.neutral.base).setInteractive({ useHandCursor: true }).on("pointerup", onClick);
+    const label = this.add
       .text(x + size / 2, y + size + Math.round(4 * LAYOUT_SCALE), name, {
         fontSize: fontSize("sm"),
         color: VALUE_COLOR.neutral,
       })
       .setOrigin(0.5, 0);
+    if (container) {
+      container.add([img as Phaser.GameObjects.GameObject, label]);
+    }
   }
 
   // ── Mode B: character menu ─────────────────────────────────────────────────
 
-  private renderCharacterMenu(phase: EquipScreenPhase): void {
+  private renderCharacterMenu(phase: AnyEquipPhase): void {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    this.renderUnitTabs(phase.availableUnits, w);
+    this.renderUnitTabs(phase.availableUnits, w, phase.type === 'debug_equip_screen');
 
     const matrixW = 3 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const matrixH = 4 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
@@ -208,7 +260,7 @@ export class EquipScreen extends Phaser.Scene {
     this.renderBackButton(w, backpackBottomY);
   }
 
-  private renderUnitTabs(units: UnitTabSnapshot[], screenW: number): void {
+  private renderUnitTabs(units: UnitTabSnapshot[], screenW: number, isDebug = false): void {
     const totalW = units.length * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const startX = Math.round((screenW - totalW) / 2);
     units.forEach((u, i) => {
@@ -228,10 +280,11 @@ export class EquipScreen extends Phaser.Scene {
           img.on("pointerover", () => img.setTint(0xffffff));
           img.on("pointerout", () => img.setTint(0xaaaaaa));
           img.on("pointerup", () =>
-            PhaseManager.transition({
-              type: "switch_equip_unit",
-              templateId: u.templateId,
-            }),
+            PhaseManager.transition(
+              isDebug
+                ? { type: 'switch_debug_unit', templateId: u.templateId }
+                : { type: 'switch_equip_unit', templateId: u.templateId },
+            ),
           );
         }
       } else {
@@ -249,10 +302,11 @@ export class EquipScreen extends Phaser.Scene {
           rect.on("pointerover", () => rect.setFillStyle(BTN.navy.hover));
           rect.on("pointerout", () => rect.setFillStyle(BTN.navy.base));
           rect.on("pointerup", () =>
-            PhaseManager.transition({
-              type: "switch_equip_unit",
-              templateId: u.templateId,
-            }),
+            PhaseManager.transition(
+              isDebug
+                ? { type: 'switch_debug_unit', templateId: u.templateId }
+                : { type: 'switch_equip_unit', templateId: u.templateId },
+            ),
           );
         }
 
@@ -285,7 +339,7 @@ export class EquipScreen extends Phaser.Scene {
     }
   }
 
-  private refreshPanels(phase: EquipScreenPhase): void {
+  private refreshPanels(phase: AnyEquipPhase): void {
     if (!phase.selectedUnitTemplateId || !phase.unitStats) return;
     const bp = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
     if (!bp) return;
@@ -383,7 +437,11 @@ export class EquipScreen extends Phaser.Scene {
 
   private onStateChanged(): void {
     const phase = PhaseManager.getPhase();
-    if (phase.type !== "equip_screen") return;
+    if (phase.type !== 'equip_screen' && phase.type !== 'debug_equip_screen') return;
+    if (!phase.selectedUnitTemplateId) {
+      this.renderSelectionMode(phase);
+      return;
+    }
     this.equipMatrix?.refresh(phase.unitEquipment);
     this.backpackRow?.refresh(phase.backpack);
     this.refreshPanels(phase);

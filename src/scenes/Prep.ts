@@ -5,6 +5,7 @@ import { EventBus, Events } from "../core/EventBus";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
 import { Button } from "../ui/Button";
 import { VALUE_COLOR, SCENE_BG, BTN, ALPHA } from "../ui/theme";
+import { EnemyGroupSelector } from "../objects/EnemyGroupSelector";
 
 export class Prep extends Phaser.Scene {
   private _activePanel: Phaser.GameObjects.Container | null = null;
@@ -128,7 +129,7 @@ export class Prep extends Phaser.Scene {
 
   private onStateChanged(): void {
     const phase = PhaseManager.getPhase();
-    if (phase.type !== 'camp' && phase.type !== 'debug_prep') return;
+    if (phase.type !== 'camp') return;
     if (this._activePanel === this.campPanel)  this.refreshCampPanel();
     if (this._activePanel === this.partyPanel) this.refreshPartyPanel();
     this.refreshBattleButton();
@@ -138,7 +139,7 @@ export class Prep extends Phaser.Scene {
 
   private getActiveCount(): number {
     const phase = PhaseManager.getPhase();
-    if (phase.type !== 'camp' && phase.type !== 'debug_prep') return 0;
+    if (phase.type !== 'camp') return 0;
     return phase.units.filter(u => !u.inCamp).length;
   }
 
@@ -212,7 +213,7 @@ export class Prep extends Phaser.Scene {
     const w = this._w;
     const h = this._h;
     const phase = PhaseManager.getPhase();
-    if (phase.type !== 'camp' && phase.type !== 'debug_prep') return;
+    if (phase.type !== 'camp') return;
 
     while (panel.list.length > 4) {
       (panel.list[panel.list.length - 1] as Phaser.GameObjects.GameObject).destroy();
@@ -331,7 +332,7 @@ export class Prep extends Phaser.Scene {
     const w = this._w;
     const h = this._h;
     const phase = PhaseManager.getPhase();
-    if (phase.type !== 'camp' && phase.type !== 'debug_prep') return;
+    if (phase.type !== 'camp') return;
 
     while (panel.list.length > 3) {
       (panel.list[panel.list.length - 1] as Phaser.GameObjects.GameObject).destroy();
@@ -402,37 +403,11 @@ export class Prep extends Phaser.Scene {
       this._activePanel = null;
       return;
     }
-
-    const races: { label: string; groupId: string }[] = [
-      { label: 'Orcs',   groupId: 'orc_patrol'  },
-      { label: 'Demons', groupId: 'demon_patrol' },
-      { label: 'Undead', groupId: 'undead_horde' },
-    ];
-
     const panelW = 200;
-    const panelH = races.length * 50 + 20;
+    const panelH = 3 * 50 + 20;
     const panelX = this.scale.width / 2 - panelW / 2;
     const panelY = this.scale.height - panelH - 80;
-
-    const container = this.add.container(panelX, panelY);
-    container.add(
-      this.add.rectangle(panelW / 2, panelH / 2, panelW, panelH, 0x222244, 0.95)
-    );
-
-    races.forEach(({ label, groupId }, i) => {
-      const btnY = 20 + i * 50 + 15;
-      const btn = new Button({
-        scene: this, x: panelW / 2, y: btnY, w: 160, h: 38,
-        label, style: "ghost",
-        onClick: () => {
-          container.destroy();
-          this._activePanel = null;
-          PhaseManager.transition({ type: 'start_battle', enemyGroupId: groupId });
-        },
-      });
-      container.add(btn);
-    });
-
-    this._activePanel = container;
+    this._activePanel = new EnemyGroupSelector(this, panelX, panelY);
+    this._activePanel.on('destroy', () => { this._activePanel = null; });
   }
 }

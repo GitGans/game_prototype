@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GamePhase, PhaseAction, CampUnitSnapshot, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
+import { DebugBattleState, createDebugBattleState } from './DebugBattleState';
 import { GameState } from './GameState';
 import { EventBus, Events } from './EventBus';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
@@ -23,6 +24,7 @@ import {
 class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
   private game!: Phaser.Game;
+  private debugState: DebugBattleState | null = null;
 
   init(game: Phaser.Game): void {
     this.game = game;
@@ -30,6 +32,10 @@ class PhaseManagerClass {
 
   getPhase(): GamePhase {
     return this.phase;
+  }
+
+  getDebugState(): DebugBattleState | null {
+    return this.debugState;
   }
 
   transition(action: PhaseAction): void {
@@ -56,6 +62,16 @@ class PhaseManagerClass {
       name:       bp.name,
       level:      GameState.playerUnitLevels[bp.templateId] ?? bp.level,
       inCamp:     GameState.campUnitIds.includes(bp.templateId),
+    }));
+  }
+
+  private buildDebugCampUnits(): CampUnitSnapshot[] {
+    const ds = this.debugState!;
+    return PLAYER_UNITS.map(bp => ({
+      templateId: bp.templateId,
+      name:       bp.name,
+      level:      ds.level,
+      inCamp:     ds.campUnitIds.includes(bp.templateId),
     }));
   }
 
@@ -100,8 +116,41 @@ class PhaseManagerClass {
         return { ...phase, backpack, unitEquipment, availableUnits, unitStats };
       }
       case 'camp':
-      case 'debug_prep':
         return { ...phase, units: this.buildCampUnits() };
+      case 'debug_equip_screen': {
+        const ds = this.debugState!;
+        const backpack = buildBackpackSnapshot(
+          ds.itemContainers,
+          ds.itemInstances,
+          ITEM_DEFINITIONS,
+          'backpack_debug',
+        );
+        const unitEquipment = phase.selectedUnitTemplateId
+          ? buildEquipmentSnapshot(
+              phase.selectedUnitTemplateId,
+              ds.itemContainers,
+              ds.itemInstances,
+              ITEM_DEFINITIONS,
+            )
+          : EMPTY_EQUIP_SNAPSHOT;
+        const availableUnits: UnitTabSnapshot[] = PLAYER_UNITS.map(bp => ({
+          templateId: bp.templateId,
+          name: bp.name,
+          unitClass: bp.unitClass,
+        }));
+        const unitStats = phase.selectedUnitTemplateId
+          ? (() => {
+              const equippedBonuses = getEquippedBonuses(
+                phase.selectedUnitTemplateId,
+                ds.itemContainers,
+                ds.itemInstances,
+                ITEM_DEFINITIONS,
+              );
+              return { level: ds.level, equippedBonuses };
+            })()
+          : null;
+        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, campUnitIds: [...ds.campUnitIds] };
+      }
       default:
         return phase; // phases without snapshots pass through unchanged
     }
@@ -208,6 +257,56 @@ class PhaseManagerClass {
       else          ids.push(action.templateId);
     }
 
+    // ── Debug mode ──
+    if (action.type === 'init_debug') {
+      this.debugState = createDebugBattleState(action.level);
+    }
+
+    if (action.type === 'toggle_debug_camp') {
+      const ds = this.debugState!;
+      const idx = ds.campUnitIds.indexOf(action.templateId);
+      if (idx >= 0) ds.campUnitIds.splice(idx, 1);
+      else          ds.campUnitIds.push(action.templateId);
+    }
+
+    if (action.type === 'equip_item' && prev.type === 'debug_equip_screen') {
+      const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
+      if (bp) {
+        equipItem(
+          action.unitTemplateId,
+          bp.unitClass,
+          action.instanceId,
+          this.debugState!.itemContainers,
+          this.debugState!.itemInstances,
+          ITEM_DEFINITIONS,
+        );
+      }
+      return; // skip GameState mutation below
+    }
+
+    if (action.type === 'unequip_item' && prev.type === 'debug_equip_screen') {
+      unequipItem(
+        action.unitTemplateId,
+        action.slot as any,
+        this.debugState!.itemContainers,
+        this.debugState!.itemInstances,
+        ITEM_DEFINITIONS,
+      );
+      return;
+    }
+
+    if (action.type === 'use_item' && prev.type === 'debug_equip_screen') {
+      useItem(
+        action.instanceId,
+        action.unitTemplateId,
+        this.debugState!.itemContainers,
+        this.debugState!.itemInstances,
+        this.debugState!.unitPermanentBonuses,
+        ITEM_DEFINITIONS,
+      );
+      return;
+    }
+
     // ── Commerce — commented out until 'shop' phase exists ──
     // if (action.type === 'buy_item') {
     //   const def = ITEM_DEFINITIONS[action.definitionId];
@@ -245,19 +344,20 @@ class PhaseManagerClass {
     }
   }
 
-  private readonly GAME_SCENES = ['MainMenu', 'WorldMap', 'Prep', 'Game', 'MapVictory', 'EquipScreen'];
+  private readonly GAME_SCENES = ['MainMenu', 'WorldMap', 'Prep', 'Game', 'MapVictory', 'EquipScreen', 'DebugLevelSelect'];
 
   private syncPhaserScenes(phase: GamePhase): void {
     const sm = this.game.scene;
     let nextScene: string;
     switch (phase.type) {
-      case 'main_menu':    nextScene = 'MainMenu';    break;
-      case 'world_map':    nextScene = 'WorldMap';    break;
-      case 'battle':       nextScene = 'Game';        break;
-      case 'camp':         nextScene = 'Prep';        break;
-      case 'debug_prep':   nextScene = 'Prep';        break;
-      case 'map_victory':  nextScene = 'MapVictory';  break;
-      case 'equip_screen': nextScene = 'EquipScreen'; break;
+      case 'main_menu':         nextScene = 'MainMenu';         break;
+      case 'world_map':         nextScene = 'WorldMap';         break;
+      case 'battle':            nextScene = 'Game';             break;
+      case 'camp':              nextScene = 'Prep';             break;
+      case 'map_victory':       nextScene = 'MapVictory';       break;
+      case 'equip_screen':      nextScene = 'EquipScreen';      break;
+      case 'debug_equip_screen':nextScene = 'EquipScreen';      break;
+      case 'debug_level_select':nextScene = 'DebugLevelSelect'; break;
       default: return;
     }
     for (const key of this.GAME_SCENES) {
@@ -276,7 +376,26 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
       return { type: 'world_map', mapId: 'test_01', partyPos: MAP_DEFINITIONS['test_01'].startPos };
 
     case 'debug':
-      return { type: 'debug_prep', units: [] };
+      return { type: 'debug_level_select' };
+
+    case 'init_debug':
+      return {
+        type: 'debug_equip_screen',
+        selectedUnitTemplateId: '',
+        availableUnits: [],
+        backpack: EMPTY_BACKPACK_SNAPSHOT,
+        unitEquipment: EMPTY_EQUIP_SNAPSHOT,
+        unitStats: null,
+        campUnitIds: [],
+      };
+
+    case 'switch_debug_unit':
+      if (current.type !== 'debug_equip_screen') return null;
+      return { ...current, selectedUnitTemplateId: action.templateId };
+
+    case 'toggle_debug_camp':
+      if (current.type !== 'debug_equip_screen') return null;
+      return current; // mutation-only → STATE_CHANGED
 
     case 'enter_battle':
       if (current.type !== 'world_map') return null;
@@ -297,8 +416,13 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
       return current.returnPhase;
 
     case 'start_battle':
-      if (current.type !== 'debug_prep') return null;
-      return { type: 'battle', enemyGroupId: action.enemyGroupId, returnPhase: { type: 'main_menu' } };
+      if (current.type !== 'debug_equip_screen') return null;
+      return {
+        type: 'battle',
+        enemyGroupId: action.enemyGroupId,
+        returnPhase: current,
+        isDebug: true,
+      };
 
     case 'exit_battle':
       if (current.type !== 'battle') return null;
@@ -314,7 +438,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
     // ── Equip screen navigation ──────────────────────────────────────────────
 
     case 'open_equip_screen':
-      if (current.type !== 'world_map' && current.type !== 'debug_prep' && current.type !== 'camp') return null;
+      if (current.type !== 'world_map' && current.type !== 'camp') return null;
       return {
         type: 'equip_screen',
         selectedUnitTemplateId: action.unitTemplateId,
@@ -326,8 +450,9 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
       };
 
     case 'close_equip_screen':
-      if (current.type !== 'equip_screen') return null;
-      return current.returnPhase;
+      if (current.type === 'equip_screen') return current.returnPhase;
+      if (current.type === 'debug_equip_screen') return { ...current, selectedUnitTemplateId: '' };
+      return null;
 
     case 'switch_equip_unit':
       if (current.type !== 'equip_screen') return null;
@@ -337,20 +462,20 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
     // ── Mutation-only — return same reference → rebuildSnapshot + STATE_CHANGED ──
 
     case 'equip_item':
-      if (current.type !== 'equip_screen') return null;
+      if (current.type !== 'equip_screen' && current.type !== 'debug_equip_screen') return null;
       return current;
 
     case 'unequip_item':
-      if (current.type !== 'equip_screen') return null;
+      if (current.type !== 'equip_screen' && current.type !== 'debug_equip_screen') return null;
       return current;
 
     case 'use_item':
-      if (current.type !== 'equip_screen') return null;
+      if (current.type !== 'equip_screen' && current.type !== 'debug_equip_screen') return null;
       return current;
 
     // ── Camp unit toggle (mutation-only) ─────────────────────────────────────
     case 'toggle_camp_unit': {
-      if (current.type !== 'camp' && current.type !== 'debug_prep') return null;
+      if (current.type !== 'camp') return null;
       const unit = current.units.find(u => u.templateId === action.templateId);
       if (!unit) return null;
       const activeCount = current.units.filter(u => !u.inCamp).length;

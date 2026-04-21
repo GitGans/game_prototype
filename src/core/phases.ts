@@ -22,9 +22,19 @@ export type GamePhase =
       returnPhase: GamePhase;
       triggerPos?: { x: number; y: number };
       mapId?: string;
+      isDebug?: boolean;
     }
   | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
-  | { type: 'debug_prep'; units: CampUnitSnapshot[] }
+  | { type: 'debug_level_select' }
+  | {
+      type: 'debug_equip_screen';
+      selectedUnitTemplateId: string;
+      availableUnits: UnitTabSnapshot[];
+      backpack: BackpackSnapshot;
+      unitEquipment: EquipmentSnapshot;
+      unitStats: { level: number; equippedBonuses: BattleStatBonuses } | null;
+      campUnitIds: string[];
+    }
   | {
       type: 'equip_screen';
       selectedUnitTemplateId: string;
@@ -57,7 +67,11 @@ export type PhaseAction =
   // ── Commerce (mutation-only) — stub, no shop phase yet ────────
   | { type: 'buy_item'; definitionId: string }
   | { type: 'sell_item'; instanceId: string }
-  | { type: 'toggle_camp_unit'; templateId: string };
+  | { type: 'toggle_camp_unit'; templateId: string }
+  // ── Debug battle ──────────────────────────────────────────────
+  | { type: 'init_debug'; level: number }
+  | { type: 'switch_debug_unit'; templateId: string }
+  | { type: 'toggle_debug_camp'; templateId: string };
 
 // Empty snapshots used by resolveTransition as placeholders —
 // rebuildSnapshot fills them with real data after side effects run.

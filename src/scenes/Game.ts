@@ -59,6 +59,7 @@ import {
   createUnitInstance,
   blueprintFromUnit,
   getPlayerAverageLevel,
+  PlayerBattleSetup,
 } from "../battle/autoPlace";
 
 /** Returns the currently active skill for a unit. */
@@ -303,10 +304,28 @@ export class Game extends Phaser.Scene {
 
   private initBattle(): void {
     let state = GameState.get();
-    state = autoPlacePlayer(state);
+    const phase = PhaseManager.getPhase();
+    const isDebug = phase.type === 'battle' && phase.isDebug;
+
+    if (isDebug) {
+      const ds = PhaseManager.getDebugState()!;
+      const debugSetup: PlayerBattleSetup = {
+        unitLevels: Object.fromEntries(PLAYER_UNITS.map(bp => [bp.templateId, ds.level])),
+        campUnitIds: ds.campUnitIds,
+        itemContainers: ds.itemContainers,
+        itemInstances: ds.itemInstances,
+        playerUnitPlacements: ds.playerUnitPlacements,
+        playerBenchIds: ds.playerBenchIds,
+        unitPermanentBonuses: ds.unitPermanentBonuses,
+      };
+      state = autoPlacePlayer(state, debugSetup);
+    } else {
+      GameState.reset();
+      state = GameState.get();
+      state = autoPlacePlayer(state);
+    }
 
     const playerAvgLevel = getPlayerAverageLevel(state);
-    const phase = PhaseManager.getPhase();
     let forceRace: UnitRace | undefined;
     let enemyLevel: number | undefined;
     if (phase.type === 'battle') {
@@ -317,14 +336,16 @@ export class Game extends Phaser.Scene {
       }
     }
 
-    const saved = GameState.lastEnemyPlacements;
+    const saved = isDebug ? null : GameState.lastEnemyPlacements;
     if (saved) {
       state = replayPlaceEnemies(state, saved);
     } else {
       state = autoPlaceEnemies(state, enemyLevel ?? playerAvgLevel, forceRace);
-      GameState.lastEnemyPlacements = [...state.units.values()]
-        .filter(u => u.id.startsWith('e'))
-        .map(u => ({ templateId: u.templateId, anchor: u.anchor, level: u.level }));
+      if (!isDebug) {
+        GameState.lastEnemyPlacements = [...state.units.values()]
+          .filter(u => u.id.startsWith('e'))
+          .map(u => ({ templateId: u.templateId, anchor: u.anchor, level: u.level }));
+      }
     }
 
     // Determine the highest player instance counter used so we can continue from there
