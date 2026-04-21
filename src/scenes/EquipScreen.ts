@@ -207,7 +207,7 @@ export class EquipScreen extends Phaser.Scene {
       GameState.itemInstances,
       ITEM_DEFINITIONS,
     );
-    this.statsPanel.showFixedFromBlueprint(bp, level, bonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
+    this.statsPanel.showFixedStatsOnly(bp, level, bonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
   }
 
   private renderBackButton(w: number, h: number): void {

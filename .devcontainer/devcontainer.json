@@ -2,7 +2,6 @@
   "name": "Claude Code Sandbox",
   "build": {
     "dockerfile": "Dockerfile",
-    "network": "host",
     "args": {
       "TZ": "${localEnv:TZ:America/Los_Angeles}",
       "CLAUDE_CODE_VERSION": "latest",
