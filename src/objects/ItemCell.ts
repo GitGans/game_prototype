@@ -54,7 +54,11 @@ export class ItemCell extends Phaser.GameObjects.Container {
     this.buildContent(cfg.item);
 
     this.setSize(cfg.size, cfg.size);
-    this.setInteractive({ useHandCursor: !!cfg.onClick });
+    this.setInteractive(
+      new Phaser.Geom.Rectangle(0, 0, cfg.size, cfg.size),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    if (cfg.onClick) this.input!.cursor = 'pointer';
 
     this.on('pointerover', () => {
       this.borderRect.setStrokeStyle(1, ITEM_CELL.hoverBorder, 1);
