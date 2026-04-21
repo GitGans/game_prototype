@@ -1,11 +1,8 @@
 import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
-import { GameState } from '../core/GameState';
 import { EventBus, Events } from '../core/EventBus';
 import { PLAYER_UNITS } from '../data/unitDefinitions';
-import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
-import { getEquippedBonuses } from '../battle/itemOps';
 import { ItemSlotSnapshot, UnitTabSnapshot } from '../battle/types';
 import { Button } from '../ui/Button';
 import { ContextMenu } from '../ui/ContextMenu';
@@ -218,17 +215,11 @@ export class EquipScreen extends Phaser.Scene {
   }
 
   private refreshPanels(phase: EquipScreenPhase): void {
-    if (!phase.selectedUnitTemplateId) return;
+    if (!phase.selectedUnitTemplateId || !phase.unitStats) return;
     const bp = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
     if (!bp) return;
-    const level   = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-    const bonuses = getEquippedBonuses(
-      bp.templateId,
-      GameState.itemContainers,
-      GameState.itemInstances,
-      ITEM_DEFINITIONS,
-    );
-    this.statsPanel?.showFixedStatsOnly(bp, level, bonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
+    const { level, equippedBonuses } = phase.unitStats;
+    this.statsPanel?.showFixedStatsOnly(bp, level, equippedBonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
     this.skillsPanel?.showFixedSkillsOnly(bp, level, this.skillsPanelX, this.statsPanelY, this.skillsPanelW);
   }
 
