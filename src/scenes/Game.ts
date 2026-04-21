@@ -59,7 +59,6 @@ import {
   replayPlaceEnemies,
   createUnitInstance,
   blueprintFromUnit,
-  getPlayerMaxLevel,
   PlayerBattleSetup,
 } from "../battle/autoPlace";
 
@@ -315,7 +314,9 @@ export class Game extends Phaser.Scene {
       state = autoPlacePlayer(state);
     }
 
-    const playerMaxLevel = getPlayerMaxLevel(GameState.playerUnits);
+    const playerMaxLevel = [...state.units.values()]
+      .filter(u => u.id.startsWith('p') && !u.isDead)
+      .reduce((max, u) => Math.max(max, u.level), 1);
     let forceRace: UnitRace | undefined;
     let enemyLevel: number | undefined;
     if (phase.type === 'battle') {
