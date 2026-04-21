@@ -18,11 +18,11 @@ const CELL_SIZE    = Math.round(56  * LAYOUT_SCALE);
 const CELL_GAP     = Math.round(6   * LAYOUT_SCALE);
 const PORTRAIT_TAB = Math.round(32  * LAYOUT_SCALE);
 const PORTRAIT_SEL = Math.round(128 * LAYOUT_SCALE);
-const SPRITE_SZ    = Math.round(256 * LAYOUT_SCALE);
-const PAD          = Math.round(16  * LAYOUT_SCALE);
+const SPRITE_SZ = Math.round(256 * LAYOUT_SCALE);
+const PAD = Math.round(16 * LAYOUT_SCALE);
 
 export class EquipScreen extends Phaser.Scene {
-  private selectedTemplateId = '';
+  private selectedTemplateId = "";
   private equipMatrix?: EquipmentMatrix;
   private backpackRow?: BackpackRow;
   private statsPanel?: UnitTooltip;
@@ -35,7 +35,9 @@ export class EquipScreen extends Phaser.Scene {
   private itemTooltip!: ItemTooltip;
   private activeContextMenu: ContextMenu | null = null;
 
-  constructor() { super({ key: 'EquipScreen' }); }
+  constructor() {
+    super({ key: "EquipScreen" });
+  }
 
   create(): void {
     const phase = PhaseManager.getPhase() as EquipScreenPhase;
@@ -70,46 +72,70 @@ export class EquipScreen extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    this.add.text(w / 2, Math.round(40 * LAYOUT_SCALE), 'Select a character', {
-      fontSize: fontSize('lg'), color: VALUE_COLOR.neutral, fontStyle: 'bold',
-    }).setOrigin(0.5);
+    this.add
+      .text(w / 2, Math.round(40 * LAYOUT_SCALE), "Select a character", {
+        fontSize: fontSize("lg"),
+        color: VALUE_COLOR.neutral,
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
 
     const units = phase.availableUnits;
-    const rows  = [units.slice(0, 6), units.slice(6, 12)].filter(r => r.length > 0);
+    const rows = [units.slice(0, 6), units.slice(6, 12)].filter(
+      (r) => r.length > 0,
+    );
     const startY = Math.round(100 * LAYOUT_SCALE);
 
     rows.forEach((row, ri) => {
-      const rowY   = startY + ri * (PORTRAIT_SEL + Math.round(28 * LAYOUT_SCALE));
+      const rowY = startY + ri * (PORTRAIT_SEL + Math.round(28 * LAYOUT_SCALE));
       const totalW = row.length * (PORTRAIT_SEL + PAD) - PAD;
       const startX = (w - totalW) / 2;
       row.forEach((u, i) => {
         this.addPortrait(
           startX + i * (PORTRAIT_SEL + PAD),
-          rowY, PORTRAIT_SEL,
-          u.templateId, u.name,
-          () => PhaseManager.transition({ type: 'switch_equip_unit', templateId: u.templateId }),
+          rowY,
+          PORTRAIT_SEL,
+          u.templateId,
+          u.name,
+          () =>
+            PhaseManager.transition({
+              type: "switch_equip_unit",
+              templateId: u.templateId,
+            }),
         );
       });
     });
 
-    this.renderBackButton(w, h);
+    this.renderBackButton(w, h - Math.round(16 * LAYOUT_SCALE));
   }
 
-  private addPortrait(x: number, y: number, size: number, templateId: string, name: string, onClick: () => void): void {
+  private addPortrait(
+    x: number,
+    y: number,
+    size: number,
+    templateId: string,
+    name: string,
+    onClick: () => void,
+  ): void {
     const spriteKey = `sprite-${templateId}`;
     if (this.textures.exists(spriteKey)) {
-      this.add.image(x + size / 2, y + size / 2, spriteKey)
+      this.add
+        .image(x + size / 2, y + size / 2, spriteKey)
         .setDisplaySize(size, size)
         .setInteractive({ useHandCursor: true })
-        .on('pointerup', onClick);
+        .on("pointerup", onClick);
     } else {
-      this.add.rectangle(x + size / 2, y + size / 2, size, size, BTN.neutral.base)
+      this.add
+        .rectangle(x + size / 2, y + size / 2, size, size, BTN.neutral.base)
         .setInteractive({ useHandCursor: true })
-        .on('pointerup', onClick);
+        .on("pointerup", onClick);
     }
-    this.add.text(x + size / 2, y + size + Math.round(4 * LAYOUT_SCALE), name, {
-      fontSize: fontSize('sm'), color: VALUE_COLOR.neutral,
-    }).setOrigin(0.5, 0);
+    this.add
+      .text(x + size / 2, y + size + Math.round(4 * LAYOUT_SCALE), name, {
+        fontSize: fontSize("sm"),
+        color: VALUE_COLOR.neutral,
+      })
+      .setOrigin(0.5, 0);
   }
 
   // ── Mode B: character menu ─────────────────────────────────────────────────
@@ -124,17 +150,18 @@ export class EquipScreen extends Phaser.Scene {
     const matrixH = 4 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const contentTopY = CELL_SIZE + PAD * 2;
 
-    const STATS_W  = Math.round(200 * LAYOUT_SCALE);
+    const STATS_W = Math.round(200 * LAYOUT_SCALE);
     const SKILLS_W = Math.round(200 * LAYOUT_SCALE);
-    const totalContentW = STATS_W + PAD + matrixW + PAD + SPRITE_SZ + PAD + SKILLS_W;
-    const startX   = Math.round((w - totalContentW) / 2);
-    const statsX   = startX;
-    const matrixX  = startX + STATS_W + PAD;
-    const spriteX  = matrixX + matrixW + PAD;
-    const skillsX  = spriteX + SPRITE_SZ + PAD;
-    this.statsPanelX  = statsX;
-    this.statsPanelY  = contentTopY;
-    this.statsPanelW  = STATS_W;
+    const totalContentW =
+      STATS_W + PAD + matrixW + PAD + SPRITE_SZ + PAD + SKILLS_W;
+    const startX = Math.round((w - totalContentW) / 2);
+    const statsX = startX;
+    const matrixX = startX + STATS_W + PAD;
+    const spriteX = matrixX + matrixW + PAD;
+    const skillsX = spriteX + SPRITE_SZ + PAD;
+    this.statsPanelX = statsX;
+    this.statsPanelY = contentTopY;
+    this.statsPanelW = STATS_W;
     this.skillsPanelX = skillsX;
     this.skillsPanelW = SKILLS_W;
 
@@ -143,8 +170,13 @@ export class EquipScreen extends Phaser.Scene {
 
     // Equipment matrix (second column)
     this.equipMatrix = new EquipmentMatrix(
-      this, matrixX, contentTopY, CELL_SIZE, CELL_GAP,
-      phase.unitEquipment, this.itemTooltip,
+      this,
+      matrixX,
+      contentTopY,
+      CELL_SIZE,
+      CELL_GAP,
+      phase.unitEquipment,
+      this.itemTooltip,
       (slot, item) => this.onEquipSlotClick(slot, item),
     );
 
@@ -160,13 +192,20 @@ export class EquipScreen extends Phaser.Scene {
     const backpackW = 12 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const backpackX = Math.round((w - backpackW) / 2);
     this.backpackRow = new BackpackRow(
-      this, backpackX, backpackY, CELL_SIZE, CELL_GAP,
-      phase.backpack, this.itemTooltip,
+      this,
+      backpackX,
+      backpackY,
+      CELL_SIZE,
+      CELL_GAP,
+      phase.backpack,
+      this.itemTooltip,
       (item, cellX, cellY) => this.onBackpackItemClick(item, cellX, cellY),
-      12, 2,
+      12,
+      2,
     );
 
-    this.renderBackButton(w, h);
+    const backpackBottomY = backpackY + 2 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+    this.renderBackButton(w, backpackBottomY);
   }
 
   private renderUnitTabs(units: UnitTabSnapshot[], screenW: number): void {
@@ -175,30 +214,55 @@ export class EquipScreen extends Phaser.Scene {
     units.forEach((u, i) => {
       const tabX = startX + i * (CELL_SIZE + CELL_GAP);
       const isSelected = u.templateId === this.selectedTemplateId;
-      const baseColor  = isSelected ? BTN.navy.hover : BTN.navy.base;
+      const baseColor = isSelected ? BTN.navy.hover : BTN.navy.base;
 
       const spriteKey = `sprite-${u.templateId}`;
       if (this.textures.exists(spriteKey)) {
-        this.add.image(tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2, spriteKey)
+        const img = this.add
+          .image(tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2, spriteKey)
           .setDisplaySize(CELL_SIZE, CELL_SIZE)
           .setTint(isSelected ? 0xffffff : 0xaaaaaa)
-          .setInteractive({ useHandCursor: !isSelected })
-          .on('pointerup', () => { if (!isSelected) PhaseManager.transition({ type: 'switch_equip_unit', templateId: u.templateId }); });
-      } else {
-        const rect = this.add.rectangle(
-          tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2,
-          CELL_SIZE, CELL_SIZE, baseColor,
-        ).setInteractive({ useHandCursor: !isSelected });
+          .setInteractive({ useHandCursor: !isSelected });
 
         if (!isSelected) {
-          rect.on('pointerover', () => rect.setFillStyle(BTN.neutral.base));
-          rect.on('pointerout',  () => rect.setFillStyle(baseColor));
-          rect.on('pointerup',   () => PhaseManager.transition({ type: 'switch_equip_unit', templateId: u.templateId }));
+          img.on("pointerover", () => img.setTint(0xffffff));
+          img.on("pointerout", () => img.setTint(0xaaaaaa));
+          img.on("pointerup", () =>
+            PhaseManager.transition({
+              type: "switch_equip_unit",
+              templateId: u.templateId,
+            }),
+          );
+        }
+      } else {
+        const rect = this.add
+          .rectangle(
+            tabX + CELL_SIZE / 2,
+            PAD + CELL_SIZE / 2,
+            CELL_SIZE,
+            CELL_SIZE,
+            baseColor,
+          )
+          .setInteractive({ useHandCursor: !isSelected });
+
+        if (!isSelected) {
+          rect.on("pointerover", () => rect.setFillStyle(BTN.navy.hover));
+          rect.on("pointerout", () => rect.setFillStyle(BTN.navy.base));
+          rect.on("pointerup", () =>
+            PhaseManager.transition({
+              type: "switch_equip_unit",
+              templateId: u.templateId,
+            }),
+          );
         }
 
-        this.add.text(tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2, u.name.charAt(0), {
-          fontSize: fontSize('sm'), color: VALUE_COLOR.neutral, fontStyle: 'bold',
-        }).setOrigin(0.5);
+        this.add
+          .text(tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2, u.name.charAt(0), {
+            fontSize: fontSize("sm"),
+            color: VALUE_COLOR.neutral,
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5);
       }
     });
   }
@@ -206,11 +270,18 @@ export class EquipScreen extends Phaser.Scene {
   private renderUnitSprite(templateId: string, x: number, y: number): void {
     const spriteKey = `sprite-${templateId}`;
     if (this.textures.exists(spriteKey)) {
-      this.add.image(x + SPRITE_SZ / 2, y + SPRITE_SZ / 2, spriteKey)
+      this.add
+        .image(x + SPRITE_SZ / 2, y + SPRITE_SZ / 2, spriteKey)
         .setDisplaySize(SPRITE_SZ, SPRITE_SZ)
         .setOrigin(0.5);
     } else {
-      this.add.rectangle(x + SPRITE_SZ / 2, y + SPRITE_SZ / 2, SPRITE_SZ, SPRITE_SZ, 0x4a4a6a);
+      this.add.rectangle(
+        x + SPRITE_SZ / 2,
+        y + SPRITE_SZ / 2,
+        SPRITE_SZ,
+        SPRITE_SZ,
+        0x4a4a6a,
+      );
     }
   }
 
@@ -223,47 +294,65 @@ export class EquipScreen extends Phaser.Scene {
     this.skillsPanel?.showFixedSkillsOnly(bp, level, this.skillsPanelX, this.statsPanelY, this.skillsPanelW);
   }
 
-  private renderBackButton(w: number, h: number): void {
+  private renderBackButton(w: number, backpackBottomY: number): void {
+    const BTN_W = Math.round(44 * LAYOUT_SCALE);
+    const BTN_H = Math.round(34 * LAYOUT_SCALE);
     new Button({
       scene: this,
-      x: w - Math.round(80 * LAYOUT_SCALE),
-      y: h - Math.round(30 * LAYOUT_SCALE),
-      w: Math.round(130 * LAYOUT_SCALE),
-      h: Math.round(36  * LAYOUT_SCALE),
-      label: '← Back',
-      style: 'neutral',
-      onClick: () => PhaseManager.transition({ type: 'close_equip_screen' }),
+      x: w - Math.round(16 * LAYOUT_SCALE) - BTN_W / 2,
+      y: backpackBottomY - BTN_H / 2,
+      w: BTN_W,
+      h: BTN_H,
+      label: "←",
+      style: "neutral",
+      onClick: () => PhaseManager.transition({ type: "close_equip_screen" }),
     });
   }
 
   // ── Item interaction ───────────────────────────────────────────────────────
 
-  private onBackpackItemClick(item: ItemSlotSnapshot, cellX: number, cellY: number): void {
+  private onBackpackItemClick(
+    item: ItemSlotSnapshot,
+    cellX: number,
+    cellY: number,
+  ): void {
     this.dismissContextMenu();
     const def = item.definition;
 
-    if (def.usage === 'equip') {
-      PhaseManager.transition({ type: 'equip_item', instanceId: item.instanceId, unitTemplateId: this.selectedTemplateId });
+    if (def.usage === "equip") {
+      PhaseManager.transition({
+        type: "equip_item",
+        instanceId: item.instanceId,
+        unitTemplateId: this.selectedTemplateId,
+      });
       return;
     }
 
     const options: Array<{ label: string; onClick: () => void }> = [];
 
-    if (def.usage === 'equip_and_activate') {
+    if (def.usage === "equip_and_activate") {
       options.push({
-        label: 'Wear',
+        label: "Wear",
         onClick: () => {
           this.dismissContextMenu();
-          PhaseManager.transition({ type: 'equip_item', instanceId: item.instanceId, unitTemplateId: this.selectedTemplateId });
+          PhaseManager.transition({
+            type: "equip_item",
+            instanceId: item.instanceId,
+            unitTemplateId: this.selectedTemplateId,
+          });
         },
       });
     }
 
     options.push({
-      label: 'Use',
+      label: "Use",
       onClick: () => {
         this.dismissContextMenu();
-        PhaseManager.transition({ type: 'use_item', instanceId: item.instanceId, unitTemplateId: this.selectedTemplateId });
+        PhaseManager.transition({
+          type: "use_item",
+          instanceId: item.instanceId,
+          unitTemplateId: this.selectedTemplateId,
+        });
       },
     });
 
@@ -279,7 +368,11 @@ export class EquipScreen extends Phaser.Scene {
 
   private onEquipSlotClick(slot: string, item: ItemSlotSnapshot | null): void {
     if (item) {
-      PhaseManager.transition({ type: 'unequip_item', unitTemplateId: this.selectedTemplateId, slot });
+      PhaseManager.transition({
+        type: "unequip_item",
+        unitTemplateId: this.selectedTemplateId,
+        slot,
+      });
     }
   }
 
@@ -290,7 +383,7 @@ export class EquipScreen extends Phaser.Scene {
 
   private onStateChanged(): void {
     const phase = PhaseManager.getPhase();
-    if (phase.type !== 'equip_screen') return;
+    if (phase.type !== "equip_screen") return;
     this.equipMatrix?.refresh(phase.unitEquipment);
     this.backpackRow?.refresh(phase.backpack);
     this.refreshPanels(phase);

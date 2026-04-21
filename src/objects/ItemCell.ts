@@ -38,16 +38,16 @@ export class ItemCell extends Phaser.GameObjects.Container {
   private contentObjects: Phaser.GameObjects.GameObject[] = [];
 
   constructor(cfg: ItemCellConfig) {
-    super(cfg.scene, cfg.x, cfg.y);
+    super(cfg.scene, cfg.x + cfg.size / 2, cfg.y + cfg.size / 2);
     this.cfg = cfg;
     this.currentItem = cfg.item;
 
     // Background
-    const bgRect = cfg.scene.add.rectangle(0, 0, cfg.size, cfg.size, ITEM_CELL.bg).setOrigin(0, 0);
+    const bgRect = cfg.scene.add.rectangle(-cfg.size / 2, -cfg.size / 2, cfg.size, cfg.size, ITEM_CELL.bg).setOrigin(0, 0);
     this.add(bgRect);
 
     // Hover border (initially invisible)
-    this.borderRect = cfg.scene.add.rectangle(0, 0, cfg.size, cfg.size, 0x000000, 0).setOrigin(0, 0);
+    this.borderRect = cfg.scene.add.rectangle(-cfg.size / 2, -cfg.size / 2, cfg.size, cfg.size, 0x000000, 0).setOrigin(0, 0);
     this.borderRect.setStrokeStyle(1, ITEM_CELL.hoverBorder, 0);
     this.add(this.borderRect);
 
@@ -86,7 +86,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
     const { scene, size, slotKey, slotLabel } = this.cfg;
 
     if (!item) {
-      const label = scene.add.text(size / 2, size / 2, slotLabel, {
+      const label = scene.add.text(0, 0, slotLabel, {
         fontSize: fontSize('xs'),
         color: ITEM_CELL.emptySlot,
       }).setOrigin(0.5);
@@ -97,15 +97,15 @@ export class ItemCell extends Phaser.GameObjects.Container {
 
     const spriteKey = `sprite-item-${item.definition.id}`;
     if (scene.textures.exists(spriteKey)) {
-      const img = scene.add.image(size / 2, size / 2, spriteKey)
+      const img = scene.add.image(0, 0, spriteKey)
         .setDisplaySize(size - 4, size - 4)
         .setOrigin(0.5);
       this.add(img);
       this.contentObjects.push(img);
     } else {
       const color = SLOT_COLORS[slotKey] ?? SLOT_COLORS['default'];
-      const rect = scene.add.rectangle(0, 0, size, size, color).setOrigin(0, 0);
-      const letter = scene.add.text(size / 2, size / 2, item.definition.name.charAt(0), {
+      const rect = scene.add.rectangle(-size / 2, -size / 2, size, size, color).setOrigin(0, 0);
+      const letter = scene.add.text(0, 0, item.definition.name.charAt(0), {
         fontSize: fontSize('md'),
         color: VALUE_COLOR.white,
         fontStyle: 'bold',
@@ -133,6 +133,6 @@ export class ItemCell extends Phaser.GameObjects.Container {
     };
 
     const matrix = this.getWorldTransformMatrix();
-    this.cfg.tooltip.show(data, matrix.tx + this.cfg.size, matrix.ty, 'right');
+    this.cfg.tooltip.show(data, matrix.tx + this.cfg.size / 2, matrix.ty - this.cfg.size / 2, 'right');
   }
 }
