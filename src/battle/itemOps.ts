@@ -364,10 +364,10 @@ export function buildBackpackSnapshot(
   definitions: Record<string, ItemDefinition>,
 ): BackpackSnapshot {
   const backpack = containers['backpack_shared'];
-  const slots: Array<ItemSlotSnapshot | null> = Array(10).fill(null);
+  const slots: Array<ItemSlotSnapshot | null> = Array(24).fill(null);
   if (!backpack) return { slots };
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 24; i++) {
     const instanceId = backpack.slots[String(i)];
     if (!instanceId) continue;
     const instance = instances[instanceId];

@@ -29,9 +29,12 @@ export class EquipScreen extends Phaser.Scene {
   private equipMatrix?: EquipmentMatrix;
   private backpackRow?: BackpackRow;
   private statsPanel?: UnitTooltip;
+  private skillsPanel?: UnitTooltip;
   private statsPanelX = 0;
   private statsPanelY = 0;
   private statsPanelW = 0;
+  private skillsPanelX = 0;
+  private skillsPanelW = 0;
   private itemTooltip!: ItemTooltip;
   private activeContextMenu: ContextMenu | null = null;
 
@@ -118,70 +121,88 @@ export class EquipScreen extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    this.renderUnitTabs(phase.availableUnits);
+    this.renderUnitTabs(phase.availableUnits, w);
 
     const matrixW = 3 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const matrixH = 4 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-    const contentTopY = PORTRAIT_TAB + PAD * 2;
+    const contentTopY = CELL_SIZE + PAD * 2;
 
-    const STATS_W = Math.round(200 * LAYOUT_SCALE);
-    const totalContentW = matrixW + PAD + SPRITE_SZ + PAD + STATS_W;
+    const STATS_W  = Math.round(200 * LAYOUT_SCALE);
+    const SKILLS_W = Math.round(200 * LAYOUT_SCALE);
+    const totalContentW = STATS_W + PAD + matrixW + PAD + SPRITE_SZ + PAD + SKILLS_W;
     const startX   = Math.round((w - totalContentW) / 2);
-    const matrixX  = startX;
-    const spriteX  = startX + matrixW + PAD;
-    const statsX   = startX + matrixW + PAD + SPRITE_SZ + PAD;
-    this.statsPanelW = STATS_W;
-    this.statsPanelX = statsX;
-    this.statsPanelY = contentTopY;
+    const statsX   = startX;
+    const matrixX  = startX + STATS_W + PAD;
+    const spriteX  = matrixX + matrixW + PAD;
+    const skillsX  = spriteX + SPRITE_SZ + PAD;
+    this.statsPanelX  = statsX;
+    this.statsPanelY  = contentTopY;
+    this.statsPanelW  = STATS_W;
+    this.skillsPanelX = skillsX;
+    this.skillsPanelW = SKILLS_W;
 
-    // Equipment matrix (left column)
+    // Stats panel (leftmost column)
+    this.statsPanel = new UnitTooltip(this);
+
+    // Equipment matrix (second column)
     this.equipMatrix = new EquipmentMatrix(
       this, matrixX, contentTopY, CELL_SIZE, CELL_GAP,
       phase.unitEquipment, this.itemTooltip,
       (slot, item) => this.onEquipSlotClick(slot, item),
     );
 
-    // Unit sprite (center column)
+    // Unit sprite (third column)
     this.renderUnitSprite(phase.selectedUnitTemplateId, spriteX, contentTopY);
 
-    // Stats panel (right column)
-    this.statsPanel = new UnitTooltip(this);
-    this.refreshStatsPanel(phase);
+    // Skills panel (rightmost column)
+    this.skillsPanel = new UnitTooltip(this);
+    this.refreshPanels(phase);
 
-    // Backpack (below the three columns)
+    // Backpack (below the four columns)
     const backpackY = contentTopY + Math.max(matrixH, SPRITE_SZ) + PAD;
-    const backpackW = 10 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+    const backpackW = 12 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const backpackX = Math.round((w - backpackW) / 2);
     this.backpackRow = new BackpackRow(
       this, backpackX, backpackY, CELL_SIZE, CELL_GAP,
       phase.backpack, this.itemTooltip,
       (item, cellX, cellY) => this.onBackpackItemClick(item, cellX, cellY),
-      10,
+      12, 2,
     );
 
     this.renderBackButton(w, h);
   }
 
-  private renderUnitTabs(units: UnitTabSnapshot[]): void {
+  private renderUnitTabs(units: UnitTabSnapshot[], screenW: number): void {
+    const totalW = units.length * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+    const startX = Math.round((screenW - totalW) / 2);
     units.forEach((u, i) => {
-      const tabX = PAD + i * (PORTRAIT_TAB + CELL_GAP);
+      const tabX = startX + i * (CELL_SIZE + CELL_GAP);
       const isSelected = u.templateId === this.selectedTemplateId;
       const baseColor  = isSelected ? BTN.navy.hover : BTN.navy.base;
 
-      const rect = this.add.rectangle(
-        tabX + PORTRAIT_TAB / 2, PAD + PORTRAIT_TAB / 2,
-        PORTRAIT_TAB, PORTRAIT_TAB, baseColor,
-      ).setInteractive({ useHandCursor: !isSelected });
+      const spriteKey = `sprite-${u.templateId}`;
+      if (this.textures.exists(spriteKey)) {
+        this.add.image(tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2, spriteKey)
+          .setDisplaySize(CELL_SIZE, CELL_SIZE)
+          .setTint(isSelected ? 0xffffff : 0xaaaaaa)
+          .setInteractive({ useHandCursor: !isSelected })
+          .on('pointerup', () => { if (!isSelected) PhaseManager.transition({ type: 'switch_equip_unit', templateId: u.templateId }); });
+      } else {
+        const rect = this.add.rectangle(
+          tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2,
+          CELL_SIZE, CELL_SIZE, baseColor,
+        ).setInteractive({ useHandCursor: !isSelected });
 
-      if (!isSelected) {
-        rect.on('pointerover', () => rect.setFillStyle(BTN.neutral.base));
-        rect.on('pointerout',  () => rect.setFillStyle(baseColor));
-        rect.on('pointerup',   () => PhaseManager.transition({ type: 'switch_equip_unit', templateId: u.templateId }));
+        if (!isSelected) {
+          rect.on('pointerover', () => rect.setFillStyle(BTN.neutral.base));
+          rect.on('pointerout',  () => rect.setFillStyle(baseColor));
+          rect.on('pointerup',   () => PhaseManager.transition({ type: 'switch_equip_unit', templateId: u.templateId }));
+        }
+
+        this.add.text(tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2, u.name.charAt(0), {
+          fontSize: fontSize('sm'), color: VALUE_COLOR.neutral, fontStyle: 'bold',
+        }).setOrigin(0.5);
       }
-
-      this.add.text(tabX + PORTRAIT_TAB / 2, PAD + PORTRAIT_TAB / 2, u.name.charAt(0), {
-        fontSize: fontSize('sm'), color: VALUE_COLOR.neutral, fontStyle: 'bold',
-      }).setOrigin(0.5);
     });
   }
 
@@ -196,8 +217,8 @@ export class EquipScreen extends Phaser.Scene {
     }
   }
 
-  private refreshStatsPanel(phase: EquipScreenPhase): void {
-    if (!this.statsPanel || !phase.selectedUnitTemplateId) return;
+  private refreshPanels(phase: EquipScreenPhase): void {
+    if (!phase.selectedUnitTemplateId) return;
     const bp = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
     if (!bp) return;
     const level   = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
@@ -207,7 +228,8 @@ export class EquipScreen extends Phaser.Scene {
       GameState.itemInstances,
       ITEM_DEFINITIONS,
     );
-    this.statsPanel.showFixedStatsOnly(bp, level, bonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
+    this.statsPanel?.showFixedStatsOnly(bp, level, bonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
+    this.skillsPanel?.showFixedSkillsOnly(bp, level, this.skillsPanelX, this.statsPanelY, this.skillsPanelW);
   }
 
   private renderBackButton(w: number, h: number): void {
@@ -280,6 +302,6 @@ export class EquipScreen extends Phaser.Scene {
     if (phase.type !== 'equip_screen') return;
     this.equipMatrix?.refresh(phase.unitEquipment);
     this.backpackRow?.refresh(phase.backpack);
-    this.refreshStatsPanel(phase);
+    this.refreshPanels(phase);
   }
 }

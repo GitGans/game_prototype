@@ -51,5 +51,5 @@ export type PhaseAction =
 
 // Empty snapshots used by resolveTransition as placeholders —
 // rebuildSnapshot fills them with real data after side effects run.
-export const EMPTY_BACKPACK_SNAPSHOT: BackpackSnapshot = { slots: Array(10).fill(null) };
+export const EMPTY_BACKPACK_SNAPSHOT: BackpackSnapshot = { slots: Array(24).fill(null) };
 export const EMPTY_EQUIP_SNAPSHOT: EquipmentSnapshot = { slots: {} };

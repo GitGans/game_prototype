@@ -38,12 +38,13 @@ interface TooltipData {
 
 interface BuildOptions {
   showSprite?: boolean; // default true
+  showStats?:  boolean; // default true
   showSkills?: boolean; // default true
 }
 
 export class UnitTooltip extends BaseTooltip<TooltipData> {
-  constructor(scene: Phaser.Scene) {
-    super(scene, W);
+  constructor(scene: Phaser.Scene, bgColor?: number, bgAlpha?: number) {
+    super(scene, W, bgColor, bgAlpha);
   }
 
   // ── Public entry points ────────────────────────────────────────────────────
@@ -163,6 +164,34 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.setVisible(true);
   }
 
+  showFixedSkillsOnly(
+    bp:    UnitBlueprint,
+    level: number,
+    x: number, y: number, w: number,
+  ): void {
+    const scale = 1 + 0.1 * (level - 1);
+    const data: TooltipData = {
+      templateId:      bp.templateId,
+      name:            bp.name,
+      side:            'player',
+      hp:              flat(Math.round(bp.hp * scale)),
+      maxHp:           flat(Math.round(bp.hp * scale)),
+      physicalDamage:  flat(Math.round(bp.physicalDamage  * scale)),
+      magicalDamage:   flat(Math.round(bp.magicalDamage   * scale)),
+      physicalDefense: flat(bp.physicalDefense),
+      magicalDefense:  flat(bp.magicalDefense),
+      dodge:           flat(bp.dodge),
+      block:           flat(bp.block),
+      initiative:      flat(bp.initiative),
+      skills: bp.skills.map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+    };
+    this.clearContent();
+    const h = this.buildContent(data, { showSprite: false, showStats: false });
+    this.bg.setSize(w, h);
+    this.setPosition(x, y);
+    this.setVisible(true);
+  }
+
   // ── Content builder ────────────────────────────────────────────────────────
 
   protected buildContent(data: TooltipData, opts: BuildOptions = {}): number {
@@ -202,6 +231,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       y += Math.round(6 * LAYOUT_SCALE);
     }
 
+    if (opts.showStats !== false) {
     // Stats section
     this.addText(pad, y, "Stats", {
       fontSize: fontSize("md"), color: VALUE_COLOR.highlight, fontStyle: "bold",
@@ -224,6 +254,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       this.addText(pad + labelObj.width, y, display, { fontSize: fontSize("sm"), color });
       y += TOOLTIP.lineH;
     }
+    } // end showStats
 
     if (opts.showSkills !== false) {
       y += Math.round(6 * LAYOUT_SCALE);

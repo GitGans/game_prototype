@@ -16,11 +16,13 @@ export class BackpackRow extends Phaser.GameObjects.Container {
     tooltip: ItemTooltip,
     onItemClick: (item: ItemSlotSnapshot, cellX: number, cellY: number) => void,
     cols: number = 5,
+    rows: number = 2,
   ) {
     super(scene, x, y);
 
     const COLS = cols;
-    for (let i = 0; i < 10; i++) {
+    const total = cols * rows;
+    for (let i = 0; i < total; i++) {
       const col = i % COLS;
       const row = Math.floor(i / COLS);
       const cx = col * (cellSize + gap);
