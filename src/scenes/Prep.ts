@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
-import { GameState } from "../core/GameState";
 import { PhaseManager } from "../core/PhaseManager";
+import { EventBus, Events } from "../core/EventBus";
 import { PLAYER_UNITS } from "../data/unitDefinitions";
 import { Button } from "../ui/Button";
 import { VALUE_COLOR, SCENE_BG, BTN, ALPHA } from "../ui/theme";
@@ -11,6 +11,10 @@ export class Prep extends Phaser.Scene {
   private _isCampMode = false;
   private battleBtn!: Phaser.GameObjects.Rectangle;
   private battleBtnText!: Phaser.GameObjects.Text;
+  private campPanel!: Phaser.GameObjects.Container;
+  private partyPanel!: Phaser.GameObjects.Container;
+  private _w = 0;
+  private _h = 0;
 
   constructor() {
     super("Prep");
@@ -22,6 +26,8 @@ export class Prep extends Phaser.Scene {
 
     const w = this.scale.width;
     const h = this.scale.height;
+    this._w = w;
+    this._h = h;
 
     this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.default);
     this.add
@@ -33,13 +39,13 @@ export class Prep extends Phaser.Scene {
       .setOrigin(0.5);
 
     // ── Build panels (hidden by default) ───────────────────────────────────────
-    const campPanel = this.buildCampPanel(w, h);
+    this.campPanel  = this.buildCampPanel(w, h);
     const shopPanel = this.buildShopPanel(w, h);
-    const partyPanel = this.buildPartyPanel(w, h);
+    this.partyPanel = this.buildPartyPanel(w, h);
     const panels: Record<string, Phaser.GameObjects.Container> = {
-      camp: campPanel,
-      shop: shopPanel,
-      party: partyPanel,
+      camp:  this.campPanel,
+      shop:  shopPanel,
+      party: this.partyPanel,
     };
 
     this.input.keyboard!.on("keydown-ESC", () => {
@@ -77,8 +83,8 @@ export class Prep extends Phaser.Scene {
         Object.values(panels).forEach((p) => p.setVisible(false));
         panels[key].setVisible(true);
         this._activePanel = panels[key];
-        if (key === "camp") this.refreshCampPanel(campPanel, w, h);
-        if (key === "party") this.refreshPartyPanel(partyPanel, w, h);
+        if (key === "camp")  this.refreshCampPanel();
+        if (key === "party") this.refreshPartyPanel();
       });
     });
 
@@ -110,12 +116,30 @@ export class Prep extends Phaser.Scene {
       this.battleBtn.on('pointerup', () => this._showEnemyGroupSelector());
     }
     this.refreshBattleButton();
+
+    EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);
+  }
+
+  shutdown(): void {
+    EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
+  }
+
+  // ── State change handler ────────────────────────────────────────────────────
+
+  private onStateChanged(): void {
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'camp' && phase.type !== 'debug_prep') return;
+    if (this._activePanel === this.campPanel)  this.refreshCampPanel();
+    if (this._activePanel === this.partyPanel) this.refreshPartyPanel();
+    this.refreshBattleButton();
   }
 
   // ── Battle button helpers ───────────────────────────────────────────────────
 
   private getActiveCount(): number {
-    return PLAYER_UNITS.length - GameState.campUnitIds.length;
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'camp' && phase.type !== 'debug_prep') return 0;
+    return phase.units.filter(u => !u.inCamp).length;
   }
 
   private refreshBattleButton(): void {
@@ -183,38 +207,36 @@ export class Prep extends Phaser.Scene {
 
   // Refreshes the dynamic unit rows inside the camp panel.
   // First 4 items in panel.list are permanent (bg, title, subtitle, close btn).
-  private refreshCampPanel(
-    panel: Phaser.GameObjects.Container,
-    w: number,
-    h: number,
-  ): void {
+  private refreshCampPanel(): void {
+    const panel = this.campPanel;
+    const w = this._w;
+    const h = this._h;
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'camp' && phase.type !== 'debug_prep') return;
+
     while (panel.list.length > 4) {
-      (
-        panel.list[panel.list.length - 1] as Phaser.GameObjects.GameObject
-      ).destroy();
+      (panel.list[panel.list.length - 1] as Phaser.GameObjects.GameObject).destroy();
     }
 
     const startY = h / 2 - Math.round(100 * LAYOUT_SCALE);
-    const rowH = Math.round(40 * LAYOUT_SCALE);
+    const rowH   = Math.round(40 * LAYOUT_SCALE);
 
-    PLAYER_UNITS.forEach((bp, i) => {
+    phase.units.forEach((unit, i) => {
       const y = startY + i * rowH;
-      const inCamp = GameState.campUnitIds.includes(bp.templateId);
-      const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+      const { inCamp, level, name, templateId } = unit;
+      const toggleColor = inCamp ? BTN.danger.base : BTN.primary.base;
+      const toggleLabel = inCamp ? "In Camp" : "Active";
+      const toggleBtnX  = w / 2 + Math.round(150 * LAYOUT_SCALE);
+      const toggleBtnY  = y + Math.round(8 * LAYOUT_SCALE);
 
       const label = this.add
         .text(
           w / 2 - Math.round(180 * LAYOUT_SCALE),
           y,
-          `${bp.name}  Lv.${level}`,
+          `${name}  Lv.${level}`,
           { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: VALUE_COLOR.white },
         )
         .setDepth(11);
-
-      const toggleColor = inCamp ? BTN.danger.base : BTN.primary.base;
-      const toggleLabel = inCamp ? "In Camp" : "Active";
-      const toggleBtnX = w / 2 + Math.round(150 * LAYOUT_SCALE);
-      const toggleBtnY = y + Math.round(8 * LAYOUT_SCALE);
 
       const toggleBtn = this.add
         .rectangle(
@@ -234,19 +256,9 @@ export class Prep extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(12);
 
-      toggleBtn.on("pointerup", () => {
-        const ids = GameState.campUnitIds;
-        const idx = ids.indexOf(bp.templateId);
-        const isCurrentlyActive = idx < 0;
-
-        // Prevent sending the last active unit to camp
-        if (isCurrentlyActive && this.getActiveCount() <= 1) return;
-
-        if (idx >= 0) ids.splice(idx, 1);
-        else ids.push(bp.templateId);
-        this.refreshCampPanel(panel, w, h);
-        this.refreshBattleButton();
-      });
+      toggleBtn.on("pointerup", () =>
+        PhaseManager.transition({ type: 'toggle_camp_unit', templateId }),
+      );
 
       panel.add([label, toggleBtn, toggleText]);
     });
@@ -314,24 +326,23 @@ export class Prep extends Phaser.Scene {
 
   // Refreshes unit rows in the party panel.
   // First 3 items are permanent (bg, title, close btn).
-  private refreshPartyPanel(
-    panel: Phaser.GameObjects.Container,
-    w: number,
-    h: number,
-  ): void {
+  private refreshPartyPanel(): void {
+    const panel = this.partyPanel;
+    const w = this._w;
+    const h = this._h;
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'camp' && phase.type !== 'debug_prep') return;
+
     while (panel.list.length > 3) {
-      (
-        panel.list[panel.list.length - 1] as Phaser.GameObjects.GameObject
-      ).destroy();
+      (panel.list[panel.list.length - 1] as Phaser.GameObjects.GameObject).destroy();
     }
 
     const startY = h / 2 - Math.round(140 * LAYOUT_SCALE);
-    const rowH = Math.round(38 * LAYOUT_SCALE);
+    const rowH   = Math.round(38 * LAYOUT_SCALE);
 
-    PLAYER_UNITS.forEach((bp, i) => {
+    phase.units.forEach((unit, i) => {
       const y = startY + i * rowH;
-      const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-      const inCamp = GameState.campUnitIds.includes(bp.templateId);
+      const { inCamp, level, name, templateId } = unit;
       const status = inCamp ? " [Camp]" : "";
 
       const row = this.add
@@ -348,15 +359,15 @@ export class Prep extends Phaser.Scene {
         .text(
           w / 2 - Math.round(190 * LAYOUT_SCALE),
           y,
-          `${bp.name}  Lv.${level}${status}`,
+          `${name}  Lv.${level}${status}`,
           { fontSize: `${Math.round(15 * LAYOUT_SCALE)}px`, color: VALUE_COLOR.white },
         )
         .setDepth(12);
 
       row.on("pointerover", () => row.setFillStyle(BTN.ghost.hover));
-      row.on("pointerout", () => row.setFillStyle(BTN.ghost.base));
-      row.on("pointerup", () =>
-        PhaseManager.transition({ type: 'open_equip_screen', unitTemplateId: bp.templateId })
+      row.on("pointerout",  () => row.setFillStyle(BTN.ghost.base));
+      row.on("pointerup",   () =>
+        PhaseManager.transition({ type: 'open_equip_screen', unitTemplateId: templateId })
       );
 
       panel.add([row, rowLabel]);

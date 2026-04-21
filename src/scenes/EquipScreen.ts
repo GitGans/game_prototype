@@ -1,28 +1,22 @@
-import Phaser from "phaser";
-import { LAYOUT_SCALE } from "../core/Constants";
-import { PhaseManager } from "../core/PhaseManager";
-import { GameState } from "../core/GameState";
-import { EventBus, Events } from "../core/EventBus";
-import { PLAYER_UNITS } from "../data/unitDefinitions";
-import { ITEM_DEFINITIONS } from "../data/itemDefinitions";
-import { getEquippedBonuses } from "../battle/itemOps";
-import { ItemSlotSnapshot, UnitTabSnapshot } from "../battle/types";
-import { Button } from "../ui/Button";
-import { ContextMenu } from "../ui/ContextMenu";
-import { fontSize, VALUE_COLOR, BTN, SCENE_BG } from "../ui/theme";
-import { ItemTooltip } from "../objects/ItemTooltip";
-import { UnitTooltip } from "../objects/UnitTooltip";
-import { EquipmentMatrix } from "../objects/EquipmentMatrix";
-import { BackpackRow } from "../objects/BackpackRow";
+import Phaser from 'phaser';
+import { LAYOUT_SCALE } from '../core/Constants';
+import { PhaseManager } from '../core/PhaseManager';
+import { EventBus, Events } from '../core/EventBus';
+import { PLAYER_UNITS } from '../data/unitDefinitions';
+import { ItemSlotSnapshot, UnitTabSnapshot } from '../battle/types';
+import { Button } from '../ui/Button';
+import { ContextMenu } from '../ui/ContextMenu';
+import { fontSize, VALUE_COLOR, BTN, SCENE_BG } from '../ui/theme';
+import { ItemTooltip } from '../objects/ItemTooltip';
+import { UnitTooltip } from '../objects/UnitTooltip';
+import { EquipmentMatrix } from '../objects/EquipmentMatrix';
+import { BackpackRow } from '../objects/BackpackRow';
 
-type EquipScreenPhase = Extract<
-  ReturnType<typeof PhaseManager.getPhase>,
-  { type: "equip_screen" }
->;
+type EquipScreenPhase = Extract<ReturnType<typeof PhaseManager.getPhase>, { type: 'equip_screen' }>;
 
-const CELL_SIZE = Math.round(56 * LAYOUT_SCALE);
-const CELL_GAP = Math.round(6 * LAYOUT_SCALE);
-const PORTRAIT_TAB = Math.round(32 * LAYOUT_SCALE);
+const CELL_SIZE    = Math.round(56  * LAYOUT_SCALE);
+const CELL_GAP     = Math.round(6   * LAYOUT_SCALE);
+const PORTRAIT_TAB = Math.round(32  * LAYOUT_SCALE);
 const PORTRAIT_SEL = Math.round(128 * LAYOUT_SCALE);
 const SPRITE_SZ = Math.round(256 * LAYOUT_SCALE);
 const PAD = Math.round(16 * LAYOUT_SCALE);
@@ -292,33 +286,12 @@ export class EquipScreen extends Phaser.Scene {
   }
 
   private refreshPanels(phase: EquipScreenPhase): void {
-    if (!phase.selectedUnitTemplateId) return;
-    const bp = PLAYER_UNITS.find(
-      (u) => u.templateId === phase.selectedUnitTemplateId,
-    );
+    if (!phase.selectedUnitTemplateId || !phase.unitStats) return;
+    const bp = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
     if (!bp) return;
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-    const bonuses = getEquippedBonuses(
-      bp.templateId,
-      GameState.itemContainers,
-      GameState.itemInstances,
-      ITEM_DEFINITIONS,
-    );
-    this.statsPanel?.showFixedStatsOnly(
-      bp,
-      level,
-      bonuses,
-      this.statsPanelX,
-      this.statsPanelY,
-      this.statsPanelW,
-    );
-    this.skillsPanel?.showFixedSkillsOnly(
-      bp,
-      level,
-      this.skillsPanelX,
-      this.statsPanelY,
-      this.skillsPanelW,
-    );
+    const { level, equippedBonuses } = phase.unitStats;
+    this.statsPanel?.showFixedStatsOnly(bp, level, equippedBonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
+    this.skillsPanel?.showFixedSkillsOnly(bp, level, this.skillsPanelX, this.statsPanelY, this.skillsPanelW);
   }
 
   private renderBackButton(w: number, backpackBottomY: number): void {

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
+import { GamePhase, PhaseAction, CampUnitSnapshot, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
 import { GameState } from './GameState';
 import { EventBus, Events } from './EventBus';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
@@ -13,6 +13,7 @@ import {
   useItem,
   buildBackpackSnapshot,
   buildEquipmentSnapshot,
+  getEquippedBonuses,
   getSellPrice,
 } from '../battle/itemOps';
 import {
@@ -49,6 +50,15 @@ class PhaseManagerClass {
     this.syncPhaserScenes(this.phase);
   }
 
+  private buildCampUnits(): CampUnitSnapshot[] {
+    return PLAYER_UNITS.map(bp => ({
+      templateId: bp.templateId,
+      name:       bp.name,
+      level:      GameState.playerUnitLevels[bp.templateId] ?? bp.level,
+      inCamp:     GameState.campUnitIds.includes(bp.templateId),
+    }));
+  }
+
   // Recomputes data snapshots for phases that carry them.
   // Called after every applyActionSideEffects so GamePhase is always fresh.
   private rebuildSnapshot(phase: GamePhase): GamePhase {
@@ -72,8 +82,26 @@ class PhaseManagerClass {
           name: bp.name,
           unitClass: bp.unitClass,
         }));
-        return { ...phase, backpack, unitEquipment, availableUnits };
+        const unitStats = phase.selectedUnitTemplateId
+          ? (() => {
+              const bp = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
+              const level = bp
+                ? (GameState.playerUnitLevels[phase.selectedUnitTemplateId] ?? bp.level)
+                : 1;
+              const equippedBonuses = getEquippedBonuses(
+                phase.selectedUnitTemplateId,
+                GameState.itemContainers,
+                GameState.itemInstances,
+                ITEM_DEFINITIONS,
+              );
+              return { level, equippedBonuses };
+            })()
+          : null;
+        return { ...phase, backpack, unitEquipment, availableUnits, unitStats };
       }
+      case 'camp':
+      case 'debug_prep':
+        return { ...phase, units: this.buildCampUnits() };
       default:
         return phase; // phases without snapshots pass through unchanged
     }
@@ -172,6 +200,14 @@ class PhaseManagerClass {
       );
     }
 
+    // ── Camp unit toggle ──
+    if (action.type === 'toggle_camp_unit') {
+      const ids = GameState.campUnitIds;
+      const idx = ids.indexOf(action.templateId);
+      if (idx >= 0) ids.splice(idx, 1);
+      else          ids.push(action.templateId);
+    }
+
     // ── Commerce — commented out until 'shop' phase exists ──
     // if (action.type === 'buy_item') {
     //   const def = ITEM_DEFINITIONS[action.definitionId];
@@ -240,7 +276,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
       return { type: 'world_map', mapId: 'test_01', partyPos: MAP_DEFINITIONS['test_01'].startPos };
 
     case 'debug':
-      return { type: 'debug_prep' };
+      return { type: 'debug_prep', units: [] };
 
     case 'enter_battle':
       if (current.type !== 'world_map') return null;
@@ -254,7 +290,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
 
     case 'enter_camp':
       if (current.type !== 'world_map') return null;
-      return { type: 'camp', returnPhase: current };
+      return { type: 'camp', returnPhase: current, units: [] };
 
     case 'exit_camp':
       if (current.type !== 'camp') return null;
@@ -286,6 +322,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
         backpack: EMPTY_BACKPACK_SNAPSHOT,    // filled by rebuildSnapshot
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,  // filled by rebuildSnapshot
         availableUnits: [],                   // filled by rebuildSnapshot
+        unitStats: null,                      // filled by rebuildSnapshot
       };
 
     case 'close_equip_screen':
@@ -310,6 +347,16 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
     case 'use_item':
       if (current.type !== 'equip_screen') return null;
       return current;
+
+    // ── Camp unit toggle (mutation-only) ─────────────────────────────────────
+    case 'toggle_camp_unit': {
+      if (current.type !== 'camp' && current.type !== 'debug_prep') return null;
+      const unit = current.units.find(u => u.templateId === action.templateId);
+      if (!unit) return null;
+      const activeCount = current.units.filter(u => !u.inCamp).length;
+      if (!unit.inCamp && activeCount <= 1) return null; // can't bench last active unit
+      return current; // same reference → mutation-only path → STATE_CHANGED
+    }
 
     // ── Commerce — stub until 'shop' phase exists ────────────────────────────
     case 'buy_item':
