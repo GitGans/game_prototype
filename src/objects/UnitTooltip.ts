@@ -19,6 +19,7 @@ function statColor(sv: StatValue): string {
 interface TooltipData {
   templateId:      string;
   name:            string;
+  level?:          number;
   side:            "player" | "enemy";
   hp:              StatValue;
   maxHp:           StatValue;
@@ -37,9 +38,10 @@ interface TooltipData {
 }
 
 interface BuildOptions {
-  showSprite?: boolean; // default true
-  showStats?:  boolean; // default true
-  showSkills?: boolean; // default true
+  showSprite?:     boolean; // default true
+  showStats?:      boolean; // default true
+  showSkills?:     boolean; // default true
+  showNameHeader?: boolean; // default false — renders "Name  Lvl N" at top
 }
 
 export class UnitTooltip extends BaseTooltip<TooltipData> {
@@ -80,7 +82,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       dodge:           flat(bp.dodge),
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
-      skills: bp.skillTiers.flatMap(t => t.options.slice(0, 1)).map(s => ({
+      skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({
         name:        s.name,
         damageBlock: s.damageBlock,
         isActive:    false,
@@ -126,10 +128,27 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       dodge:           flat(bp.dodge),
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
-      skills: bp.skillTiers.flatMap(t => t.options.slice(0, 1)).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+      skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
     };
     this.clearContent();
     const h = this.buildContent(data);
+    this.bg.setSize(w, h);
+    this.setPosition(x, y);
+    this.setVisible(true);
+  }
+
+  showFixedNameOnly(bp: UnitBlueprint, level: number, x: number, y: number, w: number): void {
+    const data: TooltipData = {
+      templateId: bp.templateId, name: bp.name, level,
+      side: 'player',
+      hp: flat(0), maxHp: flat(0),
+      physicalDamage: flat(0), magicalDamage: flat(0),
+      physicalDefense: flat(0), magicalDefense: flat(0),
+      dodge: flat(0), block: flat(0), initiative: flat(0),
+      skills: [],
+    };
+    this.clearContent();
+    const h = this.buildContent(data, { showNameHeader: true, showSprite: false, showStats: false, showSkills: false });
     this.bg.setSize(w, h);
     this.setPosition(x, y);
     this.setVisible(true);
@@ -145,6 +164,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     const data: TooltipData = {
       templateId:      bp.templateId,
       name:            bp.name,
+      level,
       side:            'player',
       hp:              { value: Math.round(bp.hp * scale) + (bonuses.hp ?? 0), base: Math.round(bp.hp * scale) },
       maxHp:           { value: Math.round(bp.hp * scale) + (bonuses.hp ?? 0), base: Math.round(bp.hp * scale) },
@@ -183,7 +203,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       dodge:           flat(bp.dodge),
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
-      skills: bp.skillTiers.flatMap(t => t.options.slice(0, 1)).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+      skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
     };
     this.clearContent();
     const h = this.buildContent(data, { showSprite: false, showStats: false });
@@ -199,6 +219,13 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     const panelW = this.tooltipW;
     const pad    = TOOLTIP.pad;
     let y        = pad;
+
+    if (opts.showNameHeader) {
+      this.addText(pad, y, `${data.name}  Lvl ${data.level ?? 1}`, {
+        fontSize: fontSize('md'), color: VALUE_COLOR.highlight, fontStyle: 'bold',
+      });
+      y += Math.round(18 * LAYOUT_SCALE);
+    }
 
     if (opts.showSprite !== false) {
       // Sprite or fallback color rect

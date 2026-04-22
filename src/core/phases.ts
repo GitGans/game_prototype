@@ -14,7 +14,7 @@ export interface CampUnitSnapshot {
   inCamp:     boolean;
 }
 
-export interface SkillOptionSnapshot {
+export interface SkillIconSnapshot {
   id:          string;
   name:        string;
   description: string;
@@ -22,11 +22,19 @@ export interface SkillOptionSnapshot {
   actionType:  SkillActionType;
 }
 
-export interface SkillTierSnapshot {
-  tierId: 0 | 5 | 10 | 15 | 20;
-  options: SkillOptionSnapshot[];
-  chosenSkillId: string | null; // null = not yet chosen (level reached)
-  isLocked: boolean;            // true = level not yet reached
+export interface UpgradeOptionSnapshot {
+  id:          string;
+  name:        string;
+  skill:       SkillIconSnapshot | null;
+  statBonuses: Partial<BattleStatBonuses>;
+  spriteKey:   string | null;
+}
+
+export interface UpgradeTierSnapshot {
+  tierId:          5 | 10 | 15 | 20;
+  options:         UpgradeOptionSnapshot[];
+  chosenUpgradeId: string | null;
+  isLocked:        boolean;
 }
 
 export type GamePhase =
@@ -51,7 +59,8 @@ export type GamePhase =
       unitEquipment: EquipmentSnapshot;
       unitStats: { level: number; equippedBonuses: BattleStatBonuses } | null;
       campUnitIds: string[];
-      skillTiers: SkillTierSnapshot[];
+      learnedSkills: SkillIconSnapshot[];
+      upgradeSkills: SkillIconSnapshot[];
     }
   | {
       type: 'equip_screen';
@@ -61,7 +70,15 @@ export type GamePhase =
       unitEquipment: EquipmentSnapshot;
       availableUnits: UnitTabSnapshot[];
       unitStats: { level: number; equippedBonuses: BattleStatBonuses } | null;
-      skillTiers: SkillTierSnapshot[];
+      learnedSkills: SkillIconSnapshot[];
+      upgradeSkills: SkillIconSnapshot[];
+    }
+  | {
+      type: 'upgrade_tree';
+      unitTemplateId: string;
+      unitName: string;
+      returnPhase: GamePhase;
+      upgradeTiers: UpgradeTierSnapshot[];
     };
 
 export type PhaseAction =
@@ -87,7 +104,9 @@ export type PhaseAction =
   | { type: 'buy_item'; definitionId: string }
   | { type: 'sell_item'; instanceId: string }
   | { type: 'toggle_camp_unit'; templateId: string }
-  | { type: 'choose_skill'; templateId: string; tierId: 0 | 5 | 10 | 15 | 20; skillId: string }
+  | { type: 'open_upgrade_tree' }
+  | { type: 'close_upgrade_tree' }
+  | { type: 'choose_upgrade'; templateId: string; tierId: 5 | 10 | 15 | 20; upgradeId: string }
   // ── Debug battle ──────────────────────────────────────────────
   | { type: 'init_debug'; level: number }
   | { type: 'switch_debug_unit'; templateId: string }

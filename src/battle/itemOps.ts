@@ -220,9 +220,10 @@ export function unequipItem(
   containers: Record<string, ItemContainer>,
   instances: Record<string, ItemInstance>,
   definitions: Record<string, ItemDefinition>,
+  backpackId: string = 'backpack_shared',
 ): boolean {
   const equipContainerId    = `equip_${unitTemplateId}`;
-  const backpackContainerId = 'backpack_shared';
+  const backpackContainerId = backpackId;
 
   const equipContainer    = containers[equipContainerId];
   const backpackContainer = containers[backpackContainerId];

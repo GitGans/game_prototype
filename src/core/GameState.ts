@@ -27,7 +27,7 @@ export interface PlayerUnitState {
   isInCamp: boolean;
   lastPlacement: CellCoord | null;
   permanentBonuses: Partial<BattleStatBonuses>;
-  chosenSkills: Partial<Record<0 | 5 | 10 | 15 | 20, string>>; // skill id per tier
+  chosenUpgrades: Partial<Record<5 | 10 | 15 | 20, string>>; // upgrade id per tier
 }
 
 export interface CampaignState {

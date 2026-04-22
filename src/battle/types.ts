@@ -37,10 +37,25 @@ export interface SpriteSheetConfig {
   states: SpriteState[]; // states in column order, e.g. ['idle', 'attack', 'death']
 }
 
-/** One level-gated skill choice for a player unit. Tier 0 is auto-assigned on new game. */
+/** One level-gated skill choice for an enemy unit. */
 export interface SkillTier {
   unlocksAtLevel: 0 | 5 | 10 | 15 | 20;
-  options: Skill[]; // 1–4 choices; player picks 1 (tier 0 is auto-assigned to options[0])
+  options: Skill[];
+}
+
+/** An upgrade option a player can choose at levels 5/10/15/20. All fields are optional. */
+export interface Upgrade {
+  id: string;
+  name: string;
+  skill?: Skill;
+  statBonuses?: Partial<BattleStatBonuses>;
+  spriteKey?: string;
+}
+
+/** One level-gated upgrade tier for a player unit. */
+export interface UpgradeTier {
+  unlocksAtLevel: 5 | 10 | 15 | 20;
+  options: Upgrade[];
 }
 
 /** Deterministic skill added to an enemy unit when it reaches a level milestone. */
@@ -62,7 +77,9 @@ export interface UnitBlueprint {
   level: number;
   initiative: number;
   shape: UnitShape;
-  skillTiers: SkillTier[];          // replaces skills: Skill[]
+  baseSkill?: Skill;                // player units only; auto-learned at level 0
+  upgradeTiers?: UpgradeTier[];     // player units only; tiers 5/10/15/20
+  skillTiers?: SkillTier[];         // enemy units only; tier 0 base skill
   levelSkills?: EnemyLevelSkill[];  // enemy-only; absent on player blueprints
   rowTrait: RowTrait;
   race?: UnitRace;

@@ -15,20 +15,18 @@ export interface PlayerBattleSetup {
 
 function resolvePlayerSkills(blueprint: UnitBlueprint, unitState: PlayerUnitState): Skill[] {
   const skills: Skill[] = [];
-  for (const tier of blueprint.skillTiers) {
-    const chosenId = unitState.chosenSkills[tier.unlocksAtLevel];
-    if (chosenId) {
-      const skill = tier.options.find(s => s.id === chosenId);
-      if (skill) skills.push(skill);
-    } else if (tier.unlocksAtLevel === 0 && tier.options.length > 0) {
-      skills.push(tier.options[0]); // fallback: auto-assign tier 0
-    }
+  if (blueprint.baseSkill) skills.push(blueprint.baseSkill);
+  for (const tier of (blueprint.upgradeTiers ?? [])) {
+    const chosenId = unitState.chosenUpgrades[tier.unlocksAtLevel];
+    if (!chosenId) continue;
+    const upgrade = tier.options.find(upg => upg.id === chosenId);
+    if (upgrade?.skill) skills.push(upgrade.skill);
   }
   return skills;
 }
 
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): Skill[] {
-  const base = blueprint.skillTiers
+  const base = (blueprint.skillTiers ?? [])
     .filter(t => t.unlocksAtLevel === 0)
     .flatMap(t => t.options.slice(0, 1));
   const leveled = (blueprint.levelSkills ?? [])

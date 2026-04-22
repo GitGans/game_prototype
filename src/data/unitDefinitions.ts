@@ -1,6 +1,10 @@
-import { UnitBlueprint, UnitRace } from "../battle/types";
+import { UnitBlueprint, UnitRace, Skill, Upgrade } from "../battle/types";
 import { SHAPES } from "../battle/shapes";
 import { SKILLS } from "./skillDefinitions";
+
+function u(skill: Skill): Upgrade {
+  return { id: skill.id, name: skill.name, skill };
+}
 
 export const PLAYER_UNITS: UnitBlueprint[] = [
   {
@@ -17,12 +21,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 9,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.p_melee_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.row_strike, SKILLS.pierce] },
-      { unlocksAtLevel: 10, options: [SKILLS.poison_strike, SKILLS.provoke_strike] },
-      { unlocksAtLevel: 15, options: [SKILLS.armor_pierce, SKILLS.drain_strike] },
-      { unlocksAtLevel: 20, options: [SKILLS.life_sweep, SKILLS.armor_pierce] },
+    baseSkill: SKILLS.p_melee_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.row_strike), u(SKILLS.pierce)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.poison_strike), u(SKILLS.provoke_strike)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.armor_pierce), u(SKILLS.drain_strike)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.life_sweep), u(SKILLS.armor_pierce)] },
     ],
     rowTrait: "front",
     spriteSheet: {
@@ -46,12 +50,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 8,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.p_melee_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.row_strike, SKILLS.provoke_strike] },
-      { unlocksAtLevel: 10, options: [SKILLS.pierce, SKILLS.poison_strike] },
-      { unlocksAtLevel: 15, options: [SKILLS.armor_pierce, SKILLS.drain_strike] },
-      { unlocksAtLevel: 20, options: [SKILLS.life_sweep, SKILLS.drain_strike] },
+    baseSkill: SKILLS.p_melee_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.row_strike), u(SKILLS.provoke_strike)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.pierce), u(SKILLS.poison_strike)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.armor_pierce), u(SKILLS.drain_strike)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.life_sweep), u(SKILLS.drain_strike)] },
     ],
     rowTrait: "front",
     spriteSheet: {
@@ -75,12 +79,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 10,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.p_melee_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.pierce, SKILLS.provoke_strike] },
-      { unlocksAtLevel: 10, options: [SKILLS.row_strike, SKILLS.armor_pierce] },
-      { unlocksAtLevel: 15, options: [SKILLS.poison_strike, SKILLS.drain_strike] },
-      { unlocksAtLevel: 20, options: [SKILLS.life_sweep, SKILLS.armor_pierce] },
+    baseSkill: SKILLS.p_melee_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.pierce), u(SKILLS.provoke_strike)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.row_strike), u(SKILLS.armor_pierce)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.poison_strike), u(SKILLS.drain_strike)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.life_sweep), u(SKILLS.armor_pierce)] },
     ],
     rowTrait: "front",
     spriteSheet: {
@@ -104,12 +108,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 12,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.p_melee_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.poison_strike, SKILLS.provoke_strike] },
-      { unlocksAtLevel: 10, options: [SKILLS.pierce, SKILLS.row_strike] },
-      { unlocksAtLevel: 15, options: [SKILLS.drain_strike, SKILLS.armor_pierce] },
-      { unlocksAtLevel: 20, options: [SKILLS.life_sweep, SKILLS.drain_strike] },
+    baseSkill: SKILLS.p_melee_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.poison_strike), u(SKILLS.provoke_strike)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.pierce), u(SKILLS.row_strike)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.drain_strike), u(SKILLS.armor_pierce)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.life_sweep), u(SKILLS.drain_strike)] },
     ],
     rowTrait: "front",
     spriteSheet: {
@@ -133,12 +137,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 10,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.p_ranged_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.p_ranged_slowing, SKILLS.distract_shot] },
-      { unlocksAtLevel: 10, options: [SKILLS.pierce, SKILLS.armor_pierce] },
-      { unlocksAtLevel: 15, options: [SKILLS.poison_strike, SKILLS.drain_strike] },
-      { unlocksAtLevel: 20, options: [SKILLS.life_sweep, SKILLS.armor_pierce] },
+    baseSkill: SKILLS.p_ranged_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.p_ranged_slowing), u(SKILLS.distract_shot)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.pierce), u(SKILLS.armor_pierce)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.poison_strike), u(SKILLS.drain_strike)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.life_sweep), u(SKILLS.armor_pierce)] },
     ],
     rowTrait: "front",
     spriteSheet: {
@@ -162,12 +166,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 12,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.p_ranged_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.distract_shot, SKILLS.p_ranged_slowing] },
-      { unlocksAtLevel: 10, options: [SKILLS.poison_strike, SKILLS.pierce] },
-      { unlocksAtLevel: 15, options: [SKILLS.armor_pierce, SKILLS.drain_strike] },
-      { unlocksAtLevel: 20, options: [SKILLS.life_sweep, SKILLS.drain_strike] },
+    baseSkill: SKILLS.p_ranged_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.distract_shot), u(SKILLS.p_ranged_slowing)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.poison_strike), u(SKILLS.pierce)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.armor_pierce), u(SKILLS.drain_strike)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.life_sweep), u(SKILLS.drain_strike)] },
     ],
     rowTrait: "front",
     spriteSheet: {
@@ -191,12 +195,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 11,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.m_ranged_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.arcane_cross, SKILLS.weaken_curse] },
-      { unlocksAtLevel: 10, options: [SKILLS.arcane_cross, SKILLS.m_ranged_basic] },
-      { unlocksAtLevel: 15, options: [SKILLS.weaken_curse, SKILLS.arcane_cross] },
-      { unlocksAtLevel: 20, options: [SKILLS.arcane_cross, SKILLS.weaken_curse] },
+    baseSkill: SKILLS.m_ranged_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.arcane_cross), u(SKILLS.weaken_curse)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.arcane_cross), u(SKILLS.m_ranged_basic)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.weaken_curse), u(SKILLS.arcane_cross)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.arcane_cross), u(SKILLS.weaken_curse)] },
     ],
     rowTrait: "back",
     spriteSheet: {
@@ -220,12 +224,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 9,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.m_ranged_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.weaken_curse, SKILLS.arcane_cross] },
-      { unlocksAtLevel: 10, options: [SKILLS.arcane_cross, SKILLS.m_ranged_basic] },
-      { unlocksAtLevel: 15, options: [SKILLS.arcane_cross, SKILLS.weaken_curse] },
-      { unlocksAtLevel: 20, options: [SKILLS.weaken_curse, SKILLS.arcane_cross] },
+    baseSkill: SKILLS.m_ranged_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.weaken_curse), u(SKILLS.arcane_cross)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.arcane_cross), u(SKILLS.m_ranged_basic)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.arcane_cross), u(SKILLS.weaken_curse)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.weaken_curse), u(SKILLS.arcane_cross)] },
     ],
     rowTrait: "back",
     spriteSheet: {
@@ -249,12 +253,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 11,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.m_ranged_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.arcane_cross, SKILLS.weaken_curse] },
-      { unlocksAtLevel: 10, options: [SKILLS.weaken_curse, SKILLS.arcane_cross] },
-      { unlocksAtLevel: 15, options: [SKILLS.arcane_cross, SKILLS.m_ranged_basic] },
-      { unlocksAtLevel: 20, options: [SKILLS.weaken_curse, SKILLS.arcane_cross] },
+    baseSkill: SKILLS.m_ranged_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.arcane_cross), u(SKILLS.weaken_curse)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.weaken_curse), u(SKILLS.arcane_cross)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.arcane_cross), u(SKILLS.m_ranged_basic)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.weaken_curse), u(SKILLS.arcane_cross)] },
     ],
     rowTrait: "back",
     spriteSheet: {
@@ -278,12 +282,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 9,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.m_heal_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.heal_with_defence, SKILLS.self_heal_mass_regeneration] },
-      { unlocksAtLevel: 10, options: [SKILLS.self_heal_mass_regeneration, SKILLS.heal_with_defence] },
-      { unlocksAtLevel: 15, options: [SKILLS.heal_with_defence, SKILLS.m_heal_basic] },
-      { unlocksAtLevel: 20, options: [SKILLS.self_heal_mass_regeneration, SKILLS.heal_with_defence] },
+    baseSkill: SKILLS.m_heal_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.heal_with_defence), u(SKILLS.self_heal_mass_regeneration)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.self_heal_mass_regeneration), u(SKILLS.heal_with_defence)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.heal_with_defence), u(SKILLS.m_heal_basic)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.self_heal_mass_regeneration), u(SKILLS.heal_with_defence)] },
     ],
     rowTrait: "back",
     spriteSheet: {
@@ -307,12 +311,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 10,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.m_ranged_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.arcane_cross, SKILLS.weaken_curse] },
-      { unlocksAtLevel: 10, options: [SKILLS.weaken_curse, SKILLS.m_ranged_basic] },
-      { unlocksAtLevel: 15, options: [SKILLS.arcane_cross, SKILLS.weaken_curse] },
-      { unlocksAtLevel: 20, options: [SKILLS.arcane_cross, SKILLS.m_ranged_basic] },
+    baseSkill: SKILLS.m_ranged_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.arcane_cross), u(SKILLS.weaken_curse)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.weaken_curse), u(SKILLS.m_ranged_basic)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.arcane_cross), u(SKILLS.weaken_curse)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.arcane_cross), u(SKILLS.m_ranged_basic)] },
     ],
     rowTrait: "back",
     spriteSheet: {
@@ -336,12 +340,12 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     level: 1,
     initiative: 9,
     shape: SHAPES["1x1"],
-    skillTiers: [
-      { unlocksAtLevel: 0,  options: [SKILLS.p_melee_basic] },
-      { unlocksAtLevel: 5,  options: [SKILLS.row_strike, SKILLS.drain_strike] },
-      { unlocksAtLevel: 10, options: [SKILLS.pierce, SKILLS.poison_strike] },
-      { unlocksAtLevel: 15, options: [SKILLS.armor_pierce, SKILLS.provoke_strike] },
-      { unlocksAtLevel: 20, options: [SKILLS.life_sweep, SKILLS.drain_strike] },
+    baseSkill: SKILLS.p_melee_basic,
+    upgradeTiers: [
+      { unlocksAtLevel: 5,  options: [u(SKILLS.row_strike), u(SKILLS.drain_strike)] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.pierce), u(SKILLS.poison_strike)] },
+      { unlocksAtLevel: 15, options: [u(SKILLS.armor_pierce), u(SKILLS.provoke_strike)] },
+      { unlocksAtLevel: 20, options: [u(SKILLS.life_sweep), u(SKILLS.drain_strike)] },
     ],
     rowTrait: "front",
     spriteSheet: {

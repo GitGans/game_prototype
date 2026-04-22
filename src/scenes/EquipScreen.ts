@@ -13,7 +13,7 @@ import { UnitTooltip } from '../objects/UnitTooltip';
 import { EquipmentMatrix } from '../objects/EquipmentMatrix';
 import { BackpackRow } from '../objects/BackpackRow';
 import { EnemyGroupSelector } from '../objects/EnemyGroupSelector';
-import { SkillTierPanel } from '../objects/SkillTierPanel';
+import { SkillIconRow } from '../objects/SkillIconRow';
 
 type EquipScreenPhase = Extract<ReturnType<typeof PhaseManager.getPhase>, { type: 'equip_screen' }>;
 type DebugEquipScreenPhase = Extract<ReturnType<typeof PhaseManager.getPhase>, { type: 'debug_equip_screen' }>;
@@ -33,13 +33,15 @@ export class EquipScreen extends Phaser.Scene {
   private equipMatrix?: EquipmentMatrix;
   private backpackRow?: BackpackRow;
   private statsPanel?: UnitTooltip;
-  private skillTierPanel?: SkillTierPanel;
+  private unitNamePanel?: UnitTooltip;
+  private skillIconRow?: SkillIconRow;
   private statsPanelX = 0;
   private statsPanelY = 0;
   private statsPanelW = 0;
   private skillsPanelX = 0;
   private skillsPanelY = 0;
-  private skillsPanelW = 0;
+  private spriteHeaderX = 0;
+  private spriteHeaderY = 0;
   private itemTooltip!: ItemTooltip;
   private activeContextMenu: ContextMenu | null = null;
 
@@ -196,13 +198,14 @@ export class EquipScreen extends Phaser.Scene {
 
   private renderCharacterMenu(phase: AnyEquipPhase): void {
     const w = this.scale.width;
-    const h = this.scale.height;
 
     this.renderUnitTabs(phase.availableUnits, w, phase.type === 'debug_equip_screen');
 
     const matrixW = 3 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const matrixH = 4 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const contentTopY = CELL_SIZE + PAD * 2;
+    const HEADER_H = Math.round(24 * LAYOUT_SCALE);
+    const panelTopY = contentTopY + HEADER_H;
 
     const STATS_W = Math.round(200 * LAYOUT_SCALE);
     const SKILLS_W = Math.round(200 * LAYOUT_SCALE);
@@ -217,17 +220,23 @@ export class EquipScreen extends Phaser.Scene {
     this.statsPanelY = contentTopY;
     this.statsPanelW = STATS_W;
     this.skillsPanelX = skillsX;
-    this.skillsPanelY = contentTopY;
-    this.skillsPanelW = SKILLS_W;
+    this.skillsPanelY = panelTopY;
+    this.spriteHeaderX = spriteX;
+    this.spriteHeaderY = contentTopY;
 
-    // Stats panel (leftmost column)
+    // Stats panel (leftmost column) — has its own "Stats" header internally
     this.statsPanel = new UnitTooltip(this);
+
+    // "Items" header above equipment matrix
+    this.add.text(matrixX, contentTopY, 'Items', {
+      fontSize: fontSize('md'), color: VALUE_COLOR.highlight, fontStyle: 'bold',
+    }).setOrigin(0, 0);
 
     // Equipment matrix (second column)
     this.equipMatrix = new EquipmentMatrix(
       this,
       matrixX,
-      contentTopY,
+      panelTopY,
       CELL_SIZE,
       CELL_GAP,
       phase.unitEquipment,
@@ -235,15 +244,36 @@ export class EquipScreen extends Phaser.Scene {
       (slot, item) => this.onEquipSlotClick(slot, item),
     );
 
+    // Unit name header (third column) — via UnitTooltip with transparent bg
+    this.unitNamePanel = new UnitTooltip(this, 0x000000, 0);
+
     // Unit sprite (third column)
-    this.renderUnitSprite(phase.selectedUnitTemplateId, spriteX, contentTopY);
+    this.renderUnitSprite(phase.selectedUnitTemplateId, spriteX, panelTopY);
+
+    // "Skills" header above skills panel
+    this.add.text(skillsX, contentTopY, 'Skills', {
+      fontSize: fontSize('md'), color: VALUE_COLOR.highlight, fontStyle: 'bold',
+    }).setOrigin(0, 0);
 
     // Skills panel (rightmost column)
-    this.skillTierPanel = new SkillTierPanel(this, skillsX, contentTopY, SKILLS_W);
+    this.skillIconRow = new SkillIconRow(this, skillsX, panelTopY);
+
+    // 32×32 upgrade button — top-right corner of unit sprite
+    const BTN_SZ = Math.round(32 * LAYOUT_SCALE);
+    new Button({
+      scene: this,
+      x: spriteX + SPRITE_SZ - BTN_SZ / 2,
+      y: panelTopY + BTN_SZ / 2,
+      w: BTN_SZ,
+      h: BTN_SZ,
+      label: '↑',
+      style: 'neutral',
+      onClick: () => PhaseManager.transition({ type: 'open_upgrade_tree' }),
+    });
     this.refreshPanels(phase);
 
     // Backpack (below the four columns)
-    const backpackY = contentTopY + Math.max(matrixH, SPRITE_SZ) + PAD;
+    const backpackY = panelTopY + Math.max(matrixH, SPRITE_SZ) + Math.round(PAD / 2);
     const backpackW = 12 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
     const backpackX = Math.round((w - backpackW) / 2);
     this.backpackRow = new BackpackRow(
@@ -348,13 +378,11 @@ export class EquipScreen extends Phaser.Scene {
     if (!bp) return;
     const { level, equippedBonuses } = phase.unitStats;
     this.statsPanel?.showFixedStatsOnly(bp, level, equippedBonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
+    this.unitNamePanel?.showFixedNameOnly(bp, level, this.spriteHeaderX, this.spriteHeaderY, SPRITE_SZ);
 
-    if (this.skillTierPanel) {
-      const templateId = phase.selectedUnitTemplateId;
-      this.skillTierPanel.setPosition(this.skillsPanelX, this.skillsPanelY);
-      this.skillTierPanel.render(phase.skillTiers, (tierId, skillId) => {
-        PhaseManager.transition({ type: 'choose_skill', templateId, tierId, skillId });
-      });
+    if (this.skillIconRow) {
+      this.skillIconRow.setPosition(this.skillsPanelX, this.skillsPanelY);
+      this.skillIconRow.render(phase.upgradeSkills);
     }
   }
 
@@ -449,8 +477,8 @@ export class EquipScreen extends Phaser.Scene {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'equip_screen' && phase.type !== 'debug_equip_screen') return;
     if (!phase.selectedUnitTemplateId) {
-      this.skillTierPanel?.destroy();
-      this.skillTierPanel = undefined;
+      this.skillIconRow?.destroy();
+      this.skillIconRow = undefined;
       this.renderSelectionMode(phase);
       return;
     }
