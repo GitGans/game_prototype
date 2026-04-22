@@ -944,6 +944,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "front",
       race: "orc",
+      spriteSheet: {
+        path: "assets/sprites/units/orc_tank.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "orc_dd",
@@ -966,6 +972,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "front",
       race: "orc",
+      spriteSheet: {
+        path: "assets/sprites/units/orc_dd.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "orc_archer",
@@ -988,6 +1000,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "back",
       race: "orc",
+      spriteSheet: {
+        path: "assets/sprites/units/orc_archer.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "orc_mage",
@@ -1010,6 +1028,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "back",
       race: "orc",
+      spriteSheet: {
+        path: "assets/sprites/units/orc_mage.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "orc_healer",
@@ -1032,6 +1056,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "back",
       race: "orc",
+      spriteSheet: {
+        path: "assets/sprites/units/orc_healer.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
   ],
   demon: [
@@ -1056,6 +1086,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "front",
       race: "demon",
+      spriteSheet: {
+        path: "assets/sprites/units/demon_tank.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "demon_dd",
@@ -1078,6 +1114,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "front",
       race: "demon",
+      spriteSheet: {
+        path: "assets/sprites/units/demon_dd.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "demon_archer",
@@ -1100,6 +1142,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "back",
       race: "demon",
+      spriteSheet: {
+        path: "assets/sprites/units/demon_archer.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "demon_mage",
@@ -1122,6 +1170,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "back",
       race: "demon",
+      spriteSheet: {
+        path: "assets/sprites/units/demon_mage.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "demon_healer",
@@ -1144,6 +1198,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "back",
       race: "demon",
+      spriteSheet: {
+        path: "assets/sprites/units/demon_healer.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
   ],
   undead: [
@@ -1168,6 +1228,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "front",
       race: "undead",
+      spriteSheet: {
+        path: "assets/sprites/units/undead_tank.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "undead_dd",
@@ -1190,6 +1256,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "front",
       race: "undead",
+      spriteSheet: {
+        path: "assets/sprites/units/undead_dd.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "undead_archer",
@@ -1212,6 +1284,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "back",
       race: "undead",
+      spriteSheet: {
+        path: "assets/sprites/units/undead_archer.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "undead_mage",
@@ -1234,6 +1312,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "back",
       race: "undead",
+      spriteSheet: {
+        path: "assets/sprites/units/undead_mage.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
     {
       templateId: "undead_healer",
@@ -1256,6 +1340,12 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
       ],
       rowTrait: "back",
       race: "undead",
+      spriteSheet: {
+        path: "assets/sprites/units/undead_healer.png",
+        frameWidth: 128,
+        frameHeight: 128,
+        states: ["idle", "attack", "death"],
+      },
     },
   ],
 };
