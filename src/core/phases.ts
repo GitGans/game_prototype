@@ -3,6 +3,8 @@ import {
   BackpackSnapshot,
   EquipmentSnapshot,
   UnitTabSnapshot,
+  DamageType,
+  SkillActionType,
 } from '../battle/types';
 
 export interface CampUnitSnapshot {
@@ -13,9 +15,11 @@ export interface CampUnitSnapshot {
 }
 
 export interface SkillOptionSnapshot {
-  id: string;
-  name: string;
+  id:          string;
+  name:        string;
   description: string;
+  damageType:  DamageType | null;
+  actionType:  SkillActionType;
 }
 
 export interface SkillTierSnapshot {

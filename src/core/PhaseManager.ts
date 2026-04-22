@@ -109,9 +109,11 @@ class PhaseManagerClass {
     return bp.skillTiers.map(tier => ({
       tierId: tier.unlocksAtLevel,
       options: tier.options.map(s => ({
-        id: s.id,
-        name: s.name,
+        id:          s.id,
+        name:        s.name,
         description: buildSkillDescription(s),
+        damageType:  s.damageBlock?.damageType ?? null,
+        actionType:  s.actionType,
       })),
       chosenSkillId: chosenSkills[tier.unlocksAtLevel] ?? null,
       isLocked: level < tier.unlocksAtLevel,
