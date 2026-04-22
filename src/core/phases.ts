@@ -37,10 +37,29 @@ export interface UpgradeTierSnapshot {
   isLocked:        boolean;
 }
 
+/** Snapshot of one player unit at moment of battle exit — pre-level-up. */
+export interface BattleParticipant {
+  templateId: string;
+  name: string;
+  level: number;       // current level BEFORE +1
+  isAlive: boolean;
+  wasOnBench: boolean;
+}
+
+/** Display data for BattleResults scene — level already incremented. */
+export interface BattleResultUnit {
+  templateId: string;
+  name: string;
+  newLevel: number;    // level AFTER +1
+  isAlive: boolean;
+  wasOnBench: boolean;
+}
+
 export type GamePhase =
   | { type: 'main_menu' }
   | { type: 'world_map'; mapId: string; partyPos: { x: number; y: number } }
   | { type: 'map_victory'; mapId: string }
+  | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase }
   | {
       type: 'battle';
       enemyGroupId: string;
@@ -89,7 +108,8 @@ export type PhaseAction =
   | { type: 'enter_camp' }
   | { type: 'exit_camp' }
   | { type: 'start_battle'; enemyGroupId: string }
-  | { type: 'exit_battle' }
+  | { type: 'exit_battle'; participants: BattleParticipant[] }
+  | { type: 'exit_results' }
   | { type: 'replay' }
   | { type: 'exit_to_menu' }
   // ── Equip screen navigation ────────────────────────────────────

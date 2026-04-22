@@ -293,26 +293,46 @@ class PhaseManagerClass {
 
     // ── Battle teardown ──
     if (action.type === 'exit_battle' && prev.type === 'battle') {
+      const state = GameState.get();
+
+      // Level up field + bench units (only on victory — participants array is populated)
+      if (action.participants.length > 0) {
+        state.units.forEach((unit) => {
+          if (!unit.id.startsWith('p')) return;
+          unit.level += 1;
+          const us = GameState.playerUnits[unit.templateId];
+          if (us) GameState.playerUnits[unit.templateId] = { ...us, level: unit.level };
+          const bp = PLAYER_UNITS.find(b => b.templateId === unit.templateId);
+          if (!bp) return;
+          const scale = 1 + 0.1 * (unit.level - 1);
+          unit.maxHp          = Math.round(bp.hp * scale);
+          unit.physicalDamage = Math.round(bp.physicalDamage * scale);
+          unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
+        });
+        GameState.set(state);
+
+        // Bench units — stats derived fresh from level at next placement
+        state.benchUnits.forEach((bp) => {
+          if (!bp) return;
+          const us = GameState.playerUnits[bp.templateId];
+          if (us) GameState.playerUnits[bp.templateId] = { ...us, level: us.level + 1 };
+        });
+      }
+
+      // Save last field placement
+      for (const unit of GameState.get().units.values()) {
+        if (!unit.id.startsWith('p')) continue;
+        const us = GameState.playerUnits[unit.templateId];
+        if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
+      }
+
+      // Mark trigger entity dead on the map
       if (prev.mapId && prev.triggerPos) {
         const key = `${prev.triggerPos.x},${prev.triggerPos.y}`;
         const mapState = GameState.subMapStates[prev.mapId];
         if (mapState) mapState.entityStates[key] = { alive: false };
       }
-      if (prev.mapId) {
-        const mapDef = MAP_DEFINITIONS[prev.mapId];
-        const mapState = GameState.subMapStates[prev.mapId];
-        if (mapDef && mapState && allMobsDead(mapDef, mapState)) {
-          (prev as any).returnPhase = { type: 'map_victory', mapId: prev.mapId };
-        }
-      }
-      // Save last placement for each player unit
-      for (const unit of GameState.get().units.values()) {
-        if (!unit.id.startsWith('p')) continue;
-        const us = GameState.playerUnits[unit.templateId];
-        if (us) {
-          GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
-        }
-      }
+      // allMobsDead → map_victory redirect removed — battle_results is the universal screen
     }
 
     // ── Item mutations ──
@@ -479,7 +499,7 @@ class PhaseManagerClass {
     }
   }
 
-  private readonly GAME_SCENES = ['MainMenu', 'WorldMap', 'Prep', 'Game', 'MapVictory', 'EquipScreen', 'DebugLevelSelect', 'UpgradeTreeScreen'];
+  private readonly GAME_SCENES = ['MainMenu', 'WorldMap', 'Prep', 'Game', 'BattleResults', 'EquipScreen', 'DebugLevelSelect', 'UpgradeTreeScreen'];
 
   private syncPhaserScenes(phase: GamePhase): void {
     const sm = this.game.scene;
@@ -489,7 +509,7 @@ class PhaseManagerClass {
       case 'world_map':         nextScene = 'WorldMap';         break;
       case 'battle':            nextScene = 'Game';             break;
       case 'camp':              nextScene = 'Prep';             break;
-      case 'map_victory':       nextScene = 'MapVictory';       break;
+      case 'battle_results':    nextScene = 'BattleResults';    break;
       case 'equip_screen':      nextScene = 'EquipScreen';      break;
       case 'debug_equip_screen':nextScene = 'EquipScreen';      break;
       case 'debug_level_select':nextScene = 'DebugLevelSelect'; break;
@@ -564,6 +584,15 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
 
     case 'exit_battle':
       if (current.type !== 'battle') return null;
+      if (action.participants.length === 0) return current.returnPhase;
+      return {
+        type: 'battle_results',
+        units: action.participants.map(p => ({ ...p, newLevel: p.level + 1 })),
+        returnPhase: current.returnPhase,
+      };
+
+    case 'exit_results':
+      if (current.type !== 'battle_results') return null;
       return current.returnPhase;
 
     case 'replay':

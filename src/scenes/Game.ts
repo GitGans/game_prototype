@@ -33,6 +33,7 @@ import {
   UnitRace,
 } from "../battle/types";
 import { PhaseManager } from '../core/PhaseManager';
+import { BattleParticipant } from '../core/phases';
 import { Button } from '../ui/Button';
 import { VALUE_COLOR, ALPHA } from '../ui/theme';
 import { SkillTooltip } from '../objects/SkillTooltip';
@@ -2112,33 +2113,38 @@ export class Game extends Phaser.Scene {
         scene: this, x: rightX, y: btnY, w: btnW, h: btnH,
         label: "Exit Battle", style: "primary",
         onClick: () => {
-        const allBlueprints = [
-          ...PLAYER_UNITS,
-          ...Object.values(ENEMY_UNITS).flat(),
-        ];
-        const state = GameState.get();
+        const phase = PhaseManager.getPhase();
+        const isDebugBattle = phase.type === 'battle' && phase.isDebug;
 
-        // Field units — live Unit objects in state.units (camp units were never placed)
-        state.units.forEach((unit) => {
-          if (!unit.id.startsWith("p")) return;
-          unit.level += 1;
-          const us = GameState.playerUnits[unit.templateId];
-          if (us) GameState.playerUnits[unit.templateId] = { ...us, level: unit.level };
-          const bp = allBlueprints.find(b => b.templateId === unit.templateId);
-          if (!bp) return;
-          const scale = 1 + 0.1 * (unit.level - 1);
-          unit.maxHp          = Math.round(bp.hp * scale);
-          unit.physicalDamage = Math.round(bp.physicalDamage * scale);
-          unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
-        });
-        GameState.set(state);
+        if (!isDebugBattle) {
+          const allBlueprints = [
+            ...PLAYER_UNITS,
+            ...Object.values(ENEMY_UNITS).flat(),
+          ];
+          const state = GameState.get();
 
-        // Bench units — stored as UnitBlueprint | undefined (camp units were never benched)
-        state.benchUnits.forEach((bp) => {
-          if (!bp) return;
-          const us = GameState.playerUnits[bp.templateId];
-          if (us) GameState.playerUnits[bp.templateId] = { ...us, level: us.level + 1 };
-        });
+          // Field units — live Unit objects in state.units (camp units were never placed)
+          state.units.forEach((unit) => {
+            if (!unit.id.startsWith("p")) return;
+            unit.level += 1;
+            const us = GameState.playerUnits[unit.templateId];
+            if (us) GameState.playerUnits[unit.templateId] = { ...us, level: unit.level };
+            const bp = allBlueprints.find(b => b.templateId === unit.templateId);
+            if (!bp) return;
+            const scale = 1 + 0.1 * (unit.level - 1);
+            unit.maxHp          = Math.round(bp.hp * scale);
+            unit.physicalDamage = Math.round(bp.physicalDamage * scale);
+            unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
+          });
+          GameState.set(state);
+
+          // Bench units — stored as UnitBlueprint | undefined (camp units were never benched)
+          state.benchUnits.forEach((bp) => {
+            if (!bp) return;
+            const us = GameState.playerUnits[bp.templateId];
+            if (us) GameState.playerUnits[bp.templateId] = { ...us, level: us.level + 1 };
+          });
+        }
 
         PhaseManager.transition({ type: 'exit_battle' });
         },
