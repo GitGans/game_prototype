@@ -22,15 +22,19 @@ function emptyState(): BattleState {
   };
 }
 
+export interface PlayerUnitState {
+  level: number;
+  isInCamp: boolean;
+  lastPlacement: CellCoord | null;
+  permanentBonuses: Partial<BattleStatBonuses>;
+  chosenSkills: Partial<Record<0 | 5 | 10 | 15 | 20, string>>; // skill id per tier
+}
+
 export interface CampaignState {
   money: number;
   itemInstances: Record<string, ItemInstance>;
   itemContainers: Record<string, ItemContainer>;
-  unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>>;
-  playerUnitLevels: Record<string, number>;
-  playerUnitPlacements: Record<string, CellCoord>;
-  playerBenchIds: string[] | null;
-  campUnitIds: string[];
+  playerUnits: Record<string, PlayerUnitState>; // templateId → state
   subMapStates: Record<string, SubMapState>;
 }
 
@@ -39,17 +43,13 @@ class GameStateManager {
   private battleMode: BattleMode = "manual";
 
   // Survive reset() — shared across scene restarts
-  playerUnitLevels: Record<string, number> = {}; // templateId → level
-  lastEnemyRace: UnitRace | null = null; // race from last battle (for Replay)
-  lastEnemyPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }> | null = null; // enemy lineup snapshot for Restart Battle
-  playerUnitPlacements: Record<string, CellCoord> = {}; // templateId → anchor, survives reset()
-  playerBenchIds: string[] | null = null; // templateIds on bench; null = first battle, use defaults
-  campUnitIds: string[] = []; // templateIds of units in camp (fully excluded from battle)
-  itemInstances: Record<string, ItemInstance> = {}; // all item instances in the world
-  itemContainers: Record<string, ItemContainer> = {}; // all item containers (backpacks, equipment slots)
-  subMapStates: Record<string, SubMapState> = {}; // persists entity (mob) alive/dead state per submap
+  lastEnemyRace: UnitRace | null = null;
+  lastEnemyPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }> | null = null;
+  playerUnits: Record<string, PlayerUnitState> = {};
+  itemInstances: Record<string, ItemInstance> = {};
+  itemContainers: Record<string, ItemContainer> = {};
+  subMapStates: Record<string, SubMapState> = {};
   money: number = 0;
-  unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>> = {};
 
   get(): BattleState {
     return this.state;
@@ -62,7 +62,7 @@ class GameStateManager {
   reset(): void {
     this.state = emptyState();
     this.battleMode = "manual";
-    // playerUnitLevels, lastEnemyRace, lastEnemyPlacements are intentionally NOT cleared here
+    // playerUnits, lastEnemyRace, lastEnemyPlacements are intentionally NOT cleared here
   }
 
   setPhase(phase: Phase): void {
@@ -82,11 +82,7 @@ class GameStateManager {
       money: this.money,
       itemInstances: this.itemInstances,
       itemContainers: this.itemContainers,
-      unitPermanentBonuses: this.unitPermanentBonuses,
-      playerUnitLevels: this.playerUnitLevels,
-      playerUnitPlacements: this.playerUnitPlacements,
-      playerBenchIds: this.playerBenchIds,
-      campUnitIds: this.campUnitIds,
+      playerUnits: this.playerUnits,
       subMapStates: this.subMapStates,
     };
   }

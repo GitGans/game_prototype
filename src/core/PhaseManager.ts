@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GamePhase, PhaseAction, CampUnitSnapshot, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
+import { GamePhase, PhaseAction, CampUnitSnapshot, SkillTierSnapshot, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
 import { DebugBattleState, createDebugBattleState } from './DebugBattleState';
 import { GameState } from './GameState';
 import { EventBus, Events } from './EventBus';
@@ -19,7 +19,17 @@ import {
 } from '../battle/itemOps';
 import {
   UnitTabSnapshot,
+  Skill,
 } from '../battle/types';
+import { PlayerUnitState } from './GameState';
+import { PlayerBattleSetup } from '../battle/autoPlace';
+
+function buildSkillDescription(skill: Skill): string {
+  if (skill.effectBlock) return `${skill.actionType} · applies ${skill.effectBlock.effectDisplayName}`;
+  if (skill.instantEffectBlock) return `${skill.actionType} · ${skill.instantEffectBlock.displayName}`;
+  if (skill.damageBlock) return `${skill.actionType} · ${skill.damageBlock.damageType} damage`;
+  return skill.actionType;
+}
 
 class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
@@ -36,6 +46,27 @@ class PhaseManagerClass {
 
   getDebugState(): DebugBattleState | null {
     return this.debugState;
+  }
+
+  buildDebugBattleSetup(): PlayerBattleSetup {
+    const ds = this.debugState!;
+    const playerUnits: Record<string, PlayerUnitState> = {};
+    for (const bp of PLAYER_UNITS) {
+      const tier0 = bp.skillTiers.find(t => t.unlocksAtLevel === 0);
+      playerUnits[bp.templateId] = {
+        level:            ds.level,
+        isInCamp:         ds.campUnitIds.includes(bp.templateId),
+        lastPlacement:    ds.playerUnitPlacements?.[bp.templateId] ?? null,
+        permanentBonuses: ds.unitPermanentBonuses[bp.templateId] ?? {},
+        chosenSkills:     ds.chosenSkills[bp.templateId]
+                            ?? (tier0 ? { 0: tier0.options[0].id } : {}),
+      };
+    }
+    return {
+      playerUnits,
+      itemContainers: ds.itemContainers,
+      itemInstances:  ds.itemInstances,
+    };
   }
 
   transition(action: PhaseAction): void {
@@ -60,18 +91,32 @@ class PhaseManagerClass {
     return PLAYER_UNITS.map(bp => ({
       templateId: bp.templateId,
       name:       bp.name,
-      level:      GameState.playerUnitLevels[bp.templateId] ?? bp.level,
-      inCamp:     GameState.campUnitIds.includes(bp.templateId),
+      level:      GameState.playerUnits[bp.templateId]?.level ?? bp.level,
+      inCamp:     GameState.playerUnits[bp.templateId]?.isInCamp ?? false,
     }));
   }
 
-  private buildDebugCampUnits(): CampUnitSnapshot[] {
-    const ds = this.debugState!;
-    return PLAYER_UNITS.map(bp => ({
-      templateId: bp.templateId,
-      name:       bp.name,
-      level:      ds.level,
-      inCamp:     ds.campUnitIds.includes(bp.templateId),
+  private buildSkillTiers(
+    templateId: string,
+    debugLevel?: number,
+    debugChosenSkills?: Partial<Record<0 | 5 | 10 | 15 | 20, string>>,
+  ): SkillTierSnapshot[] {
+    const bp = PLAYER_UNITS.find(u => u.templateId === templateId);
+    if (!bp) return [];
+    const unitState = GameState.playerUnits[templateId];
+    const level = debugLevel ?? unitState?.level ?? bp.level;
+    const chosenSkills = debugChosenSkills ?? unitState?.chosenSkills ?? {};
+    return bp.skillTiers.map(tier => ({
+      tierId: tier.unlocksAtLevel,
+      options: tier.options.map(s => ({
+        id:          s.id,
+        name:        s.name,
+        description: buildSkillDescription(s),
+        damageType:  s.damageBlock?.damageType ?? null,
+        actionType:  s.actionType,
+      })),
+      chosenSkillId: chosenSkills[tier.unlocksAtLevel] ?? null,
+      isLocked: level < tier.unlocksAtLevel,
     }));
   }
 
@@ -102,7 +147,7 @@ class PhaseManagerClass {
           ? (() => {
               const bp = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
               const level = bp
-                ? (GameState.playerUnitLevels[phase.selectedUnitTemplateId] ?? bp.level)
+                ? (GameState.playerUnits[phase.selectedUnitTemplateId]?.level ?? bp.level)
                 : 1;
               const equippedBonuses = getEquippedBonuses(
                 phase.selectedUnitTemplateId,
@@ -113,7 +158,8 @@ class PhaseManagerClass {
               return { level, equippedBonuses };
             })()
           : null;
-        return { ...phase, backpack, unitEquipment, availableUnits, unitStats };
+        const skillTiers = this.buildSkillTiers(phase.selectedUnitTemplateId);
+        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, skillTiers };
       }
       case 'camp':
         return { ...phase, units: this.buildCampUnits() };
@@ -149,7 +195,12 @@ class PhaseManagerClass {
               return { level: ds.level, equippedBonuses };
             })()
           : null;
-        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, campUnitIds: [...ds.campUnitIds] };
+        const debugSkillTiers = this.buildSkillTiers(
+          phase.selectedUnitTemplateId,
+          ds.level,
+          ds.chosenSkills[phase.selectedUnitTemplateId],
+        );
+        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, campUnitIds: [...ds.campUnitIds], skillTiers: debugSkillTiers };
       }
       default:
         return phase; // phases without snapshots pass through unchanged
@@ -157,15 +208,24 @@ class PhaseManagerClass {
   }
 
   private applyActionSideEffects(action: PhaseAction, prev: GamePhase): void {
-    // ── Campaign init (moved from GameState.initItemsIfNeeded) ──
+    // ── Campaign init ──
     if (action.type === 'new_game') {
       const mapId = 'test_01';
       if (!GameState.subMapStates[mapId]) {
         GameState.subMapStates[mapId] = initSubMapState(MAP_DEFINITIONS[mapId]);
       }
-      if (GameState.playerBenchIds === null) {
-        GameState.playerBenchIds = [];
-        GameState.campUnitIds = PLAYER_UNITS.slice(9).map(u => u.templateId);
+      // Initialize playerUnits (idempotent)
+      if (Object.keys(GameState.playerUnits).length === 0) {
+        for (const bp of PLAYER_UNITS) {
+          const tier0 = bp.skillTiers.find(t => t.unlocksAtLevel === 0);
+          GameState.playerUnits[bp.templateId] = {
+            level: bp.level,
+            isInCamp: PLAYER_UNITS.indexOf(bp) >= 9, // last 3 start in camp
+            lastPlacement: null,
+            permanentBonuses: {},
+            chosenSkills: tier0 ? { 0: tier0.options[0].id } : {},
+          };
+        }
       }
       // Item containers init (idempotent)
       if (!GameState.itemContainers['backpack_shared']) {
@@ -210,7 +270,14 @@ class PhaseManagerClass {
           (prev as any).returnPhase = { type: 'map_victory', mapId: prev.mapId };
         }
       }
-      // TODO: read from BattleState.units activatableAbilities and clean up consumed equip_and_activate items
+      // Save last placement for each player unit
+      for (const unit of GameState.get().units.values()) {
+        if (!unit.id.startsWith('p')) continue;
+        const us = GameState.playerUnits[unit.templateId];
+        if (us) {
+          GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
+        }
+      }
     }
 
     // ── Item mutations ──
@@ -239,22 +306,53 @@ class PhaseManagerClass {
     }
 
     if (action.type === 'use_item') {
+      // Build temporary bonuses record for useItem compat, then sync back
+      const bonusRecord: Record<string, Partial<import('../battle/types').BattleStatBonuses>> = {};
+      for (const [id, unitState] of Object.entries(GameState.playerUnits)) {
+        bonusRecord[id] = unitState.permanentBonuses;
+      }
       useItem(
         action.instanceId,
         action.unitTemplateId,
         GameState.itemContainers,
         GameState.itemInstances,
-        GameState.unitPermanentBonuses,
+        bonusRecord,
         ITEM_DEFINITIONS,
       );
+      const unitStateAfter = GameState.playerUnits[action.unitTemplateId];
+      if (unitStateAfter) {
+        GameState.playerUnits[action.unitTemplateId] = {
+          ...unitStateAfter,
+          permanentBonuses: bonusRecord[action.unitTemplateId] ?? {},
+        };
+      }
     }
 
     // ── Camp unit toggle ──
     if (action.type === 'toggle_camp_unit') {
-      const ids = GameState.campUnitIds;
-      const idx = ids.indexOf(action.templateId);
-      if (idx >= 0) ids.splice(idx, 1);
-      else          ids.push(action.templateId);
+      const unitState = GameState.playerUnits[action.templateId];
+      if (unitState) {
+        GameState.playerUnits[action.templateId] = { ...unitState, isInCamp: !unitState.isInCamp };
+      }
+    }
+
+    // ── Skill choice ──
+    if (action.type === 'choose_skill') {
+      if (prev.type === 'debug_equip_screen') {
+        const ds = this.debugState!;
+        const existing = ds.chosenSkills[action.templateId] ?? {};
+        if (!existing[action.tierId]) {
+          ds.chosenSkills[action.templateId] = { ...existing, [action.tierId]: action.skillId };
+        }
+      } else {
+        const unitState = GameState.playerUnits[action.templateId];
+        if (unitState && !unitState.chosenSkills[action.tierId]) {
+          GameState.playerUnits[action.templateId] = {
+            ...unitState,
+            chosenSkills: { ...unitState.chosenSkills, [action.tierId]: action.skillId },
+          };
+        }
+      }
     }
 
     // ── Debug mode ──
@@ -387,6 +485,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,
         unitStats: null,
         campUnitIds: [],
+        skillTiers: [],
       };
 
     case 'switch_debug_unit':
@@ -447,6 +546,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,  // filled by rebuildSnapshot
         availableUnits: [],                   // filled by rebuildSnapshot
         unitStats: null,                      // filled by rebuildSnapshot
+        skillTiers: [],                       // filled by rebuildSnapshot
       };
 
     case 'close_equip_screen':
@@ -472,6 +572,11 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
     case 'use_item':
       if (current.type !== 'equip_screen' && current.type !== 'debug_equip_screen') return null;
       return current;
+
+    // ── Skill choice (mutation-only) ─────────────────────────────────────────
+    case 'choose_skill':
+      if (current.type !== 'equip_screen' && current.type !== 'debug_equip_screen') return null;
+      return current; // mutation-only → rebuildSnapshot refreshes skill tiers
 
     // ── Camp unit toggle (mutation-only) ─────────────────────────────────────
     case 'toggle_camp_unit': {

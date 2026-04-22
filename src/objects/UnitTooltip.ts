@@ -80,7 +80,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       dodge:           flat(bp.dodge),
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
-      skills: bp.skills.map(s => ({
+      skills: bp.skillTiers.flatMap(t => t.options.slice(0, 1)).map(s => ({
         name:        s.name,
         damageBlock: s.damageBlock,
         isActive:    false,
@@ -126,7 +126,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       dodge:           flat(bp.dodge),
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
-      skills: bp.skills.map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+      skills: bp.skillTiers.flatMap(t => t.options.slice(0, 1)).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
     };
     this.clearContent();
     const h = this.buildContent(data);
@@ -183,7 +183,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       dodge:           flat(bp.dodge),
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
-      skills: bp.skills.map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+      skills: bp.skillTiers.flatMap(t => t.options.slice(0, 1)).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
     };
     this.clearContent();
     const h = this.buildContent(data, { showSprite: false, showStats: false });

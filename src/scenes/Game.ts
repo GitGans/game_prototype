@@ -34,8 +34,9 @@ import {
 } from "../battle/types";
 import { PhaseManager } from '../core/PhaseManager';
 import { Button } from '../ui/Button';
-import { VALUE_COLOR, BTN, ALPHA } from '../ui/theme';
+import { VALUE_COLOR, ALPHA } from '../ui/theme';
 import { SkillTooltip } from '../objects/SkillTooltip';
+import { SkillBar } from '../objects/SkillBar';
 import { ENEMY_GROUPS } from '../data/enemyGroupDefinitions';
 import { PLAYER_UNITS, ENEMY_UNITS } from "../data/unitDefinitions";
 import { cellKey } from "../battle/field";
@@ -58,7 +59,6 @@ import {
   replayPlaceEnemies,
   createUnitInstance,
   blueprintFromUnit,
-  getPlayerAverageLevel,
   PlayerBattleSetup,
 } from "../battle/autoPlace";
 
@@ -222,8 +222,7 @@ export class Game extends Phaser.Scene {
   private selectedFieldUnitId: string | null = null;
   private pendingTargetCoord: CellCoord | null = null;
   private lastClickCoordKey: string | null = null;
-  private skillIconContainers: Phaser.GameObjects.Container[] = [];
-  private skillNameTooltip: SkillTooltip | null = null;
+  private skillBar!: SkillBar;
   private lastClickTime = 0;
 
   // Counter for generating unique unit IDs during placement
@@ -240,7 +239,7 @@ export class Game extends Phaser.Scene {
     this.buildGrid();
     this.unitTooltip = new UnitTooltip(this, TOOLTIP.bg, TOOLTIP.bgAlpha);
     this.effectTooltip = new EffectTooltip(this);
-    this.skillNameTooltip = new SkillTooltip(this);
+    this.skillBar = new SkillBar(this, new SkillTooltip(this));
     this.initBattle();
     this.buildUnitViews();
     this.buildUI();
@@ -308,24 +307,16 @@ export class Game extends Phaser.Scene {
     const isDebug = phase.type === 'battle' && phase.isDebug;
 
     if (isDebug) {
-      const ds = PhaseManager.getDebugState()!;
-      const debugSetup: PlayerBattleSetup = {
-        unitLevels: Object.fromEntries(PLAYER_UNITS.map(bp => [bp.templateId, ds.level])),
-        campUnitIds: ds.campUnitIds,
-        itemContainers: ds.itemContainers,
-        itemInstances: ds.itemInstances,
-        playerUnitPlacements: ds.playerUnitPlacements,
-        playerBenchIds: ds.playerBenchIds,
-        unitPermanentBonuses: ds.unitPermanentBonuses,
-      };
-      state = autoPlacePlayer(state, debugSetup);
+      state = autoPlacePlayer(state, PhaseManager.buildDebugBattleSetup());
     } else {
       GameState.reset();
       state = GameState.get();
       state = autoPlacePlayer(state);
     }
 
-    const playerAvgLevel = getPlayerAverageLevel(state);
+    const playerMaxLevel = [...state.units.values()]
+      .filter(u => u.id.startsWith('p') && !u.isDead)
+      .reduce((max, u) => Math.max(max, u.level), 1);
     let forceRace: UnitRace | undefined;
     let enemyLevel: number | undefined;
     if (phase.type === 'battle') {
@@ -340,7 +331,7 @@ export class Game extends Phaser.Scene {
     if (saved) {
       state = replayPlaceEnemies(state, saved);
     } else {
-      state = autoPlaceEnemies(state, enemyLevel ?? playerAvgLevel, forceRace);
+      state = autoPlaceEnemies(state, enemyLevel ?? playerMaxLevel, forceRace);
       if (!isDebug) {
         GameState.lastEnemyPlacements = [...state.units.values()]
           .filter(u => u.id.startsWith('e'))
@@ -589,7 +580,7 @@ export class Game extends Phaser.Scene {
     ).setOrigin(0.5, 0);
 
     // HP text + HP bar
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
     const scaledHp = Math.round(bp.hp * (1 + 0.1 * (level - 1)));
     const barW = BENCH_PANEL_WIDTH - Math.round(12 * LAYOUT_SCALE);
     const barH = Math.round(6 * LAYOUT_SCALE);
@@ -621,7 +612,7 @@ export class Game extends Phaser.Scene {
       container.on("pointerup", () => this.onBenchCardClick(idx));
       container.on("pointerover", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(COLORS.benchHover, 0.9);
-        const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+        const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
         this.unitTooltip.showFromBlueprint(bp, level, "player", this.logX, this.logY, this.logW);
       });
       container.on("pointerout", () => {
@@ -771,7 +762,7 @@ export class Game extends Phaser.Scene {
   ): void {
     let state = GameState.get();
     const newId = `p${++this.playerIdCounter}`;
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
     const unit = createUnitInstance(bp, newId, anchor, level);
 
     if (!canPlace(anchor, bp.shape, state, "player")) return;
@@ -806,7 +797,7 @@ export class Game extends Phaser.Scene {
     }
 
     const newId = `p${++this.playerIdCounter}`;
-    const level = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
+    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
     const newUnit = createUnitInstance(bp, newId, anchor, level);
     state = placeUnit(newUnit, state);
 
@@ -1012,16 +1003,11 @@ export class Game extends Phaser.Scene {
     let state = GameState.get();
 
     // Save player unit positions so they can be restored next battle
-    const placements: Record<string, CellCoord> = {};
     for (const unit of state.units.values()) {
-      if (unit.anchor.side === 'player') {
-        placements[unit.templateId] = unit.anchor;
-      }
+      if (unit.anchor.side !== 'player') continue;
+      const us = GameState.playerUnits[unit.templateId];
+      if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
     }
-    GameState.playerUnitPlacements = placements;
-    GameState.playerBenchIds = state.benchUnits
-      .filter((bp): bp is UnitBlueprint => bp !== undefined)
-      .map(bp => bp.templateId);
 
     const queue = buildRoundQueue(state.units);
     state = { ...state, roundQueue: queue, phase: "select_target" };
@@ -1972,11 +1958,11 @@ export class Game extends Phaser.Scene {
   // ─── Skill Icon UI ─────────────────────────────────────────────────────────
 
   private showSkillIcons(unit: Unit): void {
-    this.clearSkillIcons();
-    if (unit.skills.length < 1) return;
+    if (unit.skills.length < 1) { this.skillBar.hide(); return; }
 
-    const iconSize = Math.round(28 * LAYOUT_SCALE);
-    const iconGap  = Math.round(4  * LAYOUT_SCALE);
+    // 6 icons × 20px + 5 gaps × 3px = 135px — fits within one CELL_SIZE (126*LAYOUT_SCALE).
+    const iconSize = Math.round(20 * LAYOUT_SCALE);
+    const iconGap  = Math.round(3  * LAYOUT_SCALE);
 
     const occupiedCells = getOccupiedCells(unit.anchor, unit.shape);
     const rightmostCol  = Math.max(...occupiedCells.map(c => c.col)) as Col;
@@ -1984,7 +1970,7 @@ export class Game extends Phaser.Scene {
     const bottomRow     = Math.max(...occupiedCells.map(c => c.row));
 
     const rightCellPos = this.cellPixelPos(unit.anchor.side, topRow, rightmostCol);
-    const iconX = rightCellPos.x + CELL_SIZE / 2 + iconGap + iconSize / 2;
+    const iconX        = rightCellPos.x + CELL_SIZE / 2 + iconGap + iconSize / 2;
 
     const unitTopY    = this.cellPixelPos(unit.anchor.side, topRow,    rightmostCol).y - CELL_SIZE / 2;
     const unitBottomY = this.cellPixelPos(unit.anchor.side, bottomRow, rightmostCol).y + CELL_SIZE / 2;
@@ -1992,39 +1978,11 @@ export class Game extends Phaser.Scene {
     const totalH      = unit.skills.length * iconSize + (unit.skills.length - 1) * iconGap;
     const startY      = unitCenterY - totalH / 2 + iconSize / 2;
 
-    unit.skills.forEach((skill, i) => {
-      const iconY    = startY + i * (iconSize + iconGap);
-      const isActive = i === unit.activeSkillIndex;
-
-      const baseColor  = isActive ? 0xffcc00 : BTN.dark.base;
-      const hoverColor = isActive ? 0xffdd44 : BTN.dark.hover;
-      const strokeColor = isActive ? 0xffffff : 0x888888;
-
-      const bg = this.add.rectangle(0, 0, iconSize, iconSize, baseColor)
-        .setStrokeStyle(2, strokeColor);
-
-      const container = this.add.container(iconX, iconY, [bg])
-        .setSize(iconSize, iconSize)
-        .setInteractive({ useHandCursor: true })
-        .setDepth(10)
-        .on('pointerover', () => {
-          bg.setFillStyle(hoverColor);
-          this.skillNameTooltip?.show({ name: skill.name, damageType: skill.damageBlock?.damageType }, iconX + iconSize / 2, iconY, "right");
-        })
-        .on('pointerout', () => {
-          bg.setFillStyle(baseColor);
-          this.skillNameTooltip?.hide();
-        })
-        .on('pointerup', () => this.switchActiveSkill(i));
-
-      this.skillIconContainers.push(container);
-    });
+    this.skillBar.show(unit, iconX, startY, iconSize, iconGap, i => this.switchActiveSkill(i));
   }
 
   private clearSkillIcons(): void {
-    for (const c of this.skillIconContainers) c.destroy();
-    this.skillIconContainers = [];
-    this.skillNameTooltip?.hide();
+    this.skillBar.hide();
   }
 
   private switchActiveSkill(index: number): void {
@@ -2164,7 +2122,8 @@ export class Game extends Phaser.Scene {
         state.units.forEach((unit) => {
           if (!unit.id.startsWith("p")) return;
           unit.level += 1;
-          GameState.playerUnitLevels[unit.templateId] = unit.level;
+          const us = GameState.playerUnits[unit.templateId];
+          if (us) GameState.playerUnits[unit.templateId] = { ...us, level: unit.level };
           const bp = allBlueprints.find(b => b.templateId === unit.templateId);
           if (!bp) return;
           const scale = 1 + 0.1 * (unit.level - 1);
@@ -2177,8 +2136,8 @@ export class Game extends Phaser.Scene {
         // Bench units — stored as UnitBlueprint | undefined (camp units were never benched)
         state.benchUnits.forEach((bp) => {
           if (!bp) return;
-          const currentLevel = GameState.playerUnitLevels[bp.templateId] ?? bp.level;
-          GameState.playerUnitLevels[bp.templateId] = currentLevel + 1;
+          const us = GameState.playerUnits[bp.templateId];
+          if (us) GameState.playerUnits[bp.templateId] = { ...us, level: us.level + 1 };
         });
 
         PhaseManager.transition({ type: 'exit_battle' });
