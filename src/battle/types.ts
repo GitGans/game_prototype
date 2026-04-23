@@ -43,19 +43,42 @@ export interface SkillTier {
   options: Skill[];
 }
 
-/** An upgrade option a player can choose at levels 5/10/15/20. All fields are optional. */
-export interface Upgrade {
+export interface UnitProgressionStatModifiers {
+  hp?: number;
+  physicalDamage?: number;
+  magicalDamage?: number;
+  physicalDefense?: number;
+  magicalDefense?: number;
+  dodge?: number;
+  block?: number;
+  initiative?: number;
+}
+
+export interface UnitBattleStats {
+  hp: number;
+  physicalDamage: number;
+  magicalDamage: number;
+  physicalDefense: number;
+  magicalDefense: number;
+  dodge: number;
+  block: number;
+  initiative: number;
+}
+
+/** An upgrade option a player can choose at levels 5/10/15/20. */
+export interface UnitUpgradeOption {
   id: string;
   name: string;
+  description?: string;
   skill?: Skill;
-  statBonuses?: Partial<BattleStatBonuses>;
-  spriteKey?: string;
+  statModifiers?: UnitProgressionStatModifiers;
+  spriteSheet?: SpriteSheetConfig;
 }
 
 /** One level-gated upgrade tier for a player unit. */
-export interface UpgradeTier {
+export interface UnitUpgradeTier {
   unlocksAtLevel: 5 | 10 | 15 | 20;
-  options: Upgrade[];
+  options: UnitUpgradeOption[];
 }
 
 /** Deterministic skill added to an enemy unit when it reaches a level milestone. */
@@ -78,7 +101,7 @@ export interface UnitBlueprint {
   initiative: number;
   shape: UnitShape;
   baseSkill?: Skill;                // player units only; auto-learned at level 0
-  upgradeTiers?: UpgradeTier[];     // player units only; tiers 5/10/15/20
+  upgradeTiers?: UnitUpgradeTier[];  // player units only; tiers 5/10/15/20
   skillTiers?: SkillTier[];         // enemy units only; tier 0 base skill
   levelSkills?: EnemyLevelSkill[];  // enemy-only; absent on player blueprints
   rowTrait: RowTrait;

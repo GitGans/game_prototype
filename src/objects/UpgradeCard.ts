@@ -33,7 +33,7 @@ export class UpgradeCard extends Phaser.GameObjects.Container {
       .setOrigin(0, 0).setStrokeStyle(2, borderColor).setAlpha(alpha);
     this.add([bg, border]);
 
-    const spriteKey = upgrade.spriteKey;
+    const spriteKey = upgrade.spritePreview;
     if (spriteKey && scene.textures.exists(spriteKey)) {
       const img = scene.add.image(w / 2, pad + spriteSz / 2, spriteKey)
         .setDisplaySize(spriteSz, spriteSz).setAlpha(alpha);
@@ -55,7 +55,7 @@ export class UpgradeCard extends Phaser.GameObjects.Container {
     this.add(nameText);
     textY += nameText.height + Math.round(4 * LAYOUT_SCALE);
 
-    const bonusEntries = Object.entries(upgrade.statBonuses) as [string, number][];
+    const bonusEntries = Object.entries(upgrade.statModifiers) as [string, number][];
     for (const [stat, val] of bonusEntries) {
       if (!val) continue;
       const sign = val > 0 ? '+' : '';
@@ -92,11 +92,14 @@ export class UpgradeCard extends Phaser.GameObjects.Container {
 
 function formatStat(stat: string): string {
   const map: Record<string, string> = {
-    hp: 'HP',
-    physicalDamage: 'P.Dmg',
-    magicalDamage: 'M.Dmg',
+    hp:              'HP',
+    physicalDamage:  'P.Dmg',
+    magicalDamage:   'M.Dmg',
     physicalDefense: 'P.Def',
-    magicalDefense: 'M.Def',
+    magicalDefense:  'M.Def',
+    dodge:           'Dodge',
+    block:           'Block',
+    initiative:      'Init',
   };
   return map[stat] ?? stat;
 }

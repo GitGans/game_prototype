@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GamePhase, PhaseAction, CampUnitSnapshot, SkillIconSnapshot, UpgradeTierSnapshot, UpgradeOptionSnapshot, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
+import { GamePhase, PhaseAction, CampUnitSnapshot, SkillIconSnapshot, UpgradeTierSnapshot, UpgradeOptionSnapshot, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT, BattleParticipant } from './phases';
 import { DebugBattleState, createDebugBattleState } from './DebugBattleState';
 import { GameState } from './GameState';
 import { EventBus, Events } from './EventBus';
@@ -23,6 +23,7 @@ import {
 } from '../battle/types';
 import { PlayerUnitState } from './GameState';
 import { PlayerBattleSetup } from '../battle/autoPlace';
+import { resolveUnitSkills, type UnitUpgradeChoices } from './unitProgression';
 
 function toSkillIcon(skill: Skill): import('./phases').SkillIconSnapshot {
   return {
@@ -56,6 +57,17 @@ class PhaseManagerClass {
 
   getDebugState(): DebugBattleState | null {
     return this.debugState;
+  }
+
+  getActiveBattleSetup(): PlayerBattleSetup {
+    if (this.phase.type === 'battle' && this.phase.isDebug && this.debugState) {
+      return this.buildDebugBattleSetup();
+    }
+    return {
+      playerUnits:    GameState.playerUnits,
+      itemContainers: GameState.itemContainers,
+      itemInstances:  GameState.itemInstances,
+    };
   }
 
   buildDebugBattleSetup(): PlayerBattleSetup {
@@ -106,19 +118,12 @@ class PhaseManagerClass {
 
   private buildLearnedSkills(
     templateId: string,
-    debugChosenUpgrades?: Partial<Record<5 | 10 | 15 | 20, string>>,
+    debugChosenUpgrades?: UnitUpgradeChoices,
   ): SkillIconSnapshot[] {
     const bp = PLAYER_UNITS.find(u => u.templateId === templateId);
-    if (!bp || !bp.baseSkill) return [];
+    if (!bp) return [];
     const chosenUpgrades = debugChosenUpgrades ?? GameState.playerUnits[templateId]?.chosenUpgrades ?? {};
-    const result: SkillIconSnapshot[] = [toSkillIcon(bp.baseSkill)];
-    for (const tier of (bp.upgradeTiers ?? [])) {
-      const chosenId = chosenUpgrades[tier.unlocksAtLevel];
-      if (!chosenId) continue;
-      const upgrade = tier.options.find(upg => upg.id === chosenId);
-      if (upgrade?.skill) result.push(toSkillIcon(upgrade.skill));
-    }
-    return result;
+    return resolveUnitSkills(bp, chosenUpgrades).map(toSkillIcon);
   }
 
   private buildUpgradeTiers(
@@ -134,11 +139,12 @@ class PhaseManagerClass {
     return (bp.upgradeTiers ?? []).map(tier => ({
       tierId: tier.unlocksAtLevel,
       options: tier.options.map((upg): UpgradeOptionSnapshot => ({
-        id:          upg.id,
-        name:        upg.name,
-        skill:       upg.skill ? toSkillIcon(upg.skill) : null,
-        statBonuses: upg.statBonuses ?? {},
-        spriteKey:   upg.spriteKey ?? null,
+        id:            upg.id,
+        name:          upg.name,
+        description:   upg.description ?? '',
+        skill:         upg.skill ? toSkillIcon(upg.skill) : null,
+        statModifiers: upg.statModifiers ?? {},
+        spritePreview: upg.spriteSheet?.path ?? null,
       })),
       chosenUpgradeId: chosenUpgrades[tier.unlocksAtLevel] ?? null,
       isLocked: level < tier.unlocksAtLevel,
@@ -238,6 +244,8 @@ class PhaseManagerClass {
         );
         return { ...phase, upgradeTiers };
       }
+      case 'battle':
+        return { ...phase, participants: GameState.battleParticipants };
       default:
         return phase; // phases without snapshots pass through unchanged
     }
@@ -291,48 +299,80 @@ class PhaseManagerClass {
       GameState.lastEnemyPlacements = null;
     }
 
+    // Snapshot all party members at battle start (before anyone can die)
+    if (action.type === 'enter_battle') {
+      const state = GameState.get();
+      const participants: BattleParticipant[] = [];
+      Object.entries(GameState.playerUnits).forEach(([templateId, us]) => {
+        if (us.isInCamp) return;
+        const bp = PLAYER_UNITS.find(b => b.templateId === templateId);
+        if (!bp) return;
+        const wasOnBench = state.benchUnits.some(b => b?.templateId === templateId);
+        participants.push({ templateId, name: bp.name, level: us.level, isAlive: true, wasOnBench });
+      });
+      GameState.battleParticipants = participants;
+    }
+
+    // Snapshot all party members at debug battle start
+    if (action.type === 'start_battle' && this.debugState) {
+      const ds = this.debugState;
+      const participants: BattleParticipant[] = [];
+      for (const bp of PLAYER_UNITS) {
+        if (ds.campUnitIds.includes(bp.templateId)) continue;
+        participants.push({ templateId: bp.templateId, name: bp.name, level: ds.level, isAlive: true, wasOnBench: false });
+      }
+      GameState.battleParticipants = participants;
+    }
+
     // ── Battle teardown ──
     if (action.type === 'exit_battle' && prev.type === 'battle') {
-      const state = GameState.get();
+      if (prev.isDebug && this.debugState) {
+        // Debug teardown: XP goes to DebugBattleState only — never touches GameState
+        if (action.participants.length > 0) {
+          this.debugState.level += 1;
+        }
+      } else {
+        const state = GameState.get();
 
-      // Level up field + bench units (only on victory — participants array is populated)
-      if (action.participants.length > 0) {
-        state.units.forEach((unit) => {
-          if (!unit.id.startsWith('p')) return;
-          unit.level += 1;
+        // Level up all participants (field alive + field dead + bench) — not just state.units
+        if (action.participants.length > 0) {
+          action.participants.forEach((p) => {
+            const us = GameState.playerUnits[p.templateId];
+            if (!us) return;
+            const newLevel = us.level + 1;
+            GameState.playerUnits[p.templateId] = { ...us, level: newLevel };
+
+            if (!p.wasOnBench) {
+              // Update live stats only if unit survived (dead units were removed from state.units)
+              const liveUnit = [...state.units.values()].find(u => u.templateId === p.templateId);
+              if (liveUnit) {
+                const bp = PLAYER_UNITS.find(b => b.templateId === p.templateId);
+                if (!bp) return;
+                const scale = 1 + 0.1 * (newLevel - 1);
+                liveUnit.level          = newLevel;
+                liveUnit.maxHp          = Math.round(bp.hp * scale);
+                liveUnit.physicalDamage = Math.round(bp.physicalDamage * scale);
+                liveUnit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
+              }
+            }
+          });
+          GameState.set(state);
+        }
+
+        // Save last field placement
+        for (const unit of GameState.get().units.values()) {
+          if (!unit.id.startsWith('p')) continue;
           const us = GameState.playerUnits[unit.templateId];
-          if (us) GameState.playerUnits[unit.templateId] = { ...us, level: unit.level };
-          const bp = PLAYER_UNITS.find(b => b.templateId === unit.templateId);
-          if (!bp) return;
-          const scale = 1 + 0.1 * (unit.level - 1);
-          unit.maxHp          = Math.round(bp.hp * scale);
-          unit.physicalDamage = Math.round(bp.physicalDamage * scale);
-          unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
-        });
-        GameState.set(state);
+          if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
+        }
 
-        // Bench units — stats derived fresh from level at next placement
-        state.benchUnits.forEach((bp) => {
-          if (!bp) return;
-          const us = GameState.playerUnits[bp.templateId];
-          if (us) GameState.playerUnits[bp.templateId] = { ...us, level: us.level + 1 };
-        });
+        // Mark trigger entity dead on the map
+        if (prev.mapId && prev.triggerPos) {
+          const key = `${prev.triggerPos.x},${prev.triggerPos.y}`;
+          const mapState = GameState.subMapStates[prev.mapId];
+          if (mapState) mapState.entityStates[key] = { alive: false };
+        }
       }
-
-      // Save last field placement
-      for (const unit of GameState.get().units.values()) {
-        if (!unit.id.startsWith('p')) continue;
-        const us = GameState.playerUnits[unit.templateId];
-        if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
-      }
-
-      // Mark trigger entity dead on the map
-      if (prev.mapId && prev.triggerPos) {
-        const key = `${prev.triggerPos.x},${prev.triggerPos.y}`;
-        const mapState = GameState.subMapStates[prev.mapId];
-        if (mapState) mapState.entityStates[key] = { alive: false };
-      }
-      // allMobsDead → map_victory redirect removed — battle_results is the universal screen
     }
 
     // ── Item mutations ──
@@ -563,6 +603,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
         returnPhase: current,
         triggerPos: action.triggerPos,
         mapId: current.mapId,
+        participants: [],
       };
 
     case 'enter_camp':
@@ -580,6 +621,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
         enemyGroupId: action.enemyGroupId,
         returnPhase: current,
         isDebug: true,
+        participants: [],
       };
 
     case 'exit_battle':

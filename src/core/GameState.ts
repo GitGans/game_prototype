@@ -8,6 +8,7 @@ import {
   ItemContainer,
   BattleStatBonuses,
 } from "../battle/types";
+import { BattleParticipant } from './phases';
 import { SubMapState } from '../world/types';
 import { buildOccupancy } from "../battle/occupancy";
 
@@ -45,6 +46,7 @@ class GameStateManager {
   // Survive reset() — shared across scene restarts
   lastEnemyRace: UnitRace | null = null;
   lastEnemyPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }> | null = null;
+  battleParticipants: BattleParticipant[] = [];
   playerUnits: Record<string, PlayerUnitState> = {};
   itemInstances: Record<string, ItemInstance> = {};
   itemContainers: Record<string, ItemContainer> = {};

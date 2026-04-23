@@ -5,7 +5,7 @@ import { MainMenu }  from './scenes/MainMenu';
 import { WorldMap }  from './scenes/WorldMap';
 import { Prep }      from './scenes/Prep';
 import { Game }       from './scenes/Game';
-import { MapVictory }  from './scenes/MapVictory';
+import { BattleResults } from './scenes/BattleResults';
 import { EquipScreen } from './scenes/EquipScreen';
 import { DebugLevelSelect } from './scenes/DebugLevelSelect';
 import { UpgradeTreeScreen } from './scenes/UpgradeTreeScreen';
@@ -16,7 +16,7 @@ export const config: Phaser.Types.Core.GameConfig = {
   height: window.innerHeight,
   backgroundColor: '#1a1a2e',
   pixelArt: true,
-  scene: [Boot, Preloader, MainMenu, WorldMap, Prep, Game, MapVictory, EquipScreen, DebugLevelSelect, UpgradeTreeScreen],
+  scene: [Boot, Preloader, MainMenu, WorldMap, Prep, Game, BattleResults, EquipScreen, DebugLevelSelect, UpgradeTreeScreen],
   parent: document.body,
   scale: {
     mode: Phaser.Scale.NONE,

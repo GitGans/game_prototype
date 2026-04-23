@@ -1,5 +1,6 @@
 import {
   BattleStatBonuses,
+  UnitProgressionStatModifiers,
   BackpackSnapshot,
   EquipmentSnapshot,
   UnitTabSnapshot,
@@ -23,11 +24,12 @@ export interface SkillIconSnapshot {
 }
 
 export interface UpgradeOptionSnapshot {
-  id:          string;
-  name:        string;
-  skill:       SkillIconSnapshot | null;
-  statBonuses: Partial<BattleStatBonuses>;
-  spriteKey:   string | null;
+  id:            string;
+  name:          string;
+  description:   string;
+  skill:         SkillIconSnapshot | null;
+  statModifiers: UnitProgressionStatModifiers;
+  spritePreview: string | null;
 }
 
 export interface UpgradeTierSnapshot {
@@ -67,6 +69,7 @@ export type GamePhase =
       triggerPos?: { x: number; y: number };
       mapId?: string;
       isDebug?: boolean;
+      participants: BattleParticipant[];
     }
   | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
   | { type: 'debug_level_select' }

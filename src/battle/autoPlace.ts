@@ -6,23 +6,12 @@ import { BENCH_SLOTS } from '../core/Constants';
 import { GameState, PlayerUnitState } from '../core/GameState';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from './itemOps';
+import { resolveUnitSkills, resolveChosenUnitUpgrades, computeUnitUpgradeStatModifiers } from '../core/unitProgression';
 
 export interface PlayerBattleSetup {
   playerUnits: Record<string, PlayerUnitState>;
   itemContainers: Record<string, ItemContainer>;
   itemInstances: Record<string, ItemInstance>;
-}
-
-function resolvePlayerSkills(blueprint: UnitBlueprint, unitState: PlayerUnitState): Skill[] {
-  const skills: Skill[] = [];
-  if (blueprint.baseSkill) skills.push(blueprint.baseSkill);
-  for (const tier of (blueprint.upgradeTiers ?? [])) {
-    const chosenId = unitState.chosenUpgrades[tier.unlocksAtLevel];
-    if (!chosenId) continue;
-    const upgrade = tier.options.find(upg => upg.id === chosenId);
-    if (upgrade?.skill) skills.push(upgrade.skill);
-  }
-  return skills;
 }
 
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): Skill[] {
@@ -48,19 +37,24 @@ export function createUnitInstance(
   const containers = setup?.itemContainers ?? GameState.itemContainers;
   const instances  = setup?.itemInstances  ?? GameState.itemInstances;
   const bonuses    = setup?.unitState?.permanentBonuses ?? {};
+  const chosenUpgrades = setup?.unitState
+    ? resolveChosenUnitUpgrades(blueprint, setup.unitState.chosenUpgrades)
+    : [];
+  const upgradeModifiers = computeUnitUpgradeStatModifiers(chosenUpgrades);
   const stats = computeUnitBattleStats(
     blueprint, level,
     containers,
     instances,
     ITEM_DEFINITIONS,
     { [blueprint.templateId]: bonuses },
+    upgradeModifiers,
   );
   const activatableAbilities = setup?.unitState
     ? snapshotActivatableAbilities(blueprint.templateId, containers, instances, ITEM_DEFINITIONS)
     : [];
 
   const skills = setup?.unitState
-    ? resolvePlayerSkills(blueprint, setup.unitState)
+    ? resolveUnitSkills(blueprint, setup.unitState.chosenUpgrades)
     : resolveEnemySkills(blueprint, level);
 
   return {
@@ -72,10 +66,10 @@ export function createUnitInstance(
     magicalDamage:       stats.magicalDamage,
     physicalDefense:     stats.physicalDefense,
     magicalDefense:      stats.magicalDefense,
-    dodge:               blueprint.dodge,
-    block:               blueprint.block,
+    dodge:               stats.dodge,
+    block:               stats.block,
     level,
-    initiative:          blueprint.initiative,
+    initiative:          stats.initiative,
     shape:               blueprint.shape,
     anchor,
     skills,

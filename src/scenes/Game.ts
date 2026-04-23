@@ -763,8 +763,14 @@ export class Game extends Phaser.Scene {
   ): void {
     let state = GameState.get();
     const newId = `p${++this.playerIdCounter}`;
-    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
-    const unit = createUnitInstance(bp, newId, anchor, level);
+    const setup = PhaseManager.getActiveBattleSetup();
+    const unitState = setup.playerUnits[bp.templateId];
+    const level = unitState?.level ?? bp.level;
+    const unit = createUnitInstance(bp, newId, anchor, level, {
+      itemContainers: setup.itemContainers,
+      itemInstances:  setup.itemInstances,
+      unitState,
+    });
 
     if (!canPlace(anchor, bp.shape, state, "player")) return;
 
@@ -798,8 +804,14 @@ export class Game extends Phaser.Scene {
     }
 
     const newId = `p${++this.playerIdCounter}`;
-    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
-    const newUnit = createUnitInstance(bp, newId, anchor, level);
+    const setup = PhaseManager.getActiveBattleSetup();
+    const unitState = setup.playerUnits[bp.templateId];
+    const level = unitState?.level ?? bp.level;
+    const newUnit = createUnitInstance(bp, newId, anchor, level, {
+      itemContainers: setup.itemContainers,
+      itemInstances:  setup.itemInstances,
+      unitState,
+    });
     state = placeUnit(newUnit, state);
 
     // Update bench: replace bp at benchIdx with field unit's blueprint
@@ -2113,40 +2125,21 @@ export class Game extends Phaser.Scene {
         scene: this, x: rightX, y: btnY, w: btnW, h: btnH,
         label: "Exit Battle", style: "primary",
         onClick: () => {
-        const phase = PhaseManager.getPhase();
-        const isDebugBattle = phase.type === 'battle' && phase.isDebug;
+          const phase = PhaseManager.getPhase();
+          if (phase.type !== 'battle') return;
 
-        if (!isDebugBattle) {
-          const allBlueprints = [
-            ...PLAYER_UNITS,
-            ...Object.values(ENEMY_UNITS).flat(),
-          ];
-          const state = GameState.get();
+          const aliveIds = new Set(
+            [...GameState.get().units.values()]
+              .filter(u => u.id.startsWith('p'))
+              .map(u => u.templateId)
+          );
 
-          // Field units — live Unit objects in state.units (camp units were never placed)
-          state.units.forEach((unit) => {
-            if (!unit.id.startsWith("p")) return;
-            unit.level += 1;
-            const us = GameState.playerUnits[unit.templateId];
-            if (us) GameState.playerUnits[unit.templateId] = { ...us, level: unit.level };
-            const bp = allBlueprints.find(b => b.templateId === unit.templateId);
-            if (!bp) return;
-            const scale = 1 + 0.1 * (unit.level - 1);
-            unit.maxHp          = Math.round(bp.hp * scale);
-            unit.physicalDamage = Math.round(bp.physicalDamage * scale);
-            unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
-          });
-          GameState.set(state);
+          const participants: BattleParticipant[] = phase.participants.map(p => ({
+            ...p,
+            isAlive: p.wasOnBench || aliveIds.has(p.templateId),
+          }));
 
-          // Bench units — stored as UnitBlueprint | undefined (camp units were never benched)
-          state.benchUnits.forEach((bp) => {
-            if (!bp) return;
-            const us = GameState.playerUnits[bp.templateId];
-            if (us) GameState.playerUnits[bp.templateId] = { ...us, level: us.level + 1 };
-          });
-        }
-
-        PhaseManager.transition({ type: 'exit_battle' });
+          PhaseManager.transition({ type: 'exit_battle', participants });
         },
       }).setDepth(31);
     } else {
@@ -2168,7 +2161,7 @@ export class Game extends Phaser.Scene {
         new Button({
           scene: this, x: rightX, y: btnY, w: btnW, h: btnH,
           label: "Exit Battle", style: "primary",
-          onClick: () => PhaseManager.transition({ type: 'exit_battle' }),
+          onClick: () => PhaseManager.transition({ type: 'exit_battle', participants: [] }),
         }).setDepth(31);
       }
     }
