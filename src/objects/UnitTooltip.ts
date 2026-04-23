@@ -4,6 +4,7 @@ import { TOOLTIP, fontSize, VALUE_COLOR } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
 import { Unit, UnitBlueprint } from "../battle/types";
 import { effectiveStats } from "../battle/combat";
+import type { UnitStatsSnapshot } from '../core/phases';
 
 const W           = Math.round(200 * LAYOUT_SCALE);
 const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
@@ -154,27 +155,26 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.setVisible(true);
   }
 
-  showFixedStatsOnly(
-    bp:      UnitBlueprint,
-    level:   number,
-    bonuses: Partial<import('../battle/types').BattleStatBonuses>,
+
+  showFixedStatsSnapshot(
+    bp:    UnitBlueprint,
+    stats: UnitStatsSnapshot,
     x: number, y: number, w: number,
   ): void {
-    const scale = 1 + 0.1 * (level - 1);
     const data: TooltipData = {
       templateId:      bp.templateId,
       name:            bp.name,
-      level,
+      level:           stats.level,
       side:            'player',
-      hp:              { value: Math.round(bp.hp * scale) + (bonuses.hp ?? 0), base: Math.round(bp.hp * scale) },
-      maxHp:           { value: Math.round(bp.hp * scale) + (bonuses.hp ?? 0), base: Math.round(bp.hp * scale) },
-      physicalDamage:  { value: Math.round(bp.physicalDamage  * scale) + (bonuses.physicalDamage  ?? 0), base: Math.round(bp.physicalDamage  * scale) },
-      magicalDamage:   { value: Math.round(bp.magicalDamage   * scale) + (bonuses.magicalDamage   ?? 0), base: Math.round(bp.magicalDamage   * scale) },
-      physicalDefense: { value: bp.physicalDefense + (bonuses.physicalDefense ?? 0), base: bp.physicalDefense },
-      magicalDefense:  { value: bp.magicalDefense  + (bonuses.magicalDefense  ?? 0), base: bp.magicalDefense  },
-      dodge:           flat(bp.dodge),
-      block:           flat(bp.block),
-      initiative:      flat(bp.initiative),
+      hp:              stats.hp,
+      maxHp:           stats.maxHp,
+      physicalDamage:  stats.physicalDamage,
+      magicalDamage:   stats.magicalDamage,
+      physicalDefense: stats.physicalDefense,
+      magicalDefense:  stats.magicalDefense,
+      dodge:           stats.dodge,
+      block:           stats.block,
+      initiative:      stats.initiative,
       skills:          [],
     };
     this.clearContent();

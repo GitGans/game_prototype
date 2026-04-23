@@ -376,9 +376,8 @@ export class EquipScreen extends Phaser.Scene {
     if (!phase.selectedUnitTemplateId || !phase.unitStats) return;
     const bp = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
     if (!bp) return;
-    const { level, equippedBonuses } = phase.unitStats;
-    this.statsPanel?.showFixedStatsOnly(bp, level, equippedBonuses, this.statsPanelX, this.statsPanelY, this.statsPanelW);
-    this.unitNamePanel?.showFixedNameOnly(bp, level, this.spriteHeaderX, this.spriteHeaderY, SPRITE_SZ);
+    this.statsPanel?.showFixedStatsSnapshot(bp, phase.unitStats, this.statsPanelX, this.statsPanelY, this.statsPanelW);
+    this.unitNamePanel?.showFixedNameOnly(bp, phase.unitStats.level, this.spriteHeaderX, this.spriteHeaderY, SPRITE_SZ);
 
     if (this.skillIconRow) {
       this.skillIconRow.setPosition(this.skillsPanelX, this.skillsPanelY);

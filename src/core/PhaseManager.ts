@@ -14,7 +14,6 @@ import {
   useItem,
   buildBackpackSnapshot,
   buildEquipmentSnapshot,
-  getEquippedBonuses,
   getSellPrice,
 } from '../battle/itemOps';
 import {
@@ -24,6 +23,7 @@ import {
 import { PlayerUnitState } from './GameState';
 import { PlayerBattleSetup } from '../battle/autoPlace';
 import { resolveUnitSkills, type UnitUpgradeChoices } from './unitProgression';
+import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 
 function toSkillIcon(skill: Skill): import('./phases').SkillIconSnapshot {
   return {
@@ -176,17 +176,18 @@ class PhaseManagerClass {
         }));
         const unitStats = phase.selectedUnitTemplateId
           ? (() => {
-              const bp = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
-              const level = bp
-                ? (GameState.playerUnits[phase.selectedUnitTemplateId]?.level ?? bp.level)
-                : 1;
-              const equippedBonuses = getEquippedBonuses(
-                phase.selectedUnitTemplateId,
-                GameState.itemContainers,
-                GameState.itemInstances,
-                ITEM_DEFINITIONS,
-              );
-              return { level, equippedBonuses };
+              const bp        = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
+              const unitState = GameState.playerUnits[phase.selectedUnitTemplateId];
+              return bp && unitState
+                ? buildUnitStatsSnapshot(
+                    bp,
+                    unitState.level,
+                    unitState,
+                    GameState.itemContainers,
+                    GameState.itemInstances,
+                    ITEM_DEFINITIONS,
+                  )
+                : null;
             })()
           : null;
         const learnedSkills = this.buildLearnedSkills(phase.selectedUnitTemplateId);
@@ -216,15 +217,21 @@ class PhaseManagerClass {
           name: bp.name,
           unitClass: bp.unitClass,
         }));
+        const debugSetup = this.buildDebugBattleSetup();
         const unitStats = phase.selectedUnitTemplateId
           ? (() => {
-              const equippedBonuses = getEquippedBonuses(
-                phase.selectedUnitTemplateId,
-                ds.itemContainers,
-                ds.itemInstances,
-                ITEM_DEFINITIONS,
-              );
-              return { level: ds.level, equippedBonuses };
+              const bp        = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
+              const unitState = debugSetup.playerUnits[phase.selectedUnitTemplateId];
+              return bp && unitState
+                ? buildUnitStatsSnapshot(
+                    bp,
+                    ds.level,
+                    unitState,
+                    ds.itemContainers,
+                    ds.itemInstances,
+                    ITEM_DEFINITIONS,
+                  )
+                : null;
             })()
           : null;
         const debugLearnedSkills = this.buildLearnedSkills(
