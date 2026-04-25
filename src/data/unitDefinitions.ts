@@ -23,7 +23,22 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     shape: SHAPES["1x1"],
     baseSkill: SKILLS.p_melee_basic,
     upgradeTiers: [
-      { unlocksAtLevel: 5,  options: [u(SKILLS.row_strike), { ...u(SKILLS.pierce), statModifiers: { hp: 20 } }] },
+      {
+        unlocksAtLevel: 5,
+        options: [
+          u(SKILLS.row_strike),
+          {
+            ...u(SKILLS.pierce),
+            statModifiers: { hp: 20 },
+            spriteSheet: {
+              path: 'assets/sprites/units/soldier_elite.png',
+              frameWidth: 128,
+              frameHeight: 128,
+              states: ['idle', 'attack', 'death'] as const,
+            },
+          },
+        ],
+      },
       { unlocksAtLevel: 10, options: [u(SKILLS.poison_strike), { ...u(SKILLS.provoke_strike), statModifiers: { initiative: 2 } }] },
       { unlocksAtLevel: 15, options: [u(SKILLS.armor_pierce), u(SKILLS.drain_strike)] },
       { unlocksAtLevel: 20, options: [u(SKILLS.life_sweep), u(SKILLS.armor_pierce)] },

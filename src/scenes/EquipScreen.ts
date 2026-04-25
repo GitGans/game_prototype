@@ -21,7 +21,6 @@ type AnyEquipPhase = EquipScreenPhase | DebugEquipScreenPhase;
 
 const CELL_SIZE    = Math.round(56  * LAYOUT_SCALE);
 const CELL_GAP     = Math.round(6   * LAYOUT_SCALE);
-const PORTRAIT_TAB = Math.round(32  * LAYOUT_SCALE);
 const PORTRAIT_SEL = Math.round(128 * LAYOUT_SCALE);
 const SPRITE_SZ = Math.round(256 * LAYOUT_SCALE);
 const PAD = Math.round(16 * LAYOUT_SCALE);
@@ -111,7 +110,7 @@ export class EquipScreen extends Phaser.Scene {
       const startX = (w - totalW) / 2;
       row.forEach((u, i) => {
         const px = startX + i * (PORTRAIT_SEL + PAD);
-        this.addPortrait(px, rowY, PORTRAIT_SEL, u.templateId, u.name, c,
+        this.addPortrait(px, rowY, PORTRAIT_SEL, u.spriteKey, u.name, c,
           () => PhaseManager.transition(
             isDebug
               ? { type: 'switch_debug_unit', templateId: u.templateId }
@@ -174,13 +173,12 @@ export class EquipScreen extends Phaser.Scene {
     x: number,
     y: number,
     size: number,
-    templateId: string,
+    spriteKey: string | null,
     name: string,
     container: Phaser.GameObjects.Container | null,
     onClick: () => void,
   ): void {
-    const spriteKey = `sprite-${templateId}`;
-    const img = this.textures.exists(spriteKey)
+    const img = spriteKey && this.textures.exists(spriteKey)
       ? this.add.image(x + size / 2, y + size / 2, spriteKey).setDisplaySize(size, size).setInteractive({ useHandCursor: true }).on("pointerup", onClick)
       : this.add.rectangle(x + size / 2, y + size / 2, size, size, BTN.neutral.base).setInteractive({ useHandCursor: true }).on("pointerup", onClick);
     const label = this.add
@@ -248,7 +246,7 @@ export class EquipScreen extends Phaser.Scene {
     this.unitNamePanel = new UnitTooltip(this, 0x000000, 0);
 
     // Unit sprite (third column)
-    this.renderUnitSprite(phase.selectedUnitTemplateId, spriteX, panelTopY);
+    this.renderUnitSprite(phase.selectedUnitSpriteKey, spriteX, panelTopY);
 
     // "Skills" header above skills panel
     this.add.text(skillsX, contentTopY, 'Skills', {
@@ -301,8 +299,8 @@ export class EquipScreen extends Phaser.Scene {
       const isSelected = u.templateId === this.selectedTemplateId;
       const baseColor = isSelected ? BTN.navy.hover : BTN.navy.base;
 
-      const spriteKey = `sprite-${u.templateId}`;
-      if (this.textures.exists(spriteKey)) {
+      const spriteKey = u.spriteKey;
+      if (spriteKey && this.textures.exists(spriteKey)) {
         const img = this.add
           .image(tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2, spriteKey)
           .setDisplaySize(CELL_SIZE, CELL_SIZE)
@@ -354,9 +352,8 @@ export class EquipScreen extends Phaser.Scene {
     });
   }
 
-  private renderUnitSprite(templateId: string, x: number, y: number): void {
-    const spriteKey = `sprite-${templateId}`;
-    if (this.textures.exists(spriteKey)) {
+  private renderUnitSprite(spriteKey: string | null, x: number, y: number): void {
+    if (spriteKey && this.textures.exists(spriteKey)) {
       this.add
         .image(x + SPRITE_SZ / 2, y + SPRITE_SZ / 2, spriteKey)
         .setDisplaySize(SPRITE_SZ, SPRITE_SZ)

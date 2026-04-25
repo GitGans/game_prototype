@@ -55,7 +55,7 @@ export class BattleResults extends Phaser.Scene {
 
   private renderCard(unit: BattleResultUnit, cx: number, cy: number, cw: number, ch: number): void {
     const alpha  = unit.isAlive ? 1 : 0.45;
-    const sprKey = `sprite-${unit.templateId}`;
+    const sprKey = unit.spriteKey;
     const sprSz  = Math.round(72 * S);
     const sprY   = cy - Math.round(30 * S);
 
@@ -63,7 +63,7 @@ export class BattleResults extends Phaser.Scene {
       .setStrokeStyle(Math.round(1 * S), 0x44445a)
       .setAlpha(alpha);
 
-    if (this.textures.exists(sprKey)) {
+    if (sprKey && this.textures.exists(sprKey)) {
       this.add.image(cx, sprY, sprKey).setDisplaySize(sprSz, sprSz).setAlpha(alpha);
     } else {
       this.add.rectangle(cx, sprY, sprSz, sprSz, 0x556677).setAlpha(alpha);

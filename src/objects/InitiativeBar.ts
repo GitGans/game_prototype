@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BattleState, Unit } from '../battle/types';
 import { COLORS, LAYOUT_SCALE } from '../core/Constants';
+import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 import { effectiveStats } from '../battle/combat';
 import { fontSize, VALUE_COLOR, INITIATIVE } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
@@ -97,12 +98,14 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     );
 
     // Sprite or fallback colored rect
-    const spriteKey = `sprite-${unit.templateId}`;
-    const hasSprite = this.scene.textures.exists(spriteKey);
+    const spriteKey = unit.spriteSheet
+      ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
+      : null;
+    const hasSprite = !!spriteKey && this.scene.textures.exists(spriteKey);
 
     let bg: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
     if (hasSprite) {
-      bg = this.scene.add.image(x + CARD_W / 2, y + CARD_H / 2, spriteKey);
+      bg = this.scene.add.image(x + CARD_W / 2, y + CARD_H / 2, spriteKey!);
       (bg as Phaser.GameObjects.Image).setFrame(0); // idle frame
       bg.setDisplaySize(
         CARD_W - Math.round(3 * LAYOUT_SCALE),

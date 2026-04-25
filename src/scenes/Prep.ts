@@ -2,7 +2,6 @@ import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { PhaseManager } from "../core/PhaseManager";
 import { EventBus, Events } from "../core/EventBus";
-import { PLAYER_UNITS } from "../data/unitDefinitions";
 import { Button } from "../ui/Button";
 import { VALUE_COLOR, SCENE_BG, BTN, ALPHA } from "../ui/theme";
 import { EnemyGroupSelector } from "../objects/EnemyGroupSelector";

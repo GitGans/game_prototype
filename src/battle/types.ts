@@ -130,6 +130,7 @@ export interface Unit {
   rowTrait: RowTrait;
   race?: UnitRace;
   templateId: string;
+  spriteSheet?: SpriteSheetConfig;  // resolved at unit creation; undefined = no sprite
   activeEffects: ActiveEffect[]; // runtime only; max 2; ordered oldest-first
   activatableAbilities: UnitActivatableAbility[]; // [] for enemies
 }
@@ -142,13 +143,20 @@ export interface OccupancyMap {
 export type Phase = 'placement' | 'select_target' | 'end';
 export type BattleMode = 'manual' | 'auto' | 'quick';
 
+export interface BenchUnitSnapshot {
+  templateId: string;
+  name: string;
+  level: number;
+  spriteKey: string | null;
+}
+
 export interface BattleState {
   units: Map<string, Unit>;
   occupancy: OccupancyMap;
   roundQueue: string[]; // unit IDs to act this round; [0] = currently acting
   phase: Phase;
   validTargets: CellCoord[];
-  benchUnits: (UnitBlueprint | undefined)[]; // player units waiting on the bench; undefined = empty slot
+  benchUnits: (BenchUnitSnapshot | undefined)[]; // player units waiting on the bench; undefined = empty slot
 }
 
 // ─── Skill / Pattern System ───────────────────────────────────────────────
@@ -400,6 +408,7 @@ export interface UnitTabSnapshot {
   templateId: string;
   name: string;
   unitClass: UnitClass;
+  spriteKey: string | null;
 }
 
 export interface ItemInstance {

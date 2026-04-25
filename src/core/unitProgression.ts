@@ -1,4 +1,4 @@
-import { UnitBlueprint, Skill, UnitUpgradeOption, UnitProgressionStatModifiers } from '../battle/types';
+import { UnitBlueprint, Skill, UnitUpgradeOption, UnitProgressionStatModifiers, SpriteSheetConfig } from '../battle/types';
 
 export type UnitUpgradeChoices = Partial<Record<5 | 10 | 15 | 20, string>>;
 
@@ -45,4 +45,18 @@ export function computeUnitUpgradeStatModifiers(
     result.initiative      = (result.initiative      ?? 0) + (m.initiative      ?? 0);
   }
   return result;
+}
+
+export function resolveUnitSpriteSheet(
+  blueprint: UnitBlueprint,
+  chosenUpgrades: UnitUpgradeChoices,
+): SpriteSheetConfig | undefined {
+  let result: SpriteSheetConfig | undefined;
+  for (const tier of (blueprint.upgradeTiers ?? [])) {
+    const chosenId = chosenUpgrades[tier.unlocksAtLevel];
+    if (!chosenId) continue;
+    const option = tier.options.find(o => o.id === chosenId);
+    if (option?.spriteSheet) result = option.spriteSheet; // highest tier wins
+  }
+  return result ?? blueprint.spriteSheet;
 }

@@ -22,8 +22,9 @@ import {
 } from '../battle/types';
 import { PlayerUnitState } from './GameState';
 import { PlayerBattleSetup } from '../battle/autoPlace';
-import { resolveUnitSkills, type UnitUpgradeChoices } from './unitProgression';
+import { resolveUnitSkills, resolveUnitSpriteSheet, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
+import { getUnitSpriteTextureKey } from './unitSpriteKey';
 
 function toSkillIcon(skill: Skill): import('./phases').SkillIconSnapshot {
   return {
@@ -90,7 +91,11 @@ class PhaseManagerClass {
   }
 
   transition(action: PhaseAction): void {
-    const next = resolveTransition(this.phase, action);
+    let mapCleared = false;
+    if (action.type === 'exit_battle' && this.phase.type === 'battle') {
+      mapCleared = wouldClearMap(this.phase);
+    }
+    const next = resolveTransition(this.phase, action, mapCleared);
     if (next === null) return; // invalid action for current phase
 
     this.applyActionSideEffects(action, this.phase);
@@ -144,11 +149,43 @@ class PhaseManagerClass {
         description:   upg.description ?? '',
         skill:         upg.skill ? toSkillIcon(upg.skill) : null,
         statModifiers: upg.statModifiers ?? {},
-        spritePreview: upg.spriteSheet?.path ?? null,
+        spritePreview: upg.spriteSheet
+          ? getUnitSpriteTextureKey(bp.templateId, upg.spriteSheet)
+          : null,
       })),
       chosenUpgradeId: chosenUpgrades[tier.unlocksAtLevel] ?? null,
       isLocked: level < tier.unlocksAtLevel,
     }));
+  }
+
+  private buildUnitTabSnapshots(
+    debugChosenUpgradesMap?: Record<string, UnitUpgradeChoices>,
+  ): UnitTabSnapshot[] {
+    return PLAYER_UNITS.map(bp => {
+      const chosenUpgrades =
+        debugChosenUpgradesMap?.[bp.templateId] ??
+        GameState.playerUnits[bp.templateId]?.chosenUpgrades ??
+        {};
+      const sheet = resolveUnitSpriteSheet(bp, chosenUpgrades);
+      return {
+        templateId: bp.templateId,
+        name: bp.name,
+        unitClass: bp.unitClass,
+        spriteKey: sheet ? getUnitSpriteTextureKey(bp.templateId, sheet) : null,
+      };
+    });
+  }
+
+  private buildSelectedUnitSpriteKey(
+    templateId: string,
+    chosenUpgrades?: UnitUpgradeChoices,
+  ): string | null {
+    if (!templateId) return null;
+    const bp = PLAYER_UNITS.find(u => u.templateId === templateId);
+    if (!bp) return null;
+    const upgrades = chosenUpgrades ?? GameState.playerUnits[templateId]?.chosenUpgrades ?? {};
+    const sheet = resolveUnitSpriteSheet(bp, upgrades);
+    return sheet ? getUnitSpriteTextureKey(templateId, sheet) : null;
   }
 
   // Recomputes data snapshots for phases that carry them.
@@ -169,11 +206,8 @@ class PhaseManagerClass {
               ITEM_DEFINITIONS,
             )
           : EMPTY_EQUIP_SNAPSHOT;
-        const availableUnits: UnitTabSnapshot[] = PLAYER_UNITS.map(bp => ({
-          templateId: bp.templateId,
-          name: bp.name,
-          unitClass: bp.unitClass,
-        }));
+        const availableUnits = this.buildUnitTabSnapshots();
+        const selectedUnitSpriteKey = this.buildSelectedUnitSpriteKey(phase.selectedUnitTemplateId);
         const unitStats = phase.selectedUnitTemplateId
           ? (() => {
               const bp        = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
@@ -192,7 +226,7 @@ class PhaseManagerClass {
           : null;
         const learnedSkills = this.buildLearnedSkills(phase.selectedUnitTemplateId);
         const upgradeSkills = learnedSkills.slice(1, 5);
-        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, learnedSkills, upgradeSkills };
+        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, learnedSkills, upgradeSkills, selectedUnitSpriteKey };
       }
       case 'camp':
         return { ...phase, units: this.buildCampUnits() };
@@ -212,11 +246,11 @@ class PhaseManagerClass {
               ITEM_DEFINITIONS,
             )
           : EMPTY_EQUIP_SNAPSHOT;
-        const availableUnits: UnitTabSnapshot[] = PLAYER_UNITS.map(bp => ({
-          templateId: bp.templateId,
-          name: bp.name,
-          unitClass: bp.unitClass,
-        }));
+        const availableUnits = this.buildUnitTabSnapshots(ds.chosenUpgrades);
+        const selectedUnitSpriteKey = this.buildSelectedUnitSpriteKey(
+          phase.selectedUnitTemplateId,
+          ds.chosenUpgrades[phase.selectedUnitTemplateId],
+        );
         const debugSetup = this.buildDebugBattleSetup();
         const unitStats = phase.selectedUnitTemplateId
           ? (() => {
@@ -239,7 +273,7 @@ class PhaseManagerClass {
           ds.chosenUpgrades[phase.selectedUnitTemplateId],
         );
         const debugUpgradeSkills = debugLearnedSkills.slice(1, 5);
-        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, campUnitIds: [...ds.campUnitIds], learnedSkills: debugLearnedSkills, upgradeSkills: debugUpgradeSkills };
+        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, campUnitIds: [...ds.campUnitIds], learnedSkills: debugLearnedSkills, upgradeSkills: debugUpgradeSkills, selectedUnitSpriteKey };
       }
       case 'upgrade_tree': {
         const isDebug = phase.returnPhase.type === 'debug_equip_screen';
@@ -315,7 +349,9 @@ class PhaseManagerClass {
         const bp = PLAYER_UNITS.find(b => b.templateId === templateId);
         if (!bp) return;
         const wasOnBench = state.benchUnits.some(b => b?.templateId === templateId);
-        participants.push({ templateId, name: bp.name, level: us.level, isAlive: true, wasOnBench });
+        const sheet     = resolveUnitSpriteSheet(bp, us.chosenUpgrades ?? {});
+        const spriteKey = sheet ? getUnitSpriteTextureKey(templateId, sheet) : null;
+        participants.push({ templateId, name: bp.name, level: us.level, isAlive: true, wasOnBench, spriteKey });
       });
       GameState.battleParticipants = participants;
     }
@@ -326,7 +362,9 @@ class PhaseManagerClass {
       const participants: BattleParticipant[] = [];
       for (const bp of PLAYER_UNITS) {
         if (ds.campUnitIds.includes(bp.templateId)) continue;
-        participants.push({ templateId: bp.templateId, name: bp.name, level: ds.level, isAlive: true, wasOnBench: false });
+        const sheet     = resolveUnitSpriteSheet(bp, ds.chosenUpgrades[bp.templateId] ?? {});
+        const spriteKey = sheet ? getUnitSpriteTextureKey(bp.templateId, sheet) : null;
+        participants.push({ templateId: bp.templateId, name: bp.name, level: ds.level, isAlive: true, wasOnBench: false, spriteKey });
       }
       GameState.battleParticipants = participants;
     }
@@ -546,7 +584,7 @@ class PhaseManagerClass {
     }
   }
 
-  private readonly GAME_SCENES = ['MainMenu', 'WorldMap', 'Prep', 'Game', 'BattleResults', 'EquipScreen', 'DebugLevelSelect', 'UpgradeTreeScreen'];
+  private readonly GAME_SCENES = ['MainMenu', 'WorldMap', 'Prep', 'Game', 'BattleResults', 'EquipScreen', 'DebugLevelSelect', 'UpgradeTreeScreen', 'MapVictory'];
 
   private syncPhaserScenes(phase: GamePhase): void {
     const sm = this.game.scene;
@@ -561,6 +599,7 @@ class PhaseManagerClass {
       case 'debug_equip_screen':nextScene = 'EquipScreen';      break;
       case 'debug_level_select':nextScene = 'DebugLevelSelect'; break;
       case 'upgrade_tree':      nextScene = 'UpgradeTreeScreen'; break;
+      case 'map_victory':       nextScene = 'MapVictory';        break;
       default: return;
     }
     for (const key of this.GAME_SCENES) {
@@ -572,7 +611,7 @@ class PhaseManagerClass {
 
 // ─── Pure transition logic — no Phaser imports, no GameState access ───────────
 
-export function resolveTransition(current: GamePhase, action: PhaseAction): GamePhase | null {
+export function resolveTransition(current: GamePhase, action: PhaseAction, mapCleared = false): GamePhase | null {
   switch (action.type) {
 
     case 'new_game':
@@ -585,6 +624,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
       return {
         type: 'debug_equip_screen',
         selectedUnitTemplateId: '',
+        selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
         availableUnits: [],
         backpack: EMPTY_BACKPACK_SNAPSHOT,
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,
@@ -638,10 +678,14 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
         type: 'battle_results',
         units: action.participants.map(p => ({ ...p, newLevel: p.level + 1 })),
         returnPhase: current.returnPhase,
+        mapCleared,
       };
 
     case 'exit_results':
       if (current.type !== 'battle_results') return null;
+      if (current.mapCleared && current.returnPhase.type === 'world_map') {
+        return { type: 'map_victory', mapId: current.returnPhase.mapId };
+      }
       return current.returnPhase;
 
     case 'replay':
@@ -658,6 +702,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction): Game
       return {
         type: 'equip_screen',
         selectedUnitTemplateId: action.unitTemplateId,
+        selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
         returnPhase: current,
         backpack: EMPTY_BACKPACK_SNAPSHOT,    // filled by rebuildSnapshot
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,  // filled by rebuildSnapshot
@@ -765,6 +810,20 @@ function allMobsDead(mapDef: SubMapDefinition, mapState: SubMapState): boolean {
     }
   }
   return true;
+}
+
+/** True if winning the current world-map battle would leave no live mobs on the map. */
+function wouldClearMap(battlePhase: GamePhase & { type: 'battle' }): boolean {
+  if (battlePhase.isDebug || !battlePhase.mapId || !battlePhase.triggerPos) return false;
+  const mapDef   = MAP_DEFINITIONS[battlePhase.mapId];
+  const mapState = GameState.subMapStates[battlePhase.mapId];
+  if (!mapDef || !mapState) return false;
+
+  const key = `${battlePhase.triggerPos.x},${battlePhase.triggerPos.y}`;
+  const virtualEntityStates = { ...mapState.entityStates, [key]: { alive: false } };
+  const virtualMapState: SubMapState = { ...mapState, entityStates: virtualEntityStates };
+
+  return allMobsDead(mapDef, virtualMapState);
 }
 
 export const PhaseManager = new PhaseManagerClass();

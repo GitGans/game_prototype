@@ -45,6 +45,7 @@ export interface BattleParticipant {
   level: number;       // current level BEFORE +1
   isAlive: boolean;
   wasOnBench: boolean;
+  spriteKey: string | null;
 }
 
 /** Display data for BattleResults scene — level already incremented. */
@@ -54,6 +55,7 @@ export interface BattleResultUnit {
   newLevel: number;    // level AFTER +1
   isAlive: boolean;
   wasOnBench: boolean;
+  spriteKey: string | null;
 }
 
 export interface UnitStatValueSnapshot {
@@ -78,7 +80,7 @@ export type GamePhase =
   | { type: 'main_menu' }
   | { type: 'world_map'; mapId: string; partyPos: { x: number; y: number } }
   | { type: 'map_victory'; mapId: string }
-  | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase }
+  | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase; mapCleared: boolean }
   | {
       type: 'battle';
       enemyGroupId: string;
@@ -93,6 +95,7 @@ export type GamePhase =
   | {
       type: 'debug_equip_screen';
       selectedUnitTemplateId: string;
+      selectedUnitSpriteKey: string | null;
       availableUnits: UnitTabSnapshot[];
       backpack: BackpackSnapshot;
       unitEquipment: EquipmentSnapshot;
@@ -104,6 +107,7 @@ export type GamePhase =
   | {
       type: 'equip_screen';
       selectedUnitTemplateId: string;
+      selectedUnitSpriteKey: string | null;
       returnPhase: GamePhase;
       backpack: BackpackSnapshot;
       unitEquipment: EquipmentSnapshot;

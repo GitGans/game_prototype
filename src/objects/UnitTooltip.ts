@@ -5,6 +5,7 @@ import { BaseTooltip } from "../ui/BaseTooltip";
 import { Unit, UnitBlueprint } from "../battle/types";
 import { effectiveStats } from "../battle/combat";
 import type { UnitStatsSnapshot } from '../core/phases';
+import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 
 const W           = Math.round(200 * LAYOUT_SCALE);
 const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
@@ -36,6 +37,7 @@ interface TooltipData {
     damageBlock?: { damageType: string };
     isActive:    boolean;
   }>;
+  spriteKey?: string | null;
 }
 
 interface BuildOptions {
@@ -68,6 +70,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     anchorX:   number,
     anchorY:   number,
     overrideW?: number,
+    spriteKeyOverride?: string | null,
   ): void {
     const scale = 1 + 0.1 * (level - 1);
     const data: TooltipData = {
@@ -88,6 +91,9 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
         damageBlock: s.damageBlock,
         isActive:    false,
       })),
+      spriteKey: spriteKeyOverride !== undefined
+        ? spriteKeyOverride
+        : (bp.spriteSheet ? getUnitSpriteTextureKey(bp.templateId, bp.spriteSheet) : null),
     };
     if (overrideW !== undefined) {
       this.clearContent();
@@ -130,6 +136,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
       skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+      spriteKey: bp.spriteSheet ? getUnitSpriteTextureKey(bp.templateId, bp.spriteSheet) : null,
     };
     this.clearContent();
     const h = this.buildContent(data);
@@ -229,8 +236,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 
     if (opts.showSprite !== false) {
       // Sprite or fallback color rect
-      const spriteKey = `sprite-${data.templateId}`;
-      if (scene.textures.exists(spriteKey)) {
+      const spriteKey = data.spriteKey ?? null;
+      if (spriteKey && scene.textures.exists(spriteKey)) {
         const img = scene.add.image(pad + SPRITE_SIZE / 2, y + SPRITE_SIZE / 2, spriteKey);
         img.setDisplaySize(SPRITE_SIZE, SPRITE_SIZE).setOrigin(0.5);
         this.add(img);
@@ -333,5 +340,8 @@ function unitToData(unit: Unit): TooltipData {
       damageBlock: s.damageBlock,
       isActive:    i === unit.activeSkillIndex,
     })),
+    spriteKey: unit.spriteSheet
+      ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
+      : null,
   };
 }

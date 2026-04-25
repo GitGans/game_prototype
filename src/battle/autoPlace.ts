@@ -1,4 +1,5 @@
-import { BattleState, CellCoord, Col, Row, Skill, Unit, UnitBlueprint, UnitRace, ItemInstance, ItemContainer } from './types';
+import { BattleState, BenchUnitSnapshot, CellCoord, Col, Row, Skill, Unit, UnitBlueprint, UnitRace, ItemInstance, ItemContainer } from './types';
+import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
 import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
@@ -6,7 +7,7 @@ import { BENCH_SLOTS } from '../core/Constants';
 import { GameState, PlayerUnitState } from '../core/GameState';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from './itemOps';
-import { resolveUnitSkills, resolveChosenUnitUpgrades, computeUnitUpgradeStatModifiers } from '../core/unitProgression';
+import { resolveUnitSkills, resolveChosenUnitUpgrades, computeUnitUpgradeStatModifiers, resolveUnitSpriteSheet } from '../core/unitProgression';
 
 export interface PlayerBattleSetup {
   playerUnits: Record<string, PlayerUnitState>;
@@ -57,6 +58,10 @@ export function createUnitInstance(
     ? resolveUnitSkills(blueprint, setup.unitState.chosenUpgrades)
     : resolveEnemySkills(blueprint, level);
 
+  const spriteSheet = setup?.unitState
+    ? resolveUnitSpriteSheet(blueprint, setup.unitState.chosenUpgrades)
+    : blueprint.spriteSheet;
+
   return {
     id,
     name:                blueprint.name,
@@ -77,8 +82,20 @@ export function createUnitInstance(
     rowTrait:            blueprint.rowTrait,
     race:                blueprint.race,
     templateId:          blueprint.templateId,
+    spriteSheet,
     activeEffects:       [],
     activatableAbilities,
+  };
+}
+
+export function benchSnapshotFromUnit(unit: Unit): BenchUnitSnapshot {
+  return {
+    templateId: unit.templateId,
+    name: unit.name,
+    level: unit.level,
+    spriteKey: unit.spriteSheet
+      ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
+      : null,
   };
 }
 
@@ -104,12 +121,19 @@ export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): 
   const availableUnits = PLAYER_UNITS.filter(u => !playerUnitsState[u.templateId]?.isInCamp);
 
   let counter = 1;
-  const paddedBench: (UnitBlueprint | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
+  const paddedBench: (BenchUnitSnapshot | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
 
   const addToBench = (def: UnitBlueprint): boolean => {
     const slot = paddedBench.indexOf(undefined);
     if (slot === -1) return false;
-    paddedBench[slot] = def;
+    const unitState = playerUnitsState[def.templateId];
+    const sheet = resolveUnitSpriteSheet(def, unitState?.chosenUpgrades ?? {});
+    paddedBench[slot] = {
+      templateId: def.templateId,
+      name: def.name,
+      level: unitState?.level ?? def.level,
+      spriteKey: sheet ? getUnitSpriteTextureKey(def.templateId, sheet) : null,
+    };
     return true;
   };
 
