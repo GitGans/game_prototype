@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { LAYOUT_SCALE, COLORS } from "../core/Constants";
 import { TOOLTIP, fontSize, VALUE_COLOR } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
-import { Unit, UnitBlueprint, BenchUnitSnapshot } from "../battle/types";
+import { Unit, BenchUnitSnapshot } from "../battle/types";
 import { effectiveStats } from "../battle/combat";
 import type { UnitStatsSnapshot } from '../core/phases';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
@@ -68,81 +68,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     super.show(unitToData(unit), anchorX, anchorY, side);
   }
 
-  showFromBlueprint(
-    bp:        UnitBlueprint,
-    level:     number,
-    side:      "player" | "enemy",
-    anchorX:   number,
-    anchorY:   number,
-    overrideW?: number,
-    spriteKeyOverride?: string | null,
-  ): void {
-    const scale = 1 + 0.1 * (level - 1);
-    const data: TooltipData = {
-      templateId:      bp.templateId,
-      name:            bp.name,
-      side,
-      hp:              flat(Math.round(bp.hp * scale)),
-      maxHp:           flat(Math.round(bp.hp * scale)),
-      physicalDamage:  flat(Math.round(bp.physicalDamage  * scale)),
-      magicalDamage:   flat(Math.round(bp.magicalDamage   * scale)),
-      physicalDefense: flat(bp.physicalDefense),
-      magicalDefense:  flat(bp.magicalDefense),
-      dodge:           flat(bp.dodge),
-      block:           flat(bp.block),
-      initiative:      flat(bp.initiative),
-      skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({
-        name:        s.name,
-        damageBlock: s.damageBlock,
-        isActive:    false,
-      })),
-      spriteKey: spriteKeyOverride !== undefined
-        ? spriteKeyOverride
-        : (bp.spriteSheet ? getUnitSpriteTextureKey(bp.templateId, bp.spriteSheet) : null),
-    };
-    if (overrideW !== undefined) {
-      this.clearContent();
-      const h = this.buildContent(data);
-      this.bg.setSize(overrideW, h);
-      this.setPosition(anchorX, anchorY);
-      this.setVisible(true);
-    } else {
-      super.show(data, anchorX, anchorY, side === "player" ? "right" : "left");
-    }
-  }
-
   showFixed(unit: Unit, x: number, y: number, w: number): void {
     const data = unitToData(unit);
-    this.clearContent();
-    const h = this.buildContent(data);
-    this.bg.setSize(w, h);
-    this.setPosition(x, y);
-    this.setVisible(true);
-  }
-
-  showFixedFromBlueprint(
-    bp:      UnitBlueprint,
-    level:   number,
-    bonuses: Partial<import('../battle/types').BattleStatBonuses>,
-    x: number, y: number, w: number,
-  ): void {
-    const scale = 1 + 0.1 * (level - 1);
-    const data: TooltipData = {
-      templateId:      bp.templateId,
-      name:            bp.name,
-      side:            'player',
-      hp:              { value: Math.round(bp.hp * scale) + (bonuses.hp ?? 0), base: Math.round(bp.hp * scale) },
-      maxHp:           { value: Math.round(bp.hp * scale) + (bonuses.hp ?? 0), base: Math.round(bp.hp * scale) },
-      physicalDamage:  { value: Math.round(bp.physicalDamage  * scale) + (bonuses.physicalDamage  ?? 0), base: Math.round(bp.physicalDamage  * scale) },
-      magicalDamage:   { value: Math.round(bp.magicalDamage   * scale) + (bonuses.magicalDamage   ?? 0), base: Math.round(bp.magicalDamage   * scale) },
-      physicalDefense: { value: bp.physicalDefense + (bonuses.physicalDefense ?? 0), base: bp.physicalDefense },
-      magicalDefense:  { value: bp.magicalDefense  + (bonuses.magicalDefense  ?? 0), base: bp.magicalDefense  },
-      dodge:           flat(bp.dodge),
-      block:           flat(bp.block),
-      initiative:      flat(bp.initiative),
-      skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
-      spriteKey: bp.spriteSheet ? getUnitSpriteTextureKey(bp.templateId, bp.spriteSheet) : null,
-    };
     this.clearContent();
     const h = this.buildContent(data);
     this.bg.setSize(w, h);
@@ -196,6 +123,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.setVisible(true);
   }
 
+  // Bench preview represents an uninjured reserve unit for battle setup.
   showBenchSnapshot(
     snapshot: BenchUnitSnapshot,
     anchorX:  number,
@@ -233,34 +161,6 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     } else {
       super.show(data, anchorX, anchorY, 'right');
     }
-  }
-
-  showFixedSkillsOnly(
-    bp:    UnitBlueprint,
-    level: number,
-    x: number, y: number, w: number,
-  ): void {
-    const scale = 1 + 0.1 * (level - 1);
-    const data: TooltipData = {
-      templateId:      bp.templateId,
-      name:            bp.name,
-      side:            'player',
-      hp:              flat(Math.round(bp.hp * scale)),
-      maxHp:           flat(Math.round(bp.hp * scale)),
-      physicalDamage:  flat(Math.round(bp.physicalDamage  * scale)),
-      magicalDamage:   flat(Math.round(bp.magicalDamage   * scale)),
-      physicalDefense: flat(bp.physicalDefense),
-      magicalDefense:  flat(bp.magicalDefense),
-      dodge:           flat(bp.dodge),
-      block:           flat(bp.block),
-      initiative:      flat(bp.initiative),
-      skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
-    };
-    this.clearContent();
-    const h = this.buildContent(data, { showSprite: false, showStats: false });
-    this.bg.setSize(w, h);
-    this.setPosition(x, y);
-    this.setVisible(true);
   }
 
   // ── Content builder ────────────────────────────────────────────────────────

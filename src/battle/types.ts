@@ -145,6 +145,9 @@ export type BattleMode = 'manual' | 'auto' | 'quick';
 
 import type { UnitStatsSnapshot, SkillIconSnapshot } from '../shared/unitSnapshots';
 
+// Display snapshot for the current battle setup.
+// Rebuild when player upgrades, equipment, permanent bonuses, or debug setup change.
+// Stale snapshot prevention is not enforced at runtime — this is a known limitation.
 export interface BenchUnitSnapshot {
   templateId: string;
   name:       string;

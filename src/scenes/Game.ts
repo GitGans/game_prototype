@@ -501,16 +501,16 @@ export class Game extends Phaser.Scene {
     const startY = (gridTopY + gridBottomY) / 2 - totalH / 2 + cardH / 2;
 
     for (let i = 0; i < BENCH_SLOTS; i++) {
-      const bp = state.benchUnits[i] ?? null;
+      const benchSnapshot = state.benchUnits[i] ?? null;
       const cardY = startY + i * (cardH + slotGap);
       const isSelected = this.selectedBenchIdx === i;
-      const card = this.makeBenchCard(bp, i, panelX, cardY, isSelected, interactive);
+      const card = this.makeBenchCard(benchSnapshot, i, panelX, cardY, isSelected, interactive);
       this.benchCards.push(card);
     }
   }
 
   private makeBenchCard(
-    bp: BenchUnitSnapshot | null,
+    benchSnapshot: BenchUnitSnapshot | null,
     idx: number,
     x: number,
     y: number,
@@ -521,7 +521,7 @@ export class Game extends Phaser.Scene {
     const borderThickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
 
     // ── Empty slot ──────────────────────────────────────────────────────────
-    if (bp === null) {
+    if (benchSnapshot === null) {
       const emptyBorder = this.add.rectangle(0, 0, BENCH_PANEL_WIDTH, cardH, COLORS.cellBorder);
       const emptyBg = this.add.rectangle(
         0, 0,
@@ -554,14 +554,14 @@ export class Game extends Phaser.Scene {
 
     // Sprite (frame 0 = idle) — only when texture is loaded for this snapshot
     const spriteObj =
-      bp.spriteKey && this.textures.exists(bp.spriteKey)
-        ? this.add.image(0, 0, bp.spriteKey).setFrame(0).setDisplaySize(BENCH_PANEL_WIDTH - 2, cardH - 2)
+      benchSnapshot.spriteKey && this.textures.exists(benchSnapshot.spriteKey)
+        ? this.add.image(0, 0, benchSnapshot.spriteKey).setFrame(0).setDisplaySize(BENCH_PANEL_WIDTH - 2, cardH - 2)
         : null;
 
     // Name
     const nameText = this.add.text(
       0, -cardH / 2 + Math.round(10 * LAYOUT_SCALE),
-      bp.name,
+      benchSnapshot.name,
       {
         fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
         color: COLORS.label,
@@ -574,7 +574,7 @@ export class Game extends Phaser.Scene {
     ).setOrigin(0.5, 0);
 
     // HP text + HP bar
-    const hp = bp.stats.maxHp.value;
+    const hp = benchSnapshot.stats.maxHp.value;
     const barW = BENCH_PANEL_WIDTH - Math.round(12 * LAYOUT_SCALE);
     const barH = Math.round(6 * LAYOUT_SCALE);
     const barY = cardH / 2 - Math.round(10 * LAYOUT_SCALE);
@@ -605,7 +605,7 @@ export class Game extends Phaser.Scene {
       container.on("pointerup", () => this.onBenchCardClick(idx));
       container.on("pointerover", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(COLORS.benchHover, 0.9);
-        this.unitTooltip.showBenchSnapshot(bp, this.logX, this.logY, this.logW);
+        this.unitTooltip.showBenchSnapshot(benchSnapshot, this.logX, this.logY, this.logW);
       });
       container.on("pointerout", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(fillColor, 0.9);
@@ -642,9 +642,9 @@ export class Game extends Phaser.Scene {
       const fieldUnit = [...state.units.values()].find(
         (u) => u.id === this.selectedFieldUnitId,
       );
-      const bp = state.benchUnits[idx];
-      if (fieldUnit && bp) {
-        this.swapBenchWithField(bp, idx, fieldUnit);
+      const benchUnit = state.benchUnits[idx];
+      if (fieldUnit && benchUnit) {
+        this.swapBenchWithField(benchUnit, idx, fieldUnit);
       }
       this.selectedFieldUnitId = null;
       this.clearPlacementHighlights();
@@ -706,15 +706,15 @@ export class Game extends Phaser.Scene {
     const unitAtCell = state.occupancy.cellToUnit.get(cellKey(coord));
 
     if (this.selectedBenchIdx !== null) {
-      const bp = state.benchUnits[this.selectedBenchIdx];
-      if (!bp) return;
+      const benchUnit = state.benchUnits[this.selectedBenchIdx];
+      if (!benchUnit) return;
 
       if (!unitAtCell) {
         // Place on empty cell
-        this.placeBenchUnitOnField(bp, this.selectedBenchIdx, coord);
+        this.placeBenchUnitOnField(benchUnit, this.selectedBenchIdx, coord);
       } else {
         // Swap: field unit goes to bench, bench unit takes its place
-        this.swapBenchWithField(bp, this.selectedBenchIdx, unitAtCell);
+        this.swapBenchWithField(benchUnit, this.selectedBenchIdx, unitAtCell);
       }
       this.selectedBenchIdx = null;
       this.buildBenchPanel();
