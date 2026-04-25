@@ -1,56 +1,65 @@
 # scenes
 
 ## Role
-Orchestration layer that wires game flow together. Scenes manage the Phaser lifecycle, respond to user input by calling `PhaseManager.transition()`, and render state read from `PhaseManager.getPhase()`. This is the only layer that imports from all other layers.
+
+Scenes are the UI orchestration layer of the game. Each scene corresponds to exactly one `GamePhase`, reads all display data from `PhaseManager.getPhase()`, and triggers transitions via `PhaseManager.transition()`. Scenes never manage game state or scene lifecycle directly.
 
 ## Responsibilities
-- Manage Phaser scene lifecycle (create, update, destroy)
-- Wire user input events to `PhaseManager.transition()` calls
-- Read display data from `PhaseManager.getPhase()` and delegate rendering to `src/objects/`
-- Load all assets at startup (sprites, item icons)
-- Coordinate battle flow: placement → turns → targeting → combat resolution → game-over
-- Bridge the world map exploration loop with battle and camp phases
+
+- Compose `src/ui/` and `src/objects/` components into full-screen layouts
+- Handle user input (clicks, keypresses) and route to `PhaseManager`
+- Re-render on `EventBus` state-change events
+- Read all display data exclusively from the current `GamePhase` snapshot
+- Never write to `GameState` or decide the next phase
 
 ## Key Files
-- `Boot.ts` — first scene; initializes PhaseManager and hands off to Preloader
-- `Preloader.ts` — loads all sprite sheets and item icons; starts MainMenu when done
-- `MainMenu.ts` — title screen; entry point for new game and debug battle flows
-- `Game.ts` — full battle orchestrator: placement, initiative, turns, combat, game-over detection
-- `Prep.ts` — pre-battle camp screen: unit benching, enemy group selection, equip access
-- `EquipScreen.ts` — equipment management: equip/unequip items, browse backpack, view unit stats
-- `WorldMap.ts` — overworld grid: party movement, mob encounters, portal and NPC interactions
-- `MapVictory.ts` — post-battle victory screen; exits to MainMenu
+
+- `Boot.ts` — entry point; initializes `PhaseManager` singleton, delegates to Preloader
+- `Preloader.ts` — loads sprite sheets and item icons from unit/item definitions
+- `MainMenu.ts` — title screen; triggers `new_game` or `debug` transitions
+- `Game.ts` — full battle orchestrator: placement phase, turn queue, combat resolution, game-over; reads `enemyGroupId`, `returnPhase`, `isDebug` from phase
+- `Prep.ts` — camp screen: unit benching, party panel, enemy group selector; reads `units[]` snapshot
+- `EquipScreen.ts` — character detail and equipment management; handles both `equip_screen` and `debug_equip_screen` phases
+- `UpgradeTreeScreen.ts` — skill upgrade tree: 4 tiers × 4 options; reads `upgradeTiers[]` snapshot, triggers `choose_upgrade`
+- `WorldMap.ts` — overworld grid: party movement, mob encounters, camp/portal interactions; reads `mapId` and `partyPos`
+- `MapVictory.ts` — post-map victory screen; transitions to `exit_to_menu`
+- `DebugLevelSelect.ts` — debug-only level selector (1–30); triggers `init_debug`
 
 ## Structural Role
-scenes → sole orchestration layer; reads phases, calls transitions, renders via objects/
+
+scenes → UI orchestration + user input routing
 
 ## Data Flow
+
 User input (click / keypress)
 ↓
-Scene calls PhaseManager.transition(action)
+Scene calls PhaseManager.transition({ type: '...' })
 ↓
-PhaseManager resolves next GamePhase and mutates GameState
+PhaseManager resolves next GamePhase (pure) + applies side effects
 ↓
-PhaseManager.syncPhaserScenes() starts the correct scene
+PhaseManager starts the correct scene
 ↓
-New scene reads PhaseManager.getPhase() and renders state
+Scene reads PhaseManager.getPhase() and renders
 
 ## Dependencies
-- depends on: `core/PhaseManager`, `core/GameState`, `core/EventBus`, `core/Constants`, `battle/*`, `data/*`, `objects/*`, `world/*`
-- used by: `src/config.ts` (scene registry), `src/main.ts` (game bootstrap)
+
+- depends on: `src/core/` (PhaseManager, GameState, EventBus, Constants), `src/objects/` (UnitView, CellView, InitiativeBar, etc.), `src/ui/` (Button, theme), `src/data/` (unit/item/map definitions), `src/battle/` (combat logic used by Game.ts)
+- used by: nothing — scenes are leaf nodes in the dependency graph
 
 ## Invariants
-- Scenes MUST NOT call `this.scene.start()`, `this.scene.launch()`, or `this.scene.stop()` directly (Boot and Preloader are exempt)
-- Scenes MUST NOT decide what the next phase is — that belongs to `resolveTransition()` in PhaseManager
-- Scenes MUST NOT write to `GameState` directly from UI components — mutations go through `PhaseManager.transition()`
-- All display data must be read from `PhaseManager.getPhase()` in `create()`, not stored in local scene fields from prior phases
-- `src/objects/` components used here are read-only — they never mutate GameState
+
+- Scenes never call `this.scene.start/stop/launch` (Boot and Preloader are the only exceptions)
+- All display data must come from `PhaseManager.getPhase()`, never from cached local state
+- Scenes never call `resolveTransition` or mutate `GameState` directly
+- Transition decisions (what comes next) belong in `PhaseManager`, not in scenes
+- No data is passed between scenes via `scene.start(key, data)` — use `GamePhase` only
 
 ## Where to Modify
-- change battle flow or game-over logic → `Game.ts`
-- change prep/camp screen (benching, enemy selector) → `Prep.ts`
-- change equipment UI or item use → `EquipScreen.ts`
-- change world map movement or encounter triggers → `WorldMap.ts`
-- change title screen or game entry → `MainMenu.ts`
-- add a new sprite or item icon → `Preloader.ts` + `public/assets/sprites/`
-- add a new game screen → `src/core/phases.ts` → `PhaseManager.ts` → new scene here → `src/config.ts`
+
+- change battle UI or turn flow → `Game.ts`
+- change camp/bench layout → `Prep.ts`
+- change equipment or backpack layout → `EquipScreen.ts`
+- change skill upgrade display → `UpgradeTreeScreen.ts`
+- change overworld movement or map rendering → `WorldMap.ts`
+- add a new screen → create new scene file + add corresponding `GamePhase` type + wire in `PhaseManager`
+- change asset loading → `Preloader.ts`

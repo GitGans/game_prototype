@@ -1,50 +1,48 @@
-# data/
+# data
 
 ## Role
-Static game content layer. Contains all definitions for units, items, skills, maps, and enemy encounter groups. No runtime logic — only constant data consumed by the rest of the system.
+Central game data definitions layer — all playable content, combat configurations, and world layouts live here. No logic, only structured declarations consumed by the rest of the system.
 
 ## Responsibilities
-- Define all player and enemy unit blueprints with stats, shapes, and skill references
-- Define the player's starting party composition
-- Define all equippable and consumable items with stat bonuses and use effects
-- Define all named skills with AoE damage matrices and effect patterns
-- Define world map layouts with terrain grids and entity placements
-- Group enemy units into named encounter compositions
+- Define all unit blueprints (player and enemy) with stats, skills, and progression tiers
+- Declare all skills, damage patterns, effects, and their level scaling
+- Specify item properties, stat bonuses, and usage types
+- Describe world map layouts, tile types, and entity placements
+- Group enemy encounter configurations by race and variant
 
 ## Key Files
-- `unitDefinitions.ts` — player unit blueprints (`PLAYER_UNITS`, `PLAYER_STARTING_IDS`) and enemy pools (`ENEMY_UNITS` keyed by race)
-- `skillDefinitions.ts` — skill records (`SKILLS`), AoE grids (`DAMAGE_MATRICES`, `EFFECT_MATRICES`, `INSTANT_EFFECT_MATRICES`), leveled modifiers, and pure pattern lookup helpers
-- `itemDefinitions.ts` — item records (`ITEM_DEFINITIONS`) and `getItemDescription()` display helper
-- `mapDefinitions.ts` — world map layouts (`MAP_DEFINITIONS`) with terrain and entity placement grids
-- `enemyGroupDefinitions.ts` — named encounter groups (`ENEMY_GROUPS`) with race references and optional level overrides
+- `unitDefinitions.ts` — player unit blueprints (`PLAYER_UNITS`), enemy templates by race (`ENEMY_UNITS`), starting roster IDs
+- `skillDefinitions.ts` — skill catalog (`SKILLS`), damage/effect matrices, level-scaling helpers (`getSkillPattern`, `getEffectPattern`, etc.)
+- `itemDefinitions.ts` — item catalog (`ITEM_DEFINITIONS`), stat bonus descriptions (`getItemDescription`)
+- `enemyGroupDefinitions.ts` — encounter group configs (`ENEMY_GROUPS`), maps group id → race + optional level override
+- `mapDefinitions.ts` — world map grid layouts (`MAP_DEFINITIONS`) with tile types, mob spawns, and player start positions
 
 ## Structural Role
-`data/` → single source of truth for all static game content; no logic, no state
+`src/data` → declarative content layer consumed by battle, world, and UI systems
 
 ## Data Flow
-Static constant definitions
+Unit/skill/item/map definitions (static config)
 ↓
-Imported by `GameState`, `autoPlace`, `Prep`, `Game`, `mapLogic` at startup
+Imported by core managers (PhaseManager) and battle/scene modules
 ↓
-Instantiated into live unit, item, and map objects at runtime
+Runtime queries (e.g. getSkillPattern at level N)
+↓
+Game state populated and rendered
 
 ## Dependencies
-- depends on: `src/battle/types.ts` (type definitions), `src/battle/shapes.ts` (SHAPES)
-- used by: `src/core/GameState.ts`, `src/battle/autoPlace.ts`, `src/scenes/Prep.ts`, `src/scenes/Game.ts`, `src/world/mapLogic.ts`
+- depends on: `src/battle/types.ts` (shared type interfaces for units, skills, items, effects)
+- used by: `src/core/PhaseManager.ts` (initialization), `src/battle/` (combat calculation), `src/scenes/` (rendering and world state), `src/objects/` (tooltips and upgrade UI)
 
 ## Invariants
-- No runtime logic — only data declarations and pure lookup helpers
-- May only import from `src/battle/types.ts` and `src/battle/shapes.ts`; no Phaser, no other layers
-- All `templateId`, item `id`, skill `id`, and map `id` values must be globally unique
-- `PLAYER_STARTING_IDS` must only reference `templateId`s that exist in `PLAYER_UNITS`
-- Sprite paths must match actual assets under `public/assets/sprites/`
+- Skill level indices are 0-based (level 1 = index 0 in matrices)
+- Damage multipliers use 0–1 scale (1.0 = 100%)
+- Every skill referenced in a unit blueprint must exist in `SKILLS`
+- Enemy units use the same `SKILLS` table as player units — no separate enemy-only skill catalog
+- `PLAYER_STARTING_IDS` entries must correspond to valid `PLAYER_UNITS` template ids
 
 ## Where to Modify
-- add or edit a player unit → `unitDefinitions.ts` → `PLAYER_UNITS`
-- change starting party → `unitDefinitions.ts` → `PLAYER_STARTING_IDS`
-- add or edit an enemy unit → `unitDefinitions.ts` → `ENEMY_UNITS`
-- add or edit an item → `itemDefinitions.ts` → `ITEM_DEFINITIONS`
-- add or edit a skill → `skillDefinitions.ts` → `SKILLS`
-- add an AoE damage or effect pattern → `skillDefinitions.ts` → `DAMAGE_MATRICES` / `EFFECT_MATRICES`
-- add or edit a map → `mapDefinitions.ts` → `MAP_DEFINITIONS`
-- add or edit an encounter group → `enemyGroupDefinitions.ts` → `ENEMY_GROUPS`
+- add/change a unit stat or skill tier → `unitDefinitions.ts`
+- add/change a skill, damage pattern, or effect → `skillDefinitions.ts`
+- add/change an item or stat bonus → `itemDefinitions.ts`
+- add/change an enemy encounter group → `enemyGroupDefinitions.ts`
+- add/change a world map layout → `mapDefinitions.ts`

@@ -3,6 +3,7 @@ import {
   BattleStatBonuses, UnitClass,
   BackpackSnapshot, EquipmentSnapshot, ItemSlotSnapshot,
   UnitActivatableAbility, UnitBlueprint,
+  UnitProgressionStatModifiers, UnitBattleStats,
 } from './types';
 
 // ─── Low-level ────────────────────────────────────────────────────────────────
@@ -220,9 +221,10 @@ export function unequipItem(
   containers: Record<string, ItemContainer>,
   instances: Record<string, ItemInstance>,
   definitions: Record<string, ItemDefinition>,
+  backpackId: string = 'backpack_shared',
 ): boolean {
   const equipContainerId    = `equip_${unitTemplateId}`;
-  const backpackContainerId = 'backpack_shared';
+  const backpackContainerId = backpackId;
 
   const equipContainer    = containers[equipContainerId];
   const backpackContainer = containers[backpackContainerId];
@@ -292,16 +294,20 @@ export function computeUnitBattleStats(
   instances: Record<string, ItemInstance>,
   definitions: Record<string, ItemDefinition>,
   permanentBonuses: Record<string, Partial<BattleStatBonuses>>,
-): BattleStatBonuses {
+  upgradeModifiers: UnitProgressionStatModifiers = {},
+): UnitBattleStats {
   const scale = 1 + 0.1 * (level - 1);
   const equip = getEquippedBonuses(blueprint.templateId, containers, instances, definitions);
   const perm  = permanentBonuses[blueprint.templateId] ?? {};
   return {
-    hp:              Math.round(blueprint.hp             * scale) + equip.hp              + (perm.hp              ?? 0),
-    physicalDamage:  Math.round(blueprint.physicalDamage * scale) + equip.physicalDamage  + (perm.physicalDamage  ?? 0),
-    magicalDamage:   Math.round(blueprint.magicalDamage  * scale) + equip.magicalDamage   + (perm.magicalDamage   ?? 0),
-    physicalDefense: blueprint.physicalDefense                    + equip.physicalDefense + (perm.physicalDefense ?? 0),
-    magicalDefense:  blueprint.magicalDefense                     + equip.magicalDefense  + (perm.magicalDefense  ?? 0),
+    hp:              Math.round(blueprint.hp             * scale) + (upgradeModifiers.hp              ?? 0) + equip.hp              + (perm.hp              ?? 0),
+    physicalDamage:  Math.round(blueprint.physicalDamage * scale) + (upgradeModifiers.physicalDamage  ?? 0) + equip.physicalDamage  + (perm.physicalDamage  ?? 0),
+    magicalDamage:   Math.round(blueprint.magicalDamage  * scale) + (upgradeModifiers.magicalDamage   ?? 0) + equip.magicalDamage   + (perm.magicalDamage   ?? 0),
+    physicalDefense: blueprint.physicalDefense                    + (upgradeModifiers.physicalDefense ?? 0) + equip.physicalDefense + (perm.physicalDefense ?? 0),
+    magicalDefense:  blueprint.magicalDefense                     + (upgradeModifiers.magicalDefense  ?? 0) + equip.magicalDefense  + (perm.magicalDefense  ?? 0),
+    dodge:           blueprint.dodge      + (upgradeModifiers.dodge      ?? 0),
+    block:           blueprint.block      + (upgradeModifiers.block      ?? 0),
+    initiative:      blueprint.initiative + (upgradeModifiers.initiative ?? 0),
   };
 }
 

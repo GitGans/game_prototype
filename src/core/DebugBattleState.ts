@@ -9,7 +9,7 @@ export interface DebugBattleState {
   unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>>;
   playerUnitPlacements: Record<string, CellCoord>;
   playerBenchIds: string[] | null;
-  chosenSkills: Record<string, Partial<Record<0 | 5 | 10 | 15 | 20, string>>>;
+  chosenUpgrades: Record<string, Partial<Record<5 | 10 | 15 | 20, string>>>;
 }
 
 export function createDebugBattleState(level: number): DebugBattleState {
@@ -42,6 +42,6 @@ export function createDebugBattleState(level: number): DebugBattleState {
     unitPermanentBonuses: {},
     playerUnitPlacements: {},
     playerBenchIds: null,
-    chosenSkills: {},
+    chosenUpgrades: {},
   };
 }

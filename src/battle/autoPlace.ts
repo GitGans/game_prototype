@@ -1,4 +1,5 @@
-import { BattleState, CellCoord, Col, Row, Skill, Unit, UnitBlueprint, UnitRace, ItemInstance, ItemContainer } from './types';
+import { BattleState, BenchUnitSnapshot, CellCoord, Col, Row, Skill, Unit, UnitBlueprint, UnitRace, ItemInstance, ItemContainer } from './types';
+import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
 import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
@@ -6,6 +7,7 @@ import { BENCH_SLOTS } from '../core/Constants';
 import { GameState, PlayerUnitState } from '../core/GameState';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from './itemOps';
+import { resolveUnitSkills, resolveChosenUnitUpgrades, computeUnitUpgradeStatModifiers, resolveUnitSpriteSheet } from '../core/unitProgression';
 
 export interface PlayerBattleSetup {
   playerUnits: Record<string, PlayerUnitState>;
@@ -13,22 +15,8 @@ export interface PlayerBattleSetup {
   itemInstances: Record<string, ItemInstance>;
 }
 
-function resolvePlayerSkills(blueprint: UnitBlueprint, unitState: PlayerUnitState): Skill[] {
-  const skills: Skill[] = [];
-  for (const tier of blueprint.skillTiers) {
-    const chosenId = unitState.chosenSkills[tier.unlocksAtLevel];
-    if (chosenId) {
-      const skill = tier.options.find(s => s.id === chosenId);
-      if (skill) skills.push(skill);
-    } else if (tier.unlocksAtLevel === 0 && tier.options.length > 0) {
-      skills.push(tier.options[0]); // fallback: auto-assign tier 0
-    }
-  }
-  return skills;
-}
-
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): Skill[] {
-  const base = blueprint.skillTiers
+  const base = (blueprint.skillTiers ?? [])
     .filter(t => t.unlocksAtLevel === 0)
     .flatMap(t => t.options.slice(0, 1));
   const leveled = (blueprint.levelSkills ?? [])
@@ -50,20 +38,29 @@ export function createUnitInstance(
   const containers = setup?.itemContainers ?? GameState.itemContainers;
   const instances  = setup?.itemInstances  ?? GameState.itemInstances;
   const bonuses    = setup?.unitState?.permanentBonuses ?? {};
+  const chosenUpgrades = setup?.unitState
+    ? resolveChosenUnitUpgrades(blueprint, setup.unitState.chosenUpgrades)
+    : [];
+  const upgradeModifiers = computeUnitUpgradeStatModifiers(chosenUpgrades);
   const stats = computeUnitBattleStats(
     blueprint, level,
     containers,
     instances,
     ITEM_DEFINITIONS,
     { [blueprint.templateId]: bonuses },
+    upgradeModifiers,
   );
   const activatableAbilities = setup?.unitState
     ? snapshotActivatableAbilities(blueprint.templateId, containers, instances, ITEM_DEFINITIONS)
     : [];
 
   const skills = setup?.unitState
-    ? resolvePlayerSkills(blueprint, setup.unitState)
+    ? resolveUnitSkills(blueprint, setup.unitState.chosenUpgrades)
     : resolveEnemySkills(blueprint, level);
+
+  const spriteSheet = setup?.unitState
+    ? resolveUnitSpriteSheet(blueprint, setup.unitState.chosenUpgrades)
+    : blueprint.spriteSheet;
 
   return {
     id,
@@ -74,10 +71,10 @@ export function createUnitInstance(
     magicalDamage:       stats.magicalDamage,
     physicalDefense:     stats.physicalDefense,
     magicalDefense:      stats.magicalDefense,
-    dodge:               blueprint.dodge,
-    block:               blueprint.block,
+    dodge:               stats.dodge,
+    block:               stats.block,
     level,
-    initiative:          blueprint.initiative,
+    initiative:          stats.initiative,
     shape:               blueprint.shape,
     anchor,
     skills,
@@ -85,8 +82,20 @@ export function createUnitInstance(
     rowTrait:            blueprint.rowTrait,
     race:                blueprint.race,
     templateId:          blueprint.templateId,
+    spriteSheet,
     activeEffects:       [],
     activatableAbilities,
+  };
+}
+
+export function benchSnapshotFromUnit(unit: Unit): BenchUnitSnapshot {
+  return {
+    templateId: unit.templateId,
+    name: unit.name,
+    level: unit.level,
+    spriteKey: unit.spriteSheet
+      ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
+      : null,
   };
 }
 
@@ -112,12 +121,19 @@ export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): 
   const availableUnits = PLAYER_UNITS.filter(u => !playerUnitsState[u.templateId]?.isInCamp);
 
   let counter = 1;
-  const paddedBench: (UnitBlueprint | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
+  const paddedBench: (BenchUnitSnapshot | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
 
   const addToBench = (def: UnitBlueprint): boolean => {
     const slot = paddedBench.indexOf(undefined);
     if (slot === -1) return false;
-    paddedBench[slot] = def;
+    const unitState = playerUnitsState[def.templateId];
+    const sheet = resolveUnitSpriteSheet(def, unitState?.chosenUpgrades ?? {});
+    paddedBench[slot] = {
+      templateId: def.templateId,
+      name: def.name,
+      level: unitState?.level ?? def.level,
+      spriteKey: sheet ? getUnitSpriteTextureKey(def.templateId, sheet) : null,
+    };
     return true;
   };
 

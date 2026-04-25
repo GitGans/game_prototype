@@ -22,23 +22,24 @@ import { EffectTooltip } from "../objects/EffectTooltip";
 import { TOOLTIP } from "../ui/theme";
 import {
   BattleState,
+  BenchUnitSnapshot,
   CellCoord,
   Col,
   ResolvedHitCell,
   Side,
   Skill,
   Unit,
-  UnitBlueprint,
   SpriteSheetConfig,
   UnitRace,
 } from "../battle/types";
 import { PhaseManager } from '../core/PhaseManager';
+import { BattleParticipant } from '../core/phases';
 import { Button } from '../ui/Button';
-import { VALUE_COLOR, ALPHA } from '../ui/theme';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
 import { ENEMY_GROUPS } from '../data/enemyGroupDefinitions';
-import { PLAYER_UNITS, ENEMY_UNITS } from "../data/unitDefinitions";
+import { PLAYER_UNITS } from "../data/unitDefinitions";
+import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
 import { canPlace, placeUnit } from "../battle/placement";
@@ -58,8 +59,7 @@ import {
   autoPlaceEnemies,
   replayPlaceEnemies,
   createUnitInstance,
-  blueprintFromUnit,
-  PlayerBattleSetup,
+  benchSnapshotFromUnit,
 } from "../battle/autoPlace";
 
 /** Returns the currently active skill for a unit. */
@@ -405,15 +405,10 @@ export class Game extends Phaser.Scene {
     key: string | undefined;
     config: SpriteSheetConfig | undefined;
   } {
-    const allBlueprints = [
-      ...PLAYER_UNITS,
-      ...Object.values(ENEMY_UNITS).flat(),
-    ];
-    const bp = allBlueprints.find((b) => b.templateId === unit.templateId);
-    if (!bp?.spriteSheet) return { key: undefined, config: undefined };
+    if (!unit.spriteSheet) return { key: undefined, config: undefined };
     return {
-      key: `sprite-${unit.templateId}`,
-      config: bp.spriteSheet,
+      key: getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet),
+      config: unit.spriteSheet,
     };
   }
 
@@ -515,7 +510,7 @@ export class Game extends Phaser.Scene {
   }
 
   private makeBenchCard(
-    bp: UnitBlueprint | null,
+    bp: BenchUnitSnapshot | null,
     idx: number,
     x: number,
     y: number,
@@ -557,11 +552,10 @@ export class Game extends Phaser.Scene {
       fillColor, 0.9,
     );
 
-    // Sprite (frame 0 = idle) — only when texture is loaded for this blueprint
-    const spriteKey = `sprite-${bp.templateId}`;
+    // Sprite (frame 0 = idle) — only when texture is loaded for this snapshot
     const spriteObj =
-      bp.spriteSheet && this.textures.exists(spriteKey)
-        ? this.add.image(0, 0, spriteKey).setFrame(0).setDisplaySize(BENCH_PANEL_WIDTH - 2, cardH - 2)
+      bp.spriteKey && this.textures.exists(bp.spriteKey)
+        ? this.add.image(0, 0, bp.spriteKey).setFrame(0).setDisplaySize(BENCH_PANEL_WIDTH - 2, cardH - 2)
         : null;
 
     // Name
@@ -581,7 +575,8 @@ export class Game extends Phaser.Scene {
 
     // HP text + HP bar
     const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
-    const scaledHp = Math.round(bp.hp * (1 + 0.1 * (level - 1)));
+    const fullBpForHp = PLAYER_UNITS.find(b => b.templateId === bp.templateId);
+    const scaledHp = fullBpForHp ? Math.round(fullBpForHp.hp * (1 + 0.1 * (level - 1))) : 0;
     const barW = BENCH_PANEL_WIDTH - Math.round(12 * LAYOUT_SCALE);
     const barH = Math.round(6 * LAYOUT_SCALE);
     const barY = cardH / 2 - Math.round(10 * LAYOUT_SCALE);
@@ -613,7 +608,8 @@ export class Game extends Phaser.Scene {
       container.on("pointerover", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(COLORS.benchHover, 0.9);
         const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
-        this.unitTooltip.showFromBlueprint(bp, level, "player", this.logX, this.logY, this.logW);
+        const fullBp = PLAYER_UNITS.find(b => b.templateId === bp.templateId)!;
+        this.unitTooltip.showFromBlueprint(fullBp, level, "player", this.logX, this.logY, this.logW, bp.spriteKey);
       });
       container.on("pointerout", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(fillColor, 0.9);
@@ -756,16 +752,23 @@ export class Game extends Phaser.Scene {
   }
 
   private placeBenchUnitOnField(
-    bp: UnitBlueprint,
+    snapshot: BenchUnitSnapshot,
     benchIdx: number,
     anchor: CellCoord,
   ): void {
     let state = GameState.get();
+    const fullBp = PLAYER_UNITS.find(b => b.templateId === snapshot.templateId)!;
     const newId = `p${++this.playerIdCounter}`;
-    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
-    const unit = createUnitInstance(bp, newId, anchor, level);
+    const setup = PhaseManager.getActiveBattleSetup();
+    const unitState = setup.playerUnits[snapshot.templateId];
+    const level = unitState?.level ?? snapshot.level;
+    const unit = createUnitInstance(fullBp, newId, anchor, level, {
+      itemContainers: setup.itemContainers,
+      itemInstances:  setup.itemInstances,
+      unitState,
+    });
 
-    if (!canPlace(anchor, bp.shape, state, "player")) return;
+    if (!canPlace(anchor, fullBp.shape, state, "player")) return;
 
     state = placeUnit(unit, state);
     const newBench = [...state.benchUnits];
@@ -777,12 +780,13 @@ export class Game extends Phaser.Scene {
   }
 
   private swapBenchWithField(
-    bp: UnitBlueprint,
+    snapshot: BenchUnitSnapshot,
     benchIdx: number,
     fieldUnit: Unit,
   ): void {
     let state = GameState.get();
     const anchor = fieldUnit.anchor;
+    const fullBp = PLAYER_UNITS.find(b => b.templateId === snapshot.templateId)!;
 
     // Remove field unit
     const newUnits = new Map(state.units);
@@ -790,20 +794,26 @@ export class Game extends Phaser.Scene {
     state = { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) };
 
     // Check new unit fits
-    if (!canPlace(anchor, bp.shape, state, "player")) {
+    if (!canPlace(anchor, fullBp.shape, state, "player")) {
       // Restore and abort
       state = GameState.get();
       return;
     }
 
     const newId = `p${++this.playerIdCounter}`;
-    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
-    const newUnit = createUnitInstance(bp, newId, anchor, level);
+    const setup = PhaseManager.getActiveBattleSetup();
+    const unitState = setup.playerUnits[snapshot.templateId];
+    const level = unitState?.level ?? snapshot.level;
+    const newUnit = createUnitInstance(fullBp, newId, anchor, level, {
+      itemContainers: setup.itemContainers,
+      itemInstances:  setup.itemInstances,
+      unitState,
+    });
     state = placeUnit(newUnit, state);
 
-    // Update bench: replace bp at benchIdx with field unit's blueprint
+    // Update bench: replace snapshot at benchIdx with field unit's snapshot
     const newBench = [...state.benchUnits];
-    newBench[benchIdx] = blueprintFromUnit(fieldUnit);
+    newBench[benchIdx] = benchSnapshotFromUnit(fieldUnit);
     state = { ...state, benchUnits: newBench };
     GameState.set(state);
 
@@ -875,7 +885,7 @@ export class Game extends Phaser.Scene {
     if (emptyIdx === -1) return; // bench full — all 3 slots occupied
     const newUnits = new Map(state.units);
     newUnits.delete(unit.id);
-    newBench[emptyIdx] = blueprintFromUnit(unit);
+    newBench[emptyIdx] = benchSnapshotFromUnit(unit);
     const newState = {
       ...state,
       units: newUnits,
@@ -898,7 +908,7 @@ export class Game extends Phaser.Scene {
     newUnits.delete(unit.id);
 
     const newBench = [...state.benchUnits];
-    newBench[benchIdx] = blueprintFromUnit(unit);
+    newBench[benchIdx] = benchSnapshotFromUnit(unit);
 
     GameState.set({
       ...state,
@@ -2112,35 +2122,21 @@ export class Game extends Phaser.Scene {
         scene: this, x: rightX, y: btnY, w: btnW, h: btnH,
         label: "Exit Battle", style: "primary",
         onClick: () => {
-        const allBlueprints = [
-          ...PLAYER_UNITS,
-          ...Object.values(ENEMY_UNITS).flat(),
-        ];
-        const state = GameState.get();
+          const phase = PhaseManager.getPhase();
+          if (phase.type !== 'battle') return;
 
-        // Field units — live Unit objects in state.units (camp units were never placed)
-        state.units.forEach((unit) => {
-          if (!unit.id.startsWith("p")) return;
-          unit.level += 1;
-          const us = GameState.playerUnits[unit.templateId];
-          if (us) GameState.playerUnits[unit.templateId] = { ...us, level: unit.level };
-          const bp = allBlueprints.find(b => b.templateId === unit.templateId);
-          if (!bp) return;
-          const scale = 1 + 0.1 * (unit.level - 1);
-          unit.maxHp          = Math.round(bp.hp * scale);
-          unit.physicalDamage = Math.round(bp.physicalDamage * scale);
-          unit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
-        });
-        GameState.set(state);
+          const aliveIds = new Set(
+            [...GameState.get().units.values()]
+              .filter(u => u.id.startsWith('p'))
+              .map(u => u.templateId)
+          );
 
-        // Bench units — stored as UnitBlueprint | undefined (camp units were never benched)
-        state.benchUnits.forEach((bp) => {
-          if (!bp) return;
-          const us = GameState.playerUnits[bp.templateId];
-          if (us) GameState.playerUnits[bp.templateId] = { ...us, level: us.level + 1 };
-        });
+          const participants: BattleParticipant[] = phase.participants.map(p => ({
+            ...p,
+            isAlive: p.wasOnBench || aliveIds.has(p.templateId),
+          }));
 
-        PhaseManager.transition({ type: 'exit_battle' });
+          PhaseManager.transition({ type: 'exit_battle', participants });
         },
       }).setDepth(31);
     } else {
@@ -2162,7 +2158,7 @@ export class Game extends Phaser.Scene {
         new Button({
           scene: this, x: rightX, y: btnY, w: btnW, h: btnH,
           label: "Exit Battle", style: "primary",
-          onClick: () => PhaseManager.transition({ type: 'exit_battle' }),
+          onClick: () => PhaseManager.transition({ type: 'exit_battle', participants: [] }),
         }).setDepth(31);
       }
     }

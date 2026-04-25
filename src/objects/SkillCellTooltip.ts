@@ -1,17 +1,17 @@
 import Phaser from 'phaser';
 import { BaseTooltip } from '../ui/BaseTooltip';
-import { SkillOptionSnapshot } from '../core/phases';
+import { SkillIconSnapshot } from '../core/phases';
 import { fontSize, VALUE_COLOR, TOOLTIP } from '../ui/theme';
 
 const PAD  = TOOLTIP.pad;
 const LINE = TOOLTIP.lineH;
 
-export class SkillCellTooltip extends BaseTooltip<SkillOptionSnapshot> {
+export class SkillCellTooltip extends BaseTooltip<SkillIconSnapshot> {
   constructor(scene: Phaser.Scene, width: number) {
     super(scene, width, TOOLTIP.bg, TOOLTIP.bgAlpha);
   }
 
-  protected buildContent(data: SkillOptionSnapshot): number {
+  protected buildContent(data: SkillIconSnapshot): number {
     const damageColor =
       data.damageType === 'physical' ? '#ff6666' :
       data.damageType === 'magical'  ? '#6699ff' :
@@ -43,7 +43,7 @@ export class SkillCellTooltip extends BaseTooltip<SkillOptionSnapshot> {
     return y;
   }
 
-  showBelow(data: SkillOptionSnapshot, anchorX: number, anchorY: number): void {
+  showBelow(data: SkillIconSnapshot, anchorX: number, anchorY: number): void {
     this.clearContent();
     const h = this.buildContent(data);
     this.bg.setSize(this.tooltipW, h);

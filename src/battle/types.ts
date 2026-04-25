@@ -37,10 +37,48 @@ export interface SpriteSheetConfig {
   states: SpriteState[]; // states in column order, e.g. ['idle', 'attack', 'death']
 }
 
-/** One level-gated skill choice for a player unit. Tier 0 is auto-assigned on new game. */
+/** One level-gated skill choice for an enemy unit. */
 export interface SkillTier {
   unlocksAtLevel: 0 | 5 | 10 | 15 | 20;
-  options: Skill[]; // 1–4 choices; player picks 1 (tier 0 is auto-assigned to options[0])
+  options: Skill[];
+}
+
+export interface UnitProgressionStatModifiers {
+  hp?: number;
+  physicalDamage?: number;
+  magicalDamage?: number;
+  physicalDefense?: number;
+  magicalDefense?: number;
+  dodge?: number;
+  block?: number;
+  initiative?: number;
+}
+
+export interface UnitBattleStats {
+  hp: number;
+  physicalDamage: number;
+  magicalDamage: number;
+  physicalDefense: number;
+  magicalDefense: number;
+  dodge: number;
+  block: number;
+  initiative: number;
+}
+
+/** An upgrade option a player can choose at levels 5/10/15/20. */
+export interface UnitUpgradeOption {
+  id: string;
+  name: string;
+  description?: string;
+  skill?: Skill;
+  statModifiers?: UnitProgressionStatModifiers;
+  spriteSheet?: SpriteSheetConfig;
+}
+
+/** One level-gated upgrade tier for a player unit. */
+export interface UnitUpgradeTier {
+  unlocksAtLevel: 5 | 10 | 15 | 20;
+  options: UnitUpgradeOption[];
 }
 
 /** Deterministic skill added to an enemy unit when it reaches a level milestone. */
@@ -62,7 +100,9 @@ export interface UnitBlueprint {
   level: number;
   initiative: number;
   shape: UnitShape;
-  skillTiers: SkillTier[];          // replaces skills: Skill[]
+  baseSkill?: Skill;                // player units only; auto-learned at level 0
+  upgradeTiers?: UnitUpgradeTier[];  // player units only; tiers 5/10/15/20
+  skillTiers?: SkillTier[];         // enemy units only; tier 0 base skill
   levelSkills?: EnemyLevelSkill[];  // enemy-only; absent on player blueprints
   rowTrait: RowTrait;
   race?: UnitRace;
@@ -90,6 +130,7 @@ export interface Unit {
   rowTrait: RowTrait;
   race?: UnitRace;
   templateId: string;
+  spriteSheet?: SpriteSheetConfig;  // resolved at unit creation; undefined = no sprite
   activeEffects: ActiveEffect[]; // runtime only; max 2; ordered oldest-first
   activatableAbilities: UnitActivatableAbility[]; // [] for enemies
 }
@@ -102,13 +143,20 @@ export interface OccupancyMap {
 export type Phase = 'placement' | 'select_target' | 'end';
 export type BattleMode = 'manual' | 'auto' | 'quick';
 
+export interface BenchUnitSnapshot {
+  templateId: string;
+  name: string;
+  level: number;
+  spriteKey: string | null;
+}
+
 export interface BattleState {
   units: Map<string, Unit>;
   occupancy: OccupancyMap;
   roundQueue: string[]; // unit IDs to act this round; [0] = currently acting
   phase: Phase;
   validTargets: CellCoord[];
-  benchUnits: (UnitBlueprint | undefined)[]; // player units waiting on the bench; undefined = empty slot
+  benchUnits: (BenchUnitSnapshot | undefined)[]; // player units waiting on the bench; undefined = empty slot
 }
 
 // ─── Skill / Pattern System ───────────────────────────────────────────────
@@ -360,6 +408,7 @@ export interface UnitTabSnapshot {
   templateId: string;
   name: string;
   unitClass: UnitClass;
+  spriteKey: string | null;
 }
 
 export interface ItemInstance {

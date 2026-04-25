@@ -1,5 +1,5 @@
 import {
-  BattleStatBonuses,
+  UnitProgressionStatModifiers,
   BackpackSnapshot,
   EquipmentSnapshot,
   UnitTabSnapshot,
@@ -14,7 +14,7 @@ export interface CampUnitSnapshot {
   inCamp:     boolean;
 }
 
-export interface SkillOptionSnapshot {
+export interface SkillIconSnapshot {
   id:          string;
   name:        string;
   description: string;
@@ -22,17 +22,65 @@ export interface SkillOptionSnapshot {
   actionType:  SkillActionType;
 }
 
-export interface SkillTierSnapshot {
-  tierId: 0 | 5 | 10 | 15 | 20;
-  options: SkillOptionSnapshot[];
-  chosenSkillId: string | null; // null = not yet chosen (level reached)
-  isLocked: boolean;            // true = level not yet reached
+export interface UpgradeOptionSnapshot {
+  id:            string;
+  name:          string;
+  description:   string;
+  skill:         SkillIconSnapshot | null;
+  statModifiers: UnitProgressionStatModifiers;
+  spritePreview: string | null;
+}
+
+export interface UpgradeTierSnapshot {
+  tierId:          5 | 10 | 15 | 20;
+  options:         UpgradeOptionSnapshot[];
+  chosenUpgradeId: string | null;
+  isLocked:        boolean;
+}
+
+/** Snapshot of one player unit at moment of battle exit — pre-level-up. */
+export interface BattleParticipant {
+  templateId: string;
+  name: string;
+  level: number;       // current level BEFORE +1
+  isAlive: boolean;
+  wasOnBench: boolean;
+  spriteKey: string | null;
+}
+
+/** Display data for BattleResults scene — level already incremented. */
+export interface BattleResultUnit {
+  templateId: string;
+  name: string;
+  newLevel: number;    // level AFTER +1
+  isAlive: boolean;
+  wasOnBench: boolean;
+  spriteKey: string | null;
+}
+
+export interface UnitStatValueSnapshot {
+  base: number;   // blueprint + level scaling only
+  value: number;  // final: base + upgrade modifiers + equipment + permanent bonuses
+}
+
+export interface UnitStatsSnapshot {
+  level: number;
+  hp:              UnitStatValueSnapshot;
+  maxHp:           UnitStatValueSnapshot;
+  physicalDamage:  UnitStatValueSnapshot;
+  magicalDamage:   UnitStatValueSnapshot;
+  physicalDefense: UnitStatValueSnapshot;
+  magicalDefense:  UnitStatValueSnapshot;
+  dodge:           UnitStatValueSnapshot;
+  block:           UnitStatValueSnapshot;
+  initiative:      UnitStatValueSnapshot;
 }
 
 export type GamePhase =
   | { type: 'main_menu' }
   | { type: 'world_map'; mapId: string; partyPos: { x: number; y: number } }
   | { type: 'map_victory'; mapId: string }
+  | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase; mapCleared: boolean }
   | {
       type: 'battle';
       enemyGroupId: string;
@@ -40,28 +88,40 @@ export type GamePhase =
       triggerPos?: { x: number; y: number };
       mapId?: string;
       isDebug?: boolean;
+      participants: BattleParticipant[];
     }
   | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
   | { type: 'debug_level_select' }
   | {
       type: 'debug_equip_screen';
       selectedUnitTemplateId: string;
+      selectedUnitSpriteKey: string | null;
       availableUnits: UnitTabSnapshot[];
       backpack: BackpackSnapshot;
       unitEquipment: EquipmentSnapshot;
-      unitStats: { level: number; equippedBonuses: BattleStatBonuses } | null;
+      unitStats: UnitStatsSnapshot | null;
       campUnitIds: string[];
-      skillTiers: SkillTierSnapshot[];
+      learnedSkills: SkillIconSnapshot[];
+      upgradeSkills: SkillIconSnapshot[];
     }
   | {
       type: 'equip_screen';
       selectedUnitTemplateId: string;
+      selectedUnitSpriteKey: string | null;
       returnPhase: GamePhase;
       backpack: BackpackSnapshot;
       unitEquipment: EquipmentSnapshot;
       availableUnits: UnitTabSnapshot[];
-      unitStats: { level: number; equippedBonuses: BattleStatBonuses } | null;
-      skillTiers: SkillTierSnapshot[];
+      unitStats: UnitStatsSnapshot | null;
+      learnedSkills: SkillIconSnapshot[];
+      upgradeSkills: SkillIconSnapshot[];
+    }
+  | {
+      type: 'upgrade_tree';
+      unitTemplateId: string;
+      unitName: string;
+      returnPhase: GamePhase;
+      upgradeTiers: UpgradeTierSnapshot[];
     };
 
 export type PhaseAction =
@@ -72,7 +132,8 @@ export type PhaseAction =
   | { type: 'enter_camp' }
   | { type: 'exit_camp' }
   | { type: 'start_battle'; enemyGroupId: string }
-  | { type: 'exit_battle' }
+  | { type: 'exit_battle'; participants: BattleParticipant[] }
+  | { type: 'exit_results' }
   | { type: 'replay' }
   | { type: 'exit_to_menu' }
   // ── Equip screen navigation ────────────────────────────────────
@@ -87,7 +148,9 @@ export type PhaseAction =
   | { type: 'buy_item'; definitionId: string }
   | { type: 'sell_item'; instanceId: string }
   | { type: 'toggle_camp_unit'; templateId: string }
-  | { type: 'choose_skill'; templateId: string; tierId: 0 | 5 | 10 | 15 | 20; skillId: string }
+  | { type: 'open_upgrade_tree' }
+  | { type: 'close_upgrade_tree' }
+  | { type: 'choose_upgrade'; templateId: string; tierId: 5 | 10 | 15 | 20; upgradeId: string }
   // ── Debug battle ──────────────────────────────────────────────
   | { type: 'init_debug'; level: number }
   | { type: 'switch_debug_unit'; templateId: string }

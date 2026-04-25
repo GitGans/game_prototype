@@ -4,6 +4,8 @@ import { TOOLTIP, fontSize, VALUE_COLOR } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
 import { Unit, UnitBlueprint } from "../battle/types";
 import { effectiveStats } from "../battle/combat";
+import type { UnitStatsSnapshot } from '../core/phases';
+import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 
 const W           = Math.round(200 * LAYOUT_SCALE);
 const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
@@ -19,6 +21,7 @@ function statColor(sv: StatValue): string {
 interface TooltipData {
   templateId:      string;
   name:            string;
+  level?:          number;
   side:            "player" | "enemy";
   hp:              StatValue;
   maxHp:           StatValue;
@@ -34,12 +37,14 @@ interface TooltipData {
     damageBlock?: { damageType: string };
     isActive:    boolean;
   }>;
+  spriteKey?: string | null;
 }
 
 interface BuildOptions {
-  showSprite?: boolean; // default true
-  showStats?:  boolean; // default true
-  showSkills?: boolean; // default true
+  showSprite?:     boolean; // default true
+  showStats?:      boolean; // default true
+  showSkills?:     boolean; // default true
+  showNameHeader?: boolean; // default false — renders "Name  Lvl N" at top
 }
 
 export class UnitTooltip extends BaseTooltip<TooltipData> {
@@ -65,6 +70,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     anchorX:   number,
     anchorY:   number,
     overrideW?: number,
+    spriteKeyOverride?: string | null,
   ): void {
     const scale = 1 + 0.1 * (level - 1);
     const data: TooltipData = {
@@ -80,11 +86,14 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       dodge:           flat(bp.dodge),
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
-      skills: bp.skillTiers.flatMap(t => t.options.slice(0, 1)).map(s => ({
+      skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({
         name:        s.name,
         damageBlock: s.damageBlock,
         isActive:    false,
       })),
+      spriteKey: spriteKeyOverride !== undefined
+        ? spriteKeyOverride
+        : (bp.spriteSheet ? getUnitSpriteTextureKey(bp.templateId, bp.spriteSheet) : null),
     };
     if (overrideW !== undefined) {
       this.clearContent();
@@ -126,7 +135,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       dodge:           flat(bp.dodge),
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
-      skills: bp.skillTiers.flatMap(t => t.options.slice(0, 1)).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+      skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+      spriteKey: bp.spriteSheet ? getUnitSpriteTextureKey(bp.templateId, bp.spriteSheet) : null,
     };
     this.clearContent();
     const h = this.buildContent(data);
@@ -135,26 +145,43 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.setVisible(true);
   }
 
-  showFixedStatsOnly(
-    bp:      UnitBlueprint,
-    level:   number,
-    bonuses: Partial<import('../battle/types').BattleStatBonuses>,
+  showFixedNameOnly(bp: UnitBlueprint, level: number, x: number, y: number, w: number): void {
+    const data: TooltipData = {
+      templateId: bp.templateId, name: bp.name, level,
+      side: 'player',
+      hp: flat(0), maxHp: flat(0),
+      physicalDamage: flat(0), magicalDamage: flat(0),
+      physicalDefense: flat(0), magicalDefense: flat(0),
+      dodge: flat(0), block: flat(0), initiative: flat(0),
+      skills: [],
+    };
+    this.clearContent();
+    const h = this.buildContent(data, { showNameHeader: true, showSprite: false, showStats: false, showSkills: false });
+    this.bg.setSize(w, h);
+    this.setPosition(x, y);
+    this.setVisible(true);
+  }
+
+
+  showFixedStatsSnapshot(
+    bp:    UnitBlueprint,
+    stats: UnitStatsSnapshot,
     x: number, y: number, w: number,
   ): void {
-    const scale = 1 + 0.1 * (level - 1);
     const data: TooltipData = {
       templateId:      bp.templateId,
       name:            bp.name,
+      level:           stats.level,
       side:            'player',
-      hp:              { value: Math.round(bp.hp * scale) + (bonuses.hp ?? 0), base: Math.round(bp.hp * scale) },
-      maxHp:           { value: Math.round(bp.hp * scale) + (bonuses.hp ?? 0), base: Math.round(bp.hp * scale) },
-      physicalDamage:  { value: Math.round(bp.physicalDamage  * scale) + (bonuses.physicalDamage  ?? 0), base: Math.round(bp.physicalDamage  * scale) },
-      magicalDamage:   { value: Math.round(bp.magicalDamage   * scale) + (bonuses.magicalDamage   ?? 0), base: Math.round(bp.magicalDamage   * scale) },
-      physicalDefense: { value: bp.physicalDefense + (bonuses.physicalDefense ?? 0), base: bp.physicalDefense },
-      magicalDefense:  { value: bp.magicalDefense  + (bonuses.magicalDefense  ?? 0), base: bp.magicalDefense  },
-      dodge:           flat(bp.dodge),
-      block:           flat(bp.block),
-      initiative:      flat(bp.initiative),
+      hp:              stats.hp,
+      maxHp:           stats.maxHp,
+      physicalDamage:  stats.physicalDamage,
+      magicalDamage:   stats.magicalDamage,
+      physicalDefense: stats.physicalDefense,
+      magicalDefense:  stats.magicalDefense,
+      dodge:           stats.dodge,
+      block:           stats.block,
+      initiative:      stats.initiative,
       skills:          [],
     };
     this.clearContent();
@@ -183,7 +210,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       dodge:           flat(bp.dodge),
       block:           flat(bp.block),
       initiative:      flat(bp.initiative),
-      skills: bp.skillTiers.flatMap(t => t.options.slice(0, 1)).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
+      skills: (bp.baseSkill ? [bp.baseSkill] : (bp.skillTiers?.flatMap(t => t.options.slice(0, 1)) ?? [])).map(s => ({ name: s.name, damageBlock: s.damageBlock, isActive: false })),
     };
     this.clearContent();
     const h = this.buildContent(data, { showSprite: false, showStats: false });
@@ -200,10 +227,17 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     const pad    = TOOLTIP.pad;
     let y        = pad;
 
+    if (opts.showNameHeader) {
+      this.addText(pad, y, `${data.name}  Lvl ${data.level ?? 1}`, {
+        fontSize: fontSize('md'), color: VALUE_COLOR.highlight, fontStyle: 'bold',
+      });
+      y += Math.round(18 * LAYOUT_SCALE);
+    }
+
     if (opts.showSprite !== false) {
       // Sprite or fallback color rect
-      const spriteKey = `sprite-${data.templateId}`;
-      if (scene.textures.exists(spriteKey)) {
+      const spriteKey = data.spriteKey ?? null;
+      if (spriteKey && scene.textures.exists(spriteKey)) {
         const img = scene.add.image(pad + SPRITE_SIZE / 2, y + SPRITE_SIZE / 2, spriteKey);
         img.setDisplaySize(SPRITE_SIZE, SPRITE_SIZE).setOrigin(0.5);
         this.add(img);
@@ -306,5 +340,8 @@ function unitToData(unit: Unit): TooltipData {
       damageBlock: s.damageBlock,
       isActive:    i === unit.activeSkillIndex,
     })),
+    spriteKey: unit.spriteSheet
+      ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
+      : null,
   };
 }
