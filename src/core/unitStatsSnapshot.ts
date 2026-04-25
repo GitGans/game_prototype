@@ -4,10 +4,10 @@ import type {
   ItemInstance,
   ItemDefinition,
   UnitBattleStats,
+  BattleStatBonuses,
+  UnitProgressionStatModifiers,
 } from '../battle/types';
-import type { PlayerUnitState } from './GameState';
 import type { UnitStatsSnapshot } from './phases';
-import { resolveChosenUnitUpgrades, computeUnitUpgradeStatModifiers } from './unitProgression';
 import { computeUnitBattleStats } from '../battle/itemOps';
 
 // Must match the base stat scaling rules used by computeUnitBattleStats().
@@ -26,16 +26,14 @@ function computeBaseStats(blueprint: UnitBlueprint, level: number): UnitBattleSt
 }
 
 export function buildUnitStatsSnapshot(
-  blueprint:       UnitBlueprint,
-  level:           number,
-  unitState:       PlayerUnitState,
-  itemContainers:  Record<string, ItemContainer>,
-  itemInstances:   Record<string, ItemInstance>,
-  itemDefinitions: Record<string, ItemDefinition>,
+  blueprint:        UnitBlueprint,
+  level:            number,
+  permanentBonuses: Partial<BattleStatBonuses>,
+  itemContainers:   Record<string, ItemContainer>,
+  itemInstances:    Record<string, ItemInstance>,
+  itemDefinitions:  Record<string, ItemDefinition>,
+  upgradeModifiers: UnitProgressionStatModifiers,
 ): UnitStatsSnapshot {
-  const chosenUpgrades   = resolveChosenUnitUpgrades(blueprint, unitState.chosenUpgrades);
-  const upgradeModifiers = computeUnitUpgradeStatModifiers(chosenUpgrades);
-
   const base  = computeBaseStats(blueprint, level);
   const final = computeUnitBattleStats(
     blueprint,
@@ -43,7 +41,7 @@ export function buildUnitStatsSnapshot(
     itemContainers,
     itemInstances,
     itemDefinitions,
-    { [blueprint.templateId]: unitState.permanentBonuses },
+    { [blueprint.templateId]: permanentBonuses },
     upgradeModifiers,
   );
 

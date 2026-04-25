@@ -29,6 +29,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
           u(SKILLS.row_strike),
           {
             ...u(SKILLS.pierce),
+            description: 'Gain Pierce and become tougher.',
             statModifiers: { hp: 20 },
             spriteSheet: {
               path: 'assets/sprites/units/soldier_elite.png',
@@ -39,7 +40,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
           },
         ],
       },
-      { unlocksAtLevel: 10, options: [u(SKILLS.poison_strike), { ...u(SKILLS.provoke_strike), statModifiers: { initiative: 2 } }] },
+      { unlocksAtLevel: 10, options: [u(SKILLS.poison_strike), { ...u(SKILLS.provoke_strike), description: 'Gain Provoke Strike and act earlier in battle.', statModifiers: { initiative: 2 } }] },
       { unlocksAtLevel: 15, options: [u(SKILLS.armor_pierce), u(SKILLS.drain_strike)] },
       { unlocksAtLevel: 20, options: [u(SKILLS.life_sweep), u(SKILLS.armor_pierce)] },
     ],

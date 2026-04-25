@@ -2,30 +2,28 @@ import { UnitBlueprint, Skill, UnitUpgradeOption, UnitProgressionStatModifiers, 
 
 export type UnitUpgradeChoices = Partial<Record<5 | 10 | 15 | 20, string>>;
 
+export interface ResolvedUnitProgression {
+  chosenUpgrades: UnitUpgradeOption[];
+  skills: Skill[];
+  statModifiers: UnitProgressionStatModifiers;
+  spriteSheet: SpriteSheetConfig | undefined;
+}
+
 export function resolveChosenUnitUpgrades(
   blueprint: UnitBlueprint,
   chosenUpgrades: UnitUpgradeChoices,
 ): UnitUpgradeOption[] {
   const result: UnitUpgradeOption[] = [];
-  for (const tier of (blueprint.upgradeTiers ?? [])) {
+  const sortedTiers = [...(blueprint.upgradeTiers ?? [])].sort(
+    (a, b) => a.unlocksAtLevel - b.unlocksAtLevel,
+  );
+  for (const tier of sortedTiers) {
     const chosenId = chosenUpgrades[tier.unlocksAtLevel];
     if (!chosenId) continue;
     const option = tier.options.find(o => o.id === chosenId);
     if (option) result.push(option);
   }
   return result;
-}
-
-export function resolveUnitSkills(
-  blueprint: UnitBlueprint,
-  chosenUpgrades: UnitUpgradeChoices,
-): Skill[] {
-  const skills: Skill[] = [];
-  if (blueprint.baseSkill) skills.push(blueprint.baseSkill);
-  for (const option of resolveChosenUnitUpgrades(blueprint, chosenUpgrades)) {
-    if (option.skill) skills.push(option.skill);
-  }
-  return skills;
 }
 
 export function computeUnitUpgradeStatModifiers(
@@ -47,16 +45,39 @@ export function computeUnitUpgradeStatModifiers(
   return result;
 }
 
-export function resolveUnitSpriteSheet(
+function resolveSkillsFromUpgrades(
   blueprint: UnitBlueprint,
-  chosenUpgrades: UnitUpgradeChoices,
+  upgrades: UnitUpgradeOption[],
+): Skill[] {
+  const skills: Skill[] = [];
+  if (blueprint.baseSkill) skills.push(blueprint.baseSkill);
+  for (const option of upgrades) {
+    if (option.skill) skills.push(option.skill);
+  }
+  return skills;
+}
+
+function resolveSpriteSheetFromUpgrades(
+  blueprint: UnitBlueprint,
+  upgrades: UnitUpgradeOption[],
 ): SpriteSheetConfig | undefined {
   let result: SpriteSheetConfig | undefined;
-  for (const tier of (blueprint.upgradeTiers ?? [])) {
-    const chosenId = chosenUpgrades[tier.unlocksAtLevel];
-    if (!chosenId) continue;
-    const option = tier.options.find(o => o.id === chosenId);
-    if (option?.spriteSheet) result = option.spriteSheet; // highest tier wins
+  for (const option of upgrades) {
+    if (option.spriteSheet) result = option.spriteSheet; // highest tier wins (upgrades sorted ascending)
   }
   return result ?? blueprint.spriteSheet;
 }
+
+export function resolveUnitProgression(
+  blueprint: UnitBlueprint,
+  chosenUpgradeIds: UnitUpgradeChoices,
+): ResolvedUnitProgression {
+  const chosenUpgrades = resolveChosenUnitUpgrades(blueprint, chosenUpgradeIds);
+  return {
+    chosenUpgrades,
+    skills:        resolveSkillsFromUpgrades(blueprint, chosenUpgrades),
+    statModifiers: computeUnitUpgradeStatModifiers(chosenUpgrades),
+    spriteSheet:   resolveSpriteSheetFromUpgrades(blueprint, chosenUpgrades),
+  };
+}
+

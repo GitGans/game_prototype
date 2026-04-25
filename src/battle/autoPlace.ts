@@ -7,7 +7,7 @@ import { BENCH_SLOTS } from '../core/Constants';
 import { GameState, PlayerUnitState } from '../core/GameState';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from './itemOps';
-import { resolveUnitSkills, resolveChosenUnitUpgrades, computeUnitUpgradeStatModifiers, resolveUnitSpriteSheet } from '../core/unitProgression';
+import { resolveUnitProgression } from '../core/unitProgression';
 
 export interface PlayerBattleSetup {
   playerUnits: Record<string, PlayerUnitState>;
@@ -38,10 +38,14 @@ export function createUnitInstance(
   const containers = setup?.itemContainers ?? GameState.itemContainers;
   const instances  = setup?.itemInstances  ?? GameState.itemInstances;
   const bonuses    = setup?.unitState?.permanentBonuses ?? {};
-  const chosenUpgrades = setup?.unitState
-    ? resolveChosenUnitUpgrades(blueprint, setup.unitState.chosenUpgrades)
-    : [];
-  const upgradeModifiers = computeUnitUpgradeStatModifiers(chosenUpgrades);
+  const progression = setup?.unitState
+    ? resolveUnitProgression(blueprint, setup.unitState.chosenUpgrades)
+    : null;
+
+  const upgradeModifiers = progression?.statModifiers ?? {};
+  const skills           = progression?.skills ?? resolveEnemySkills(blueprint, level);
+  const spriteSheet      = progression?.spriteSheet ?? blueprint.spriteSheet;
+
   const stats = computeUnitBattleStats(
     blueprint, level,
     containers,
@@ -53,14 +57,6 @@ export function createUnitInstance(
   const activatableAbilities = setup?.unitState
     ? snapshotActivatableAbilities(blueprint.templateId, containers, instances, ITEM_DEFINITIONS)
     : [];
-
-  const skills = setup?.unitState
-    ? resolveUnitSkills(blueprint, setup.unitState.chosenUpgrades)
-    : resolveEnemySkills(blueprint, level);
-
-  const spriteSheet = setup?.unitState
-    ? resolveUnitSpriteSheet(blueprint, setup.unitState.chosenUpgrades)
-    : blueprint.spriteSheet;
 
   return {
     id,
@@ -127,7 +123,9 @@ export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): 
     const slot = paddedBench.indexOf(undefined);
     if (slot === -1) return false;
     const unitState = playerUnitsState[def.templateId];
-    const sheet = resolveUnitSpriteSheet(def, unitState?.chosenUpgrades ?? {});
+    const sheet = unitState
+      ? resolveUnitProgression(def, unitState.chosenUpgrades).spriteSheet
+      : def.spriteSheet;
     paddedBench[slot] = {
       templateId: def.templateId,
       name: def.name,

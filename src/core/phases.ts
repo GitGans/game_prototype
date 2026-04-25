@@ -1,11 +1,13 @@
 import {
-  UnitProgressionStatModifiers,
   BackpackSnapshot,
   EquipmentSnapshot,
   UnitTabSnapshot,
   DamageType,
   SkillActionType,
 } from '../battle/types';
+import type { UnitUpgradeStatLineSnapshot } from './unitUpgradePresentation';
+
+export type { UnitUpgradeStatLineSnapshot };
 
 export interface CampUnitSnapshot {
   templateId: string;
@@ -23,11 +25,11 @@ export interface SkillIconSnapshot {
 }
 
 export interface UpgradeOptionSnapshot {
-  id:            string;
-  name:          string;
-  description:   string;
-  skill:         SkillIconSnapshot | null;
-  statModifiers: UnitProgressionStatModifiers;
+  id:           string;
+  name:         string;
+  description:  string;
+  skill:        SkillIconSnapshot | null;
+  statLines:    UnitUpgradeStatLineSnapshot[];
   spritePreview: string | null;
 }
 
