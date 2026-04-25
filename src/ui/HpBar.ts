@@ -15,19 +15,19 @@ export interface HpBarConfig {
 export class HpBar extends Phaser.GameObjects.Container {
   private bg:   Phaser.GameObjects.Rectangle;
   private fill: Phaser.GameObjects.Rectangle;
-  private readonly w: number;
-  private readonly h: number;
+  private readonly barW: number;
+  private readonly barH: number;
   private readonly tricolor: boolean;
 
   constructor(cfg: HpBarConfig) {
     super(cfg.scene, cfg.x, cfg.y);
-    this.w = cfg.width;
-    this.h = cfg.height;
+    this.barW = cfg.width;
+    this.barH = cfg.height;
     this.tricolor = cfg.tricolor ?? false;
     const a = cfg.alpha ?? 1;
 
-    this.bg   = cfg.scene.add.rectangle(0, 0, this.w, this.h, HP_COLOR.bg, a);
-    this.fill = cfg.scene.add.rectangle(-this.w / 2, 0, this.w, this.h, HP_COLOR.high, a)
+    this.bg   = cfg.scene.add.rectangle(0, 0, this.barW, this.barH, HP_COLOR.bg, a);
+    this.fill = cfg.scene.add.rectangle(-this.barW / 2, 0, this.barW, this.barH, HP_COLOR.high, a)
       .setOrigin(0, 0.5);
     this.add([this.bg, this.fill]);
 
@@ -37,7 +37,7 @@ export class HpBar extends Phaser.GameObjects.Container {
 
   setRatio(ratio: number, alpha = 1): void {
     const clamped = Math.max(0, Math.min(1, ratio));
-    const fillW   = Math.round(this.w * clamped);
+    const fillW   = Math.round(this.barW * clamped);
 
     this.bg.setAlpha(alpha);
 
@@ -52,7 +52,7 @@ export class HpBar extends Phaser.GameObjects.Container {
 
     this.fill
       .setVisible(true)
-      .setDisplaySize(fillW, this.h)
+      .setDisplaySize(fillW, this.barH)
       .setFillStyle(color)
       .setAlpha(alpha);
   }

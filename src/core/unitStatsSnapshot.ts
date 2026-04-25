@@ -7,7 +7,7 @@ import type {
   BattleStatBonuses,
   UnitProgressionStatModifiers,
 } from '../battle/types';
-import type { UnitStatsSnapshot } from './phases';
+import type { UnitStatsSnapshot } from '../shared/unitSnapshots';
 import { computeUnitBattleStats } from '../battle/itemOps';
 
 // Must match the base stat scaling rules used by computeUnitBattleStats().

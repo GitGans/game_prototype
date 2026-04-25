@@ -2,13 +2,18 @@ import Phaser from "phaser";
 import { LAYOUT_SCALE, COLORS } from "../core/Constants";
 import { TOOLTIP, fontSize, VALUE_COLOR } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
-import { Unit, UnitBlueprint } from "../battle/types";
+import { Unit, UnitBlueprint, BenchUnitSnapshot } from "../battle/types";
 import { effectiveStats } from "../battle/combat";
 import type { UnitStatsSnapshot } from '../core/phases';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 
 const W           = Math.round(200 * LAYOUT_SCALE);
 const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
+
+interface UnitIdentitySnapshot {
+  templateId: string;
+  name: string;
+}
 
 interface StatValue { value: number; base: number }
 function flat(v: number): StatValue { return { value: v, base: v }; }
@@ -145,9 +150,9 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.setVisible(true);
   }
 
-  showFixedNameOnly(bp: UnitBlueprint, level: number, x: number, y: number, w: number): void {
+  showFixedNameOnly(unit: UnitIdentitySnapshot, level: number, x: number, y: number, w: number): void {
     const data: TooltipData = {
-      templateId: bp.templateId, name: bp.name, level,
+      templateId: unit.templateId, name: unit.name, level,
       side: 'player',
       hp: flat(0), maxHp: flat(0),
       physicalDamage: flat(0), magicalDamage: flat(0),
@@ -164,13 +169,13 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 
 
   showFixedStatsSnapshot(
-    bp:    UnitBlueprint,
+    unit:  UnitIdentitySnapshot,
     stats: UnitStatsSnapshot,
     x: number, y: number, w: number,
   ): void {
     const data: TooltipData = {
-      templateId:      bp.templateId,
-      name:            bp.name,
+      templateId:      unit.templateId,
+      name:            unit.name,
       level:           stats.level,
       side:            'player',
       hp:              stats.hp,
@@ -189,6 +194,45 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.bg.setSize(w, h);
     this.setPosition(x, y);
     this.setVisible(true);
+  }
+
+  showBenchSnapshot(
+    snapshot: BenchUnitSnapshot,
+    anchorX:  number,
+    anchorY:  number,
+    overrideW?: number,
+  ): void {
+    const data: TooltipData = {
+      templateId:      snapshot.templateId,
+      name:            snapshot.name,
+      level:           snapshot.level,
+      side:            'player',
+      // Use maxHp for both — bench shows a healthy unit, not mid-battle HP
+      hp:              snapshot.stats.maxHp,
+      maxHp:           snapshot.stats.maxHp,
+      physicalDamage:  snapshot.stats.physicalDamage,
+      magicalDamage:   snapshot.stats.magicalDamage,
+      physicalDefense: snapshot.stats.physicalDefense,
+      magicalDefense:  snapshot.stats.magicalDefense,
+      dodge:           snapshot.stats.dodge,
+      block:           snapshot.stats.block,
+      initiative:      snapshot.stats.initiative,
+      skills: snapshot.skills.map(s => ({
+        name:        s.name,
+        damageBlock: s.damageType ? { damageType: s.damageType } : undefined,
+        isActive:    false,
+      })),
+      spriteKey: snapshot.spriteKey,
+    };
+    if (overrideW !== undefined) {
+      this.clearContent();
+      const h = this.buildContent(data);
+      this.bg.setSize(overrideW, h);
+      this.setPosition(anchorX, anchorY);
+      this.setVisible(true);
+    } else {
+      super.show(data, anchorX, anchorY, 'right');
+    }
   }
 
   showFixedSkillsOnly(

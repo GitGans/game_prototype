@@ -1,5 +1,4 @@
-import { BattleState, BenchUnitSnapshot, CellCoord, Col, Row, Skill, Unit, UnitBlueprint, UnitRace, ItemInstance, ItemContainer } from './types';
-import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
+import { BattleState, BenchUnitSnapshot, CellCoord, Col, Row, Skill, Unit, UnitBlueprint, UnitRace } from './types';
 import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
 import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
@@ -8,12 +7,8 @@ import { GameState, PlayerUnitState } from '../core/GameState';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from './itemOps';
 import { resolveUnitProgression } from '../core/unitProgression';
-
-export interface PlayerBattleSetup {
-  playerUnits: Record<string, PlayerUnitState>;
-  itemContainers: Record<string, ItemContainer>;
-  itemInstances: Record<string, ItemInstance>;
-}
+import type { PlayerBattleSetup } from '../core/battleSetup';
+import { buildPlayerUnitPreviewSnapshot } from '../core/unitPreviewSnapshot';
 
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): Skill[] {
   const base = (blueprint.skillTiers ?? [])
@@ -84,15 +79,10 @@ export function createUnitInstance(
   };
 }
 
-export function benchSnapshotFromUnit(unit: Unit): BenchUnitSnapshot {
-  return {
-    templateId: unit.templateId,
-    name: unit.name,
-    level: unit.level,
-    spriteKey: unit.spriteSheet
-      ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
-      : null,
-  };
+export function benchSnapshotFromUnit(unit: Unit, setup: PlayerBattleSetup): BenchUnitSnapshot {
+  const blueprint = PLAYER_UNITS.find(b => b.templateId === unit.templateId)!;
+  const unitState = setup.playerUnits[unit.templateId];
+  return buildPlayerUnitPreviewSnapshot(blueprint, unitState, setup);
 }
 
 export function blueprintFromUnit(unit: Unit): UnitBlueprint {
@@ -119,19 +109,17 @@ export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): 
   let counter = 1;
   const paddedBench: (BenchUnitSnapshot | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
 
+  const resolvedSetup: PlayerBattleSetup = {
+    playerUnits:    playerUnitsState,
+    itemContainers: setup?.itemContainers ?? GameState.itemContainers,
+    itemInstances:  setup?.itemInstances  ?? GameState.itemInstances,
+  };
+
   const addToBench = (def: UnitBlueprint): boolean => {
     const slot = paddedBench.indexOf(undefined);
     if (slot === -1) return false;
     const unitState = playerUnitsState[def.templateId];
-    const sheet = unitState
-      ? resolveUnitProgression(def, unitState.chosenUpgrades).spriteSheet
-      : def.spriteSheet;
-    paddedBench[slot] = {
-      templateId: def.templateId,
-      name: def.name,
-      level: unitState?.level ?? def.level,
-      spriteKey: sheet ? getUnitSpriteTextureKey(def.templateId, sheet) : null,
-    };
+    paddedBench[slot] = buildPlayerUnitPreviewSnapshot(def, unitState, resolvedSetup);
     return true;
   };
 

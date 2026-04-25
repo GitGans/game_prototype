@@ -22,7 +22,7 @@ import {
 } from '../battle/types';
 import { buildSkillDescription, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import { PlayerUnitState } from './GameState';
-import { PlayerBattleSetup } from '../battle/autoPlace';
+import type { PlayerBattleSetup } from './battleSetup';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
@@ -202,6 +202,7 @@ class PhaseManagerClass {
             )
           : EMPTY_EQUIP_SNAPSHOT;
         const availableUnits        = this.buildUnitTabSnapshots();
+        const selectedUnit          = availableUnits.find(u => u.templateId === phase.selectedUnitTemplateId) ?? null;
         const selectedUnitSpriteKey = phase.selectedUnitTemplateId && progression
           ? this.spriteKeyFromProgression(phase.selectedUnitTemplateId, progression)
           : null;
@@ -218,7 +219,7 @@ class PhaseManagerClass {
           : null;
         const learnedSkills = progression ? this.buildProgressionSkillIcons(progression) : [];
         const upgradeSkills = learnedSkills.slice(1, 5);
-        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, learnedSkills, upgradeSkills, selectedUnitSpriteKey };
+        return { ...phase, backpack, unitEquipment, availableUnits, selectedUnit, unitStats, learnedSkills, upgradeSkills, selectedUnitSpriteKey };
       }
       case 'camp':
         return { ...phase, units: this.buildCampUnits() };
@@ -248,6 +249,7 @@ class PhaseManagerClass {
             )
           : EMPTY_EQUIP_SNAPSHOT;
         const availableUnits        = this.buildUnitTabSnapshots(ds.chosenUpgrades);
+        const selectedUnit          = availableUnits.find(u => u.templateId === phase.selectedUnitTemplateId) ?? null;
         const selectedUnitSpriteKey = phase.selectedUnitTemplateId && progression
           ? this.spriteKeyFromProgression(phase.selectedUnitTemplateId, progression)
           : null;
@@ -264,7 +266,7 @@ class PhaseManagerClass {
           : null;
         const debugLearnedSkills = progression ? this.buildProgressionSkillIcons(progression) : [];
         const debugUpgradeSkills = debugLearnedSkills.slice(1, 5);
-        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, campUnitIds: [...ds.campUnitIds], learnedSkills: debugLearnedSkills, upgradeSkills: debugUpgradeSkills, selectedUnitSpriteKey };
+        return { ...phase, backpack, unitEquipment, availableUnits, selectedUnit, unitStats, campUnitIds: [...ds.campUnitIds], learnedSkills: debugLearnedSkills, upgradeSkills: debugUpgradeSkills, selectedUnitSpriteKey };
       }
       case 'upgrade_tree': {
         const isDebug = phase.returnPhase.type === 'debug_equip_screen';
@@ -616,6 +618,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         type: 'debug_equip_screen',
         selectedUnitTemplateId: '',
         selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
+        selectedUnit: null,                   // filled by rebuildSnapshot
         availableUnits: [],
         backpack: EMPTY_BACKPACK_SNAPSHOT,
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,
@@ -694,6 +697,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         type: 'equip_screen',
         selectedUnitTemplateId: action.unitTemplateId,
         selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
+        selectedUnit: null,                   // filled by rebuildSnapshot
         returnPhase: current,
         backpack: EMPTY_BACKPACK_SNAPSHOT,    // filled by rebuildSnapshot
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,  // filled by rebuildSnapshot

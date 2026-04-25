@@ -143,11 +143,15 @@ export interface OccupancyMap {
 export type Phase = 'placement' | 'select_target' | 'end';
 export type BattleMode = 'manual' | 'auto' | 'quick';
 
+import type { UnitStatsSnapshot, SkillIconSnapshot } from '../shared/unitSnapshots';
+
 export interface BenchUnitSnapshot {
   templateId: string;
-  name: string;
-  level: number;
-  spriteKey: string | null;
+  name:       string;
+  level:      number;
+  spriteKey:  string | null;
+  stats:      UnitStatsSnapshot;
+  skills:     SkillIconSnapshot[];
 }
 
 export interface BattleState {

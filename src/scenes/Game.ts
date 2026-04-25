@@ -315,7 +315,7 @@ export class Game extends Phaser.Scene {
     }
 
     const playerMaxLevel = [...state.units.values()]
-      .filter(u => u.id.startsWith('p') && !u.isDead)
+      .filter(u => u.anchor.side === 'player' && u.hp > 0)
       .reduce((max, u) => Math.max(max, u.level), 1);
     let forceRace: UnitRace | undefined;
     let enemyLevel: number | undefined;
@@ -574,16 +574,14 @@ export class Game extends Phaser.Scene {
     ).setOrigin(0.5, 0);
 
     // HP text + HP bar
-    const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
-    const fullBpForHp = PLAYER_UNITS.find(b => b.templateId === bp.templateId);
-    const scaledHp = fullBpForHp ? Math.round(fullBpForHp.hp * (1 + 0.1 * (level - 1))) : 0;
+    const hp = bp.stats.maxHp.value;
     const barW = BENCH_PANEL_WIDTH - Math.round(12 * LAYOUT_SCALE);
     const barH = Math.round(6 * LAYOUT_SCALE);
     const barY = cardH / 2 - Math.round(10 * LAYOUT_SCALE);
 
     const hpText = this.add.text(
       0, barY - Math.round(14 * LAYOUT_SCALE),
-      `${scaledHp}/${scaledHp}`,
+      `${hp}/${hp}`,
       {
         fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
         color: COLORS.textDark,
@@ -607,9 +605,7 @@ export class Game extends Phaser.Scene {
       container.on("pointerup", () => this.onBenchCardClick(idx));
       container.on("pointerover", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(COLORS.benchHover, 0.9);
-        const level = GameState.playerUnits[bp.templateId]?.level ?? bp.level;
-        const fullBp = PLAYER_UNITS.find(b => b.templateId === bp.templateId)!;
-        this.unitTooltip.showFromBlueprint(fullBp, level, "player", this.logX, this.logY, this.logW, bp.spriteKey);
+        this.unitTooltip.showBenchSnapshot(bp, this.logX, this.logY, this.logW);
       });
       container.on("pointerout", () => {
         if (this.selectedBenchIdx !== idx) bg.setFillStyle(fillColor, 0.9);
@@ -813,7 +809,7 @@ export class Game extends Phaser.Scene {
 
     // Update bench: replace snapshot at benchIdx with field unit's snapshot
     const newBench = [...state.benchUnits];
-    newBench[benchIdx] = benchSnapshotFromUnit(fieldUnit);
+    newBench[benchIdx] = benchSnapshotFromUnit(fieldUnit, setup);
     state = { ...state, benchUnits: newBench };
     GameState.set(state);
 
@@ -885,7 +881,8 @@ export class Game extends Phaser.Scene {
     if (emptyIdx === -1) return; // bench full — all 3 slots occupied
     const newUnits = new Map(state.units);
     newUnits.delete(unit.id);
-    newBench[emptyIdx] = benchSnapshotFromUnit(unit);
+    const setup = PhaseManager.getActiveBattleSetup();
+    newBench[emptyIdx] = benchSnapshotFromUnit(unit, setup);
     const newState = {
       ...state,
       units: newUnits,
@@ -908,7 +905,8 @@ export class Game extends Phaser.Scene {
     newUnits.delete(unit.id);
 
     const newBench = [...state.benchUnits];
-    newBench[benchIdx] = benchSnapshotFromUnit(unit);
+    const setup = PhaseManager.getActiveBattleSetup();
+    newBench[benchIdx] = benchSnapshotFromUnit(unit, setup);
 
     GameState.set({
       ...state,

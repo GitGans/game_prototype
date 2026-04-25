@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
 import { EventBus, Events } from '../core/EventBus';
-import { PLAYER_UNITS } from '../data/unitDefinitions';
 import { ItemSlotSnapshot, UnitTabSnapshot } from '../battle/types';
 import { Button } from '../ui/Button';
 import { ContextMenu } from '../ui/ContextMenu';
@@ -370,11 +369,10 @@ export class EquipScreen extends Phaser.Scene {
   }
 
   private refreshPanels(phase: AnyEquipPhase): void {
-    if (!phase.selectedUnitTemplateId || !phase.unitStats) return;
-    const bp = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
-    if (!bp) return;
-    this.statsPanel?.showFixedStatsSnapshot(bp, phase.unitStats, this.statsPanelX, this.statsPanelY, this.statsPanelW);
-    this.unitNamePanel?.showFixedNameOnly(bp, phase.unitStats.level, this.spriteHeaderX, this.spriteHeaderY, SPRITE_SZ);
+    const selectedUnit = phase.selectedUnit;
+    if (!selectedUnit || !phase.unitStats) return;
+    this.statsPanel?.showFixedStatsSnapshot(selectedUnit, phase.unitStats, this.statsPanelX, this.statsPanelY, this.statsPanelW);
+    this.unitNamePanel?.showFixedNameOnly(selectedUnit, phase.unitStats.level, this.spriteHeaderX, this.spriteHeaderY, SPRITE_SZ);
 
     if (this.skillIconRow) {
       this.skillIconRow.setPosition(this.skillsPanelX, this.skillsPanelY);
