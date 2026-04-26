@@ -1,12 +1,9 @@
-import {
-  BackpackSnapshot,
-  EquipmentSnapshot,
-  UnitTabSnapshot,
-} from '../battle/types';
 import type { UnitUpgradeStatLineSnapshot } from './unitUpgradePresentation';
-
 export type { UnitUpgradeStatLineSnapshot };
-import type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot } from '../shared/unitSnapshots';
+import type {
+  UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot,
+  BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
+} from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
 
 export interface CampUnitSnapshot {

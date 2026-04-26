@@ -1,4 +1,4 @@
-import { SubMapDefinition } from "../world/types";
+import type { SubMapDefinition } from "../shared/worldTypes";
 
 const test01: SubMapDefinition = {
   id: "test_01",

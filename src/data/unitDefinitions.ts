@@ -1,5 +1,6 @@
-import { UnitBlueprint, UnitRace, Skill, UnitUpgradeOption } from "../battle/types";
-import { SHAPES } from "../battle/shapes";
+import type { UnitBlueprint, UnitRace, UnitUpgradeOption } from "../shared/unitTypes";
+import type { Skill } from "../shared/skillTypes";
+import { SHAPES } from "./shapeDefinitions";
 import { SKILLS } from "./skillDefinitions";
 
 function u(skill: Skill): UnitUpgradeOption {

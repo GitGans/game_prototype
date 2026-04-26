@@ -1,4 +1,4 @@
-import { UnitRace } from '../battle/types';
+import type { UnitRace } from '../shared/unitTypes';
 
 export interface EnemyGroupDefinition {
   race: UnitRace;

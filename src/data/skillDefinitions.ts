@@ -1,4 +1,4 @@
-import {
+import type {
   DamageModifierBlock,
   DamageModifierType,
   Effect,
@@ -9,7 +9,7 @@ import {
   Skill,
   SkillEffectBlock,
   SkillPattern,
-} from "../battle/types";
+} from "../shared/skillTypes";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 

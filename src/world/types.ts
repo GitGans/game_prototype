@@ -1,9 +1,10 @@
-export type MapEntityType = 'mob' | 'camp' | 'portal' | 'shop';
+export type {
+  MapEntityType, LayoutCell,
+  MobEntry, CampEntry, PortalEntry, ShopEntry,
+  MapEntityEntries, SubMapDefinition, SubMapState,
+} from '../shared/worldTypes';
 
-export type LayoutCell =
-  | null
-  | 'wall' | 'tree'
-  | { type: MapEntityType; id: string };
+import type { MapEntityType } from '../shared/worldTypes';
 
 export const ENTITY_TYPE_CONFIG: Record<MapEntityType, { triggersOnEnter: boolean }> = {
   mob:    { triggersOnEnter: true  },
@@ -14,28 +15,7 @@ export const ENTITY_TYPE_CONFIG: Record<MapEntityType, { triggersOnEnter: boolea
 
 export const IMPASSABLE_TERRAIN = new Set<string>(['wall', 'tree']);
 
-export type MobEntry    = { enemyGroupId: string };
-export type CampEntry   = Record<string, never>;
-export type PortalEntry = { targetMapId: string; targetX: number; targetY: number };
-export type ShopEntry   = { shopId: string };
-
-export interface MapEntityEntries {
-  mob?:    Record<string, MobEntry>;
-  camp?:   Record<string, CampEntry>;
-  portal?: Record<string, PortalEntry>;
-  shop?:   Record<string, ShopEntry>;
-}
-
-export interface SubMapDefinition {
-  id: string;
-  startPos: { x: number; y: number };
-  layout: LayoutCell[][];
-  entities: MapEntityEntries;
-}
-
-export interface SubMapState {
-  entityStates: Record<string, { alive: boolean }>;
-}
+import type { MobEntry, CampEntry, PortalEntry, ShopEntry } from '../shared/worldTypes';
 
 export interface ResolvedCell {
   passable: boolean;

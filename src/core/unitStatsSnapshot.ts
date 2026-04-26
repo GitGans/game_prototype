@@ -1,13 +1,6 @@
-import type {
-  UnitBlueprint,
-  ItemContainer,
-  ItemInstance,
-  ItemDefinition,
-  UnitBattleStats,
-  BattleStatBonuses,
-  UnitProgressionStatModifiers,
-} from '../battle/types';
-import type { UnitStatsSnapshot } from '../shared/unitSnapshots';
+import type { UnitBlueprint, UnitBattleStats, UnitProgressionStatModifiers } from '../shared/unitTypes';
+import type { ItemContainer, ItemInstance, ItemDefinition, BattleStatBonuses } from '../shared/itemTypes';
+import type { UnitStatsSnapshot } from '../shared/snapshotTypes';
 import { computeUnitBattleStats } from '../battle/itemOps';
 
 // Must match the base stat scaling rules used by computeUnitBattleStats().

@@ -1,7 +1,8 @@
-import type { UnitBlueprint, BenchUnitSnapshot } from '../battle/types';
+import type { UnitBlueprint } from '../shared/unitTypes';
+import type { BenchUnitSnapshot } from '../shared/battleSnapshots';
 import type { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
-import type { SkillIconSnapshot } from '../shared/unitSnapshots';
+import type { SkillIconSnapshot } from '../shared/snapshotTypes';
 import { resolveUnitProgression } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { buildSkillDescription } from './unitUpgradePresentation';
