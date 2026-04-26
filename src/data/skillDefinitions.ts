@@ -335,20 +335,96 @@ export const INSTANT_EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
   /** Single target. */
   single: {
     levels: [
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.3)]] }, // level 1 — 30%
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.5)]] }, // level 2 — 50%
+      { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
+      { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+      { anchorRow: 0, anchorCol: 0, cells: [[P(1.25)]] },
+      { anchorRow: 0, anchorCol: 0, cells: [[P(1.5)]] },
+    ],
+  },
+
+  /** 3 cells in one row. */
+  row_sweep: {
+    levels: [
+      {
+        anchorRow: 0,
+        anchorCol: 1,
+        cells: [[P(0.6), P(0.6), P(0.6)]],
+      },
+    ],
+  },
+
+  /** 2 cells in one row. */
+  shot_sweep: {
+    levels: [
+      {
+        anchorRow: 0,
+        anchorCol: 0,
+        cells: [[P(0.5), P(0.5)]],
+      },
+      {
+        anchorRow: 0,
+        anchorCol: 0,
+        cells: [[P(0.8), P(0.8)]],
+      },
+    ],
+  },
+
+  /** 3x3 area. */
+  all: {
+    levels: [
+      {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(0.3), P(0.3), P(0.3)],
+          [P(0.3), P(0.3), P(0.3)],
+          [P(0.3), P(0.3), P(0.3)],
+        ],
+      },
+      {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(0.4), P(0.4), P(0.4)],
+          [P(0.4), P(0.4), P(0.4)],
+          [P(0.4), P(0.4), P(0.4)],
+        ],
+      },
+      {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(0.5), P(0.5), P(0.5)],
+          [P(0.5), P(0.5), P(0.5)],
+          [P(0.5), P(0.5), P(0.5)],
+        ],
+      },
+      {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(1), P(1), P(1)],
+          [P(1), P(1), P(1)],
+          [P(1), P(1), P(1)],
+        ],
+      },
     ],
   },
 
   /**
    * Cross: center + 4 orthogonal neighbours.
-   * Center has higher probability than neighbours.
-   *   [ ]  [X]  [ ]
-   *   [X]  [X]  [X]
-   *   [ ]  [X]  [ ]
    */
   cross: {
     levels: [
+      {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.5), null],
+          [P(0.5), P(0.1), P(0.5)],
+          [null, P(0.5), null],
+        ],
+      },
       {
         anchorRow: 1,
         anchorCol: 1,
@@ -357,6 +433,26 @@ export const INSTANT_EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
           [P(0.4), P(0.7), P(0.4)],
           [null, P(0.4), null],
         ],
+      },
+      {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.3), null],
+          [P(0.3), P(1), P(0.3)],
+          [null, P(0.3), null],
+        ],
+      },
+    ],
+  },
+
+  /** Main target + one additional target. */
+  pierce: {
+    levels: [
+      {
+        anchorRow: 0,
+        anchorCol: 0,
+        cells: [[P(0.75), P(1)]],
       },
     ],
   },
