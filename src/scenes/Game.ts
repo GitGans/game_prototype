@@ -29,7 +29,6 @@ import {
   Skill,
   Unit,
   SpriteSheetConfig,
-  UnitRace,
 } from "../battle/types";
 import type { BenchUnitRef } from "../battle/types";
 import type { BenchUnitSnapshot } from "../shared/battleSnapshots";
@@ -38,8 +37,6 @@ import { BattleParticipant } from '../core/phases';
 import { Button } from '../ui/Button';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
-import { ENEMY_GROUPS } from '../data/enemyGroupDefinitions';
-import { PLAYER_UNITS } from "../data/unitDefinitions";
 import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
@@ -55,12 +52,8 @@ import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffect
 import { resolvePattern } from "../battle/skillPatterns";
 import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, getInstantEffectPattern, DAMAGE_MATRICES, getDamageModifierPercent } from "../data/skillDefinitions";
 import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/initiative";
-import {
-  autoPlacePlayer,
-  autoPlaceEnemies,
-  replayPlaceEnemies,
-  createUnitInstance,
-} from "../battle/autoPlace";
+import { createUnitInstance } from "../battle/unitFactory";
+import { buildPlayerUnitInput } from "../core/battleSetupProjection";
 import { buildBenchUnitSnapshots } from "../core/unitPreviewSnapshot";
 
 /** Returns the currently active skill for a unit. */
@@ -234,15 +227,14 @@ export class Game extends Phaser.Scene {
   }
 
   create(): void {
-    GameState.reset();
     this.unitViews.clear();
 
     this.buildGrid();
     this.unitTooltip = new UnitTooltip(this, TOOLTIP.bg, TOOLTIP.bgAlpha);
     this.effectTooltip = new EffectTooltip(this);
     this.skillBar = new SkillBar(this, new SkillTooltip(this));
-    this.initBattle();
     this.buildUnitViews();
+    this.syncPlayerIdCounter();
     this.buildUI();
     this.setupInput();
     this.enterPlacementPhase();
@@ -300,60 +292,6 @@ export class Game extends Phaser.Scene {
 
   }
 
-  // ─── Battle Initialisation ─────────────────────────────────────────────────
-
-  private initBattle(): void {
-    let state = GameState.get();
-    const phase = PhaseManager.getPhase();
-    const isDebug = phase.type === 'battle' && phase.isDebug;
-
-    if (isDebug) {
-      state = autoPlacePlayer(state, PhaseManager.buildDebugBattleSetup());
-    } else {
-      GameState.reset();
-      state = GameState.get();
-      state = autoPlacePlayer(state);
-    }
-
-    const playerMaxLevel = [...state.units.values()]
-      .filter(u => u.anchor.side === 'player' && u.hp > 0)
-      .reduce((max, u) => Math.max(max, u.level), 1);
-    let forceRace: UnitRace | undefined;
-    let enemyLevel: number | undefined;
-    if (phase.type === 'battle') {
-      const group = ENEMY_GROUPS[phase.enemyGroupId];
-      if (group) {
-        forceRace = group.race;
-        enemyLevel = group.levelOverride;
-      }
-    }
-
-    const saved = isDebug ? null : GameState.lastEnemyPlacements;
-    if (saved) {
-      state = replayPlaceEnemies(state, saved);
-    } else {
-      state = autoPlaceEnemies(state, enemyLevel ?? playerMaxLevel, forceRace);
-      if (!isDebug) {
-        GameState.lastEnemyPlacements = [...state.units.values()]
-          .filter(u => u.id.startsWith('e'))
-          .map(u => ({ templateId: u.templateId, anchor: u.anchor, level: u.level }));
-      }
-    }
-
-    // Determine the highest player instance counter used so we can continue from there
-    this.playerIdCounter = state.units.size; // rough upper bound; refined below
-    let maxP = 0;
-    for (const id of state.units.keys()) {
-      if (id.startsWith("p")) {
-        const n = parseInt(id.slice(1), 10);
-        if (!isNaN(n) && n > maxP) maxP = n;
-      }
-    }
-    this.playerIdCounter = maxP;
-
-    GameState.set(state);
-  }
-
   // ─── Unit Views ────────────────────────────────────────────────────────────
 
   private buildUnitViews(): void {
@@ -361,6 +299,17 @@ export class Game extends Phaser.Scene {
     for (const unit of state.units.values()) {
       this.createUnitView(unit);
     }
+  }
+
+  private syncPlayerIdCounter(): void {
+    let maxP = 0;
+    for (const id of GameState.get().units.keys()) {
+      if (id.startsWith('p')) {
+        const n = parseInt(id.slice(1), 10);
+        if (!isNaN(n) && n > maxP) maxP = n;
+      }
+    }
+    this.playerIdCounter = maxP;
   }
 
   private createUnitView(unit: Unit): void {
@@ -757,19 +706,15 @@ export class Game extends Phaser.Scene {
     anchor: CellCoord,
   ): void {
     let state = GameState.get();
-    const fullBp = PLAYER_UNITS.find(b => b.templateId === ref.templateId)!;
     const newId = `p${++this.playerIdCounter}`;
     const setup = PhaseManager.getActiveBattleSetup();
-    const unitState = setup.playerUnits[ref.templateId];
-    const level = unitState?.level ?? fullBp.level;
-    const unit = createUnitInstance(fullBp, newId, anchor, level, {
-      itemContainers: setup.itemContainers,
-      itemInstances:  setup.itemInstances,
-      unitState,
-    });
 
-    if (!canPlace(anchor, fullBp.shape, state, "player")) return;
+    const input = buildPlayerUnitInput(ref.templateId, anchor, newId, setup);
+    if (!input) return;
 
+    if (!canPlace(anchor, input.blueprint.shape, state, "player")) return;
+
+    const unit = createUnitInstance(input);
     state = placeUnit(unit, state);
     const newBench = [...state.benchUnits];
     newBench[benchIdx] = undefined;
@@ -786,29 +731,23 @@ export class Game extends Phaser.Scene {
   ): void {
     let state = GameState.get();
     const anchor = fieldUnit.anchor;
-    const fullBp = PLAYER_UNITS.find(b => b.templateId === ref.templateId)!;
 
     // Remove field unit
     const newUnits = new Map(state.units);
     newUnits.delete(fieldUnit.id);
     state = { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) };
 
-    // Check new unit fits
-    if (!canPlace(anchor, fullBp.shape, state, "player")) {
-      // Restore and abort
+    const newId = `p${++this.playerIdCounter}`;
+    const setup = PhaseManager.getActiveBattleSetup();
+    const input = buildPlayerUnitInput(ref.templateId, anchor, newId, setup);
+    if (!input) { state = GameState.get(); return; }
+
+    if (!canPlace(anchor, input.blueprint.shape, state, "player")) {
       state = GameState.get();
       return;
     }
 
-    const newId = `p${++this.playerIdCounter}`;
-    const setup = PhaseManager.getActiveBattleSetup();
-    const unitState = setup.playerUnits[ref.templateId];
-    const level = unitState?.level ?? fullBp.level;
-    const newUnit = createUnitInstance(fullBp, newId, anchor, level, {
-      itemContainers: setup.itemContainers,
-      itemInstances:  setup.itemInstances,
-      unitState,
-    });
+    const newUnit = createUnitInstance(input);
     state = placeUnit(newUnit, state);
 
     // Update bench: replace ref at benchIdx with field unit's ref

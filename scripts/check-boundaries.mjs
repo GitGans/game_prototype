@@ -32,6 +32,11 @@ const RULES = [
     // data/ → shared/ is explicitly allowed
     banned: ['battle/', 'core/', 'objects/', 'scenes/', 'ui/', 'world/'],
   },
+  {
+    layer: 'battle/**',
+    dir: join(SRC, 'battle'),
+    banned: ['core/'],
+  },
 ];
 
 // Matches both `import ... from 'x'` and `export ... from 'x'`

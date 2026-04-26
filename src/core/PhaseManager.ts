@@ -23,6 +23,10 @@ import {
 import { buildSkillDescription, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
+import {
+  buildNewBattleState,
+  buildReplayBattleState,
+} from './battleInitialization';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
@@ -328,14 +332,19 @@ class PhaseManagerClass {
       if (!GameState.money) GameState.money = 0;
     }
 
-    // ── Battle setup ──
-    if (action.type === 'start_battle' || action.type === 'enter_battle') {
-      GameState.lastEnemyPlacements = null;
-    }
-
-    // Snapshot all party members at battle start (before anyone can die)
+    // ── Campaign battle: initialize BattleState + snapshot participants ──
     if (action.type === 'enter_battle') {
-      const state = GameState.get();
+      // Build BattleState first so bench info is accurate for participants snapshot
+      GameState.reset();
+      const setup = this.getActiveBattleSetup();
+      const { state, race, enemyPlacements } = buildNewBattleState(
+        GameState.get(), setup, action.enemyGroupId,
+      );
+      GameState.set(state);
+      GameState.lastEnemyRace       = race;
+      GameState.lastEnemyPlacements = enemyPlacements;
+
+      // Snapshot all party members (field + bench) before anyone can die
       const participants: BattleParticipant[] = [];
       Object.entries(GameState.playerUnits).forEach(([templateId, us]) => {
         if (us.isInCamp) return;
@@ -349,9 +358,18 @@ class PhaseManagerClass {
       GameState.battleParticipants = participants;
     }
 
-    // Snapshot all party members at debug battle start
+    // ── Debug battle: initialize BattleState + snapshot participants ──
+    // Invariant: debug battles never save or replay enemy placements.
     if (action.type === 'start_battle' && this.debugState) {
-      const ds = this.debugState;
+      const ds    = this.debugState;
+      const setup = this.buildDebugBattleSetup();
+
+      // Build BattleState — no race/placement persistence for debug
+      GameState.reset();
+      const { state } = buildNewBattleState(GameState.get(), setup, action.enemyGroupId);
+      GameState.set(state);
+
+      // Snapshot debug participants (all non-camp units; bench not tracked for debug)
       const participants: BattleParticipant[] = [];
       for (const bp of PLAYER_UNITS) {
         if (ds.campUnitIds.includes(bp.templateId)) continue;
@@ -360,6 +378,35 @@ class PhaseManagerClass {
         participants.push({ templateId: bp.templateId, name: bp.name, level: ds.level, isAlive: true, wasOnBench: false, spriteKey });
       }
       GameState.battleParticipants = participants;
+    }
+
+    // ── Replay: reinitialize BattleState ──
+    if (action.type === 'replay') {
+      const phase = prev;
+      if (phase.type === 'battle') {
+        if (phase.isDebug) {
+          // Debug replay = fresh battle. Intentional: debug battles have no saved placements.
+          GameState.reset();
+          const setup = this.buildDebugBattleSetup();
+          const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId);
+          GameState.set(state);
+        } else {
+          const saved = GameState.lastEnemyPlacements;
+          if (saved) {
+            // Normal case: replay same enemies in same positions
+            GameState.reset();
+            const setup    = this.getActiveBattleSetup();
+            const newState = buildReplayBattleState(GameState.get(), setup, saved);
+            GameState.set(newState);
+          } else {
+            // Fallback: no saved placements, generate fresh
+            GameState.reset();
+            const setup = this.getActiveBattleSetup();
+            const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId);
+            GameState.set(state);
+          }
+        }
+      }
     }
 
     // ── Battle teardown ──
