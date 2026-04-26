@@ -1,11 +1,13 @@
 import {
-  UnitProgressionStatModifiers,
   BackpackSnapshot,
   EquipmentSnapshot,
   UnitTabSnapshot,
-  DamageType,
-  SkillActionType,
 } from '../battle/types';
+import type { UnitUpgradeStatLineSnapshot } from './unitUpgradePresentation';
+
+export type { UnitUpgradeStatLineSnapshot };
+import type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot } from '../shared/unitSnapshots';
+export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
 
 export interface CampUnitSnapshot {
   templateId: string;
@@ -14,20 +16,12 @@ export interface CampUnitSnapshot {
   inCamp:     boolean;
 }
 
-export interface SkillIconSnapshot {
-  id:          string;
-  name:        string;
-  description: string;
-  damageType:  DamageType | null;
-  actionType:  SkillActionType;
-}
-
 export interface UpgradeOptionSnapshot {
-  id:            string;
-  name:          string;
-  description:   string;
-  skill:         SkillIconSnapshot | null;
-  statModifiers: UnitProgressionStatModifiers;
+  id:           string;
+  name:         string;
+  description:  string;
+  skill:        SkillIconSnapshot | null;
+  statLines:    UnitUpgradeStatLineSnapshot[];
   spritePreview: string | null;
 }
 
@@ -58,24 +52,6 @@ export interface BattleResultUnit {
   spriteKey: string | null;
 }
 
-export interface UnitStatValueSnapshot {
-  base: number;   // blueprint + level scaling only
-  value: number;  // final: base + upgrade modifiers + equipment + permanent bonuses
-}
-
-export interface UnitStatsSnapshot {
-  level: number;
-  hp:              UnitStatValueSnapshot;
-  maxHp:           UnitStatValueSnapshot;
-  physicalDamage:  UnitStatValueSnapshot;
-  magicalDamage:   UnitStatValueSnapshot;
-  physicalDefense: UnitStatValueSnapshot;
-  magicalDefense:  UnitStatValueSnapshot;
-  dodge:           UnitStatValueSnapshot;
-  block:           UnitStatValueSnapshot;
-  initiative:      UnitStatValueSnapshot;
-}
-
 export type GamePhase =
   | { type: 'main_menu' }
   | { type: 'world_map'; mapId: string; partyPos: { x: number; y: number } }
@@ -96,6 +72,7 @@ export type GamePhase =
       type: 'debug_equip_screen';
       selectedUnitTemplateId: string;
       selectedUnitSpriteKey: string | null;
+      selectedUnit: UnitTabSnapshot | null;
       availableUnits: UnitTabSnapshot[];
       backpack: BackpackSnapshot;
       unitEquipment: EquipmentSnapshot;
@@ -108,6 +85,7 @@ export type GamePhase =
       type: 'equip_screen';
       selectedUnitTemplateId: string;
       selectedUnitSpriteKey: string | null;
+      selectedUnit: UnitTabSnapshot | null;
       returnPhase: GamePhase;
       backpack: BackpackSnapshot;
       unitEquipment: EquipmentSnapshot;

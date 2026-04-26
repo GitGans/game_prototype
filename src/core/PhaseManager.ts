@@ -20,9 +20,10 @@ import {
   UnitTabSnapshot,
   Skill,
 } from '../battle/types';
+import { buildSkillDescription, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import { PlayerUnitState } from './GameState';
-import { PlayerBattleSetup } from '../battle/autoPlace';
-import { resolveUnitSkills, resolveUnitSpriteSheet, type UnitUpgradeChoices } from './unitProgression';
+import type { PlayerBattleSetup } from './battleSetup';
+import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 
@@ -34,13 +35,6 @@ function toSkillIcon(skill: Skill): import('./phases').SkillIconSnapshot {
     damageType:  skill.damageBlock?.damageType ?? null,
     actionType:  skill.actionType,
   };
-}
-
-function buildSkillDescription(skill: Skill): string {
-  if (skill.effectBlock) return `${skill.actionType} · applies ${skill.effectBlock.effectDisplayName}`;
-  if (skill.instantEffectBlock) return `${skill.actionType} · ${skill.instantEffectBlock.displayName}`;
-  if (skill.damageBlock) return `${skill.actionType} · ${skill.damageBlock.damageType} damage`;
-  return skill.actionType;
 }
 
 class PhaseManagerClass {
@@ -121,14 +115,19 @@ class PhaseManagerClass {
     }));
   }
 
-  private buildLearnedSkills(
-    templateId: string,
-    debugChosenUpgrades?: UnitUpgradeChoices,
+  private buildProgressionSkillIcons(
+    progression: ResolvedUnitProgression,
   ): SkillIconSnapshot[] {
-    const bp = PLAYER_UNITS.find(u => u.templateId === templateId);
-    if (!bp) return [];
-    const chosenUpgrades = debugChosenUpgrades ?? GameState.playerUnits[templateId]?.chosenUpgrades ?? {};
-    return resolveUnitSkills(bp, chosenUpgrades).map(toSkillIcon);
+    return progression.skills.map(toSkillIcon);
+  }
+
+  private spriteKeyFromProgression(
+    templateId: string,
+    progression: ResolvedUnitProgression,
+  ): string | null {
+    return progression.spriteSheet
+      ? getUnitSpriteTextureKey(templateId, progression.spriteSheet)
+      : null;
   }
 
   private buildUpgradeTiers(
@@ -144,11 +143,11 @@ class PhaseManagerClass {
     return (bp.upgradeTiers ?? []).map(tier => ({
       tierId: tier.unlocksAtLevel,
       options: tier.options.map((upg): UpgradeOptionSnapshot => ({
-        id:            upg.id,
-        name:          upg.name,
-        description:   upg.description ?? '',
-        skill:         upg.skill ? toSkillIcon(upg.skill) : null,
-        statModifiers: upg.statModifiers ?? {},
+        id:           upg.id,
+        name:         upg.name,
+        description:  buildUnitUpgradeDescription(upg),
+        skill:        upg.skill ? toSkillIcon(upg.skill) : null,
+        statLines:    buildUnitUpgradeStatLines(upg.statModifiers ?? {}),
         spritePreview: upg.spriteSheet
           ? getUnitSpriteTextureKey(bp.templateId, upg.spriteSheet)
           : null,
@@ -166,26 +165,14 @@ class PhaseManagerClass {
         debugChosenUpgradesMap?.[bp.templateId] ??
         GameState.playerUnits[bp.templateId]?.chosenUpgrades ??
         {};
-      const sheet = resolveUnitSpriteSheet(bp, chosenUpgrades);
+      const progression = resolveUnitProgression(bp, chosenUpgrades);
       return {
         templateId: bp.templateId,
-        name: bp.name,
-        unitClass: bp.unitClass,
-        spriteKey: sheet ? getUnitSpriteTextureKey(bp.templateId, sheet) : null,
+        name:       bp.name,
+        unitClass:  bp.unitClass,
+        spriteKey:  this.spriteKeyFromProgression(bp.templateId, progression),
       };
     });
-  }
-
-  private buildSelectedUnitSpriteKey(
-    templateId: string,
-    chosenUpgrades?: UnitUpgradeChoices,
-  ): string | null {
-    if (!templateId) return null;
-    const bp = PLAYER_UNITS.find(u => u.templateId === templateId);
-    if (!bp) return null;
-    const upgrades = chosenUpgrades ?? GameState.playerUnits[templateId]?.chosenUpgrades ?? {};
-    const sheet = resolveUnitSpriteSheet(bp, upgrades);
-    return sheet ? getUnitSpriteTextureKey(templateId, sheet) : null;
   }
 
   // Recomputes data snapshots for phases that carry them.
@@ -193,6 +180,14 @@ class PhaseManagerClass {
   private rebuildSnapshot(phase: GamePhase): GamePhase {
     switch (phase.type) {
       case 'equip_screen': {
+        const bp        = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
+        const unitState = phase.selectedUnitTemplateId
+          ? GameState.playerUnits[phase.selectedUnitTemplateId]
+          : undefined;
+        const progression = bp && unitState
+          ? resolveUnitProgression(bp, unitState.chosenUpgrades)
+          : null;
+
         const backpack = buildBackpackSnapshot(
           GameState.itemContainers,
           GameState.itemInstances,
@@ -206,32 +201,39 @@ class PhaseManagerClass {
               ITEM_DEFINITIONS,
             )
           : EMPTY_EQUIP_SNAPSHOT;
-        const availableUnits = this.buildUnitTabSnapshots();
-        const selectedUnitSpriteKey = this.buildSelectedUnitSpriteKey(phase.selectedUnitTemplateId);
-        const unitStats = phase.selectedUnitTemplateId
-          ? (() => {
-              const bp        = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
-              const unitState = GameState.playerUnits[phase.selectedUnitTemplateId];
-              return bp && unitState
-                ? buildUnitStatsSnapshot(
-                    bp,
-                    unitState.level,
-                    unitState,
-                    GameState.itemContainers,
-                    GameState.itemInstances,
-                    ITEM_DEFINITIONS,
-                  )
-                : null;
-            })()
+        const availableUnits        = this.buildUnitTabSnapshots();
+        const selectedUnit          = availableUnits.find(u => u.templateId === phase.selectedUnitTemplateId) ?? null;
+        const selectedUnitSpriteKey = phase.selectedUnitTemplateId && progression
+          ? this.spriteKeyFromProgression(phase.selectedUnitTemplateId, progression)
           : null;
-        const learnedSkills = this.buildLearnedSkills(phase.selectedUnitTemplateId);
+        const unitStats = bp && unitState && progression
+          ? buildUnitStatsSnapshot(
+              bp,
+              unitState.level,
+              unitState.permanentBonuses,
+              GameState.itemContainers,
+              GameState.itemInstances,
+              ITEM_DEFINITIONS,
+              progression.statModifiers,
+            )
+          : null;
+        const learnedSkills = progression ? this.buildProgressionSkillIcons(progression) : [];
         const upgradeSkills = learnedSkills.slice(1, 5);
-        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, learnedSkills, upgradeSkills, selectedUnitSpriteKey };
+        return { ...phase, backpack, unitEquipment, availableUnits, selectedUnit, unitStats, learnedSkills, upgradeSkills, selectedUnitSpriteKey };
       }
       case 'camp':
         return { ...phase, units: this.buildCampUnits() };
       case 'debug_equip_screen': {
-        const ds = this.debugState!;
+        const ds         = this.debugState!;
+        const bp         = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
+        const debugSetup = this.buildDebugBattleSetup();
+        const unitState  = phase.selectedUnitTemplateId
+          ? debugSetup.playerUnits[phase.selectedUnitTemplateId]
+          : undefined;
+        const progression = bp && unitState
+          ? resolveUnitProgression(bp, ds.chosenUpgrades[phase.selectedUnitTemplateId] ?? {})
+          : null;
+
         const backpack = buildBackpackSnapshot(
           ds.itemContainers,
           ds.itemInstances,
@@ -246,34 +248,25 @@ class PhaseManagerClass {
               ITEM_DEFINITIONS,
             )
           : EMPTY_EQUIP_SNAPSHOT;
-        const availableUnits = this.buildUnitTabSnapshots(ds.chosenUpgrades);
-        const selectedUnitSpriteKey = this.buildSelectedUnitSpriteKey(
-          phase.selectedUnitTemplateId,
-          ds.chosenUpgrades[phase.selectedUnitTemplateId],
-        );
-        const debugSetup = this.buildDebugBattleSetup();
-        const unitStats = phase.selectedUnitTemplateId
-          ? (() => {
-              const bp        = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
-              const unitState = debugSetup.playerUnits[phase.selectedUnitTemplateId];
-              return bp && unitState
-                ? buildUnitStatsSnapshot(
-                    bp,
-                    ds.level,
-                    unitState,
-                    ds.itemContainers,
-                    ds.itemInstances,
-                    ITEM_DEFINITIONS,
-                  )
-                : null;
-            })()
+        const availableUnits        = this.buildUnitTabSnapshots(ds.chosenUpgrades);
+        const selectedUnit          = availableUnits.find(u => u.templateId === phase.selectedUnitTemplateId) ?? null;
+        const selectedUnitSpriteKey = phase.selectedUnitTemplateId && progression
+          ? this.spriteKeyFromProgression(phase.selectedUnitTemplateId, progression)
           : null;
-        const debugLearnedSkills = this.buildLearnedSkills(
-          phase.selectedUnitTemplateId,
-          ds.chosenUpgrades[phase.selectedUnitTemplateId],
-        );
+        const unitStats = bp && unitState && progression
+          ? buildUnitStatsSnapshot(
+              bp,
+              ds.level,
+              unitState.permanentBonuses,
+              ds.itemContainers,
+              ds.itemInstances,
+              ITEM_DEFINITIONS,
+              progression.statModifiers,
+            )
+          : null;
+        const debugLearnedSkills = progression ? this.buildProgressionSkillIcons(progression) : [];
         const debugUpgradeSkills = debugLearnedSkills.slice(1, 5);
-        return { ...phase, backpack, unitEquipment, availableUnits, unitStats, campUnitIds: [...ds.campUnitIds], learnedSkills: debugLearnedSkills, upgradeSkills: debugUpgradeSkills, selectedUnitSpriteKey };
+        return { ...phase, backpack, unitEquipment, availableUnits, selectedUnit, unitStats, campUnitIds: [...ds.campUnitIds], learnedSkills: debugLearnedSkills, upgradeSkills: debugUpgradeSkills, selectedUnitSpriteKey };
       }
       case 'upgrade_tree': {
         const isDebug = phase.returnPhase.type === 'debug_equip_screen';
@@ -348,9 +341,9 @@ class PhaseManagerClass {
         if (us.isInCamp) return;
         const bp = PLAYER_UNITS.find(b => b.templateId === templateId);
         if (!bp) return;
-        const wasOnBench = state.benchUnits.some(b => b?.templateId === templateId);
-        const sheet     = resolveUnitSpriteSheet(bp, us.chosenUpgrades ?? {});
-        const spriteKey = sheet ? getUnitSpriteTextureKey(templateId, sheet) : null;
+        const wasOnBench  = state.benchUnits.some(b => b?.templateId === templateId);
+        const progression = resolveUnitProgression(bp, us.chosenUpgrades ?? {});
+        const spriteKey   = this.spriteKeyFromProgression(templateId, progression);
         participants.push({ templateId, name: bp.name, level: us.level, isAlive: true, wasOnBench, spriteKey });
       });
       GameState.battleParticipants = participants;
@@ -362,8 +355,8 @@ class PhaseManagerClass {
       const participants: BattleParticipant[] = [];
       for (const bp of PLAYER_UNITS) {
         if (ds.campUnitIds.includes(bp.templateId)) continue;
-        const sheet     = resolveUnitSpriteSheet(bp, ds.chosenUpgrades[bp.templateId] ?? {});
-        const spriteKey = sheet ? getUnitSpriteTextureKey(bp.templateId, sheet) : null;
+        const progression = resolveUnitProgression(bp, ds.chosenUpgrades[bp.templateId] ?? {});
+        const spriteKey   = this.spriteKeyFromProgression(bp.templateId, progression);
         participants.push({ templateId: bp.templateId, name: bp.name, level: ds.level, isAlive: true, wasOnBench: false, spriteKey });
       }
       GameState.battleParticipants = participants;
@@ -625,6 +618,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         type: 'debug_equip_screen',
         selectedUnitTemplateId: '',
         selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
+        selectedUnit: null,                   // filled by rebuildSnapshot
         availableUnits: [],
         backpack: EMPTY_BACKPACK_SNAPSHOT,
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,
@@ -703,6 +697,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         type: 'equip_screen',
         selectedUnitTemplateId: action.unitTemplateId,
         selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
+        selectedUnit: null,                   // filled by rebuildSnapshot
         returnPhase: current,
         backpack: EMPTY_BACKPACK_SNAPSHOT,    // filled by rebuildSnapshot
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,  // filled by rebuildSnapshot

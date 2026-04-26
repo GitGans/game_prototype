@@ -55,12 +55,9 @@ export class UpgradeCard extends Phaser.GameObjects.Container {
     this.add(nameText);
     textY += nameText.height + Math.round(4 * LAYOUT_SCALE);
 
-    const bonusEntries = Object.entries(upgrade.statModifiers) as [string, number][];
-    for (const [stat, val] of bonusEntries) {
-      if (!val) continue;
-      const sign = val > 0 ? '+' : '';
-      const color = val > 0 ? VALUE_COLOR.positive : VALUE_COLOR.negative;
-      const label = scene.add.text(pad, textY, `${sign}${val} ${formatStat(stat)}`, {
+    for (const statLine of upgrade.statLines) {
+      const color = statLine.tone === 'positive' ? VALUE_COLOR.positive : VALUE_COLOR.negative;
+      const label = scene.add.text(pad, textY, statLine.text, {
         fontSize: fontSize('xs'),
         color,
       }).setOrigin(0, 0).setAlpha(alpha);
@@ -68,13 +65,13 @@ export class UpgradeCard extends Phaser.GameObjects.Container {
       textY += line;
     }
 
-    if (upgrade.skill) {
-      const skillText = scene.add.text(pad, textY, upgrade.skill.description, {
+    if (upgrade.description) {
+      const descText = scene.add.text(pad, textY, upgrade.description, {
         fontSize: fontSize('xs'),
         color: VALUE_COLOR.muted,
         wordWrap: { width: w - pad * 2 },
       }).setOrigin(0, 0).setAlpha(alpha);
-      this.add(skillText);
+      this.add(descText);
     }
 
     if (status === 'available') {
@@ -88,18 +85,4 @@ export class UpgradeCard extends Phaser.GameObjects.Container {
 
     scene.add.existing(this);
   }
-}
-
-function formatStat(stat: string): string {
-  const map: Record<string, string> = {
-    hp:              'HP',
-    physicalDamage:  'P.Dmg',
-    magicalDamage:   'M.Dmg',
-    physicalDefense: 'P.Def',
-    magicalDefense:  'M.Def',
-    dodge:           'Dodge',
-    block:           'Block',
-    initiative:      'Init',
-  };
-  return map[stat] ?? stat;
 }
