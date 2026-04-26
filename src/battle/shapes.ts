@@ -1,12 +1,8 @@
-import { CellCoord, Col, Row, UnitShape } from './types';
+import type { CellCoord, Col, Row, UnitShape } from './types';
 import { cellExists } from './field';
+import { SHAPES } from '../data/shapeDefinitions';
 
-export const SHAPES: Record<string, UnitShape> = {
-  '1x1': { offsets: [{ dr: 0, dc: 0 }] },
-  '1x2': { offsets: [{ dr: 0, dc: 0 }, { dr: 0, dc: 1 }] },       // 1 row, 2 cols wide
-  '2x1': { offsets: [{ dr: 0, dc: 0 }, { dr: 1, dc: 0 }] },       // 2 rows tall, 1 col
-  '2x2': { offsets: [{ dr: 0, dc: 0 }, { dr: 0, dc: 1 }, { dr: 1, dc: 0 }, { dr: 1, dc: 1 }] },
-};
+export { SHAPES }; // Step 3: migrate direct import to data/shapeDefinitions
 
 /**
  * Returns all cells occupied by a unit given its anchor and shape.

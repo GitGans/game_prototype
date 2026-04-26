@@ -1,48 +1,51 @@
 # data
 
 ## Role
-Central game data definitions layer — all playable content, combat configurations, and world layouts live here. No logic, only structured declarations consumed by the rest of the system.
+Static data layer for all game entities. Contains only read-only constant definitions — no logic, no state, no side effects.
 
 ## Responsibilities
-- Define all unit blueprints (player and enemy) with stats, skills, and progression tiers
-- Declare all skills, damage patterns, effects, and their level scaling
-- Specify item properties, stat bonuses, and usage types
-- Describe world map layouts, tile types, and entity placements
-- Group enemy encounter configurations by race and variant
+- Define all playable and enemy unit blueprints (stats, skills, upgrade tiers)
+- Define all combat skills, damage patterns, and effect matrices
+- Define equippable and consumable item configurations
+- Define world/battle map layouts and entity placement
+- Define enemy encounter group compositions
+- Define grid occupancy shapes for units
 
 ## Key Files
-- `unitDefinitions.ts` — player unit blueprints (`PLAYER_UNITS`), enemy templates by race (`ENEMY_UNITS`), starting roster IDs
-- `skillDefinitions.ts` — skill catalog (`SKILLS`), damage/effect matrices, level-scaling helpers (`getSkillPattern`, `getEffectPattern`, etc.)
-- `itemDefinitions.ts` — item catalog (`ITEM_DEFINITIONS`), stat bonus descriptions (`getItemDescription`)
-- `enemyGroupDefinitions.ts` — encounter group configs (`ENEMY_GROUPS`), maps group id → race + optional level override
-- `mapDefinitions.ts` — world map grid layouts (`MAP_DEFINITIONS`) with tile types, mob spawns, and player start positions
+- `unitDefinitions.ts` — player and enemy unit blueprints; exports `PLAYER_UNITS`, `ENEMY_UNITS`, `PLAYER_STARTING_IDS`
+- `skillDefinitions.ts` — 28 combat skills, damage/effect matrices, and runtime lookup helpers; exports `SKILLS`, `DAMAGE_MATRICES`, `LEVELED_EFFECTS`, `getSkillPattern()`, `getDamageModifierPercent()`, `getVampirismPercent()`
+- `itemDefinitions.ts` — item configs with stat bonuses and slot assignments; exports `ITEM_DEFINITIONS`, `getItemDescription()`
+- `mapDefinitions.ts` — grid terrain and mob placement per map; exports `MAP_DEFINITIONS`
+- `enemyGroupDefinitions.ts` — encounter group configs (race + level override); exports `ENEMY_GROUPS`
+- `shapeDefinitions.ts` — grid cell offset patterns per shape; exports `SHAPES`
 
 ## Structural Role
-`src/data` → declarative content layer consumed by battle, world, and UI systems
+`src/data` → source-of-truth definitions consumed by `src/core`, `src/battle`, and `src/scenes`
 
 ## Data Flow
-Unit/skill/item/map definitions (static config)
+Game startup / phase transition
 ↓
-Imported by core managers (PhaseManager) and battle/scene modules
+`src/core` and `src/scenes` read constants from `src/data`
 ↓
-Runtime queries (e.g. getSkillPattern at level N)
+Runtime objects (units, skills, items) are built from these definitions
 ↓
-Game state populated and rendered
+Live game state in `BattleState` / `CampaignState`
 
 ## Dependencies
-- depends on: `src/battle/types.ts` (shared type interfaces for units, skills, items, effects)
-- used by: `src/core/PhaseManager.ts` (initialization), `src/battle/` (combat calculation), `src/scenes/` (rendering and world state), `src/objects/` (tooltips and upgrade UI)
+- depends on: `src/shared/` (type definitions only)
+- used by: `src/core/` (PhaseManager, battleInitialization, battleSetupProjection), `src/scenes/` (Preloader, Game, WorldMap), `src/battle/` (combat, shapes)
 
 ## Invariants
-- Skill level indices are 0-based (level 1 = index 0 in matrices)
-- Damage multipliers use 0–1 scale (1.0 = 100%)
-- Every skill referenced in a unit blueprint must exist in `SKILLS`
-- Enemy units use the same `SKILLS` table as player units — no separate enemy-only skill catalog
-- `PLAYER_STARTING_IDS` entries must correspond to valid `PLAYER_UNITS` template ids
+- All exports are `const` — no mutable state
+- No imports from `src/core`, `src/scenes`, or `src/battle` — data flows one way
+- `unitDefinitions.ts` may only import from within `src/data` (shapes, skills)
+- Helper functions in this folder are pure lookups — no side effects
+- Adding a new entity requires only adding to the relevant constant; no registration elsewhere
 
 ## Where to Modify
-- add/change a unit stat or skill tier → `unitDefinitions.ts`
-- add/change a skill, damage pattern, or effect → `skillDefinitions.ts`
-- add/change an item or stat bonus → `itemDefinitions.ts`
+- add/change a player or enemy unit → `unitDefinitions.ts`
+- add/change a skill or damage pattern → `skillDefinitions.ts`
+- add/change an item → `itemDefinitions.ts`
+- add/change a map layout → `mapDefinitions.ts`
 - add/change an enemy encounter group → `enemyGroupDefinitions.ts`
-- add/change a world map layout → `mapDefinitions.ts`
+- add/change a unit grid shape → `shapeDefinitions.ts`

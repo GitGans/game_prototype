@@ -22,7 +22,6 @@ import { EffectTooltip } from "../objects/EffectTooltip";
 import { TOOLTIP } from "../ui/theme";
 import {
   BattleState,
-  BenchUnitSnapshot,
   CellCoord,
   Col,
   ResolvedHitCell,
@@ -30,20 +29,17 @@ import {
   Skill,
   Unit,
   SpriteSheetConfig,
-  UnitRace,
 } from "../battle/types";
+import type { PlacementSelection } from "../battle/types";
+import type { BenchUnitSnapshot } from "../shared/battleSnapshots";
 import { PhaseManager } from '../core/PhaseManager';
 import { BattleParticipant } from '../core/phases';
 import { Button } from '../ui/Button';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
-import { ENEMY_GROUPS } from '../data/enemyGroupDefinitions';
-import { PLAYER_UNITS } from "../data/unitDefinitions";
 import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
-import { canPlace, placeUnit } from "../battle/placement";
-import { buildOccupancy } from "../battle/occupancy";
 import {
   getMeleeTargets,
   getRangedTargets,
@@ -54,13 +50,6 @@ import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffect
 import { resolvePattern } from "../battle/skillPatterns";
 import { LEVELED_EFFECTS, getSkillPattern, getEffectPattern, getInstantEffectPattern, DAMAGE_MATRICES, getDamageModifierPercent } from "../data/skillDefinitions";
 import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/initiative";
-import {
-  autoPlacePlayer,
-  autoPlaceEnemies,
-  replayPlaceEnemies,
-  createUnitInstance,
-  benchSnapshotFromUnit,
-} from "../battle/autoPlace";
 
 /** Returns the currently active skill for a unit. */
 function activeSkill(unit: Unit): Skill {
@@ -218,30 +207,26 @@ export class Game extends Phaser.Scene {
   private chargedThisRound = new Set<string>();
   private manualTurnButtons: Button[] = [];
   private chargeBtn: Button | null = null;
-  private selectedBenchIdx: number | null = null;
-  private selectedFieldUnitId: string | null = null;
   private pendingTargetCoord: CellCoord | null = null;
   private lastClickCoordKey: string | null = null;
   private skillBar!: SkillBar;
   private lastClickTime = 0;
 
-  // Counter for generating unique unit IDs during placement
-  private playerIdCounter = 0;
+  private prevPlacementUnits: Map<string, Unit> | null = null;
 
   constructor() {
     super("Game");
   }
 
   create(): void {
-    GameState.reset();
     this.unitViews.clear();
 
     this.buildGrid();
     this.unitTooltip = new UnitTooltip(this, TOOLTIP.bg, TOOLTIP.bgAlpha);
     this.effectTooltip = new EffectTooltip(this);
     this.skillBar = new SkillBar(this, new SkillTooltip(this));
-    this.initBattle();
     this.buildUnitViews();
+    this.prevPlacementUnits = null;
     this.buildUI();
     this.setupInput();
     this.enterPlacementPhase();
@@ -297,60 +282,6 @@ export class Game extends Phaser.Scene {
       }
     }
 
-  }
-
-  // ─── Battle Initialisation ─────────────────────────────────────────────────
-
-  private initBattle(): void {
-    let state = GameState.get();
-    const phase = PhaseManager.getPhase();
-    const isDebug = phase.type === 'battle' && phase.isDebug;
-
-    if (isDebug) {
-      state = autoPlacePlayer(state, PhaseManager.buildDebugBattleSetup());
-    } else {
-      GameState.reset();
-      state = GameState.get();
-      state = autoPlacePlayer(state);
-    }
-
-    const playerMaxLevel = [...state.units.values()]
-      .filter(u => u.anchor.side === 'player' && u.hp > 0)
-      .reduce((max, u) => Math.max(max, u.level), 1);
-    let forceRace: UnitRace | undefined;
-    let enemyLevel: number | undefined;
-    if (phase.type === 'battle') {
-      const group = ENEMY_GROUPS[phase.enemyGroupId];
-      if (group) {
-        forceRace = group.race;
-        enemyLevel = group.levelOverride;
-      }
-    }
-
-    const saved = isDebug ? null : GameState.lastEnemyPlacements;
-    if (saved) {
-      state = replayPlaceEnemies(state, saved);
-    } else {
-      state = autoPlaceEnemies(state, enemyLevel ?? playerMaxLevel, forceRace);
-      if (!isDebug) {
-        GameState.lastEnemyPlacements = [...state.units.values()]
-          .filter(u => u.id.startsWith('e'))
-          .map(u => ({ templateId: u.templateId, anchor: u.anchor, level: u.level }));
-      }
-    }
-
-    // Determine the highest player instance counter used so we can continue from there
-    this.playerIdCounter = state.units.size; // rough upper bound; refined below
-    let maxP = 0;
-    for (const id of state.units.keys()) {
-      if (id.startsWith("p")) {
-        const n = parseInt(id.slice(1), 10);
-        if (!isNaN(n) && n > maxP) maxP = n;
-      }
-    }
-    this.playerIdCounter = maxP;
-
-    GameState.set(state);
   }
 
   // ─── Unit Views ────────────────────────────────────────────────────────────
@@ -489,7 +420,9 @@ export class Game extends Phaser.Scene {
     for (const card of this.benchCards) card.destroy();
     this.benchCards = [];
 
-    const state = GameState.get();
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'battle') return;
+
     const cardH = this.benchCardHeight();
     const panelX = this.benchPanelX();
     const slotGap = CELL_GAP;
@@ -500,10 +433,12 @@ export class Game extends Phaser.Scene {
     const totalH = BENCH_SLOTS * cardH + (BENCH_SLOTS - 1) * slotGap;
     const startY = (gridTopY + gridBottomY) / 2 - totalH / 2 + cardH / 2;
 
+    const benchSnapshots = phase.benchUnits;
+
     for (let i = 0; i < BENCH_SLOTS; i++) {
-      const benchSnapshot = state.benchUnits[i] ?? null;
+      const benchSnapshot = benchSnapshots[i] ?? null;
       const cardY = startY + i * (cardH + slotGap);
-      const isSelected = this.selectedBenchIdx === i;
+      const isSelected = phase.placementSelection.selectedBenchIdx === i;
       const card = this.makeBenchCard(benchSnapshot, i, panelX, cardY, isSelected, interactive);
       this.benchCards.push(card);
     }
@@ -604,11 +539,13 @@ export class Game extends Phaser.Scene {
       container.setInteractive({ useHandCursor: true });
       container.on("pointerup", () => this.onBenchCardClick(idx));
       container.on("pointerover", () => {
-        if (this.selectedBenchIdx !== idx) bg.setFillStyle(COLORS.benchHover, 0.9);
+        const ph = PhaseManager.getPhase();
+        if (ph.type !== 'battle' || ph.placementSelection.selectedBenchIdx !== idx) bg.setFillStyle(COLORS.benchHover, 0.9);
         this.unitTooltip.showBenchSnapshot(benchSnapshot, this.logX, this.logY, this.logW);
       });
       container.on("pointerout", () => {
-        if (this.selectedBenchIdx !== idx) bg.setFillStyle(fillColor, 0.9);
+        const ph = PhaseManager.getPhase();
+        if (ph.type !== 'battle' || ph.placementSelection.selectedBenchIdx !== idx) bg.setFillStyle(fillColor, 0.9);
         this.unitTooltip.hide();
       });
     } else {
@@ -625,40 +562,31 @@ export class Game extends Phaser.Scene {
   }
 
   private onBenchCardClick(idx: number): void {
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'battle') return;
+    const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
     const state = GameState.get();
 
-    // Empty bench slot: if a field unit is selected, move it here
     if (!state.benchUnits[idx]) {
-      if (this.selectedFieldUnitId !== null) {
-        this.moveFieldUnitToBench(this.selectedFieldUnitId, idx);
-        this.selectedFieldUnitId = null;
-        this.clearPlacementHighlights();
-        this.buildBenchPanel();
+      // Empty slot: move selected field unit here
+      if (selectedFieldUnitId !== null) {
+        PhaseManager.transition({ type: 'move_field_unit_to_bench', unitId: selectedFieldUnitId, benchIdx: idx });
       }
       return;
     }
 
-    if (this.selectedFieldUnitId !== null) {
-      const fieldUnit = [...state.units.values()].find(
-        (u) => u.id === this.selectedFieldUnitId,
-      );
-      const benchUnit = state.benchUnits[idx];
-      if (fieldUnit && benchUnit) {
-        this.swapBenchWithField(benchUnit, idx, fieldUnit);
-      }
-      this.selectedFieldUnitId = null;
-      this.clearPlacementHighlights();
-      this.buildBenchPanel();
+    if (selectedFieldUnitId !== null) {
+      // Occupied slot + field selected: swap
+      PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: idx, fieldUnitId: selectedFieldUnitId });
       return;
     }
-    if (this.selectedBenchIdx === idx) {
-      this.selectedBenchIdx = null;
+
+    // Toggle bench selection
+    if (selectedBenchIdx === idx) {
+      PhaseManager.transition({ type: 'clear_placement_selection' });
     } else {
-      this.selectedBenchIdx = idx;
-      this.selectedFieldUnitId = null;
-      this.clearPlacementHighlights();
+      PhaseManager.transition({ type: 'select_bench_slot', benchIdx: idx });
     }
-    this.buildBenchPanel();
   }
 
   private buildStartBattleButton(): void {
@@ -685,237 +613,36 @@ export class Game extends Phaser.Scene {
     }
   }
 
-  private highlightFieldUnit(unitId: string | null): void {
-    this.clearPlacementHighlights();
-    if (!unitId) return;
-    const state = GameState.get();
-    const unit = state.units.get(unitId);
-    if (!unit) return;
-    const cells = getOccupiedCells(unit.anchor, unit.shape);
-    for (const coord of cells) {
-      this.cellViews.get(cellKey(coord))?.setHighlight("selected");
-    }
-  }
-
   // ─── Placement Input ───────────────────────────────────────────────────────
 
   private onPlacementCellClick(coord: CellCoord): void {
-    if (coord.side !== "player") return;
+    if (coord.side !== 'player') return;
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'battle') return;
+    const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
+    const unitAtCell = GameState.get().occupancy.cellToUnit.get(cellKey(coord));
 
-    const state = GameState.get();
-    const unitAtCell = state.occupancy.cellToUnit.get(cellKey(coord));
-
-    if (this.selectedBenchIdx !== null) {
-      const benchUnit = state.benchUnits[this.selectedBenchIdx];
-      if (!benchUnit) return;
-
+    if (selectedBenchIdx !== null) {
       if (!unitAtCell) {
-        // Place on empty cell
-        this.placeBenchUnitOnField(benchUnit, this.selectedBenchIdx, coord);
+        PhaseManager.transition({ type: 'place_bench_unit', benchIdx: selectedBenchIdx, anchor: coord });
       } else {
-        // Swap: field unit goes to bench, bench unit takes its place
-        this.swapBenchWithField(benchUnit, this.selectedBenchIdx, unitAtCell);
+        PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: selectedBenchIdx, fieldUnitId: unitAtCell.id });
       }
-      this.selectedBenchIdx = null;
-      this.buildBenchPanel();
       return;
     }
 
     // No bench unit selected
     if (unitAtCell) {
-      if (this.selectedFieldUnitId === null) {
-        // Select this field unit
-        this.selectedFieldUnitId = unitAtCell.id;
-        this.highlightFieldUnit(unitAtCell.id);
-      } else if (this.selectedFieldUnitId === unitAtCell.id) {
-        // Deselect
-        this.selectedFieldUnitId = null;
-        this.clearPlacementHighlights();
+      if (selectedFieldUnitId === null) {
+        PhaseManager.transition({ type: 'select_field_unit', unitId: unitAtCell.id });
+      } else if (selectedFieldUnitId === unitAtCell.id) {
+        PhaseManager.transition({ type: 'clear_placement_selection' });
       } else {
-        // Swap two field units
-        this.swapFieldUnits(this.selectedFieldUnitId, unitAtCell.id);
-        this.selectedFieldUnitId = null;
-        this.clearPlacementHighlights();
+        PhaseManager.transition({ type: 'swap_field_units', unitAId: selectedFieldUnitId, unitBId: unitAtCell.id });
       }
-    } else {
-      // Empty cell with a field unit selected → move it
-      if (this.selectedFieldUnitId !== null) {
-        this.moveFieldUnit(this.selectedFieldUnitId, coord);
-        this.selectedFieldUnitId = null;
-        this.clearPlacementHighlights();
-      }
+    } else if (selectedFieldUnitId !== null) {
+      PhaseManager.transition({ type: 'move_field_unit', unitId: selectedFieldUnitId, anchor: coord });
     }
-  }
-
-  private placeBenchUnitOnField(
-    snapshot: BenchUnitSnapshot,
-    benchIdx: number,
-    anchor: CellCoord,
-  ): void {
-    let state = GameState.get();
-    const fullBp = PLAYER_UNITS.find(b => b.templateId === snapshot.templateId)!;
-    const newId = `p${++this.playerIdCounter}`;
-    const setup = PhaseManager.getActiveBattleSetup();
-    const unitState = setup.playerUnits[snapshot.templateId];
-    const level = unitState?.level ?? snapshot.level;
-    const unit = createUnitInstance(fullBp, newId, anchor, level, {
-      itemContainers: setup.itemContainers,
-      itemInstances:  setup.itemInstances,
-      unitState,
-    });
-
-    if (!canPlace(anchor, fullBp.shape, state, "player")) return;
-
-    state = placeUnit(unit, state);
-    const newBench = [...state.benchUnits];
-    newBench[benchIdx] = undefined;
-    state = { ...state, benchUnits: newBench };
-    GameState.set(state);
-
-    this.createUnitView(unit);
-  }
-
-  private swapBenchWithField(
-    snapshot: BenchUnitSnapshot,
-    benchIdx: number,
-    fieldUnit: Unit,
-  ): void {
-    let state = GameState.get();
-    const anchor = fieldUnit.anchor;
-    const fullBp = PLAYER_UNITS.find(b => b.templateId === snapshot.templateId)!;
-
-    // Remove field unit
-    const newUnits = new Map(state.units);
-    newUnits.delete(fieldUnit.id);
-    state = { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) };
-
-    // Check new unit fits
-    if (!canPlace(anchor, fullBp.shape, state, "player")) {
-      // Restore and abort
-      state = GameState.get();
-      return;
-    }
-
-    const newId = `p${++this.playerIdCounter}`;
-    const setup = PhaseManager.getActiveBattleSetup();
-    const unitState = setup.playerUnits[snapshot.templateId];
-    const level = unitState?.level ?? snapshot.level;
-    const newUnit = createUnitInstance(fullBp, newId, anchor, level, {
-      itemContainers: setup.itemContainers,
-      itemInstances:  setup.itemInstances,
-      unitState,
-    });
-    state = placeUnit(newUnit, state);
-
-    // Update bench: replace snapshot at benchIdx with field unit's snapshot
-    const newBench = [...state.benchUnits];
-    newBench[benchIdx] = benchSnapshotFromUnit(fieldUnit, setup);
-    state = { ...state, benchUnits: newBench };
-    GameState.set(state);
-
-    this.destroyUnitView(fieldUnit.id);
-    this.createUnitView(newUnit);
-  }
-
-  private swapFieldUnits(idA: string, idB: string): void {
-    let state = GameState.get();
-    const unitA = state.units.get(idA);
-    const unitB = state.units.get(idB);
-    if (!unitA || !unitB) return;
-
-    const anchorA = unitA.anchor;
-    const anchorB = unitB.anchor;
-
-    // Remove both
-    const tmpUnits = new Map(state.units);
-    tmpUnits.delete(idA);
-    tmpUnits.delete(idB);
-    const tmpState = {
-      ...state,
-      units: tmpUnits,
-      occupancy: buildOccupancy(tmpUnits),
-    };
-
-    if (!canPlace(anchorB, unitA.shape, tmpState, "player")) return;
-    if (!canPlace(anchorA, unitB.shape, tmpState, "player")) return;
-
-    state = placeUnit({ ...unitA, anchor: anchorB }, tmpState);
-    state = placeUnit({ ...unitB, anchor: anchorA }, state);
-    GameState.set(state);
-
-    this.destroyUnitView(idA);
-    this.destroyUnitView(idB);
-    this.createUnitView({ ...unitA, anchor: anchorB });
-    this.createUnitView({ ...unitB, anchor: anchorA });
-  }
-
-  private moveFieldUnit(unitId: string, newAnchor: CellCoord): void {
-    let state = GameState.get();
-    const unit = state.units.get(unitId);
-    if (!unit) return;
-
-    const tmpUnits = new Map(state.units);
-    tmpUnits.delete(unitId);
-    const tmpState = {
-      ...state,
-      units: tmpUnits,
-      occupancy: buildOccupancy(tmpUnits),
-    };
-
-    if (!canPlace(newAnchor, unit.shape, tmpState, "player")) return;
-
-    state = placeUnit({ ...unit, anchor: newAnchor }, tmpState);
-    GameState.set(state);
-
-    this.destroyUnitView(unitId);
-    this.createUnitView({ ...unit, anchor: newAnchor });
-  }
-
-  private removeFieldUnit(coord: CellCoord): void {
-    const state = GameState.get();
-    const unit = state.occupancy.cellToUnit.get(cellKey(coord));
-    if (!unit) return;
-
-    const newBench = [...state.benchUnits];
-    const emptyIdx = newBench.findIndex((b) => b === undefined);
-    if (emptyIdx === -1) return; // bench full — all 3 slots occupied
-    const newUnits = new Map(state.units);
-    newUnits.delete(unit.id);
-    const setup = PhaseManager.getActiveBattleSetup();
-    newBench[emptyIdx] = benchSnapshotFromUnit(unit, setup);
-    const newState = {
-      ...state,
-      units: newUnits,
-      occupancy: buildOccupancy(newUnits),
-      benchUnits: newBench,
-    };
-    GameState.set(newState);
-
-    this.destroyUnitView(unit.id);
-    this.buildBenchPanel();
-  }
-
-  private moveFieldUnitToBench(unitId: string, benchIdx: number): void {
-    const state = GameState.get();
-    const unit = state.units.get(unitId);
-    if (!unit) return;
-    if (!state.benchUnits.some((b) => b === undefined)) return; // all slots occupied
-
-    const newUnits = new Map(state.units);
-    newUnits.delete(unit.id);
-
-    const newBench = [...state.benchUnits];
-    const setup = PhaseManager.getActiveBattleSetup();
-    newBench[benchIdx] = benchSnapshotFromUnit(unit, setup);
-
-    GameState.set({
-      ...state,
-      units: newUnits,
-      occupancy: buildOccupancy(newUnits),
-      benchUnits: newBench,
-    });
-
-    this.destroyUnitView(unit.id);
   }
 
   // ─── Double Click Detection ────────────────────────────────────────────────
@@ -928,12 +655,11 @@ export class Game extends Phaser.Scene {
     const now = Date.now();
 
     if (key === this.lastClickCoordKey && now - this.lastClickTime < 300) {
-      // Double click — remove unit from field
-      this.removeFieldUnit(coord);
-      this.selectedFieldUnitId = null;
-      this.selectedBenchIdx = null;
-      this.clearPlacementHighlights();
-      this.buildBenchPanel();
+      // Double click — return unit to first free bench slot
+      const doubleClickUnit = GameState.get().occupancy.cellToUnit.get(key);
+      if (doubleClickUnit) {
+        PhaseManager.transition({ type: 'return_field_unit_to_bench', unitId: doubleClickUnit.id });
+      }
       this.lastClickCoordKey = null;
       this.lastClickTime = 0;
     } else {
@@ -994,14 +720,13 @@ export class Game extends Phaser.Scene {
   // ─── Start Battle ──────────────────────────────────────────────────────────
 
   private startBattle(): void {
+    // TODO Stage 6: move startBattle combat-init into PhaseManager pipeline
     // Tear down placement UI; keep bench visible as display-only
     this.buildBenchPanel(false);
     if (this.startBattleBtn) {
       this.startBattleBtn.destroy();
       this.startBattleBtn = null;
     }
-    this.selectedBenchIdx = null;
-    this.selectedFieldUnitId = null;
     this.clearPlacementHighlights();
 
     for (const [, cell] of this.cellViews) {
@@ -1018,9 +743,14 @@ export class Game extends Phaser.Scene {
     }
 
     const queue = buildRoundQueue(state.units);
-    state = { ...state, roundQueue: queue, phase: "select_target" };
+    state = {
+      ...state,
+      roundQueue:         queue,
+      phase:              'select_target',
+      placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },
+    };
     GameState.set(state);
-    EventBus.emit(Events.STATE_CHANGED, state);
+    EventBus.emit(Events.STATE_CHANGED);
     this.setStatus("");
     this.battleLog.setVisible(true);
     this.chargedThisRound.clear();
@@ -1069,7 +799,7 @@ export class Game extends Phaser.Scene {
           validTargets: [],
         };
         GameState.set(next);
-        EventBus.emit(Events.STATE_CHANGED, next);
+        EventBus.emit(Events.STATE_CHANGED);
         this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
         return;
       }
@@ -1093,7 +823,7 @@ export class Game extends Phaser.Scene {
         );
         const next = this.advanceQueue(state);
         GameState.set(next);
-        EventBus.emit(Events.STATE_CHANGED, next);
+        EventBus.emit(Events.STATE_CHANGED);
         this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
           this.startActiveUnitTurn(next),
         );
@@ -1106,7 +836,7 @@ export class Game extends Phaser.Scene {
         validTargets,
       };
       GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED, next);
+      EventBus.emit(Events.STATE_CHANGED);
       this.setStatus(
         (activeSkill(currentUnit).actionType === "mass_enchantment" || activeSkill(currentUnit).actionType === "self_enchantment")
           ? `${currentUnit.name} — Click on the green cell to heal`
@@ -1120,7 +850,7 @@ export class Game extends Phaser.Scene {
         validTargets: [],
       };
       GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED, next);
+      EventBus.emit(Events.STATE_CHANGED);
       this.setStatus(`${activeUnit.name} turn…`);
       this.time.delayedCall(
         mode === "auto" ? Game.DELAY_AUTO_THINK : Game.DELAY_ENEMY_THINK,
@@ -1275,7 +1005,7 @@ export class Game extends Phaser.Scene {
       }
       next = this.advanceQueue(next);
       GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED, next);
+      EventBus.emit(Events.STATE_CHANGED);
       this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
         this.startActiveUnitTurn(next),
       );
@@ -1364,7 +1094,7 @@ export class Game extends Phaser.Scene {
     if (winner) {
       next = { ...next, phase: "end" };
       GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED, next);
+      EventBus.emit(Events.STATE_CHANGED);
       this.time.delayedCall(Game.DELAY_GAMEOVER, () =>
         this.showGameOver(winner),
       );
@@ -1373,7 +1103,7 @@ export class Game extends Phaser.Scene {
 
     next = this.advanceQueue(next);
     GameState.set(next);
-    EventBus.emit(Events.STATE_CHANGED, next);
+    EventBus.emit(Events.STATE_CHANGED);
     this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
       this.startActiveUnitTurn(next),
     );
@@ -1434,7 +1164,7 @@ export class Game extends Phaser.Scene {
       if (healTargets.length === 0) {
         const next = this.advanceQueue(state);
         GameState.set(next);
-        EventBus.emit(Events.STATE_CHANGED, next);
+        EventBus.emit(Events.STATE_CHANGED);
         this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
         return;
       }
@@ -1464,7 +1194,7 @@ export class Game extends Phaser.Scene {
       );
       next = this.advanceQueue(next);
       GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED, next);
+      EventBus.emit(Events.STATE_CHANGED);
       this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
       return;
     }
@@ -1483,7 +1213,7 @@ export class Game extends Phaser.Scene {
         );
       const next = this.advanceQueue(state);
       GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED, next);
+      EventBus.emit(Events.STATE_CHANGED);
       this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
       return;
     }
@@ -1569,7 +1299,7 @@ export class Game extends Phaser.Scene {
     if (winner) {
       next = { ...next, phase: "end" };
       GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED, next);
+      EventBus.emit(Events.STATE_CHANGED);
       this.time.delayedCall(Game.DELAY_GAMEOVER, () => {
         this.destroyAutoBattleButtons();
         this.showGameOver(winner);
@@ -1579,7 +1309,7 @@ export class Game extends Phaser.Scene {
 
     next = this.advanceQueue(next);
     GameState.set(next);
-    EventBus.emit(Events.STATE_CHANGED, next);
+    EventBus.emit(Events.STATE_CHANGED);
     this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
   }
 
@@ -1604,7 +1334,7 @@ export class Game extends Phaser.Scene {
 
     state = { ...state, phase: "end" };
     GameState.set(state);
-    EventBus.emit(Events.STATE_CHANGED, state);
+    EventBus.emit(Events.STATE_CHANGED);
 
     const winner = checkGameOver(state);
     this.time.delayedCall(200, () => this.showGameOver(winner ?? "player"));
@@ -1636,7 +1366,7 @@ export class Game extends Phaser.Scene {
           if (active?.anchor.side === "player") {
             const next: BattleState = { ...s, validTargets: [] };
             GameState.set(next);
-            EventBus.emit(Events.STATE_CHANGED, next);
+            EventBus.emit(Events.STATE_CHANGED);
             this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
           }
         }
@@ -1833,7 +1563,7 @@ export class Game extends Phaser.Scene {
     this.battleLog.addEntry(`${activeUnit.name} skips their turn`, "neutral");
     const next = this.advanceQueue(state);
     GameState.set(next);
-    EventBus.emit(Events.STATE_CHANGED, next);
+    EventBus.emit(Events.STATE_CHANGED);
     this.updateManualButtons(next);
     this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
       this.startActiveUnitTurn(next),
@@ -1872,7 +1602,7 @@ export class Game extends Phaser.Scene {
       validTargets: [],
     };
     GameState.set(next);
-    EventBus.emit(Events.STATE_CHANGED, next);
+    EventBus.emit(Events.STATE_CHANGED);
     this.updateManualButtons(next);
     this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
       this.startActiveUnitTurn(next),
@@ -1926,10 +1656,54 @@ export class Game extends Phaser.Scene {
 
   // ─── State Refresh ─────────────────────────────────────────────────────────
 
-  private onStateChanged(state: BattleState): void {
-    this.refreshCells(state);
-    this.refreshUnits(state);
-    this.initiativeBar.update(state);
+  private onStateChanged(): void {
+    const state = GameState.get();
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'battle') return;
+
+    if (state.phase === 'placement') {
+      this.onPlacementStateChanged(phase);
+    } else {
+      this.refreshCells(state);
+      this.refreshUnits(state);
+      this.initiativeBar.update(state);
+    }
+  }
+
+  private onPlacementStateChanged(
+    phase: import('../core/phases').GamePhase & { type: 'battle' },
+  ): void {
+    const state = GameState.get();
+
+    // Re-render player unit views if units map changed (placement/swap/move)
+    if (this.prevPlacementUnits !== state.units) {
+      // destroyUnitView calls this.unitViews.delete(id) internally — safe to use in this loop
+      const toDestroy = [...this.unitViews.keys()].filter(id => {
+        const unit = state.units.get(id);
+        return !unit || unit.anchor.side === 'player';
+      });
+      for (const id of toDestroy) this.destroyUnitView(id);
+      for (const unit of state.units.values()) {
+        if (unit.anchor.side === 'player' && !this.unitViews.has(unit.id)) {
+          this.createUnitView(unit);
+        }
+      }
+      this.prevPlacementUnits = state.units;
+    }
+
+    this.buildBenchPanel();
+    this.applyPlacementHighlights(phase.placementSelection);
+  }
+
+  private applyPlacementHighlights(selection: PlacementSelection): void {
+    this.clearPlacementHighlights();
+    if (!selection.selectedFieldUnitId) return;
+    const unit = GameState.get().units.get(selection.selectedFieldUnitId);
+    if (!unit) return;
+    const cells = getOccupiedCells(unit.anchor, unit.shape);
+    for (const coord of cells) {
+      this.cellViews.get(cellKey(coord))?.setHighlight('selected');
+    }
   }
 
   private refreshCells(state: BattleState): void {
@@ -2018,7 +1792,7 @@ export class Game extends Phaser.Scene {
     const next: BattleState = { ...state, units: updatedUnits, validTargets };
     this.pendingTargetCoord = null;
     GameState.set(next);
-    EventBus.emit(Events.STATE_CHANGED, next);
+    EventBus.emit(Events.STATE_CHANGED);
 
     this.setStatus(
       skill.actionType === 'mass_enchantment' || skill.actionType === 'self_enchantment'

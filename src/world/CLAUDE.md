@@ -1,56 +1,47 @@
 # world
 
 ## Role
-Defines the data model and pure query logic for the overworld grid system. This is the foundation for world map traversal — the layer between player movement and encounter triggering.
+Map navigation logic for the world exploration phase. Provides movement validation, entity resolution, and state initialization — sitting between raw type definitions (`src/shared/worldTypes`) and consumers (scenes, core).
 
 ## Responsibilities
-- Define types for map layouts, entities, and runtime state
-- Provide passability checks for movement validation
-- Resolve cell queries, including dead entity handling and trigger behavior
-- Initialize runtime state for submaps
+- Validate player movement (bounds + terrain collision)
+- Resolve what entity (if any) exists at a given cell, respecting alive/dead state
+- Initialize per-map entity tracking state on first entry
+- Define which terrain types are impassable
+- Configure per-entity-type interaction behavior (e.g. triggers on enter vs. on action)
+- Re-export shared world types for consumers
 
 ## Key Files
-- `types.ts` — all type definitions and entity configuration
-  - `SubMapDefinition` — static map layout + entity declarations
-  - `SubMapState` — runtime entity state (alive/dead flags)
-  - `ResolvedCell` — query result with passability and trigger info
-  - `ENTITY_TYPE_CONFIG` — per-entity trigger behavior (enter vs. interact)
-  - `IMPASSABLE_TERRAIN` — set of blocking terrain strings
-- `mapLogic.ts` — pure query functions over map data
-  - `initSubMapState` — creates initial runtime state for a map
-  - `canMove` — boundary + passability check
-  - `resolveCell` — full cell resolution including dead entities and metadata
+- `mapLogic.ts` — core navigation functions: `canMove`, `resolveCell`, `initSubMapState`
+- `types.ts` — re-exports from `src/shared/worldTypes`, adds `ResolvedCell`, `IMPASSABLE_TERRAIN`, `ENTITY_TYPE_CONFIG`
 
 ## Structural Role
-world → data model and query interface for the world map scene
+`world/` → stateless map logic layer between data definitions and scene/core consumers
 
 ## Data Flow
-SubMapDefinition (static layout + entities)
+`SubMapDefinition` (map layout + entity placements)
 ↓
-initSubMapState → SubMapState (runtime alive flags)
+`canMove` / `resolveCell` query functions
 ↓
-canMove / resolveCell called per player step
+movement allowed or `ResolvedCell` with entity metadata
 ↓
-ResolvedCell (passable flag + entity trigger info)
-↓
-WorldMap scene decides movement or encounter trigger
-↓
-PhaseManager.transition() routes to next phase
+scene triggers transition or PhaseManager advances phase
 
 ## Dependencies
-- depends on: nothing (zero external dependencies)
-- used by: `src/core/GameState.ts`, `src/core/PhaseManager.ts`, `src/scenes/WorldMap.ts`, `src/data/mapDefinitions.ts`
+- depends on: `src/shared/worldTypes` (type contracts)
+- used by: `src/scenes/WorldMap.ts` (movement + encounter handling), `src/core/PhaseManager.ts` (state init + phase transitions), `src/core/GameState.ts` (SubMapState storage)
 
 ## Invariants
-- All functions are pure — no Phaser, no state mutation, no side effects
-- Dead entities (`alive: false` in `SubMapState`) must be treated as passable empty cells
-- Mobs block movement (`passable: false`); camps, shops, and portals do not
-- `ENTITY_TYPE_CONFIG` is the single source of truth for trigger behavior per entity type
-- `SubMapDefinition` is static — only `SubMapState` changes at runtime
+- `canMove` and `resolveCell` are pure functions — no side effects, no state mutation
+- Entity alive/dead state lives in `SubMapState`, never in the map definition itself
+- Dead entities are treated as passable empty cells
+- `ENTITY_TYPE_CONFIG` is the single source of triggering behavior per entity type
+- All world types must be sourced from `src/shared/worldTypes`, not redefined here
 
 ## Where to Modify
-- add a new entity type → `types.ts` (`MapEntityType`, `ENTITY_TYPE_CONFIG`, entry type)
-- change terrain blocking rules → `types.ts` (`IMPASSABLE_TERRAIN`)
-- change movement validation → `mapLogic.ts` (`canMove`)
-- change cell resolution or dead entity behavior → `mapLogic.ts` (`resolveCell`)
-- change map initial state → `mapLogic.ts` (`initSubMapState`)
+- add/change terrain that blocks movement → `IMPASSABLE_TERRAIN` in `types.ts`
+- change whether an entity type triggers on enter → `ENTITY_TYPE_CONFIG` in `types.ts`
+- change movement bounds or collision logic → `canMove` in `mapLogic.ts`
+- change how entities are resolved from cell data → `resolveCell` in `mapLogic.ts`
+- change initial per-map state shape → `initSubMapState` in `mapLogic.ts`
+- add new world-level types → `src/shared/worldTypes`, then re-export in `types.ts`

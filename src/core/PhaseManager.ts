@@ -23,6 +23,15 @@ import {
 import { buildSkillDescription, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
+import {
+  buildNewBattleState,
+  buildReplayBattleState,
+} from './battleInitialization';
+import {
+  isBattlePlacementAction,
+  applyBattlePlacementAction,
+} from './phaseHandlers/battlePhaseHandler';
+import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
@@ -278,14 +287,33 @@ class PhaseManagerClass {
         );
         return { ...phase, upgradeTiers };
       }
-      case 'battle':
-        return { ...phase, participants: GameState.battleParticipants };
+      case 'battle': {
+        const battleState = GameState.get();
+        const setup       = this.getActiveBattleSetup();
+        const benchUnits  = buildBenchUnitSnapshots(battleState.benchUnits, setup);
+        // participants = battle-start snapshot; do NOT rebuild from current placement state
+        return {
+          ...phase,
+          participants:       GameState.battleParticipants,
+          benchUnits,
+          placementSelection: battleState.placementSelection,
+        };
+      }
       default:
         return phase; // phases without snapshots pass through unchanged
     }
   }
 
   private applyActionSideEffects(action: PhaseAction, prev: GamePhase): void {
+    // ── Battle placement ──
+    if (isBattlePlacementAction(action) && prev.type === 'battle') {
+      const state    = GameState.get();
+      const setup    = this.getActiveBattleSetup();
+      const nextState = applyBattlePlacementAction(state, setup, action);
+      GameState.set(nextState);
+      return;
+    }
+
     // ── Campaign init ──
     if (action.type === 'new_game') {
       const mapId = 'test_01';
@@ -328,14 +356,19 @@ class PhaseManagerClass {
       if (!GameState.money) GameState.money = 0;
     }
 
-    // ── Battle setup ──
-    if (action.type === 'start_battle' || action.type === 'enter_battle') {
-      GameState.lastEnemyPlacements = null;
-    }
-
-    // Snapshot all party members at battle start (before anyone can die)
+    // ── Campaign battle: initialize BattleState + snapshot participants ──
     if (action.type === 'enter_battle') {
-      const state = GameState.get();
+      // Build BattleState first so bench info is accurate for participants snapshot
+      GameState.reset();
+      const setup = this.getActiveBattleSetup();
+      const { state, race, enemyPlacements } = buildNewBattleState(
+        GameState.get(), setup, action.enemyGroupId,
+      );
+      GameState.set(state);
+      GameState.lastEnemyRace       = race;
+      GameState.lastEnemyPlacements = enemyPlacements;
+
+      // Snapshot all party members (field + bench) before anyone can die
       const participants: BattleParticipant[] = [];
       Object.entries(GameState.playerUnits).forEach(([templateId, us]) => {
         if (us.isInCamp) return;
@@ -349,9 +382,18 @@ class PhaseManagerClass {
       GameState.battleParticipants = participants;
     }
 
-    // Snapshot all party members at debug battle start
+    // ── Debug battle: initialize BattleState + snapshot participants ──
+    // Invariant: debug battles never save or replay enemy placements.
     if (action.type === 'start_battle' && this.debugState) {
-      const ds = this.debugState;
+      const ds    = this.debugState;
+      const setup = this.buildDebugBattleSetup();
+
+      // Build BattleState — no race/placement persistence for debug
+      GameState.reset();
+      const { state } = buildNewBattleState(GameState.get(), setup, action.enemyGroupId);
+      GameState.set(state);
+
+      // Snapshot debug participants (all non-camp units; bench not tracked for debug)
       const participants: BattleParticipant[] = [];
       for (const bp of PLAYER_UNITS) {
         if (ds.campUnitIds.includes(bp.templateId)) continue;
@@ -360,6 +402,35 @@ class PhaseManagerClass {
         participants.push({ templateId: bp.templateId, name: bp.name, level: ds.level, isAlive: true, wasOnBench: false, spriteKey });
       }
       GameState.battleParticipants = participants;
+    }
+
+    // ── Replay: reinitialize BattleState ──
+    if (action.type === 'replay') {
+      const phase = prev;
+      if (phase.type === 'battle') {
+        if (phase.isDebug) {
+          // Debug replay = fresh battle. Intentional: debug battles have no saved placements.
+          GameState.reset();
+          const setup = this.buildDebugBattleSetup();
+          const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId);
+          GameState.set(state);
+        } else {
+          const saved = GameState.lastEnemyPlacements;
+          if (saved) {
+            // Normal case: replay same enemies in same positions
+            GameState.reset();
+            const setup    = this.getActiveBattleSetup();
+            const newState = buildReplayBattleState(GameState.get(), setup, saved);
+            GameState.set(newState);
+          } else {
+            // Fallback: no saved placements, generate fresh
+            GameState.reset();
+            const setup = this.getActiveBattleSetup();
+            const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId);
+            GameState.set(state);
+          }
+        }
+      }
     }
 
     // ── Battle teardown ──
@@ -639,12 +710,14 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'enter_battle':
       if (current.type !== 'world_map') return null;
       return {
-        type: 'battle',
-        enemyGroupId: action.enemyGroupId,
-        returnPhase: current,
-        triggerPos: action.triggerPos,
-        mapId: current.mapId,
-        participants: [],
+        type:               'battle',
+        enemyGroupId:       action.enemyGroupId,
+        returnPhase:        current,
+        triggerPos:         action.triggerPos,
+        mapId:              current.mapId,
+        participants:       [],                                                       // filled by rebuildSnapshot
+        benchUnits:         [],                                                       // filled by rebuildSnapshot
+        placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
       };
 
     case 'enter_camp':
@@ -658,11 +731,13 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'start_battle':
       if (current.type !== 'debug_equip_screen') return null;
       return {
-        type: 'battle',
-        enemyGroupId: action.enemyGroupId,
-        returnPhase: current,
-        isDebug: true,
-        participants: [],
+        type:               'battle',
+        enemyGroupId:       action.enemyGroupId,
+        returnPhase:        current,
+        isDebug:            true,
+        participants:       [],                                                       // filled by rebuildSnapshot
+        benchUnits:         [],                                                       // filled by rebuildSnapshot
+        placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
       };
 
     case 'exit_battle':
@@ -768,6 +843,19 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'buy_item':
     case 'sell_item':
       return null; // no shop phase yet
+
+    // ── Battle placement (mutation-only) ─────────────────────────────────────
+    case 'select_bench_slot':
+    case 'select_field_unit':
+    case 'clear_placement_selection':
+    case 'place_bench_unit':
+    case 'swap_bench_with_field':
+    case 'move_field_unit':
+    case 'move_field_unit_to_bench':
+    case 'return_field_unit_to_bench':
+    case 'swap_field_units':
+      if (current.type !== 'battle') return null;
+      return current; // applyActionSideEffects mutates BattleState; rebuildSnapshot refreshes phase
   }
 
   return null;

@@ -1,4 +1,4 @@
-import { BattleStatBonuses, ItemDefinition } from '../battle/types';
+import type { BattleStatBonuses, ItemDefinition } from '../shared/itemTypes';
 
 const STAT_LABELS: Record<keyof BattleStatBonuses, string> = {
   hp: 'HP',

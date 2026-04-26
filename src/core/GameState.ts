@@ -14,12 +14,14 @@ import { buildOccupancy } from "../battle/occupancy";
 
 function emptyState(): BattleState {
   return {
-    units: new Map(),
-    occupancy: buildOccupancy(new Map()),
-    roundQueue: [],
-    phase: "placement",
-    validTargets: [],
-    benchUnits: [],
+    units:              new Map(),
+    occupancy:          buildOccupancy(new Map()),
+    roundQueue:         [],
+    phase:              'placement',
+    validTargets:       [],
+    benchUnits:         [],
+    nextPlayerId:       1,
+    placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },
   };
 }
 

@@ -1,49 +1,54 @@
 # ui
 
 ## Role
-Game-agnostic UI component library and design system. Provides reusable primitives — buttons, tooltips, health bars, inputs — and centralized styling constants. Has no knowledge of game rules or state.
+Game-agnostic UI primitive library. Provides reusable visual components and design tokens with no knowledge of game state, phases, or rules.
 
 ## Responsibilities
-- Define all visual design tokens (colors, fonts, alpha levels) in one place
-- Provide interactive primitive components (buttons, context menus, inputs)
-- Provide a base class for all tooltips
-- Ensure consistent styling across scenes and objects without duplication
+- Define all visual design tokens (colors, sizes, opacity states) in one place
+- Provide interactive primitives: buttons, menus, inputs, health bars
+- Supply a base class for all tooltips with positioning and lifecycle management
+- Enforce consistent visual feedback (hover, idle, disabled, validation states)
+- Serve as the only source of UI style constants for the rest of the codebase
 
 ## Key Files
-- `theme.ts` — all style constants: `FONT_SIZE`, `BTN`, `ALPHA`, `TOOLTIP`, `VALUE_COLOR`, `HP_COLOR`, `SCENE_BG`, etc.
-- `Button.ts` — interactive button with hover/disabled/idle states; configurable via `BtnStyle`
-- `BaseTooltip.ts` — abstract base for tooltips; handles show/hide, auto-positioning, content cleanup
-- `HpBar.ts` — health bar with tricolor (green/yellow/red) or fixed-color mode
-- `ContextMenu.ts` — right-click menu composed of `Button` items with dismiss overlay
-- `NumberInput.ts` — keyboard number input with min/max validation and visual feedback
-- `UnitCampButton.ts` — toggle button for camp/party state, wraps `Button`
+- `theme.ts` — All design tokens: `BTN`, `FONT_SIZE`, `ALPHA`, `VALUE_COLOR`, `HP_COLOR`, `TOOLTIP`, and scene/map palettes
+- `Button.ts` — Styled button with hover/idle/disabled states; exports `Button` and `ButtonConfig`
+- `BaseTooltip.ts` — Abstract generic base for all tooltips; subclasses implement `buildContent(data)`
+- `HpBar.ts` — Health bar with optional tri-color (green/yellow/red) mode
+- `ContextMenu.ts` — Stacked button menu with outside-click dismissal
+- `NumberInput.ts` — Keyboard number input with real-time min/max validation
+- `UnitCampButton.ts` — Specialized camp/party toggle button built on `Button`
 
 ## Structural Role
-ui → shared primitive layer consumed by `src/objects/` and `src/scenes/`
+`src/ui/` → game-agnostic primitive layer consumed by `src/objects/` and `src/scenes/`
 
 ## Data Flow
-config/props passed at construction
+caller provides config (scene, position, data, callbacks)
 ↓
-component renders via Phaser GameObjects
+component renders Phaser GameObjects internally
 ↓
-user interaction triggers callbacks
+user interaction triggers provided callbacks
 ↓
-parent (scene or object) handles game logic
+caller manages state changes and re-renders
 
 ## Dependencies
-- depends on: Phaser (rendering), `src/core/Constants.ts` (layout scale)
-- used by: all `src/scenes/` and all `src/objects/`
+- depends on: Phaser (GameObjects, Scene), `src/core/Constants.ts` (layout scale)
+- used by: `src/objects/` (game-specific visuals), `src/scenes/` (composition)
 
 ## Invariants
-- No imports from `src/objects/`, `src/scenes/`, `src/battle/`, or `src/core/GameState`
-- No access to `PhaseManager` or game state
-- All colors and font sizes must come from `theme.ts` — never hardcoded inline
-- `BaseTooltip` subclasses live in `src/objects/`, not here
+- No imports from `src/core/GameState`, `src/battle/`, `src/objects/`, or `src/scenes/`
+- No calls to `PhaseManager` or any transition logic
+- All colors and font sizes must come from `theme.ts` — no hardcoded values in components
+- Components are stateless regarding game data — they receive data via config and emit events via callbacks
+- `BaseTooltip` subclasses must only override `buildContent()` and use `addText`/`addRect` helpers
 
 ## Where to Modify
-- change colors or font sizes → `theme.ts`
-- change button appearance or behavior → `Button.ts`
-- change tooltip base positioning or lifecycle → `BaseTooltip.ts`
-- change health bar rendering → `HpBar.ts`
-- change context menu layout → `ContextMenu.ts`
-- add a new reusable primitive → new file here, no game logic
+- change button colors or styles → `theme.ts` (`BTN`, `BtnStyle`)
+- change font sizes → `theme.ts` (`FONT_SIZE`, `fontSize()`)
+- change health bar colors → `theme.ts` (`HP_COLOR`)
+- change tooltip background/padding/depth → `theme.ts` (`TOOLTIP`)
+- change button behavior (hover, disabled, idle) → `Button.ts`
+- add a new tooltip type → extend `BaseTooltip` in `src/objects/`
+- change health bar color thresholds → `HpBar.ts` (`setRatio`)
+- change context menu layout or dismissal → `ContextMenu.ts`
+- change number input validation → `NumberInput.ts`

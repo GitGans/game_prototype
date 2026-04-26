@@ -1,71 +1,63 @@
 # objects
 
 ## Role
-Game-specific visual components that bridge game data and the UI layer. Each component knows game domain types and uses `src/ui/` primitives internally — scenes compose these components rather than building visuals directly.
+Game-specific visual components that know game data and render it using primitives from `src/ui/`. This layer bridges raw game state (units, skills, items, effects) and the screen — scenes compose from these objects rather than building UI directly.
 
 ## Responsibilities
-- Render units, cells, and battle state (HP, effects, initiative, log)
-- Display tooltips for skills, effects, items, and units
-- Manage equipment and inventory slot grids
-- Present skill selections during battle and in preparation screens
-- Show upgrade cards for the upgrade-selection flow
-- Encapsulate hover/click interactions tied to game data
+- Render game entities (units, cells, skills, items, upgrades) as interactive Phaser containers
+- Provide tooltip overlays tied to game data (stats, effects, skills, items)
+- Manage hover/highlight/selection states for grid cells and skill bars
+- Display auxiliary battle UI: turn order bar, event log, equipment grid, backpack
+- Degrade gracefully when sprites are missing (rectangle or letter fallbacks)
 
 ## Key Files
-
-- `UnitView.ts` — unit sprite with HP bar, effect indicators, and buff/debuff tooltips
-- `CellView.ts` — grid cell with highlight modes for placement and battle targeting
-- `InitiativeBar.ts` — turn-order strip showing current and next round queues
-- `BattleLog.ts` — collapsible event log with color-coded entries
-- `SkillBar.ts` — vertical skill list for in-battle selection with active/inactive states
-- `SkillIconRow.ts` — skill icon strip used in preparation/equip screens
-- `SkillCellTooltip.ts` — detailed skill description tooltip (used inside `SkillIconRow`)
-- `UnitTooltip.ts` — full unit stat panel with sprite, stats, and skill list
-- `EffectTooltip.ts` — buff/debuff description tooltip
-- `SkillTooltip.ts` — skill name and damage-type tooltip
-- `ItemTooltip.ts` — item stat-bonus and class-restriction tooltip
-- `ItemCell.ts` — single equipment/backpack slot with hover and click
-- `EquipmentMatrix.ts` — 4×3 grid of equipment slots composed from `ItemCell`
-- `BackpackRow.ts` — 10-slot inventory grid composed from `ItemCell`
-- `UpgradeCard.ts` — upgrade option card with chosen/available/locked states
-- `EnemyGroupSelector.ts` — popup to pick enemy race, calls `PhaseManager.transition()`
+- `UnitView.ts` — unit card in battle (sprite, HP bar, effect squares); key methods: `setSpriteState()`, `update()`
+- `CellView.ts` — grid cell with hover, highlight, and skill/effect preview; key methods: `setMode()`, `setHighlight()`, `setSkillPreview()`
+- `InitiativeBar.ts` — turn-order strip; dynamically sizes cards to viewport; key method: `update()`
+- `BattleLog.ts` — collapsible event log; pre-allocates 20 text slots; key methods: `addEntry()`, `expand()`, `collapse()`
+- `SkillBar.ts` — vertical skill toolbar with active highlight and tooltips
+- `SkillIconRow.ts` — skill list with icons and `SkillCellTooltip` on hover
+- `UpgradeCard.ts` — upgrade-choice card (three states: chosen / available / locked)
+- `ItemCell.ts` — single equipment/backpack slot with tooltip; key method: `refresh()`
+- `EquipmentMatrix.ts` — 4×3 equipment grid composed from `ItemCell`
+- `BackpackRow.ts` — configurable inventory grid composed from `ItemCell`
+- `UnitTooltip.ts` — multi-mode unit profile popup (stats, skills, bench snapshot)
+- `EffectTooltip.ts` — popup for a single active effect
+- `SkillTooltip.ts` — popup for skill name and damage type
+- `SkillCellTooltip.ts` — extended skill popup with description and screen-clamped positioning
+- `ItemTooltip.ts` — item stats and class-restriction popup
 
 ## Structural Role
 `src/objects/` → game-aware visual components consumed by scenes
 
 ## Data Flow
-`GamePhase` snapshot data
+`GamePhase` / `BattleState` snapshot data
 ↓
-component receives typed snapshot in constructor or `show()` / `refresh()`
+Component receives typed snapshot (Unit, ItemSlotSnapshot, SkillIconSnapshot, …)
 ↓
-renders via Phaser containers using `src/ui/` primitives and theme constants
+Renders Phaser primitives; shows tooltips on hover; fires callbacks on click
 ↓
-fires callbacks (`onClick`, `onSelect`) or calls `PhaseManager.transition()` on interaction
+Scene receives user interaction via callback — no state mutation here
 
 ## Dependencies
-- depends on: `src/ui/` (buttons, tooltips, BaseTooltip, HpBar, theme), `src/core/` (types, constants), game domain types from `src/data/` and `src/battle/`
-- used by: `src/scenes/` — `Game.ts`, `EquipScreen.ts`, `Prep.ts`, `UpgradeTreeScreen.ts`
+- depends on: `src/ui/` (BaseTooltip, HpBar, theme, primitives), `src/battle/types`, `src/core/Constants`, `src/core/phases`, `src/battle/combat` (effectiveStats), `src/core/unitSpriteKey`
+- used by: scenes (`src/scenes/`)
 
 ## Invariants
-- Components are stateless renderers — they do not own or mutate `CampaignState` or `BattleState`
-- All game data enters through constructor arguments or explicit `show()` / `refresh()` calls
-- Hover and click logic lives here, never duplicated inside scenes
-- `EnemyGroupSelector` is the only component allowed to call `PhaseManager.transition()` directly; all others fire callbacks
-- Tooltip components extend `BaseTooltip` from `src/ui/` — no custom tooltip base classes here
+- Components do not call `PhaseManager` or mutate game state — they only fire callbacks
+- All tooltips extend `BaseTooltip` from `src/ui/`
+- All sizing uses `LAYOUT_SCALE` from `src/core/Constants` — no raw pixel constants inside components
+- Sprite absence must be handled with a visible fallback (rectangle or letter), never a crash
+- `refresh()` / `update()` is the only path to change displayed data after construction
 
 ## Where to Modify
-- unit rendering (sprite, HP, effects) → `UnitView.ts`
-- grid cell highlights or modes → `CellView.ts`
-- turn-order display → `InitiativeBar.ts`
-- battle log styling or capacity → `BattleLog.ts`
-- in-battle skill selection UI → `SkillBar.ts`
-- skill icons in equip/prep screens → `SkillIconRow.ts`
-- skill tooltip content → `SkillCellTooltip.ts`
-- unit stat tooltip → `UnitTooltip.ts`
-- buff/debuff tooltip → `EffectTooltip.ts`
-- item tooltip → `ItemTooltip.ts`
-- single inventory/equipment slot → `ItemCell.ts`
-- equipment slot grid layout → `EquipmentMatrix.ts`
-- backpack grid layout → `BackpackRow.ts`
-- upgrade card states or layout → `UpgradeCard.ts`
-- enemy group selection popup → `EnemyGroupSelector.ts`
+- change unit battle card appearance → `UnitView.ts`
+- change grid cell colors or preview logic → `CellView.ts`
+- change turn-order display → `InitiativeBar.ts`
+- change battle log format or capacity → `BattleLog.ts`
+- change skill bar layout or highlight → `SkillBar.ts`
+- change upgrade card states or layout → `UpgradeCard.ts`
+- change equipment slot visuals → `ItemCell.ts`, `EquipmentMatrix.ts`
+- change backpack grid → `BackpackRow.ts`
+- change unit stat tooltip → `UnitTooltip.ts`
+- change effect/skill/item tooltip content → `EffectTooltip.ts`, `SkillTooltip.ts`, `SkillCellTooltip.ts`, `ItemTooltip.ts`

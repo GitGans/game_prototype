@@ -1,63 +1,60 @@
 # battle
 
 ## Role
-Pure TypeScript domain layer for all turn-based battle mechanics. No Phaser imports — contains only game logic: unit placement, combat resolution, skill targeting, turn ordering, and item operations.
+Pure battle domain logic — all computations, state mutations, and validations that make a battle work. No rendering, no Phaser, no scene knowledge.
 
 ## Responsibilities
-- Define all battle data structures (units, skills, effects, items, grid)
-- Resolve combat: damage, healing, buffs/debuffs, game-over
-- Manage grid occupancy and unit placement validation
-- Build and maintain turn order (initiative queue)
-- Determine valid skill targets and resolve AoE patterns
-- Handle item equip/unequip, stat bonuses, and item usage
+- Define the runtime `BattleState` and all battle-time types
+- Resolve combat: damage, healing, effects, and AOE patterns
+- Track unit positions on the grid (occupancy)
+- Manage placement phase: bench ↔ field swaps, unit positioning
+- Compute turn order and maintain the round queue
+- Instantiate units from blueprints and auto-place them on the field
 
 ## Key Files
-- `types.ts` — all shared types: `Unit`, `BattleState`, `Skill`, `Effect`, `ItemDefinition`, grid coords
-- `combat.ts` — damage, healing, effect application, vampirism, game-over check
-- `autoPlace.ts` — unit instantiation from blueprints (level scaling + item bonuses) and grid placement at battle start
-- `occupancy.ts` — bidirectional cell↔unit maps; `buildOccupancy()` must be called after any unit mutation
-- `placement.ts` — placement validation (`canPlace`) and applying placement to state
-- `initiative.ts` — `buildRoundQueue()`, `pruneQueue()`, `rebuildRemainingQueue()`
-- `targeting.ts` — melee, ranged, friendly, and self target resolution
-- `skillPatterns.ts` — expands `SkillPattern` relative to a target cell into `ResolvedHitCell[]`
-- `itemOps.ts` — item move/equip/unequip, stat bonus aggregation, snapshot builders for scenes
-- `field.ts` — grid coordinate helpers (`cellKey`, `cellExists`)
-- `shapes.ts` — unit shape definitions and occupied-cell expansion
+- [types.ts](types.ts) — all battle-time types (`BattleState`, `Unit`, `ActiveEffect`, `OccupancyMap`, `BenchUnitRef`, `Phase`, `BattleMode`)
+- [combat.ts](combat.ts) — damage, healing, effect application, vampirism, game-over check; emits `CombatEvent`/`AttackResult`
+- [initiative.ts](initiative.ts) — builds and prunes the round queue by initiative order
+- [placement.ts](placement.ts) — low-level validation and field-placement of units
+- [placementState.ts](placementState.ts) — UI-level placement actions (bench/field selection, swaps, moves)
+- [occupancy.ts](occupancy.ts) — builds and updates the bidirectional `OccupancyMap`
+- [targeting.ts](targeting.ts) — computes valid target cells per skill type (melee, ranged, friendly, self)
+- [skillPatterns.ts](skillPatterns.ts) — resolves `SkillPattern` → `ResolvedHitCell[]` for AOE targeting and damage
+- [shapes.ts](shapes.ts) — computes all cells occupied by a unit from its anchor and shape offsets
+- [field.ts](field.ts) — coordinate primitives: `cellKey()`, `cellExists()`
+- [unitFactory.ts](unitFactory.ts) — constructs a runtime `Unit` from a `CreateUnitInstanceInput`
+- [autoPlace.ts](autoPlace.ts) — places player/enemy units on the field at battle start
+- [itemOps.ts](itemOps.ts) — item equip/unequip, inventory queries, stat computation from equipment
 
 ## Structural Role
-`src/battle/` → pure domain logic consumed by scenes, phases, and objects
+`src/battle` → pure battle domain; consumed by `src/core` orchestration layer
 
 ## Data Flow
-`UnitBlueprint[]` + `ItemDefinition[]` from `src/data/`
+`BattleState` + action inputs (skill use, placement gesture, round tick)
 ↓
-`createUnitInstance()` — applies level scaling and item bonuses
+battle functions validate, compute, mutate
 ↓
-`autoPlacePlayer()` / `autoPlaceEnemies()` — validates and places units; rebuilds occupancy
+new `BattleState` (spread — never mutated in place)
 ↓
-`buildRoundQueue()` — sorts units by initiative
-↓
-per-turn loop: targeting → pattern resolution → combat resolution → state mutation → occupancy rebuild
-↓
-`checkGameOver()` — returns winning side when one side has no alive units
+returned to `src/core` for phase transition or rendering
 
 ## Dependencies
-- depends on: `src/data/` (unit, item, skill, enemy definitions), `src/core/GameState.ts`
-- used by: `src/scenes/Game.ts`, `src/scenes/EquipScreen.ts`, `src/core/phases.ts`, `src/objects/`
+- depends on: `src/shared` (grid, skill, unit, item, snapshot types), `src/data` (skill definitions, shape definitions)
+- used by: `src/core` (battle initialization, phase handlers, `PhaseManager`)
 
 ## Invariants
-- No Phaser imports anywhere in this folder
-- `cellToUnit` and `unitToCells` in `BattleState.occupancy` must always be in sync — always call `buildOccupancy()` after mutating units
-- Multi-cell units hit by AoE take the **highest** damage across all hit cells, not the sum
-- Dodge and block are each capped at 90% effective chance (minimum 10% hit/unblock)
-- Active effects per unit capped at 2; oldest is evicted when a third is applied
-- Level scaling formula: `1 + 0.1 × (level − 1)` applied to hp and damage; defense is flat
+- All state-mutating functions return a **new** `BattleState`; they never mutate in place
+- `OccupancyMap` is always rebuilt via `buildOccupancy()` after any unit position change
+- A unit may hold at most **2** active effects; the oldest is evicted when a third is applied
+- Placement validation is anchor-based: shape offsets from the anchor define all occupied cells
+- No Phaser, scene, or rendering imports anywhere in this folder
 
 ## Where to Modify
-- add/change a unit stat or skill type → `types.ts`
-- change damage, healing, or effect resolution → `combat.ts`
-- change turn order or initiative tie-breaking → `initiative.ts`
-- change which cells a skill can target → `targeting.ts`
-- change AoE shape resolution → `skillPatterns.ts`
-- change unit instantiation or level scaling → `autoPlace.ts`
-- change item equip rules or stat bonus calculation → `itemOps.ts`
-- change placement validation rules → `placement.ts`
+- add/change a unit stat computation → [itemOps.ts](itemOps.ts) `computeUnitBattleStats()`
+- change damage or healing resolution → [combat.ts](combat.ts)
+- change turn-order rules → [initiative.ts](initiative.ts)
+- change AOE or targeting patterns → [skillPatterns.ts](skillPatterns.ts), [targeting.ts](targeting.ts)
+- change placement rules or bench/field interactions → [placement.ts](placement.ts), [placementState.ts](placementState.ts)
+- change unit shape/size → [shapes.ts](shapes.ts)
+- change initial field layout at battle start → [autoPlace.ts](autoPlace.ts)
+- add a new battle-time type → [types.ts](types.ts)

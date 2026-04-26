@@ -1,114 +1,34 @@
-export type Side = 'player' | 'enemy';
-export type Row = 0 | 1; // 0 = front, 1 = back
-export type Col = 0 | 1 | 2;
+// ─── Migration re-exports — TODO Step 3: remove all of these; migrate each caller to direct shared/ import ───
+export type { Side, Row, Col, CellCoord, ShapeOffset, UnitShape } from '../shared/gridTypes';
+export type {
+  DamageType, SkillActionType,
+  Effect, DamageBlock, SkillEffectBlock,
+  PatternCell, SkillPattern, LeveledDamageMatrix, LeveledEffectDef,
+  InstantEffectType, InstantEffectBlock, InstantEffectEvent,
+  DamageModifierType, DamageModifierBlock,
+  PostDamageType, PostDamageBlock, Skill,
+} from '../shared/skillTypes';
+export type {
+  SpriteState, SpriteSheetConfig, RowTrait, UnitRace, UnitClass,
+  UnitProgressionStatModifiers, UnitBattleStats,
+  UnitUpgradeOption, UnitUpgradeTier, SkillTier, EnemyLevelSkill, UnitBlueprint,
+} from '../shared/unitTypes';
+export type {
+  EquipSlot, BattleStatBonuses, MapStatBonuses,
+  ItemUsage, ItemUseEffectType, ItemUseEffect, ItemDefinition,
+  UnitActivatableAbility, ItemInstance, ContainerKind, ItemContainer,
+} from '../shared/itemTypes';
+export type {
+  UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot,
+  ItemSlotSnapshot, BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
+} from '../shared/snapshotTypes';
 
-export type RowTrait = 'front' | 'back';
-export type UnitRace = 'orc' | 'demon' | 'undead';
-export type UnitClass =
-  | 'warrior' | 'ranger' | 'mage' | 'priest'
-  | 'pikeman' | 'halberdist' | 'crusher'
-  | 'archer' | 'crossbowman' | 'stormbearer'
-  | 'hieromonk' | 'warcryer' | 'therapist' | 'schemamonk'
-  | 'tank'
-  | 'soldier' | 'guard' | 'brawler' | 'marksman' | 'forest_ranger'
-  | 'elementalist' | 'monk' | 'troublemaker' | 'healer' | 'shaman' | 'destroyer';
+// ─── Runtime battle contracts (only types that exist during an active battle) ──
 
-export interface CellCoord {
-  side: Side;
-  row: Row;
-  col: Col;
-}
-
-export interface ShapeOffset {
-  dr: number;
-  dc: number;
-}
-
-export interface UnitShape {
-  offsets: ShapeOffset[];
-}
-
-export type SpriteState = 'idle' | 'attack' | 'death';
-
-export interface SpriteSheetConfig {
-  path: string;          // path from public/, e.g. 'assets/sprites/units/dd_medium.png'
-  frameWidth: number;    // width of one frame in pixels
-  frameHeight: number;   // height of one frame in pixels
-  states: SpriteState[]; // states in column order, e.g. ['idle', 'attack', 'death']
-}
-
-/** One level-gated skill choice for an enemy unit. */
-export interface SkillTier {
-  unlocksAtLevel: 0 | 5 | 10 | 15 | 20;
-  options: Skill[];
-}
-
-export interface UnitProgressionStatModifiers {
-  hp?: number;
-  physicalDamage?: number;
-  magicalDamage?: number;
-  physicalDefense?: number;
-  magicalDefense?: number;
-  dodge?: number;
-  block?: number;
-  initiative?: number;
-}
-
-export interface UnitBattleStats {
-  hp: number;
-  physicalDamage: number;
-  magicalDamage: number;
-  physicalDefense: number;
-  magicalDefense: number;
-  dodge: number;
-  block: number;
-  initiative: number;
-}
-
-/** An upgrade option a player can choose at levels 5/10/15/20. */
-export interface UnitUpgradeOption {
-  id: string;
-  name: string;
-  description?: string;
-  skill?: Skill;
-  statModifiers?: UnitProgressionStatModifiers;
-  spriteSheet?: SpriteSheetConfig;
-}
-
-/** One level-gated upgrade tier for a player unit. */
-export interface UnitUpgradeTier {
-  unlocksAtLevel: 5 | 10 | 15 | 20;
-  options: UnitUpgradeOption[];
-}
-
-/** Deterministic skill added to an enemy unit when it reaches a level milestone. */
-export interface EnemyLevelSkill {
-  unlocksAtLevel: 5 | 10 | 15 | 20;
-  skill: Skill;
-}
-
-export interface UnitBlueprint {
-  templateId: string;
-  name: string;
-  hp: number;
-  physicalDamage: number;
-  magicalDamage: number;
-  physicalDefense: number;  // percentage 0–100, reduces incoming physical damage
-  magicalDefense: number;   // percentage 0–100, reduces incoming magical damage
-  dodge: number;            // % chance to avoid damage entirely (effective cap: 90)
-  block: number;            // % chance to take only 50% damage (effective cap: 90)
-  level: number;
-  initiative: number;
-  shape: UnitShape;
-  baseSkill?: Skill;                // player units only; auto-learned at level 0
-  upgradeTiers?: UnitUpgradeTier[];  // player units only; tiers 5/10/15/20
-  skillTiers?: SkillTier[];         // enemy units only; tier 0 base skill
-  levelSkills?: EnemyLevelSkill[];  // enemy-only; absent on player blueprints
-  rowTrait: RowTrait;
-  race?: UnitRace;
-  unitClass: UnitClass;
-  spriteSheet?: SpriteSheetConfig;
-}
+import type { CellCoord, UnitShape } from '../shared/gridTypes';
+import type { Skill, Effect } from '../shared/skillTypes';
+import type { SpriteSheetConfig, RowTrait, UnitRace } from '../shared/unitTypes';
+import type { UnitActivatableAbility } from '../shared/itemTypes';
 
 export interface Unit {
   id: string;
@@ -135,6 +55,13 @@ export interface Unit {
   activatableAbilities: UnitActivatableAbility[]; // [] for enemies
 }
 
+export interface ActiveEffect {
+  effectDisplayName: string; // display name shown in log/UI (e.g. "Poisoned")
+  effect: Effect;
+  remainingRounds: number;   // decremented at round end; removed when reaches 0
+  computedPerTurn?: number;  // heal (isBuff) or damage per tick; undefined for defense-only effects
+}
+
 export interface OccupancyMap {
   cellToUnit: Map<string, Unit>;
   unitToCells: Map<string, CellCoord[]>;
@@ -143,295 +70,27 @@ export interface OccupancyMap {
 export type Phase = 'placement' | 'select_target' | 'end';
 export type BattleMode = 'manual' | 'auto' | 'quick';
 
-import type { UnitStatsSnapshot, SkillIconSnapshot } from '../shared/unitSnapshots';
-
-// Display snapshot for the current battle setup.
-// Rebuild when player upgrades, equipment, permanent bonuses, or debug setup change.
-// Stale snapshot prevention is not enforced at runtime — this is a known limitation.
-export interface BenchUnitSnapshot {
+export interface BenchUnitRef {
   templateId: string;
-  name:       string;
-  level:      number;
-  spriteKey:  string | null;
-  stats:      UnitStatsSnapshot;
-  skills:     SkillIconSnapshot[];
+}
+
+export interface PlacementSelection {
+  selectedBenchIdx:    number | null;
+  selectedFieldUnitId: string | null;
 }
 
 export interface BattleState {
-  units: Map<string, Unit>;
-  occupancy: OccupancyMap;
-  roundQueue: string[]; // unit IDs to act this round; [0] = currently acting
-  phase: Phase;
-  validTargets: CellCoord[];
-  benchUnits: (BenchUnitSnapshot | undefined)[]; // player units waiting on the bench; undefined = empty slot
+  units:              Map<string, Unit>;
+  occupancy:          OccupancyMap;
+  roundQueue:         string[]; // unit IDs to act this round; [0] = currently acting
+  phase:              Phase;
+  validTargets:       CellCoord[];
+  benchUnits:         (BenchUnitRef | undefined)[]; // player units waiting on the bench; undefined = empty slot
+  nextPlayerId:       number;          // next p<n> id for unit creation during placement
+  placementSelection: PlacementSelection; // UI selection; owned by BattleState so Game.ts stays stateless
 }
 
-// ─── Skill / Pattern System ───────────────────────────────────────────────
-
-export type DamageType = 'physical' | 'magical';
-export type SkillActionType = 'melee' | 'ranged' | 'mass_enchantment' | 'self_enchantment';
-
-// ─── Effect System ────────────────────────────────────────────────────────────
-
-/** Reusable mechanical effect definition (referenced by SkillEffectBlock). */
-export interface Effect {
-  id: string;
-  isBuff: boolean;               // true = green square, false = red square
-  physicalDefenseBonus?: number; // flat additive modifier to physicalDefense while active
-  magicalDefenseBonus?: number;  // flat additive modifier to magicalDefense while active
-  dodgeBonus?: number;           // flat % added to unit.dodge before 90% cap
-  blockBonus?: number;           // flat % added to unit.block before 90% cap
-  initiativeBonus?: number;      // flat added to unit.initiative for queue ordering
-  physicalDamageBonus?: number;  // flat additive modifier to physicalDamage while active
-  magicalDamageBonus?: number;   // flat additive modifier to magicalDamage while active
-  description?: string;          // short tooltip description shown on hover
-}
-
-/** Live buff/debuff instance on a unit. */
-export interface ActiveEffect {
-  effectDisplayName: string; // display name shown in log/UI (e.g. "Poisoned")  (was: effectName)
-  effect: Effect;
-  remainingRounds: number;   // decremented at round end; removed when reaches 0
-  computedPerTurn?: number;  // heal (isBuff) or damage per tick; undefined for defense-only effects
-}
-
-/** Skill block that deals damage. */
-export interface DamageBlock {
-  matrixName: string;   // key into DAMAGE_MATRICES (src/data/skillDefinitions.ts)
-  damageType: DamageType;
-  level: number;        // which level of DAMAGE_MATRICES to use (1-based)
-}
-
-/** Skill block that applies a buff/debuff. Never deals damage. */
-export interface SkillEffectBlock {
-  effectMatrixName: string;   // key into EFFECT_MATRICES (src/data/skillDefinitions.ts)
-  level: number;              // which level of EFFECT_MATRICES to use (1-based)
-  effectDisplayName: string;  // display name for the applied status (e.g. "Poisoned")   (was: effectName)
-  effectName: string;         // key into LEVELED_EFFECTS                                (was: leveledEffectName)
-  duration: number;           // number of rounds the effect lasts
-  damageType: DamageType;     // kept for display / targeting context
-}
-
-/**
- * One active cell in a skill pattern.
- * Stored as an object so fields (e.g. status effects) can be added later
- * without changing the matrix structure.
- */
-export interface PatternCell {
-  damageMultiplier: number;
-  // future: effects?: StatusEffect[]
-}
-
-/**
- * 2D matrix defining a skill's area of effect.
- *
- * cells[rowIndex][colIndex]:
- *   PatternCell → this cell is part of the pattern
- *   null        → this cell is not affected
- *
- * anchorRow / anchorCol: the matrix position that maps to the player-selected
- * target cell. All other cells are offset relative to this anchor.
- *
- * The `side` dimension is not part of the pattern — it is always inherited
- * from the selected target cell (attacks never cross sides).
- */
-export interface SkillPattern {
-  anchorRow: number;
-  anchorCol: number;
-  cells: (PatternCell | null)[][];
-}
-
-/** Damage matrix with per-level patterns. levels[0] = level 1, levels[1] = level 2, etc. */
-export interface LeveledDamageMatrix {
-  levels: SkillPattern[];
-}
-
-/**
- * Effect definition. Two mutually exclusive modes:
- * - effectDamageType present → per-turn value = casterStat × effect matrix multiplier (regeneration / lose_health)
- * - bonusByLevel present     → fixed defense bonus per level; sign comes from base Effect (fortify / weaken / etc.)
- */
-export interface LeveledEffectDef {
-  effect: Effect;
-  effectDamageType?: DamageType; // which caster stat drives computedPerTurn; present iff stat-based
-  bonusByLevel?: number[];       // fixed defense bonus magnitude per level (e.g. [10, 20, 30]); present iff defense-only
-}
-
-// ─── Instant Effect System ────────────────────────────────────────────────────
-
-export type InstantEffectType = 'provoke' | 'distract';
-
-/**
- * Skill block that fires instantly on the target.
- * Unlike SkillEffectBlock, this leaves no ActiveEffect on the unit.
- * The cell values in INSTANT_EFFECT_MATRICES are success probabilities (0–1).
- * Dodge / block / defense do NOT apply to the probability roll.
- */
-export interface InstantEffectBlock {
-  instantEffectMatrixName: string; // key into INSTANT_EFFECT_MATRICES
-  level: number;                   // 1-based index into matrix levels
-  instantEffectType: InstantEffectType;
-  displayName: string;             // shown in battleLog, e.g. "Provoke"
-}
-
-export type InstantEffectEvent =
-  | { type: 'instant_effect_applied'; unitId: string; unitName: string; displayName: string }
-  | { type: 'instant_effect_failed';  unitId: string; unitName: string; displayName: string }
-  | { type: 'provoke_skip';           unitId: string; unitName: string }
-  | { type: 'distract_skip';          unitId: string; unitName: string };
-
-// ─── Damage Modifier Block ────────────────────────────────────────────────────
-
-export type DamageModifierType =
-  | 'ignore_block'
-  | 'ignore_dodge'
-  | 'ignore_physical_defense'
-  | 'ignore_magical_defense';
-
-/**
- * Modifies how the skill's damage is calculated against each target.
- * `level` maps into DAMAGE_MODIFIER_LEVELS[type] (1-based).
- * Multiple modifiers on one skill → use an array.
- */
-export interface DamageModifierBlock {
-  type: DamageModifierType;
-  level: number;
-}
-
-// ─── Post-Damage Block ────────────────────────────────────────────────────────
-
-export type PostDamageType = 'self_vampirism' | 'mass_vampirism';
-
-/**
- * Fires after resolveAttack completes.
- * Converts a % of total REAL damage dealt (no overkill) into HP.
- * `level` maps into VAMPIRISM_LEVELS (1-based).
- */
-export interface PostDamageBlock {
-  type: PostDamageType;
-  level: number;
-}
-
-export interface Skill {
-  id: string;
-  name: string;
-  actionType: SkillActionType;
-  // level lives in damageBlock and/or effectBlock, not here
-  damageBlock?: DamageBlock;
-  effectBlock?: SkillEffectBlock;
-  instantEffectBlock?: InstantEffectBlock;
-  damageModifierBlocks?: DamageModifierBlock[];
-  postDamageBlock?: PostDamageBlock;
-}
-
-/**
- * One cell produced by resolvePattern().
- * Ready to pass directly to resolveAttack() or resolveHeal().
- */
 export interface ResolvedHitCell {
   coord: CellCoord;
   multiplier: number;
-}
-
-// ─── Item System ──────────────────────────────────────────────────────────────
-
-export type EquipSlot =
-  | 'ring_1'
-  | 'ring_2'
-  | 'ring'        // item-level type only — never a container slot key
-  | 'helmet'
-  | 'necklace'
-  | 'hand_right'
-  | 'armor'
-  | 'hand_left'
-  | 'gloves'
-  | 'belt'
-  | 'boots'
-  | 'artifact'
-  | 'activatable';
-
-export interface BattleStatBonuses {
-  hp: number;
-  physicalDamage: number;
-  magicalDamage: number;
-  physicalDefense: number;
-  magicalDefense: number;
-}
-
-export type ItemUsage = 'equip' | 'consume' | 'equip_and_activate';
-
-export interface MapStatBonuses {
-  movementPoints?: number;
-  // extend as map mechanics are confirmed
-}
-
-export type ItemUseEffectType = 'heal' | 'permanent_stat_boost';
-
-export interface ItemUseEffect {
-  type: ItemUseEffectType;
-  stat?: keyof BattleStatBonuses; // used by permanent_stat_boost
-  amount: number;
-}
-
-export interface ItemDefinition {
-  id: string;
-  name: string;
-  usage: ItemUsage;
-  equipSlot: EquipSlot | null;       // null = backpack-only (consumables)
-  subclass?: string;
-  allowedClasses?: UnitClass[];
-  battleStatBonuses: BattleStatBonuses; // renamed from statBonuses
-  mapStatBonuses?: MapStatBonuses;
-  buyPrice: number;                     // sellPrice = floor(buyPrice/4), computed
-  useEffect?: ItemUseEffect;            // required for consume + equip_and_activate
-  sprite?: string;
-}
-
-export interface UnitActivatableAbility {
-  sourceItemDefinitionId: string;
-  name: string;
-  useEffect: ItemUseEffect;
-  usesRemaining: number; // starts at 1; set to 0 after activation
-}
-
-// ─── Snapshot Types (read-only projections for scene rendering) ──────────────
-
-export interface ItemSlotSnapshot {
-  instanceId: string;
-  definition: ItemDefinition;
-}
-
-export interface BackpackSnapshot {
-  // 10 slots in order; null = empty slot
-  slots: Array<ItemSlotSnapshot | null>;
-}
-
-export interface EquipmentSnapshot {
-  // keyed by EquipSlot strings (ring_1, helmet, etc.); absent key = empty slot
-  slots: Partial<Record<string, ItemSlotSnapshot>>;
-}
-
-export interface UnitTabSnapshot {
-  templateId: string;
-  name: string;
-  unitClass: UnitClass;
-  spriteKey: string | null;
-}
-
-export interface ItemInstance {
-  id: string;           // unique runtime id, e.g. 'item_001'
-  definitionId: string; // references ItemDefinition.id
-}
-
-export type ContainerKind = 'backpack' | 'equipment';
-
-export interface ItemContainer {
-  id: string;               // e.g. 'backpack_tank', 'equip_tank'
-  kind: ContainerKind;
-  ownerTemplateId?: string;  // unit templateId; absent for shared containers (e.g. backpack_shared)
-  slots: Record<string, string>;
-  // Convention:
-  //   backpack  → keys are '0'–'23' (sparse; absent key = empty cell)
-  //   equipment → keys are EquipSlot strings, e.g. 'accessory' (absent = empty)
-  // NEVER store null/undefined as a value — only set and delete keys.
 }
