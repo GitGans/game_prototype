@@ -74,13 +74,20 @@ export interface BenchUnitRef {
   templateId: string;
 }
 
+export interface PlacementSelection {
+  selectedBenchIdx:    number | null;
+  selectedFieldUnitId: string | null;
+}
+
 export interface BattleState {
-  units: Map<string, Unit>;
-  occupancy: OccupancyMap;
-  roundQueue: string[]; // unit IDs to act this round; [0] = currently acting
-  phase: Phase;
-  validTargets: CellCoord[];
-  benchUnits: (BenchUnitRef | undefined)[]; // player units waiting on the bench; undefined = empty slot
+  units:              Map<string, Unit>;
+  occupancy:          OccupancyMap;
+  roundQueue:         string[]; // unit IDs to act this round; [0] = currently acting
+  phase:              Phase;
+  validTargets:       CellCoord[];
+  benchUnits:         (BenchUnitRef | undefined)[]; // player units waiting on the bench; undefined = empty slot
+  nextPlayerId:       number;          // next p<n> id for unit creation during placement
+  placementSelection: PlacementSelection; // UI selection; owned by BattleState so Game.ts stays stateless
 }
 
 export interface ResolvedHitCell {

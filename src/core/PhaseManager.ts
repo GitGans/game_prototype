@@ -27,6 +27,11 @@ import {
   buildNewBattleState,
   buildReplayBattleState,
 } from './battleInitialization';
+import {
+  isBattlePlacementAction,
+  applyBattlePlacementAction,
+} from './phaseHandlers/battlePhaseHandler';
+import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
@@ -282,14 +287,33 @@ class PhaseManagerClass {
         );
         return { ...phase, upgradeTiers };
       }
-      case 'battle':
-        return { ...phase, participants: GameState.battleParticipants };
+      case 'battle': {
+        const battleState = GameState.get();
+        const setup       = this.getActiveBattleSetup();
+        const benchUnits  = buildBenchUnitSnapshots(battleState.benchUnits, setup);
+        // participants = battle-start snapshot; do NOT rebuild from current placement state
+        return {
+          ...phase,
+          participants:       GameState.battleParticipants,
+          benchUnits,
+          placementSelection: battleState.placementSelection,
+        };
+      }
       default:
         return phase; // phases without snapshots pass through unchanged
     }
   }
 
   private applyActionSideEffects(action: PhaseAction, prev: GamePhase): void {
+    // ── Battle placement ──
+    if (isBattlePlacementAction(action) && prev.type === 'battle') {
+      const state    = GameState.get();
+      const setup    = this.getActiveBattleSetup();
+      const nextState = applyBattlePlacementAction(state, setup, action);
+      GameState.set(nextState);
+      return;
+    }
+
     // ── Campaign init ──
     if (action.type === 'new_game') {
       const mapId = 'test_01';
@@ -686,12 +710,14 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'enter_battle':
       if (current.type !== 'world_map') return null;
       return {
-        type: 'battle',
-        enemyGroupId: action.enemyGroupId,
-        returnPhase: current,
-        triggerPos: action.triggerPos,
-        mapId: current.mapId,
-        participants: [],
+        type:               'battle',
+        enemyGroupId:       action.enemyGroupId,
+        returnPhase:        current,
+        triggerPos:         action.triggerPos,
+        mapId:              current.mapId,
+        participants:       [],                                                       // filled by rebuildSnapshot
+        benchUnits:         [],                                                       // filled by rebuildSnapshot
+        placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
       };
 
     case 'enter_camp':
@@ -705,11 +731,13 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'start_battle':
       if (current.type !== 'debug_equip_screen') return null;
       return {
-        type: 'battle',
-        enemyGroupId: action.enemyGroupId,
-        returnPhase: current,
-        isDebug: true,
-        participants: [],
+        type:               'battle',
+        enemyGroupId:       action.enemyGroupId,
+        returnPhase:        current,
+        isDebug:            true,
+        participants:       [],                                                       // filled by rebuildSnapshot
+        benchUnits:         [],                                                       // filled by rebuildSnapshot
+        placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
       };
 
     case 'exit_battle':
@@ -815,6 +843,19 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'buy_item':
     case 'sell_item':
       return null; // no shop phase yet
+
+    // ── Battle placement (mutation-only) ─────────────────────────────────────
+    case 'select_bench_slot':
+    case 'select_field_unit':
+    case 'clear_placement_selection':
+    case 'place_bench_unit':
+    case 'swap_bench_with_field':
+    case 'move_field_unit':
+    case 'move_field_unit_to_bench':
+    case 'return_field_unit_to_bench':
+    case 'swap_field_units':
+      if (current.type !== 'battle') return null;
+      return current; // applyActionSideEffects mutates BattleState; rebuildSnapshot refreshes phase
   }
 
   return null;

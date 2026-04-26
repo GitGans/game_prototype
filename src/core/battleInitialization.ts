@@ -43,6 +43,12 @@ export function buildNewBattleState(
   const playerCandidates = buildPlayerAutoPlacementCandidates(setup);
   let state = autoPlacePlayer(emptyState, playerCandidates, BENCH_SLOTS);
 
+  // Seed nextPlayerId from placed units so manual placement IDs don't collide
+  const maxP = [...state.units.keys()]
+    .filter(id => id.startsWith('p'))
+    .reduce((max, id) => Math.max(max, parseInt(id.slice(1), 10) || 0), 0);
+  state = { ...state, nextPlayerId: maxP + 1 };
+
   // 2. Determine enemy race and level
   const group       = ENEMY_GROUPS[enemyGroupId];
   const playerMaxLv = [...state.units.values()]
@@ -74,6 +80,12 @@ export function buildReplayBattleState(
 ): BattleState {
   const playerCandidates = buildPlayerAutoPlacementCandidates(setup);
   let state = autoPlacePlayer(emptyState, playerCandidates, BENCH_SLOTS);
+
+  const maxP = [...state.units.keys()]
+    .filter(id => id.startsWith('p'))
+    .reduce((max, id) => Math.max(max, parseInt(id.slice(1), 10) || 0), 0);
+  state = { ...state, nextPlayerId: maxP + 1 };
+
   const replayInputs = buildEnemyReplayInputs(savedPlacements);
   return replayPlaceEnemies(state, replayInputs);
 }

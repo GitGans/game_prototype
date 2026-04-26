@@ -5,6 +5,9 @@ import type {
   BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
 } from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
+import type { BenchUnitSnapshot } from '../shared/battleSnapshots';
+import type { PlacementSelection } from '../battle/types';
+import type { CellCoord } from '../shared/gridTypes';
 
 export interface CampUnitSnapshot {
   templateId: string;
@@ -55,13 +58,15 @@ export type GamePhase =
   | { type: 'map_victory'; mapId: string }
   | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase; mapCleared: boolean }
   | {
-      type: 'battle';
-      enemyGroupId: string;
-      returnPhase: GamePhase;
-      triggerPos?: { x: number; y: number };
-      mapId?: string;
-      isDebug?: boolean;
-      participants: BattleParticipant[];
+      type:               'battle';
+      enemyGroupId:       string;
+      returnPhase:        GamePhase;
+      triggerPos?:        { x: number; y: number };
+      mapId?:             string;
+      isDebug?:           boolean;
+      participants:       BattleParticipant[];     // battle-start snapshot; never rebuilt from current placement
+      benchUnits:         (BenchUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
+      placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
     }
   | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
   | { type: 'debug_level_select' }
@@ -129,7 +134,17 @@ export type PhaseAction =
   // ── Debug battle ──────────────────────────────────────────────
   | { type: 'init_debug'; level: number }
   | { type: 'switch_debug_unit'; templateId: string }
-  | { type: 'toggle_debug_camp'; templateId: string };
+  | { type: 'toggle_debug_camp'; templateId: string }
+  // ── Battle placement (mutation-only: resolveTransition returns current) ──
+  | { type: 'select_bench_slot';          benchIdx: number }
+  | { type: 'select_field_unit';          unitId:   string }
+  | { type: 'clear_placement_selection' }
+  | { type: 'place_bench_unit';           benchIdx: number; anchor: CellCoord }
+  | { type: 'swap_bench_with_field';      benchIdx: number; fieldUnitId: string }
+  | { type: 'move_field_unit';            unitId:   string; anchor: CellCoord }
+  | { type: 'move_field_unit_to_bench';   unitId:   string; benchIdx: number }
+  | { type: 'return_field_unit_to_bench'; unitId:   string }
+  | { type: 'swap_field_units';           unitAId:  string; unitBId: string };
 
 // Empty snapshots used by resolveTransition as placeholders —
 // rebuildSnapshot fills them with real data after side effects run.
