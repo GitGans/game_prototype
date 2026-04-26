@@ -1,4 +1,5 @@
-import { BattleState, BenchUnitSnapshot, CellCoord, Col, Row, Skill, Unit, UnitBlueprint, UnitRace } from './types';
+import { BattleState, CellCoord, Col, Row, Skill, Unit, UnitBlueprint, UnitRace } from './types';
+import type { BenchUnitRef } from './types';
 import { canPlace, placeUnit } from './placement';
 import { cellKey } from './field';
 import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
@@ -8,7 +9,6 @@ import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from './itemOps';
 import { resolveUnitProgression } from '../core/unitProgression';
 import type { PlayerBattleSetup } from '../core/battleSetup';
-import { buildPlayerUnitPreviewSnapshot } from '../core/unitPreviewSnapshot';
 
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): Skill[] {
   const base = (blueprint.skillTiers ?? [])
@@ -79,23 +79,6 @@ export function createUnitInstance(
   };
 }
 
-export function benchSnapshotFromUnit(unit: Unit, setup: PlayerBattleSetup): BenchUnitSnapshot {
-  const blueprint = PLAYER_UNITS.find(b => b.templateId === unit.templateId)!;
-  const unitState = setup.playerUnits[unit.templateId];
-  return buildPlayerUnitPreviewSnapshot(blueprint, unitState, setup);
-}
-
-export function blueprintFromUnit(unit: Unit): UnitBlueprint {
-  const allBlueprints = [
-    ...PLAYER_UNITS,
-    ...Object.values(ENEMY_UNITS).flat(),
-  ];
-  const originalBp = allBlueprints.find(b => b.templateId === unit.templateId)!;
-  return {
-    ...originalBp,
-    level: unit.level,
-  };
-}
 
 export function getPlayerMaxLevel(playerUnits: Record<string, PlayerUnitState>): number {
   const levels = Object.values(playerUnits).map(u => u.level);
@@ -107,19 +90,12 @@ export function autoPlacePlayer(state: BattleState, setup?: PlayerBattleSetup): 
   const availableUnits = PLAYER_UNITS.filter(u => !playerUnitsState[u.templateId]?.isInCamp);
 
   let counter = 1;
-  const paddedBench: (BenchUnitSnapshot | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
-
-  const resolvedSetup: PlayerBattleSetup = {
-    playerUnits:    playerUnitsState,
-    itemContainers: setup?.itemContainers ?? GameState.itemContainers,
-    itemInstances:  setup?.itemInstances  ?? GameState.itemInstances,
-  };
+  const paddedBench: (BenchUnitRef | undefined)[] = Array(BENCH_SLOTS).fill(undefined);
 
   const addToBench = (def: UnitBlueprint): boolean => {
     const slot = paddedBench.indexOf(undefined);
     if (slot === -1) return false;
-    const unitState = playerUnitsState[def.templateId];
-    paddedBench[slot] = buildPlayerUnitPreviewSnapshot(def, unitState, resolvedSetup);
+    paddedBench[slot] = { templateId: def.templateId };
     return true;
   };
 

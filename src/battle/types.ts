@@ -22,7 +22,6 @@ export type {
   UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot,
   ItemSlotSnapshot, BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
 } from '../shared/snapshotTypes';
-export type { BenchUnitSnapshot } from '../shared/battleSnapshots';
 
 // ─── Runtime battle contracts (only types that exist during an active battle) ──
 
@@ -30,7 +29,6 @@ import type { CellCoord, UnitShape } from '../shared/gridTypes';
 import type { Skill, Effect } from '../shared/skillTypes';
 import type { SpriteSheetConfig, RowTrait, UnitRace } from '../shared/unitTypes';
 import type { UnitActivatableAbility } from '../shared/itemTypes';
-import type { BenchUnitSnapshot } from '../shared/battleSnapshots';
 
 export interface Unit {
   id: string;
@@ -72,13 +70,17 @@ export interface OccupancyMap {
 export type Phase = 'placement' | 'select_target' | 'end';
 export type BattleMode = 'manual' | 'auto' | 'quick';
 
+export interface BenchUnitRef {
+  templateId: string;
+}
+
 export interface BattleState {
   units: Map<string, Unit>;
   occupancy: OccupancyMap;
   roundQueue: string[]; // unit IDs to act this round; [0] = currently acting
   phase: Phase;
   validTargets: CellCoord[];
-  benchUnits: (BenchUnitSnapshot | undefined)[]; // player units waiting on the bench; undefined = empty slot
+  benchUnits: (BenchUnitRef | undefined)[]; // player units waiting on the bench; undefined = empty slot
 }
 
 export interface ResolvedHitCell {

@@ -22,7 +22,6 @@ import { EffectTooltip } from "../objects/EffectTooltip";
 import { TOOLTIP } from "../ui/theme";
 import {
   BattleState,
-  BenchUnitSnapshot,
   CellCoord,
   Col,
   ResolvedHitCell,
@@ -32,6 +31,8 @@ import {
   SpriteSheetConfig,
   UnitRace,
 } from "../battle/types";
+import type { BenchUnitRef } from "../battle/types";
+import type { BenchUnitSnapshot } from "../shared/battleSnapshots";
 import { PhaseManager } from '../core/PhaseManager';
 import { BattleParticipant } from '../core/phases';
 import { Button } from '../ui/Button';
@@ -59,8 +60,8 @@ import {
   autoPlaceEnemies,
   replayPlaceEnemies,
   createUnitInstance,
-  benchSnapshotFromUnit,
 } from "../battle/autoPlace";
+import { buildBenchUnitSnapshots } from "../core/unitPreviewSnapshot";
 
 /** Returns the currently active skill for a unit. */
 function activeSkill(unit: Unit): Skill {
@@ -500,8 +501,11 @@ export class Game extends Phaser.Scene {
     const totalH = BENCH_SLOTS * cardH + (BENCH_SLOTS - 1) * slotGap;
     const startY = (gridTopY + gridBottomY) / 2 - totalH / 2 + cardH / 2;
 
+    const setup = PhaseManager.getActiveBattleSetup();
+    const benchSnapshots = buildBenchUnitSnapshots(state.benchUnits, setup);
+
     for (let i = 0; i < BENCH_SLOTS; i++) {
-      const benchSnapshot = state.benchUnits[i] ?? null;
+      const benchSnapshot = benchSnapshots[i] ?? null;
       const cardY = startY + i * (cardH + slotGap);
       const isSelected = this.selectedBenchIdx === i;
       const card = this.makeBenchCard(benchSnapshot, i, panelX, cardY, isSelected, interactive);
@@ -748,16 +752,16 @@ export class Game extends Phaser.Scene {
   }
 
   private placeBenchUnitOnField(
-    snapshot: BenchUnitSnapshot,
+    ref: BenchUnitRef,
     benchIdx: number,
     anchor: CellCoord,
   ): void {
     let state = GameState.get();
-    const fullBp = PLAYER_UNITS.find(b => b.templateId === snapshot.templateId)!;
+    const fullBp = PLAYER_UNITS.find(b => b.templateId === ref.templateId)!;
     const newId = `p${++this.playerIdCounter}`;
     const setup = PhaseManager.getActiveBattleSetup();
-    const unitState = setup.playerUnits[snapshot.templateId];
-    const level = unitState?.level ?? snapshot.level;
+    const unitState = setup.playerUnits[ref.templateId];
+    const level = unitState?.level ?? fullBp.level;
     const unit = createUnitInstance(fullBp, newId, anchor, level, {
       itemContainers: setup.itemContainers,
       itemInstances:  setup.itemInstances,
@@ -776,13 +780,13 @@ export class Game extends Phaser.Scene {
   }
 
   private swapBenchWithField(
-    snapshot: BenchUnitSnapshot,
+    ref: BenchUnitRef,
     benchIdx: number,
     fieldUnit: Unit,
   ): void {
     let state = GameState.get();
     const anchor = fieldUnit.anchor;
-    const fullBp = PLAYER_UNITS.find(b => b.templateId === snapshot.templateId)!;
+    const fullBp = PLAYER_UNITS.find(b => b.templateId === ref.templateId)!;
 
     // Remove field unit
     const newUnits = new Map(state.units);
@@ -798,8 +802,8 @@ export class Game extends Phaser.Scene {
 
     const newId = `p${++this.playerIdCounter}`;
     const setup = PhaseManager.getActiveBattleSetup();
-    const unitState = setup.playerUnits[snapshot.templateId];
-    const level = unitState?.level ?? snapshot.level;
+    const unitState = setup.playerUnits[ref.templateId];
+    const level = unitState?.level ?? fullBp.level;
     const newUnit = createUnitInstance(fullBp, newId, anchor, level, {
       itemContainers: setup.itemContainers,
       itemInstances:  setup.itemInstances,
@@ -807,9 +811,9 @@ export class Game extends Phaser.Scene {
     });
     state = placeUnit(newUnit, state);
 
-    // Update bench: replace snapshot at benchIdx with field unit's snapshot
+    // Update bench: replace ref at benchIdx with field unit's ref
     const newBench = [...state.benchUnits];
-    newBench[benchIdx] = benchSnapshotFromUnit(fieldUnit, setup);
+    newBench[benchIdx] = { templateId: fieldUnit.templateId };
     state = { ...state, benchUnits: newBench };
     GameState.set(state);
 
@@ -881,8 +885,7 @@ export class Game extends Phaser.Scene {
     if (emptyIdx === -1) return; // bench full — all 3 slots occupied
     const newUnits = new Map(state.units);
     newUnits.delete(unit.id);
-    const setup = PhaseManager.getActiveBattleSetup();
-    newBench[emptyIdx] = benchSnapshotFromUnit(unit, setup);
+    newBench[emptyIdx] = { templateId: unit.templateId };
     const newState = {
       ...state,
       units: newUnits,
@@ -905,8 +908,7 @@ export class Game extends Phaser.Scene {
     newUnits.delete(unit.id);
 
     const newBench = [...state.benchUnits];
-    const setup = PhaseManager.getActiveBattleSetup();
-    newBench[benchIdx] = benchSnapshotFromUnit(unit, setup);
+    newBench[benchIdx] = { templateId: unit.templateId };
 
     GameState.set({
       ...state,
