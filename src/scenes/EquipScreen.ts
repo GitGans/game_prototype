@@ -2,65 +2,49 @@ import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
 import { EventBus, Events } from '../core/EventBus';
-import { ItemSlotSnapshot, UnitTabSnapshot } from '../battle/types';
-import { Button } from '../ui/Button';
+import { GamePhase } from '../core/phases';
+import { ItemSlotSnapshot } from '../battle/types';
 import { ContextMenu } from '../ui/ContextMenu';
-import { UnitCampButton } from '../ui/UnitCampButton';
-import { fontSize, VALUE_COLOR, BTN, SCENE_BG } from '../ui/theme';
+import { SCENE_BG } from '../ui/theme';
 import { ItemTooltip } from '../objects/ItemTooltip';
-import { UnitTooltip } from '../objects/UnitTooltip';
-import { EquipmentMatrix } from '../objects/EquipmentMatrix';
-import { BackpackRow } from '../objects/BackpackRow';
 import { EnemyGroupSelector } from '../objects/EnemyGroupSelector';
-import { SkillIconRow } from '../objects/SkillIconRow';
+import { UnitTabRow } from '../objects/UnitTabRow';
+import { UnitSelectionPanel } from '../objects/panels/UnitSelectionPanel';
+import { EquipmentPanel } from '../objects/panels/EquipmentPanel';
 
-type EquipScreenPhase = Extract<ReturnType<typeof PhaseManager.getPhase>, { type: 'equip_screen' }>;
-type DebugEquipScreenPhase = Extract<ReturnType<typeof PhaseManager.getPhase>, { type: 'debug_equip_screen' }>;
-type AnyEquipPhase = EquipScreenPhase | DebugEquipScreenPhase;
+export type EquipScreenPhase      = Extract<GamePhase, { type: 'equip_screen' }>;
+export type DebugEquipScreenPhase = Extract<GamePhase, { type: 'debug_equip_screen' }>;
+export type AnyEquipPhase         = EquipScreenPhase | DebugEquipScreenPhase;
 
-const CELL_SIZE    = Math.round(56  * LAYOUT_SCALE);
-const CELL_GAP     = Math.round(6   * LAYOUT_SCALE);
-const PORTRAIT_SEL = Math.round(128 * LAYOUT_SCALE);
-const SPRITE_SZ = Math.round(256 * LAYOUT_SCALE);
-const PAD = Math.round(16 * LAYOUT_SCALE);
+const CELL_SIZE     = Math.round(56 * LAYOUT_SCALE);
+const CELL_GAP      = Math.round(6  * LAYOUT_SCALE);
+const PAD           = Math.round(16 * LAYOUT_SCALE);
+const CONTENT_TOP_Y = CELL_SIZE + PAD * 2;
 
 export class EquipScreen extends Phaser.Scene {
-  private selectedTemplateId = "";
-  private _selectorPanel: EnemyGroupSelector | null = null;
-  private _selectionContainer: Phaser.GameObjects.Container | null = null;
-  private equipMatrix?: EquipmentMatrix;
-  private backpackRow?: BackpackRow;
-  private statsPanel?: UnitTooltip;
-  private unitNamePanel?: UnitTooltip;
-  private skillIconRow?: SkillIconRow;
-  private statsPanelX = 0;
-  private statsPanelY = 0;
-  private statsPanelW = 0;
-  private skillsPanelX = 0;
-  private skillsPanelY = 0;
-  private spriteHeaderX = 0;
-  private spriteHeaderY = 0;
-  private itemTooltip!: ItemTooltip;
+  private _selectionPanel : UnitSelectionPanel | null = null;
+  private _tabRow          : UnitTabRow          | null = null;
+  private _equipPanel      : EquipmentPanel      | null = null;
+  private _selectorPanel   : EnemyGroupSelector  | null = null;
+  private itemTooltip!     : ItemTooltip;
   private activeContextMenu: ContextMenu | null = null;
 
   constructor() {
-    super({ key: "EquipScreen" });
+    super({ key: 'EquipScreen' });
   }
 
   create(): void {
     const phase = PhaseManager.getPhase() as AnyEquipPhase;
-    this.selectedTemplateId = phase.selectedUnitTemplateId;
-
     const w = this.scale.width;
     const h = this.scale.height;
-    this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.default);
 
+    this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.default);
     this.itemTooltip = new ItemTooltip(this);
 
-    if (!this.selectedTemplateId) {
-      this.renderSelectionMode(phase);
+    if (!phase.selectedUnitTemplateId) {
+      this.showSelectionMode(phase);
     } else {
-      this.renderCharacterMenu(phase as AnyEquipPhase);
+      this.showCharacterMode(phase);
     }
 
     EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);
@@ -68,376 +52,137 @@ export class EquipScreen extends Phaser.Scene {
 
   shutdown(): void {
     EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
-    this._selectorPanel = null;
-    this._selectionContainer = null;
+    this.clearPanels();
   }
 
   destroy(): void {
     EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
   }
 
-  // ── Mode A: unit selection ─────────────────────────────────────────────────
+  // ── Mode switching ─────────────────────────────────────────────────────────
 
-  private renderSelectionMode(phase: AnyEquipPhase): void {
-    const w = this.scale.width;
-    const h = this.scale.height;
+  private showSelectionMode(phase: AnyEquipPhase): void {
+    this.clearPanels();
+    const w       = this.scale.width;
+    const h       = this.scale.height;
     const isDebug = phase.type === 'debug_equip_screen';
 
-    // Destroy and recreate on refresh (e.g. after camp toggle)
-    this._selectionContainer?.destroy();
-    const c = this.add.container(0, 0);
-    this._selectionContainer = c;
-
-    const title = this.add
-      .text(w / 2, Math.round(40 * LAYOUT_SCALE), isDebug ? "Debug — Select character" : "Select a character", {
-        fontSize: fontSize("lg"),
-        color: VALUE_COLOR.neutral,
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5);
-    c.add(title);
-
-    const units = phase.availableUnits;
-    const rows = [units.slice(0, 6), units.slice(6, 12)].filter(
-      (r) => r.length > 0,
-    );
-    const startY = Math.round(100 * LAYOUT_SCALE);
-
-    rows.forEach((row, ri) => {
-      const rowY = startY + ri * (PORTRAIT_SEL + Math.round(28 * LAYOUT_SCALE));
-      const totalW = row.length * (PORTRAIT_SEL + PAD) - PAD;
-      const startX = (w - totalW) / 2;
-      row.forEach((u, i) => {
-        const px = startX + i * (PORTRAIT_SEL + PAD);
-        this.addPortrait(px, rowY, PORTRAIT_SEL, u.spriteKey, u.name, c,
-          () => PhaseManager.transition(
-            isDebug
-              ? { type: 'switch_debug_unit', templateId: u.templateId }
-              : { type: 'switch_equip_unit', templateId: u.templateId },
-          ),
-        );
-
-        if (isDebug) {
-          const campIds = (phase as DebugEquipScreenPhase).campUnitIds;
-          const inCamp = campIds.includes(u.templateId);
-          const btn = new UnitCampButton(
-            this,
-            px + PORTRAIT_SEL / 2,
-            rowY + PORTRAIT_SEL - Math.round(11 * LAYOUT_SCALE),
-            inCamp,
-            () => PhaseManager.transition({ type: 'toggle_debug_camp', templateId: u.templateId }),
-          );
-          c.add(btn);
-        }
-      });
+    this._selectionPanel = new UnitSelectionPanel({
+      scene:    this,
+      screenW:  w,
+      screenH:  h,
+      phase,
+      onSelectUnit: (templateId) => PhaseManager.transition(
+        isDebug
+          ? { type: 'switch_debug_unit', templateId }
+          : { type: 'switch_equip_unit', templateId },
+      ),
+      onToggleCamp: isDebug
+        ? (templateId) => PhaseManager.transition({ type: 'toggle_debug_camp', templateId })
+        : undefined,
+      onGoToBattle: isDebug ? () => this.openEnemySelector() : undefined,
+      onBack: !isDebug ? () => PhaseManager.transition({ type: 'close_equip_screen' }) : undefined,
     });
-
-    if (isDebug) {
-      this.renderGoToBattleButton(w, h, c);
-    } else {
-      this.renderBackButton(w, h - Math.round(16 * LAYOUT_SCALE));
-    }
   }
 
-  private renderGoToBattleButton(w: number, h: number, container: Phaser.GameObjects.Container): void {
-    const phase = PhaseManager.getPhase() as DebugEquipScreenPhase;
-    const activeCount = phase.availableUnits.filter(u => !phase.campUnitIds.includes(u.templateId)).length;
-    const tooMany = activeCount > 9;
+  private showCharacterMode(phase: AnyEquipPhase): void {
+    this.clearPanels();
+    const w       = this.scale.width;
+    const isDebug = phase.type === 'debug_equip_screen';
 
-    const BTN_W = Math.round(160 * LAYOUT_SCALE);
-    const BTN_H = Math.round(44 * LAYOUT_SCALE);
+    this._tabRow = new UnitTabRow({
+      scene:              this,
+      screenW:            w,
+      y:                  PAD,
+      cellSize:           CELL_SIZE,
+      gap:                CELL_GAP,
+      units:              phase.availableUnits,
+      selectedTemplateId: phase.selectedUnitTemplateId,
+      onSwitch: (templateId) => PhaseManager.transition(
+        isDebug
+          ? { type: 'switch_debug_unit', templateId }
+          : { type: 'switch_equip_unit', templateId },
+      ),
+    });
+
+    this._equipPanel = new EquipmentPanel({
+      scene:               this,
+      screenW:             w,
+      contentTopY:         CONTENT_TOP_Y,
+      phase,
+      itemTooltip:         this.itemTooltip,
+      onEquipSlotClick:    (slot, item) => this.onEquipSlotClick(slot, item),
+      onBackpackItemClick: (item, cx, cy) => this.onBackpackItemClick(item, cx, cy),
+      onUpgrade:           () => PhaseManager.transition({ type: 'open_upgrade_tree' }),
+      onBack:              () => PhaseManager.transition({ type: 'close_equip_screen' }),
+    });
+  }
+
+  private clearPanels(): void {
+    this._selectionPanel?.destroy(); this._selectionPanel = null;
+    this._tabRow?.destroy();         this._tabRow         = null;
+    this._equipPanel?.destroy();     this._equipPanel     = null;
+    this._selectorPanel?.destroy();  this._selectorPanel  = null;
+  }
+
+  // ── EnemyGroupSelector (debug only, lives in scene) ───────────────────────
+
+  private openEnemySelector(): void {
+    if (this._selectorPanel) {
+      this._selectorPanel.destroy();
+      this._selectorPanel = null;
+      return;
+    }
+    const w    = this.scale.width;
+    const h    = this.scale.height;
     const btnY = h - Math.round(36 * LAYOUT_SCALE);
-    const btn = new Button({
-      scene: this,
-      x: w / 2,
-      y: btnY,
-      w: BTN_W,
-      h: BTN_H,
-      label: 'Go to Battle →',
-      style: tooMany ? 'danger' : 'primary',
-      onClick: () => {
-        if (tooMany) return;
-        if (this._selectorPanel) {
-          this._selectorPanel.destroy();
-          this._selectorPanel = null;
-          return;
-        }
-        this._selectorPanel = new EnemyGroupSelector(this, w / 2 - 100, btnY - 190);
-      },
-    });
-    container.add(btn);
-  }
-
-  private addPortrait(
-    x: number,
-    y: number,
-    size: number,
-    spriteKey: string | null,
-    name: string,
-    container: Phaser.GameObjects.Container | null,
-    onClick: () => void,
-  ): void {
-    const img = spriteKey && this.textures.exists(spriteKey)
-      ? this.add.image(x + size / 2, y + size / 2, spriteKey).setDisplaySize(size, size).setInteractive({ useHandCursor: true }).on("pointerup", onClick)
-      : this.add.rectangle(x + size / 2, y + size / 2, size, size, BTN.neutral.base).setInteractive({ useHandCursor: true }).on("pointerup", onClick);
-    const label = this.add
-      .text(x + size / 2, y + size + Math.round(4 * LAYOUT_SCALE), name, {
-        fontSize: fontSize("sm"),
-        color: VALUE_COLOR.neutral,
-      })
-      .setOrigin(0.5, 0);
-    if (container) {
-      container.add([img as Phaser.GameObjects.GameObject, label]);
-    }
-  }
-
-  // ── Mode B: character menu ─────────────────────────────────────────────────
-
-  private renderCharacterMenu(phase: AnyEquipPhase): void {
-    const w = this.scale.width;
-
-    this.renderUnitTabs(phase.availableUnits, w, phase.type === 'debug_equip_screen');
-
-    const matrixW = 3 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-    const matrixH = 4 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-    const contentTopY = CELL_SIZE + PAD * 2;
-    const HEADER_H = Math.round(24 * LAYOUT_SCALE);
-    const panelTopY = contentTopY + HEADER_H;
-
-    const STATS_W = Math.round(200 * LAYOUT_SCALE);
-    const SKILLS_W = Math.round(200 * LAYOUT_SCALE);
-    const totalContentW =
-      STATS_W + PAD + matrixW + PAD + SPRITE_SZ + PAD + SKILLS_W;
-    const startX = Math.round((w - totalContentW) / 2);
-    const statsX = startX;
-    const matrixX = startX + STATS_W + PAD;
-    const spriteX = matrixX + matrixW + PAD;
-    const skillsX = spriteX + SPRITE_SZ + PAD;
-    this.statsPanelX = statsX;
-    this.statsPanelY = contentTopY;
-    this.statsPanelW = STATS_W;
-    this.skillsPanelX = skillsX;
-    this.skillsPanelY = panelTopY;
-    this.spriteHeaderX = spriteX;
-    this.spriteHeaderY = contentTopY;
-
-    // Stats panel (leftmost column) — has its own "Stats" header internally
-    this.statsPanel = new UnitTooltip(this);
-
-    // "Items" header above equipment matrix
-    this.add.text(matrixX, contentTopY, 'Items', {
-      fontSize: fontSize('md'), color: VALUE_COLOR.highlight, fontStyle: 'bold',
-    }).setOrigin(0, 0);
-
-    // Equipment matrix (second column)
-    this.equipMatrix = new EquipmentMatrix(
+    this._selectorPanel = new EnemyGroupSelector(
       this,
-      matrixX,
-      panelTopY,
-      CELL_SIZE,
-      CELL_GAP,
-      phase.unitEquipment,
-      this.itemTooltip,
-      (slot, item) => this.onEquipSlotClick(slot, item),
+      w / 2 - 100,
+      btnY - 190,
+      (groupId) => PhaseManager.transition({ type: 'start_battle', enemyGroupId: groupId }),
     );
-
-    // Unit name header (third column) — via UnitTooltip with transparent bg
-    this.unitNamePanel = new UnitTooltip(this, 0x000000, 0);
-
-    // Unit sprite (third column)
-    this.renderUnitSprite(phase.selectedUnitSpriteKey, spriteX, panelTopY);
-
-    // "Skills" header above skills panel
-    this.add.text(skillsX, contentTopY, 'Skills', {
-      fontSize: fontSize('md'), color: VALUE_COLOR.highlight, fontStyle: 'bold',
-    }).setOrigin(0, 0);
-
-    // Skills panel (rightmost column)
-    this.skillIconRow = new SkillIconRow(this, skillsX, panelTopY);
-
-    // 32×32 upgrade button — top-right corner of unit sprite
-    const BTN_SZ = Math.round(32 * LAYOUT_SCALE);
-    new Button({
-      scene: this,
-      x: spriteX + SPRITE_SZ - BTN_SZ / 2,
-      y: panelTopY + BTN_SZ / 2,
-      w: BTN_SZ,
-      h: BTN_SZ,
-      label: '↑',
-      style: 'neutral',
-      onClick: () => PhaseManager.transition({ type: 'open_upgrade_tree' }),
-    });
-    this.refreshPanels(phase);
-
-    // Backpack (below the four columns)
-    const backpackY = panelTopY + Math.max(matrixH, SPRITE_SZ) + Math.round(PAD / 2);
-    const backpackW = 12 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-    const backpackX = Math.round((w - backpackW) / 2);
-    this.backpackRow = new BackpackRow(
-      this,
-      backpackX,
-      backpackY,
-      CELL_SIZE,
-      CELL_GAP,
-      phase.backpack,
-      this.itemTooltip,
-      (item, cellX, cellY) => this.onBackpackItemClick(item, cellX, cellY),
-      12,
-      2,
-    );
-
-    const backpackBottomY = backpackY + 2 * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-    this.renderBackButton(w, backpackBottomY);
-  }
-
-  private renderUnitTabs(units: UnitTabSnapshot[], screenW: number, isDebug = false): void {
-    const totalW = units.length * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-    const startX = Math.round((screenW - totalW) / 2);
-    units.forEach((u, i) => {
-      const tabX = startX + i * (CELL_SIZE + CELL_GAP);
-      const isSelected = u.templateId === this.selectedTemplateId;
-      const baseColor = isSelected ? BTN.navy.hover : BTN.navy.base;
-
-      const spriteKey = u.spriteKey;
-      if (spriteKey && this.textures.exists(spriteKey)) {
-        const img = this.add
-          .image(tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2, spriteKey)
-          .setDisplaySize(CELL_SIZE, CELL_SIZE)
-          .setTint(isSelected ? 0xffffff : 0xaaaaaa)
-          .setInteractive({ useHandCursor: !isSelected });
-
-        if (!isSelected) {
-          img.on("pointerover", () => img.setTint(0xffffff));
-          img.on("pointerout", () => img.setTint(0xaaaaaa));
-          img.on("pointerup", () =>
-            PhaseManager.transition(
-              isDebug
-                ? { type: 'switch_debug_unit', templateId: u.templateId }
-                : { type: 'switch_equip_unit', templateId: u.templateId },
-            ),
-          );
-        }
-      } else {
-        const rect = this.add
-          .rectangle(
-            tabX + CELL_SIZE / 2,
-            PAD + CELL_SIZE / 2,
-            CELL_SIZE,
-            CELL_SIZE,
-            baseColor,
-          )
-          .setInteractive({ useHandCursor: !isSelected });
-
-        if (!isSelected) {
-          rect.on("pointerover", () => rect.setFillStyle(BTN.navy.hover));
-          rect.on("pointerout", () => rect.setFillStyle(BTN.navy.base));
-          rect.on("pointerup", () =>
-            PhaseManager.transition(
-              isDebug
-                ? { type: 'switch_debug_unit', templateId: u.templateId }
-                : { type: 'switch_equip_unit', templateId: u.templateId },
-            ),
-          );
-        }
-
-        this.add
-          .text(tabX + CELL_SIZE / 2, PAD + CELL_SIZE / 2, u.name.charAt(0), {
-            fontSize: fontSize("sm"),
-            color: VALUE_COLOR.neutral,
-            fontStyle: "bold",
-          })
-          .setOrigin(0.5);
-      }
-    });
-  }
-
-  private renderUnitSprite(spriteKey: string | null, x: number, y: number): void {
-    if (spriteKey && this.textures.exists(spriteKey)) {
-      this.add
-        .image(x + SPRITE_SZ / 2, y + SPRITE_SZ / 2, spriteKey)
-        .setDisplaySize(SPRITE_SZ, SPRITE_SZ)
-        .setOrigin(0.5);
-    } else {
-      this.add.rectangle(
-        x + SPRITE_SZ / 2,
-        y + SPRITE_SZ / 2,
-        SPRITE_SZ,
-        SPRITE_SZ,
-        0x4a4a6a,
-      );
-    }
-  }
-
-  private refreshPanels(phase: AnyEquipPhase): void {
-    const selectedUnit = phase.selectedUnit;
-    if (!selectedUnit || !phase.unitStats) return;
-    this.statsPanel?.showFixedStatsSnapshot(selectedUnit, phase.unitStats, this.statsPanelX, this.statsPanelY, this.statsPanelW);
-    this.unitNamePanel?.showFixedNameOnly(selectedUnit, phase.unitStats.level, this.spriteHeaderX, this.spriteHeaderY, SPRITE_SZ);
-
-    if (this.skillIconRow) {
-      this.skillIconRow.setPosition(this.skillsPanelX, this.skillsPanelY);
-      this.skillIconRow.render(phase.upgradeSkills);
-    }
-  }
-
-  private renderBackButton(w: number, backpackBottomY: number): void {
-    const BTN_W = Math.round(44 * LAYOUT_SCALE);
-    const BTN_H = Math.round(34 * LAYOUT_SCALE);
-    new Button({
-      scene: this,
-      x: w - Math.round(16 * LAYOUT_SCALE) - BTN_W / 2,
-      y: backpackBottomY - BTN_H / 2,
-      w: BTN_W,
-      h: BTN_H,
-      label: "←",
-      style: "neutral",
-      onClick: () => PhaseManager.transition({ type: "close_equip_screen" }),
-    });
   }
 
   // ── Item interaction ───────────────────────────────────────────────────────
 
-  private onBackpackItemClick(
-    item: ItemSlotSnapshot,
-    cellX: number,
-    cellY: number,
-  ): void {
+  private onBackpackItemClick(item: ItemSlotSnapshot, cellX: number, cellY: number): void {
     this.dismissContextMenu();
     const def = item.definition;
 
-    if (def.usage === "equip") {
+    if (def.usage === 'equip') {
       PhaseManager.transition({
-        type: "equip_item",
+        type: 'equip_item',
         instanceId: item.instanceId,
-        unitTemplateId: this.selectedTemplateId,
+        unitTemplateId: this.getSelectedTemplateId(),
       });
       return;
     }
 
     const options: Array<{ label: string; onClick: () => void }> = [];
 
-    if (def.usage === "equip_and_activate") {
+    if (def.usage === 'equip_and_activate') {
       options.push({
-        label: "Wear",
+        label: 'Wear',
         onClick: () => {
           this.dismissContextMenu();
           PhaseManager.transition({
-            type: "equip_item",
+            type: 'equip_item',
             instanceId: item.instanceId,
-            unitTemplateId: this.selectedTemplateId,
+            unitTemplateId: this.getSelectedTemplateId(),
           });
         },
       });
     }
 
     options.push({
-      label: "Use",
+      label: 'Use',
       onClick: () => {
         this.dismissContextMenu();
         PhaseManager.transition({
-          type: "use_item",
+          type: 'use_item',
           instanceId: item.instanceId,
-          unitTemplateId: this.selectedTemplateId,
+          unitTemplateId: this.getSelectedTemplateId(),
         });
       },
     });
@@ -455,8 +200,8 @@ export class EquipScreen extends Phaser.Scene {
   private onEquipSlotClick(slot: string, item: ItemSlotSnapshot | null): void {
     if (item) {
       PhaseManager.transition({
-        type: "unequip_item",
-        unitTemplateId: this.selectedTemplateId,
+        type: 'unequip_item',
+        unitTemplateId: this.getSelectedTemplateId(),
         slot,
       });
     }
@@ -467,17 +212,20 @@ export class EquipScreen extends Phaser.Scene {
     this.activeContextMenu = null;
   }
 
+  private getSelectedTemplateId(): string {
+    return (PhaseManager.getPhase() as AnyEquipPhase).selectedUnitTemplateId;
+  }
+
+  // ── State change handler ───────────────────────────────────────────────────
+
   private onStateChanged(): void {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'equip_screen' && phase.type !== 'debug_equip_screen') return;
+
     if (!phase.selectedUnitTemplateId) {
-      this.skillIconRow?.destroy();
-      this.skillIconRow = undefined;
-      this.renderSelectionMode(phase);
-      return;
+      this.showSelectionMode(phase);
+    } else {
+      this._equipPanel?.refresh(phase);
     }
-    this.equipMatrix?.refresh(phase.unitEquipment);
-    this.backpackRow?.refresh(phase.backpack);
-    this.refreshPanels(phase);
   }
 }

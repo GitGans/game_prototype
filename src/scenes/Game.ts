@@ -8,9 +8,9 @@ import {
   BENCH_PANEL_WIDTH,
   BENCH_GAP,
   BENCH_SLOTS,
-  COLORS,
   LAYOUT_SCALE,
 } from "../core/Constants";
+import { BATTLE_VISUAL_THEME } from "../objects/battleVisualTheme";
 import { EventBus, Events } from "../core/EventBus";
 import { GameState } from "../core/GameState";
 import { CellView } from "../objects/CellView";
@@ -37,6 +37,8 @@ import { BattleParticipant } from '../core/phases';
 import { Button } from '../ui/Button';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
+import { BattleEndOverlay, BattleEndOutcome } from '../objects/BattleEndOverlay';
+import { BenchCard, type BenchCardMode } from '../objects/BenchCard';
 import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
@@ -201,7 +203,7 @@ export class Game extends Phaser.Scene {
   private static readonly DELAY_GAMEOVER = 600;
 
   // Placement phase UI
-  private benchCards: Phaser.GameObjects.Container[] = [];
+  private benchCards: BenchCard[] = [];
   private startBattleBtn: Button | null = null;
   private autoBattleButtons: Button[] = [];
   private chargedThisRound = new Set<string>();
@@ -369,7 +371,7 @@ export class Game extends Phaser.Scene {
         "",
         {
           fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-          color: COLORS.textLight,
+          color: BATTLE_VISUAL_THEME.unit.textLight,
           align: "center",
           wordWrap: { width: this.logW },
         },
@@ -384,7 +386,7 @@ export class Game extends Phaser.Scene {
         "",
         {
           fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-          color: COLORS.textLight,
+          color: BATTLE_VISUAL_THEME.unit.textLight,
           align: "center",
           wordWrap: { width: this.logW },
         },
@@ -423,142 +425,46 @@ export class Game extends Phaser.Scene {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'battle') return;
 
-    const cardH = this.benchCardHeight();
+    const cardH  = this.benchCardHeight();
     const panelX = this.benchPanelX();
-    const slotGap = CELL_GAP;
+    const mode: BenchCardMode = interactive ? 'placement' : 'battle';
 
-    // Vertically center 3 slots aligned with the player grid
-    const gridTopY = this.cellPixelPos("player", 0, 2).y - CELL_SIZE / 2;
-    const gridBottomY = this.cellPixelPos("player", 0, 0).y + CELL_SIZE / 2;
-    const totalH = BENCH_SLOTS * cardH + (BENCH_SLOTS - 1) * slotGap;
-    const startY = (gridTopY + gridBottomY) / 2 - totalH / 2 + cardH / 2;
-
-    const benchSnapshots = phase.benchUnits;
+    const gridTopY    = this.cellPixelPos('player', 0, 2).y - CELL_SIZE / 2;
+    const gridBottomY = this.cellPixelPos('player', 0, 0).y + CELL_SIZE / 2;
+    const totalH      = BENCH_SLOTS * cardH + (BENCH_SLOTS - 1) * CELL_GAP;
+    const startY      = (gridTopY + gridBottomY) / 2 - totalH / 2 + cardH / 2;
 
     for (let i = 0; i < BENCH_SLOTS; i++) {
-      const benchSnapshot = benchSnapshots[i] ?? null;
-      const cardY = startY + i * (cardH + slotGap);
+      const snapshot   = phase.benchUnits[i] ?? null;
+      const cardY      = startY + i * (cardH + CELL_GAP);
       const isSelected = phase.placementSelection.selectedBenchIdx === i;
-      const card = this.makeBenchCard(benchSnapshot, i, panelX, cardY, isSelected, interactive);
+
+      // Build callbacks separately to avoid `...(false | object)` spread — TypeScript
+      // cannot narrow that to an object type inside a spread expression.
+      const callbacks =
+        snapshot === null
+          ? { onClick: () => this.onBenchCardClick(i) }
+          : {
+              onClick:      () => this.onBenchCardClick(i),
+              onHoverStart: (snap: BenchUnitSnapshot) =>
+                this.unitTooltip.showBenchSnapshot(snap, this.logX, this.logY, this.logW),
+              onHoverEnd:   () => this.unitTooltip.hide(),
+            };
+
+      const card = new BenchCard({
+        scene:    this,
+        x:        panelX,
+        y:        cardY,
+        width:    BENCH_PANEL_WIDTH,
+        height:   cardH,
+        snapshot,
+        selected: isSelected,
+        mode,
+        callbacks,
+      });
+
       this.benchCards.push(card);
     }
-  }
-
-  private makeBenchCard(
-    benchSnapshot: BenchUnitSnapshot | null,
-    idx: number,
-    x: number,
-    y: number,
-    selected: boolean,
-    interactive = true,
-  ): Phaser.GameObjects.Container {
-    const cardH = this.benchCardHeight();
-    const borderThickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
-
-    // ── Empty slot ──────────────────────────────────────────────────────────
-    if (benchSnapshot === null) {
-      const emptyBorder = this.add.rectangle(0, 0, BENCH_PANEL_WIDTH, cardH, COLORS.cellBorder);
-      const emptyBg = this.add.rectangle(
-        0, 0,
-        BENCH_PANEL_WIDTH - borderThickness, cardH - borderThickness,
-        COLORS.benchEmpty, 0.5,
-      );
-      if (!interactive) {
-        emptyBorder.setVisible(false);
-        emptyBg.setVisible(false);
-      }
-      const container = this.add.container(x, y, [emptyBorder, emptyBg]);
-      container.setSize(BENCH_PANEL_WIDTH, cardH);
-      if (interactive) {
-        container.setInteractive({ useHandCursor: true });
-        container.on("pointerup", () => this.onBenchCardClick(idx));
-      }
-      return container;
-    }
-
-    // ── Occupied slot ───────────────────────────────────────────────────────
-    const fillColor = selected ? COLORS.benchSelected : COLORS.bench;
-
-    // Border + background (same two-rect pattern as CellView)
-    const rect = this.add.rectangle(0, 0, BENCH_PANEL_WIDTH, cardH, COLORS.cellBorder);
-    const bg = this.add.rectangle(
-      0, 0,
-      BENCH_PANEL_WIDTH - borderThickness, cardH - borderThickness,
-      fillColor, 0.9,
-    );
-
-    // Sprite (frame 0 = idle) — only when texture is loaded for this snapshot
-    const spriteObj =
-      benchSnapshot.spriteKey && this.textures.exists(benchSnapshot.spriteKey)
-        ? this.add.image(0, 0, benchSnapshot.spriteKey).setFrame(0).setDisplaySize(BENCH_PANEL_WIDTH - 2, cardH - 2)
-        : null;
-
-    // Name
-    const nameText = this.add.text(
-      0, -cardH / 2 + Math.round(10 * LAYOUT_SCALE),
-      benchSnapshot.name,
-      {
-        fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-        color: COLORS.label,
-        fontStyle: "bold",
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: Math.round(3 * LAYOUT_SCALE),
-        wordWrap: { width: BENCH_PANEL_WIDTH - 8 },
-      },
-    ).setOrigin(0.5, 0);
-
-    // HP text + HP bar
-    const hp = benchSnapshot.stats.maxHp.value;
-    const barW = BENCH_PANEL_WIDTH - Math.round(12 * LAYOUT_SCALE);
-    const barH = Math.round(6 * LAYOUT_SCALE);
-    const barY = cardH / 2 - Math.round(10 * LAYOUT_SCALE);
-
-    const hpText = this.add.text(
-      0, barY - Math.round(14 * LAYOUT_SCALE),
-      `${hp}/${hp}`,
-      {
-        fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-        color: COLORS.textDark,
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: Math.round(2 * LAYOUT_SCALE),
-      },
-    ).setOrigin(0.5, 0);
-
-    const hpBarBg = this.add.rectangle(0, barY, barW, barH, COLORS.hpBarBg);
-    const hpBarFg = this.add.rectangle(-barW / 2, barY, barW, barH, COLORS.hpBarFg).setOrigin(0, 0.5);
-
-    const children: Phaser.GameObjects.GameObject[] = spriteObj
-      ? [rect, bg, spriteObj, nameText, hpText, hpBarBg, hpBarFg]
-      : [rect, bg, nameText, hpText, hpBarBg, hpBarFg];
-    const container = this.add.container(x, y, children);
-    container.setSize(BENCH_PANEL_WIDTH, cardH);
-
-    if (interactive) {
-      container.setInteractive({ useHandCursor: true });
-      container.on("pointerup", () => this.onBenchCardClick(idx));
-      container.on("pointerover", () => {
-        const ph = PhaseManager.getPhase();
-        if (ph.type !== 'battle' || ph.placementSelection.selectedBenchIdx !== idx) bg.setFillStyle(COLORS.benchHover, 0.9);
-        this.unitTooltip.showBenchSnapshot(benchSnapshot, this.logX, this.logY, this.logW);
-      });
-      container.on("pointerout", () => {
-        const ph = PhaseManager.getPhase();
-        if (ph.type !== 'battle' || ph.placementSelection.selectedBenchIdx !== idx) bg.setFillStyle(fillColor, 0.9);
-        this.unitTooltip.hide();
-      });
-    } else {
-      // Battle mode: sprite only — hide everything else
-      rect.setVisible(false);
-      bg.setVisible(false);
-      nameText.setVisible(false);
-      hpText.setVisible(false);
-      hpBarBg.setVisible(false);
-      hpBarFg.setVisible(false);
-    }
-
-    return container;
   }
 
   private onBenchCardClick(idx: number): void {
@@ -948,9 +854,9 @@ export class Game extends Phaser.Scene {
     const preview = `Preview:\n${previewParts.join("\n")}\n[click again to confirm]`;
     this.setStatus(preview);
 
-    const headerColor = skill.damageBlock?.damageType === 'magical' ? COLORS.skillMagical
-                      : skill.damageBlock?.damageType === 'physical' ? COLORS.skillPhysical
-                      : COLORS.textLight;
+    const headerColor = skill.damageBlock?.damageType === 'magical' ? BATTLE_VISUAL_THEME.skill.magical
+                      : skill.damageBlock?.damageType === 'physical' ? BATTLE_VISUAL_THEME.skill.physical
+                      : BATTLE_VISUAL_THEME.unit.textLight;
     const lineH = Math.round(14 * LAYOUT_SCALE);
     this.statusHeaderText
       .setColor(headerColor)
@@ -1850,89 +1756,54 @@ export class Game extends Phaser.Scene {
   }
 
   private showGameOver(winner: Side): void {
+    // Battle runtime cleanup — stays in Game.ts, not in the overlay component.
     this.destroyAutoBattleButtons();
-    const w = this.scale.width;
-    const h = this.scale.height;
 
-    this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.72).setDepth(30);
+    // Translate game-semantic `winner` to UI-semantic `outcome`.
+    // `winner === 'enemy'` means the enemy side was eliminated → player victory.
+    // (Tech debt: `winner` naming appears inverted — tracked for rename outside Stage 3.)
+    const outcome: BattleEndOutcome = winner === 'enemy' ? 'victory' : 'defeat';
 
-    const isVictory = winner === "enemy";
+    const phase         = PhaseManager.getPhase();
+    const isDebugBattle = phase.type === 'battle' && phase.returnPhase.type === 'main_menu';
 
-    this.add
-      .text(
-        w / 2,
-        h / 2 - Math.round(60 * LAYOUT_SCALE),
-        isVictory ? "VICTORY!" : "DEFEAT",
-        {
-          fontSize: `${Math.round(52 * LAYOUT_SCALE)}px`,
-          color: isVictory ? "#ffdd44" : "#ff4444",
-          fontStyle: "bold",
-          stroke: "#000000",
-          strokeThickness: Math.round(5 * LAYOUT_SCALE),
-        },
-      )
-      .setOrigin(0.5)
-      .setDepth(31);
+    // All game decisions (PhaseManager, GameState) stay here as closures.
+    // BattleEndOverlay receives only the resulting functions, not the game knowledge.
+    const onReplay = (): void => {
+      PhaseManager.transition({ type: 'replay' });
+    };
 
-    const btnW = Math.round(180 * LAYOUT_SCALE);
-    const btnH = Math.round(46 * LAYOUT_SCALE);
-    const btnY = h / 2 + Math.round(40 * LAYOUT_SCALE);
-
-    if (isVictory) {
-      // ── Two buttons ──
-      const gap    = Math.round(20 * LAYOUT_SCALE);
-      const leftX  = w / 2 - btnW / 2 - gap / 2;
-      const rightX = w / 2 + btnW / 2 + gap / 2;
-
-      new Button({
-        scene: this, x: leftX, y: btnY, w: btnW, h: btnH,
-        label: "Restart Battle", style: "neutral",
-        onClick: () => PhaseManager.transition({ type: 'replay' }),
-      }).setDepth(31);
-
-      new Button({
-        scene: this, x: rightX, y: btnY, w: btnW, h: btnH,
-        label: "Exit Battle", style: "primary",
-        onClick: () => {
-          const phase = PhaseManager.getPhase();
-          if (phase.type !== 'battle') return;
+    const onExit = outcome === 'victory'
+      ? (): void => {
+          const p = PhaseManager.getPhase();
+          if (p.type !== 'battle') return;
 
           const aliveIds = new Set(
             [...GameState.get().units.values()]
               .filter(u => u.id.startsWith('p'))
-              .map(u => u.templateId)
+              .map(u => u.templateId),
           );
-
-          const participants: BattleParticipant[] = phase.participants.map(p => ({
-            ...p,
-            isAlive: p.wasOnBench || aliveIds.has(p.templateId),
+          const participants: BattleParticipant[] = p.participants.map(pp => ({
+            ...pp,
+            isAlive: pp.wasOnBench || aliveIds.has(pp.templateId),
           }));
-
           PhaseManager.transition({ type: 'exit_battle', participants });
-        },
-      }).setDepth(31);
-    } else {
-      // Defeat — Restart Battle + optional Exit Battle (debug mode)
-      const phase = PhaseManager.getPhase();
-      const isDebugBattle = phase.type === 'battle' && phase.returnPhase.type === 'main_menu';
+        }
+      : (): void => {
+          PhaseManager.transition({ type: 'exit_battle', participants: [] });
+        };
 
-      const gap    = Math.round(20 * LAYOUT_SCALE);
-      const leftX  = isDebugBattle ? w / 2 - btnW / 2 - gap / 2 : w / 2;
-      const rightX = w / 2 + btnW / 2 + gap / 2;
-
-      new Button({
-        scene: this, x: leftX, y: btnY, w: btnW, h: btnH,
-        label: "Restart Battle", style: "navy",
-        onClick: () => PhaseManager.transition({ type: 'replay' }),
-      }).setDepth(31);
-
-      if (isDebugBattle) {
-        new Button({
-          scene: this, x: rightX, y: btnY, w: btnW, h: btnH,
-          label: "Exit Battle", style: "primary",
-          onClick: () => PhaseManager.transition({ type: 'exit_battle', participants: [] }),
-        }).setDepth(31);
-      }
-    }
+    new BattleEndOverlay({
+      scene: this,
+      outcome,
+      isDebugBattle,
+      labels: {
+        victoryTitle: 'VICTORY!',
+        defeatTitle:  'DEFEAT',
+        restart:      'Restart Battle',
+        exit:         'Exit Battle',
+      },
+      callbacks: { onReplay, onExit },
+    });
   }
 }

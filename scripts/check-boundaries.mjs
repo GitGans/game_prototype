@@ -37,6 +37,18 @@ const RULES = [
     dir: join(SRC, 'battle'),
     banned: ['core/'],
   },
+  {
+    layer: 'ui/**',
+    dir: join(SRC, 'ui'),
+    // core/Constants (LAYOUT_SCALE) is explicitly allowed
+    banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'objects/', 'scenes/', 'battle/', 'world/'],
+  },
+  {
+    layer: 'objects/**',
+    dir: join(SRC, 'objects'),
+    // core/Constants, core/phases, core/unitSpriteKey, battle/types, battle/combat are allowed
+    banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'scenes/'],
+  },
 ];
 
 // Matches both `import ... from 'x'` and `export ... from 'x'`
@@ -66,5 +78,5 @@ if (errors.length > 0) {
   errors.forEach(e => console.error(e));
   process.exit(1);
 } else {
-  console.log('✓ All boundaries clean (Step 1 foundation rules)');
+  console.log('✓ All boundaries clean (ui + objects + foundation rules)');
 }

@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { LAYOUT_SCALE, COLORS } from "../core/Constants";
+import { LAYOUT_SCALE } from "../core/Constants";
+import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 import { TOOLTIP, fontSize, VALUE_COLOR } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
 import { Unit } from "../battle/types";
@@ -188,7 +189,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
         this.add(img);
         this.contentItems.push(img);
       } else {
-        const color = data.side === "player" ? COLORS.unitPlayer : COLORS.unitEnemy;
+        const color = data.side === "player" ? BATTLE_VISUAL_THEME.unit.player : BATTLE_VISUAL_THEME.unit.enemy;
         const rect  = scene.add.rectangle(pad + SPRITE_SIZE / 2, y + SPRITE_SIZE / 2, SPRITE_SIZE, SPRITE_SIZE, color);
         rect.setOrigin(0.5);
         this.add(rect);
@@ -196,7 +197,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       }
 
       // Name — to the right of sprite
-      const nameColor = data.side === "player" ? COLORS.label : COLORS.labelEnemy;
+      const nameColor = data.side === "player" ? BATTLE_VISUAL_THEME.unit.labelPlayer : BATTLE_VISUAL_THEME.unit.labelEnemy;
       this.addText(pad + SPRITE_SIZE + pad, y, data.name, {
         fontSize:  fontSize("md"),
         color:     nameColor,
@@ -250,8 +251,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       } else {
         for (const skill of data.skills) {
           const nameCol =
-            skill.damageBlock?.damageType === "magical"  ? COLORS.skillMagical  :
-            skill.damageBlock?.damageType === "physical" ? COLORS.skillPhysical :
+            skill.damageBlock?.damageType === "magical"  ? BATTLE_VISUAL_THEME.skill.magical  :
+            skill.damageBlock?.damageType === "physical" ? BATTLE_VISUAL_THEME.skill.physical :
             (skill.isActive ? VALUE_COLOR.white : VALUE_COLOR.inactive);
           this.addText(pad, y, skill.name, { fontSize: fontSize("sm"), color: nameCol });
           y += TOOLTIP.lineH;
