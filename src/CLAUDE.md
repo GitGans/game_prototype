@@ -94,3 +94,4 @@ scene reads GamePhase and renders
 * change a visual component tied to game data         → objects/
 * change a reusable UI primitive                      → ui/
 * change global styles or constants                   → ui/theme.ts, core/Constants.ts
+* change layout scale helper                          → ui/layout.ts

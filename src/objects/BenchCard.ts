@@ -1,0 +1,166 @@
+import Phaser from 'phaser';
+// Stage 4 compat: COLORS preserves exact legacy hex values (hpBarBg/hpBarFg differ from
+// HP_COLOR.bg/high). Migrate to UI_THEME.component.benchCard in Stage 8 / COLORS removal.
+import { COLORS, LAYOUT_SCALE } from '../core/Constants';
+import type { BenchUnitSnapshot } from '../shared/battleSnapshots';
+
+export type BenchCardMode = 'placement' | 'battle';
+
+export interface BenchCardCallbacks {
+  onClick?:       () => void;
+  onHoverStart?:  (snapshot: BenchUnitSnapshot) => void;
+  onHoverEnd?:    () => void;
+}
+
+export interface BenchCardConfig {
+  scene:      Phaser.Scene;
+  x:          number;              // center X in world space
+  y:          number;              // center Y in world space
+  width:      number;
+  height:     number;
+  snapshot:   BenchUnitSnapshot | null;
+  selected:   boolean;             // passed from phase; valid for the card's lifetime
+  mode:       BenchCardMode;
+  callbacks?: BenchCardCallbacks;
+}
+
+export class BenchCard extends Phaser.GameObjects.Container {
+  constructor(cfg: BenchCardConfig) {
+    super(cfg.scene, cfg.x, cfg.y);
+    this.setSize(cfg.width, cfg.height);
+
+    if (cfg.snapshot === null) {
+      this.buildEmptySlot(cfg);
+    } else {
+      this.buildOccupiedSlot(cfg, cfg.snapshot);
+    }
+
+    cfg.scene.add.existing(this);
+  }
+
+  // ── Empty slot ───────────────────────────────────────────────────────────────
+
+  private buildEmptySlot(cfg: BenchCardConfig): void {
+    const thickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
+
+    const border = cfg.scene.add.rectangle(0, 0, cfg.width, cfg.height, COLORS.cellBorder);
+    const bg     = cfg.scene.add.rectangle(
+      0, 0,
+      cfg.width  - thickness,
+      cfg.height - thickness,
+      COLORS.benchEmpty, 0.5,
+    );
+
+    if (cfg.mode === 'battle') {
+      border.setVisible(false);
+      bg.setVisible(false);
+    }
+
+    this.add([border, bg]);
+
+    if (cfg.mode === 'placement' && cfg.callbacks?.onClick) {
+      this.setInteractive({ useHandCursor: true });
+      this.on('pointerup', cfg.callbacks.onClick);
+    }
+  }
+
+  // ── Occupied slot ────────────────────────────────────────────────────────────
+
+  private buildOccupiedSlot(cfg: BenchCardConfig, snapshot: BenchUnitSnapshot): void {
+    const thickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
+    const fillColor = cfg.selected ? COLORS.benchSelected : COLORS.bench;
+
+    // Border + background — two-rect pattern required: bg fill changes on hover/selected
+    const border = cfg.scene.add.rectangle(0, 0, cfg.width, cfg.height, COLORS.cellBorder);
+    const bg     = cfg.scene.add.rectangle(
+      0, 0,
+      cfg.width  - thickness,
+      cfg.height - thickness,
+      fillColor, 0.9,
+    );
+
+    // Sprite (frame 0 = idle) with graceful fallback
+    const sprite = snapshot.spriteKey && cfg.scene.textures.exists(snapshot.spriteKey)
+      ? cfg.scene.add.image(0, 0, snapshot.spriteKey)
+          .setFrame(0)
+          .setDisplaySize(cfg.width - 2, cfg.height - 2)
+      : null;
+
+    // Name
+    const nameText = cfg.scene.add.text(
+      0,
+      -cfg.height / 2 + Math.round(10 * LAYOUT_SCALE),
+      snapshot.name,
+      {
+        fontSize:        `${Math.round(11 * LAYOUT_SCALE)}px`,
+        color:           COLORS.label,
+        fontStyle:       'bold',
+        align:           'center',
+        stroke:          '#000000',
+        strokeThickness: Math.round(3 * LAYOUT_SCALE),
+        wordWrap:        { width: cfg.width - 8 },
+      },
+    ).setOrigin(0.5, 0);
+
+    // HP (bench shows max HP only — unit is at full health before battle)
+    const hp   = snapshot.stats.maxHp.value;
+    const barW = cfg.width  - Math.round(12 * LAYOUT_SCALE);
+    const barH = Math.round(6  * LAYOUT_SCALE);
+    const barY = cfg.height / 2 - Math.round(10 * LAYOUT_SCALE);
+
+    const hpText = cfg.scene.add.text(
+      0,
+      barY - Math.round(14 * LAYOUT_SCALE),
+      `${hp}/${hp}`,
+      {
+        fontSize:        `${Math.round(11 * LAYOUT_SCALE)}px`,
+        color:           COLORS.textDark,
+        align:           'center',
+        stroke:          '#000000',
+        strokeThickness: Math.round(2 * LAYOUT_SCALE),
+      },
+    ).setOrigin(0.5, 0);
+
+    // HP bar — manual rects to match COLORS.hpBarBg/hpBarFg exactly.
+    // HpBar uses HP_COLOR which has different hex values; swap in Stage 8.
+    const hpBarBg = cfg.scene.add.rectangle(0,         barY, barW, barH, COLORS.hpBarBg);
+    const hpBarFg = cfg.scene.add.rectangle(-barW / 2, barY, barW, barH, COLORS.hpBarFg)
+      .setOrigin(0, 0.5);
+
+    // Compose children
+    const children: Phaser.GameObjects.GameObject[] = [border, bg];
+    if (sprite) children.push(sprite);
+    children.push(nameText, hpText, hpBarBg, hpBarFg);
+    this.add(children);
+
+    // Battle mode: sprite-only — hide all chrome
+    if (cfg.mode === 'battle') {
+      border.setVisible(false);
+      bg.setVisible(false);
+      nameText.setVisible(false);
+      hpText.setVisible(false);
+      hpBarBg.setVisible(false);
+      hpBarFg.setVisible(false);
+      return;
+    }
+
+    // Placement mode: hover + click
+    // cfg.selected is construction-time; correct because buildBenchPanel() destroys and
+    // recreates all cards on every placement state change — no PhaseManager read needed.
+    this.setInteractive({ useHandCursor: true });
+
+    if (cfg.callbacks?.onClick) {
+      this.on('pointerup', cfg.callbacks.onClick);
+    }
+
+    this.on('pointerover', () => {
+      if (!cfg.selected) bg.setFillStyle(COLORS.benchHover, 0.9);
+      cfg.callbacks?.onHoverStart?.(snapshot);
+    });
+
+    this.on('pointerout', () => {
+      if (!cfg.selected) bg.setFillStyle(fillColor, 0.9);
+      cfg.callbacks?.onHoverEnd?.();
+    });
+  }
+}

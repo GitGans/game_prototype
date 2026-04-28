@@ -12,6 +12,10 @@ export const BENCH_PANEL_WIDTH = CELL_SIZE;
 export const BENCH_GAP = Math.round(10 * LAYOUT_SCALE);
 export const BENCH_SLOTS = 3;
 
+/**
+ * @deprecated UI/style colors belong in src/ui/theme.ts.
+ * Migrate to UI_THEME during Stage 2–6 as each scene is refactored.
+ */
 export const COLORS = {
   cell: 0x2a3a5a,
   cellBorder: 0x2a3f60,

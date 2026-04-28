@@ -18,6 +18,7 @@ export function fontSize(key: keyof typeof FONT_SIZE): string {
 }
 
 // ─── Button colors ───────────────────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.component.button in new code. Remove in Stage 7. */
 export const BTN = {
   primary: { base: 0x2a6a2a, hover: 0x3a8a3a },  // green — main actions
   danger:  { base: 0x6a2a2a, hover: 0x8a3a3a },  // red — destructive / defeat
@@ -30,6 +31,7 @@ export const BTN = {
 export type BtnStyle = keyof typeof BTN;
 
 // ─── Alpha states ────────────────────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.alpha in new code. Remove in Stage 7. */
 export const ALPHA = {
   active:   1.0,
   hover:    0.85,
@@ -38,6 +40,7 @@ export const ALPHA = {
 } as const;
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.component.tooltip in new code. Remove in Stage 7. */
 export const TOOLTIP = {
   bg:      0x0d1520,
   bgAlpha: 0.92,
@@ -48,6 +51,7 @@ export const TOOLTIP = {
 } as const;
 
 // ─── Semantic value colors ───────────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.color.value in new code. Remove in Stage 7. */
 export const VALUE_COLOR = {
   positive:  "#44ff88",
   negative:  "#ff4444",
@@ -59,6 +63,7 @@ export const VALUE_COLOR = {
 } as const;
 
 // ─── HP bar fill colors ───────────────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.color.hp in new code. Remove in Stage 7. */
 export const HP_COLOR = {
   high:   0x44cc44,  // > 50%
   medium: 0xddaa00,  // 25–50%
@@ -67,6 +72,7 @@ export const HP_COLOR = {
 } as const;
 
 // ─── Skill preview overlay colors ────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.color.skillPreview in new code. Remove in Stage 7. */
 export const SKILL_PREVIEW = {
   healDim:      0x0a2a0a,
   healBright:   0x44dd44,
@@ -75,6 +81,7 @@ export const SKILL_PREVIEW = {
 } as const;
 
 // ─── BattleLog colors (lighter palette, intentionally distinct) ───────────────
+/** @deprecated Migration bridge. Use UI_THEME.component.battleLog in new code. Remove in Stage 7. */
 export const BATTLE_LOG = {
   bg:       0xd8d8d8,
   positive: "#1a8c1a",
@@ -84,6 +91,7 @@ export const BATTLE_LOG = {
 } as const;
 
 // ─── ItemCell slot background ────────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.component.itemCell in new code. Remove in Stage 7. */
 export const ITEM_CELL = {
   bg:          0x2a2a3a,
   hoverBorder: 0xffffff,
@@ -91,6 +99,7 @@ export const ITEM_CELL = {
 } as const;
 
 // ─── Scene backgrounds ───────────────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.color.background in new code. Remove in Stage 7. */
 export const SCENE_BG = {
   default: 0x1a1a2e,
   victory: 0x1a2e1a,
@@ -98,6 +107,7 @@ export const SCENE_BG = {
 } as const;
 
 // ─── WorldMap cell type colors ───────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.component.worldMapCell in new code. Remove in Stage 7. */
 export const WORLD_MAP_CELL = {
   empty:    0x555555,
   forest:   0x4a7c3f,
@@ -111,6 +121,74 @@ export const WORLD_MAP_CELL = {
 } as const;
 
 // ─── Initiative bar ──────────────────────────────────────────────────────────
+/** @deprecated Migration bridge. Use UI_THEME.component.initiative in new code. Remove in Stage 7. */
 export const INITIATIVE = {
   divider: 0x8899bb,
+} as const;
+
+// ─── Panel ───────────────────────────────────────────────────────────────────
+const PANEL = {
+  bg: 0x222244,   // matches SCENE_BG.panel — dark navy surface
+} as const;
+
+// ─── Battle result card ───────────────────────────────────────────────────────
+const RESULT_CARD = {
+  bg:       0x1a1a2e,  // dark navy card background
+  border:   0x44445a,  // subtle blue-gray border
+  fallback: 0x556677,  // placeholder when sprite is missing
+} as const;
+
+// ─── Z-order depth layers ────────────────────────────────────────────────────
+// New and migrated code must use these values. Legacy hardcoded depths are
+// migration debt tracked for removal in Stage 8.
+const DEPTH = {
+  scene:   0,             // scene background elements
+  panel:   10,            // in-scene panels and cards
+  overlay: 30,            // fullscreen dim overlays (battle end, confirm)
+  modal:   40,            // floating modals above overlays
+  menu:    80,            // context menus, dropdowns
+  tooltip: TOOLTIP.depth, // 100 — single source; TOOLTIP.depth is a legacy bridge until Stage 7
+} as const;
+
+// ─── Overlay dim ─────────────────────────────────────────────────────────────
+const OVERLAY = {
+  dim:      0x000000,
+  dimAlpha: 0.72,
+} as const;
+
+// ─── Battle end overlay ───────────────────────────────────────────────────────
+// References VALUE_COLOR — no value duplication.
+const BATTLE_END_OVERLAY = {
+  titleVictory: VALUE_COLOR.highlight, // '#ffdd44' gold
+  titleDefeat:  VALUE_COLOR.negative,  // '#ff4444' red
+  titleStroke:  '#000000',
+} as const;
+
+// ─── Structured entry point for new code ────────────────────────────────────
+// References existing objects — no value duplication.
+// Old flat exports above are @deprecated bridges; removed in Stage 7.
+export const UI_THEME = {
+  font: {
+    size: FONT_SIZE,
+  },
+  alpha: ALPHA,
+  color: {
+    value:        VALUE_COLOR,
+    hp:           HP_COLOR,
+    skillPreview: SKILL_PREVIEW,
+    background:   SCENE_BG,
+  },
+  component: {
+    button:           BTN,
+    tooltip:          TOOLTIP,
+    itemCell:         ITEM_CELL,
+    battleLog:        BATTLE_LOG,
+    worldMapCell:     WORLD_MAP_CELL,
+    initiative:       INITIATIVE,
+    panel:            PANEL,
+    resultCard:       RESULT_CARD,
+    overlay:          OVERLAY,
+    battleEndOverlay: BATTLE_END_OVERLAY,
+  },
+  depth: DEPTH,
 } as const;

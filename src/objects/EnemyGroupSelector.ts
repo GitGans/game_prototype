@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import { Button } from '../ui/Button';
-import { PhaseManager } from '../core/PhaseManager';
 
 const RACES = [
   { label: 'Orcs',   groupId: 'orc_patrol'   },
@@ -9,7 +8,12 @@ const RACES = [
 ];
 
 export class EnemyGroupSelector extends Phaser.GameObjects.Container {
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    onSelect: (groupId: string) => void,
+  ) {
     super(scene, x, y);
     const panelW = 200;
     const panelH = RACES.length * 50 + 20;
@@ -20,7 +24,7 @@ export class EnemyGroupSelector extends Phaser.GameObjects.Container {
         label, style: 'ghost',
         onClick: () => {
           this.destroy();
-          PhaseManager.transition({ type: 'start_battle', enemyGroupId: groupId });
+          onSelect(groupId);
         },
       }));
     });

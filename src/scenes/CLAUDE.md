@@ -46,7 +46,10 @@ PhaseManager resolves next phase and syncs scenes
 - Scenes never store mutable game state — all persistent data lives in `CampaignState` / `BattleState`
 - Scenes never contain transition logic — no `if (victory) go somewhere` branches
 - Scenes never pass data directly to other scenes — `GamePhase` is the only inter-scene channel
-- All visual primitives come from `src/ui/` or `src/objects/` — no inline `Rectangle + Text` constructions
+- New repeated UI must not be implemented as inline `Rectangle + Text` — extract to `src/ui/` or `src/objects/`
+- No hardcoded colors or font sizes in new code — use `UI_THEME` (`src/ui/theme.ts`)
+- Repeated visual pattern (≥2 scenes) → extract to `src/objects/` before the second use
+- Existing legacy inline UI is migrated during UI refactor stages (Stage 2–6)
 
 ## Where to Modify
 - change battle UI or combat interaction → `Game.ts`
