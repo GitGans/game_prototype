@@ -4,7 +4,7 @@ import { LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 import { effectiveStats } from '../battle/combat';
-import { fontSize, VALUE_COLOR, INITIATIVE } from '../ui/theme';
+import { fontSize, UI_THEME } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
 
 const CARD_GAP    = Math.round(5  * LAYOUT_SCALE);
@@ -65,7 +65,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
         -Math.round(4 * LAYOUT_SCALE),
         Math.round(2 * LAYOUT_SCALE),
         CARD_H + Math.round(8 * LAYOUT_SCALE),
-        INITIATIVE.divider
+        BATTLE_VISUAL_THEME.initiative.divider
       );
       this.add(divider);
       curX = divX + DIVIDER_GAP;
@@ -136,8 +136,8 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
         ).setOrigin(0.5, 0).setAlpha(alpha);
 
     const effInit = effectiveStats(unit).initiative;
-    const initColor = effInit > unit.initiative ? VALUE_COLOR.positive
-                    : effInit < unit.initiative ? VALUE_COLOR.negative
+    const initColor = effInit > unit.initiative ? UI_THEME.color.value.positive
+                    : effInit < unit.initiative ? UI_THEME.color.value.negative
                     : BATTLE_VISUAL_THEME.unit.textLight;
     const initText = this.scene.add.text(
       x + CARD_W / 2, y + CARD_H - Math.round(18 * LAYOUT_SCALE),

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { UI_THEME, fontSize } from '../ui/theme';
+import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { scaled, rowItemCenterX } from '../ui/layout';
 import { Panel } from '../ui/Panel';
 import { Button } from '../ui/Button';
@@ -30,7 +31,7 @@ export class BattleEndOverlay extends Phaser.GameObjects.Container {
     const w = scene.scale.width;
     const h = scene.scale.height;
     const isVictory = outcome === 'victory';
-    const ot = UI_THEME.component.battleEndOverlay;
+    const ot = BATTLE_VISUAL_THEME.endOverlay;
 
     // Fullscreen dim background — reuses Panel primitive.
     // Panel is not set interactive, preserving the existing non-blocking
