@@ -1715,9 +1715,9 @@ export class Game extends Phaser.Scene {
     const text = this.add
       .text(x, y, `-${amount}`, {
         fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-        color: "#ff4444",
+        color: BATTLE_VISUAL_THEME.floatingText.damage,
         fontStyle: "bold",
-        stroke: "#000000",
+        stroke: BATTLE_VISUAL_THEME.floatingText.stroke,
         strokeThickness: Math.round(3 * LAYOUT_SCALE),
       })
       .setOrigin(0.5)
@@ -1737,9 +1737,9 @@ export class Game extends Phaser.Scene {
     const text = this.add
       .text(x, y, `+${amount}`, {
         fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-        color: "#44dd44",
+        color: BATTLE_VISUAL_THEME.floatingText.heal,
         fontStyle: "bold",
-        stroke: "#000000",
+        stroke: BATTLE_VISUAL_THEME.floatingText.stroke,
         strokeThickness: Math.round(3 * LAYOUT_SCALE),
       })
       .setOrigin(0.5)

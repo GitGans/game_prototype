@@ -1,11 +1,11 @@
 import type { LayoutCell } from '../shared/worldTypes';
-import { UI_THEME } from '../ui/theme';
+import { WORLD_MAP_VISUAL_THEME } from './worldMapVisualTheme';
 
 export function resolveWorldMapCellColor(
   cell: LayoutCell | null | undefined,
   entityAlive: boolean | undefined,
 ): number {
-  const wmc = UI_THEME.component.worldMapCell;
+  const wmc = WORLD_MAP_VISUAL_THEME.cell;
 
   if (cell === 'wall' || cell === 'tree') return wmc.empty;
   if (cell === null || cell === undefined) return wmc.forest;

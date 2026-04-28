@@ -71,23 +71,6 @@ export const HP_COLOR = {
   bg:     0x333333,
 } as const;
 
-// ─── BattleLog colors (lighter palette, intentionally distinct) ───────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.battleLog in new code. Remove in Stage 7. */
-export const BATTLE_LOG = {
-  bg:       0xd8d8d8,
-  positive: "#1a8c1a",
-  negative: "#aa2222",
-  neutral:  "#555555",
-  btn:      "#333333",
-} as const;
-
-// ─── ItemCell slot background ────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.itemCell in new code. Remove in Stage 7. */
-export const ITEM_CELL = {
-  bg:          0x2a2a3a,
-  hoverBorder: 0xffffff,
-  emptySlot:   "#555566",
-} as const;
 
 // ─── Scene backgrounds ───────────────────────────────────────────────────────
 /** @deprecated Migration bridge. Use UI_THEME.color.background in new code. Remove in Stage 7. */
@@ -97,25 +80,6 @@ export const SCENE_BG = {
   panel:   0x222244,
 } as const;
 
-// ─── WorldMap cell type colors ───────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.worldMapCell in new code. Remove in Stage 7. */
-export const WORLD_MAP_CELL = {
-  empty:    0x555555,
-  forest:   0x4a7c3f,
-  enemy:    0xcc3333,
-  camp:     0xcc9933,
-  town:     0x3355cc,
-  dungeon:  0x9933cc,
-  start:    0xffffff,
-  fog:      0x888888,
-  party:    0x4488ff,
-} as const;
-
-// ─── Initiative bar ──────────────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.initiative in new code. Remove in Stage 7. */
-export const INITIATIVE = {
-  divider: 0x8899bb,
-} as const;
 
 // ─── Panel ───────────────────────────────────────────────────────────────────
 const PANEL = {
@@ -134,13 +98,6 @@ const NUMBER_INPUT = {
   border:      0x6a6a8a,
   borderError: 0x8a3a3a,
   borderValid: 0x3a8a3a,
-} as const;
-
-// ─── Battle result card ───────────────────────────────────────────────────────
-const RESULT_CARD = {
-  bg:       0x1a1a2e,  // dark navy card background
-  border:   0x44445a,  // subtle blue-gray border
-  fallback: 0x556677,  // placeholder when sprite is missing
 } as const;
 
 // ─── Z-order depth layers ────────────────────────────────────────────────────
@@ -167,14 +124,6 @@ const TEXT_STYLE = {
   titleStroke: '#000000',
 } as const;
 
-// ─── Battle end overlay ───────────────────────────────────────────────────────
-// References VALUE_COLOR — no value duplication.
-const BATTLE_END_OVERLAY = {
-  titleVictory: VALUE_COLOR.highlight, // '#ffdd44' gold
-  titleDefeat:  VALUE_COLOR.negative,  // '#ff4444' red
-  titleStroke:  TEXT_STYLE.titleStroke,
-} as const;
-
 // ─── Structured entry point for new code ────────────────────────────────────
 // References existing objects — no value duplication.
 // Old flat exports above are @deprecated bridges; removed in Stage 7.
@@ -190,18 +139,12 @@ export const UI_THEME = {
     text:       TEXT_STYLE,
   },
   component: {
-    button:           BTN,
-    tooltip:          TOOLTIP,
-    itemCell:         ITEM_CELL,
-    battleLog:        BATTLE_LOG,
-    worldMapCell:     WORLD_MAP_CELL,
-    initiative:       INITIATIVE,
-    panel:            PANEL,
-    resultCard:       RESULT_CARD,
-    overlay:          OVERLAY,
-    battleEndOverlay: BATTLE_END_OVERLAY,
-    contextMenu:      CONTEXT_MENU,
-    numberInput:      NUMBER_INPUT,
+    button:      BTN,
+    tooltip:     TOOLTIP,
+    panel:       PANEL,
+    overlay:     OVERLAY,
+    contextMenu: CONTEXT_MENU,
+    numberInput: NUMBER_INPUT,
   },
   depth: DEPTH,
 } as const;

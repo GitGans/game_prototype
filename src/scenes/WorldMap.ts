@@ -3,7 +3,7 @@ import { PhaseManager } from '../core/PhaseManager';
 import { GameState } from '../core/GameState';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { canMove, resolveCell, initSubMapState } from '../world/mapLogic';
-import { WORLD_MAP_CELL } from '../ui/theme';
+import { WORLD_MAP_VISUAL_THEME } from '../objects/worldMapVisualTheme';
 import {
   SubMapDefinition,
   MobEntry,
@@ -92,7 +92,7 @@ export class WorldMap extends Phaser.Scene {
   private buildPartyMarker(): void {
     const px = this.offsetX + this.partyX * CELL + CELL / 2;
     const py = this.offsetY + this.partyY * CELL + CELL / 2;
-    this.partyMarker = this.add.rectangle(px, py, CELL - 16, CELL - 16, WORLD_MAP_CELL.party).setDepth(1);
+    this.partyMarker = this.add.rectangle(px, py, CELL - 16, CELL - 16, WORLD_MAP_VISUAL_THEME.partyMarker).setDepth(1);
   }
 
   private movePartyMarker(): void {
