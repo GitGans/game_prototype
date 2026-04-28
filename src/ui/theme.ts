@@ -71,15 +71,6 @@ export const HP_COLOR = {
   bg:     0x333333,
 } as const;
 
-// ─── Skill preview overlay colors ────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.color.skillPreview in new code. Remove in Stage 7. */
-export const SKILL_PREVIEW = {
-  healDim:      0x0a2a0a,
-  healBright:   0x44dd44,
-  damageDim:    0x2a1a00,
-  damageBright: 0xff8800,
-} as const;
-
 // ─── BattleLog colors (lighter palette, intentionally distinct) ───────────────
 /** @deprecated Migration bridge. Use UI_THEME.component.battleLog in new code. Remove in Stage 7. */
 export const BATTLE_LOG = {
@@ -156,12 +147,17 @@ const OVERLAY = {
   dimAlpha: 0.72,
 } as const;
 
+// ─── Text style ──────────────────────────────────────────────────────────────
+const TEXT_STYLE = {
+  titleStroke: '#000000',
+} as const;
+
 // ─── Battle end overlay ───────────────────────────────────────────────────────
 // References VALUE_COLOR — no value duplication.
 const BATTLE_END_OVERLAY = {
   titleVictory: VALUE_COLOR.highlight, // '#ffdd44' gold
   titleDefeat:  VALUE_COLOR.negative,  // '#ff4444' red
-  titleStroke:  '#000000',
+  titleStroke:  TEXT_STYLE.titleStroke,
 } as const;
 
 // ─── Structured entry point for new code ────────────────────────────────────
@@ -173,10 +169,10 @@ export const UI_THEME = {
   },
   alpha: ALPHA,
   color: {
-    value:        VALUE_COLOR,
-    hp:           HP_COLOR,
-    skillPreview: SKILL_PREVIEW,
-    background:   SCENE_BG,
+    value:      VALUE_COLOR,
+    hp:         HP_COLOR,
+    background: SCENE_BG,
+    text:       TEXT_STYLE,
   },
   component: {
     button:           BTN,

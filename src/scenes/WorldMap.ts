@@ -1,17 +1,17 @@
 import Phaser from 'phaser';
-import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
 import { GameState } from '../core/GameState';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { canMove, resolveCell, initSubMapState } from '../world/mapLogic';
-import { Button } from '../ui/Button';
-import { VALUE_COLOR, WORLD_MAP_CELL } from '../ui/theme';
+import { WORLD_MAP_CELL } from '../ui/theme';
 import {
   SubMapDefinition,
-  SubMapState,
   MobEntry,
   PortalEntry,
 } from '../world/types';
+import { WorldMapControlsPanel } from '../objects/panels/WorldMapControlsPanel';
+import { WorldMapPrompt } from '../objects/WorldMapPrompt';
+import { resolveWorldMapCellColor } from '../objects/worldMapCellPresentation';
 
 const CELL = 64;
 
@@ -23,7 +23,7 @@ export class WorldMap extends Phaser.Scene {
 
   private cellRects: Phaser.GameObjects.Rectangle[][] = [];
   private partyMarker!: Phaser.GameObjects.Rectangle;
-  private interactPrompt!: Phaser.GameObjects.Text;
+  private prompt!: WorldMapPrompt;
   private offsetX = 0;
   private offsetY = 0;
   private moveCooldown = false;
@@ -52,8 +52,22 @@ export class WorldMap extends Phaser.Scene {
 
     this.buildGrid();
     this.buildPartyMarker();
-    this.buildInteractPrompt();
-    this.buildDebugButton();
+
+    this.prompt = new WorldMapPrompt({
+      scene: this,
+      x: this.scale.width / 2,
+      y: this.offsetY - 30,
+    });
+
+    new WorldMapControlsPanel({
+      scene: this,
+      screenW: this.scale.width,
+      callbacks: {
+        onDebugBattle:    () => PhaseManager.transition({ type: 'debug' }),
+        onOpenCharacters: () => PhaseManager.transition({ type: 'open_equip_screen', unitTemplateId: '' }),
+        onExitToMenu:     () => PhaseManager.transition({ type: 'exit_to_menu' }),
+      },
+    });
 
     this.input.keyboard!.on('keydown', this.handleKey, this);
   }
@@ -63,30 +77,15 @@ export class WorldMap extends Phaser.Scene {
     for (let row = 0; row < this.mapDef.layout.length; row++) {
       this.cellRects[row] = [];
       for (let col = 0; col < this.mapDef.layout[row].length; col++) {
-        const color = this.cellColor(col, row, mapState);
+        const cell = this.mapDef.layout[row][col];
+        const key = `${col},${row}`;
+        const es = mapState.entityStates[key];
+        const color = resolveWorldMapCellColor(cell, es?.alive);
         const px = this.offsetX + col * CELL + CELL / 2;
         const py = this.offsetY + row * CELL + CELL / 2;
         const rect = this.add.rectangle(px, py, CELL - 2, CELL - 2, color);
         this.cellRects[row][col] = rect;
       }
-    }
-  }
-
-  private cellColor(x: number, y: number, mapState: SubMapState): number {
-    const cell = this.mapDef.layout[y]?.[x];
-    if (cell === 'wall' || cell === 'tree') return WORLD_MAP_CELL.empty;
-    if (cell === null || cell === undefined) return WORLD_MAP_CELL.forest;
-
-    const key = `${x},${y}`;
-    const es = mapState.entityStates[key];
-    if (es && !es.alive) return WORLD_MAP_CELL.fog;
-
-    switch (cell.type) {
-      case 'mob':    return WORLD_MAP_CELL.enemy;
-      case 'camp':   return WORLD_MAP_CELL.camp;
-      case 'portal': return WORLD_MAP_CELL.town;
-      case 'shop':   return WORLD_MAP_CELL.dungeon;
-      default:       return WORLD_MAP_CELL.start;
     }
   }
 
@@ -100,52 +99,6 @@ export class WorldMap extends Phaser.Scene {
     const px = this.offsetX + this.partyX * CELL + CELL / 2;
     const py = this.offsetY + this.partyY * CELL + CELL / 2;
     this.partyMarker.setPosition(px, py);
-  }
-
-  private buildInteractPrompt(): void {
-    this.interactPrompt = this.add
-      .text(this.scale.width / 2, this.offsetY - 30, '', {
-        fontSize: '20px', color: VALUE_COLOR.highlight, stroke: '#000', strokeThickness: 3,
-      })
-      .setOrigin(0.5)
-      .setDepth(2)
-      .setVisible(false);
-  }
-
-  private showPrompt(text: string): void {
-    this.interactPrompt.setText(text).setVisible(true);
-  }
-
-  private hidePrompt(): void {
-    this.interactPrompt.setVisible(false);
-  }
-
-  private buildDebugButton(): void {
-    new Button({
-      scene: this, x: 80, y: 30, w: 120, h: 36,
-      label: "Debug Battle", style: "dark",
-      onClick: () => PhaseManager.transition({ type: 'debug' }),
-    });
-    this.buildCharactersButton();
-
-    new Button({
-      scene: this, x: this.scale.width - 90, y: 30, w: 140, h: 36,
-      label: "Main Menu", style: "danger",
-      onClick: () => PhaseManager.transition({ type: 'exit_to_menu' }),
-    });
-  }
-
-  private buildCharactersButton(): void {
-    new Button({
-      scene: this,
-      x: Math.round(70  * LAYOUT_SCALE),
-      y: Math.round(75  * LAYOUT_SCALE),
-      w: Math.round(130 * LAYOUT_SCALE),
-      h: Math.round(36  * LAYOUT_SCALE),
-      label: 'Characters',
-      style: 'navy',
-      onClick: () => PhaseManager.transition({ type: 'open_equip_screen', unitTemplateId: '' }),
-    });
   }
 
   private handleKey(event: KeyboardEvent): void {
@@ -203,10 +156,10 @@ export class WorldMap extends Phaser.Scene {
         const label = resolved.entity.type === 'camp' ? 'Press Space to enter camp'
           : resolved.entity.type === 'shop' ? 'Press Space to enter shop'
           : 'Press Space to interact';
-        this.showPrompt(label);
+        this.prompt.show(label);
       }
     } else {
-      this.hidePrompt();
+      this.prompt.hide();
     }
 
     this.applyMoveCooldown();
@@ -217,7 +170,7 @@ export class WorldMap extends Phaser.Scene {
     const resolved = resolveCell(this.mapDef, mapState, this.partyX, this.partyY);
     if (!resolved.entity || resolved.entity.triggersOnEnter) return;
 
-    this.hidePrompt();
+    this.prompt.hide();
     switch (resolved.entity.type) {
       case 'camp':
         PhaseManager.transition({ type: 'enter_camp' });

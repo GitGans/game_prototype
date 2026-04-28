@@ -104,6 +104,8 @@ export type GamePhase =
       upgradeTiers: UpgradeTierSnapshot[];
     };
 
+export type UpgradeTreePhase = Extract<GamePhase, { type: 'upgrade_tree' }>;
+
 export type PhaseAction =
   // ── Existing ──────────────────────────────────────────────────
   | { type: 'new_game' }               // replaces 'play'

@@ -24,7 +24,7 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `DebugBattleState.ts` — isolated state container for debug battles; never syncs to `GameState`
 - `EventBus.ts` — `STATE_CHANGED` event singleton; scenes subscribe via `sceneEvents.ts`
 - `sceneEvents.ts` — binds Phaser scene lifecycle to `STATE_CHANGED` with auto-cleanup
-- `Constants.ts` — grid layout, bench config, color palette, combat constants
+- `Constants.ts` — grid layout, bench config, combat constants (visual colors removed; see `src/objects/battleVisualTheme.ts`)
 - `phaseHandlers/battlePhaseHandler.ts` — routes battle placement actions; delegates to `../battle/placementState`
 
 ## Structural Role

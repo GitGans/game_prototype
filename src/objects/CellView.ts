@@ -1,8 +1,8 @@
 import Phaser from "phaser";
-import { CELL_SIZE, COLORS, LAYOUT_SCALE } from "../core/Constants";
+import { CELL_SIZE, LAYOUT_SCALE } from "../core/Constants";
 import { CellCoord } from "../battle/types";
 import { cellKey } from "../battle/field";
-import { SKILL_PREVIEW } from "../ui/theme";
+import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 
 type HighlightType = "none" | "selected" | "target" | "heal_target";
 type CellMode = "placement" | "battle";
@@ -41,14 +41,14 @@ export class CellView extends Phaser.GameObjects.Container {
       0,
       CELL_SIZE,
       CELL_SIZE,
-      COLORS.cellBorder,
+      BATTLE_VISUAL_THEME.cell.border,
     );
     this.bg = scene.add.rectangle(
       0,
       0,
       CELL_SIZE - borderThickness,
       CELL_SIZE - borderThickness,
-      COLORS.cell,
+      BATTLE_VISUAL_THEME.cell.bg,
     );
     this.effectGfx = scene.add.graphics();
 
@@ -84,20 +84,20 @@ export class CellView extends Phaser.GameObjects.Container {
   setHighlight(type: HighlightType): void {
     switch (type) {
       case "selected":
-        this.bg.setFillStyle(COLORS.cellSelected).setAlpha(0.25);
+        this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.selected).setAlpha(0.25);
         break;
       case "target":
-        this.bg.setFillStyle(COLORS.validTarget).setAlpha(0.45);
+        this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.validTarget).setAlpha(0.45);
         break;
       case "heal_target":
-        this.bg.setFillStyle(COLORS.validHeal).setAlpha(0.25);
+        this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.validHeal).setAlpha(0.25);
         break;
       default:
         // 'none': in battle keep cell invisible; in placement restore subtle tint
         if (this._mode === "battle") {
           this.bg.setAlpha(0);
         } else {
-          this.bg.setFillStyle(COLORS.cell).setAlpha(0.3);
+          this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.bg).setAlpha(0.3);
         }
     }
   }
@@ -105,20 +105,20 @@ export class CellView extends Phaser.GameObjects.Container {
   setHover(on: boolean): void {
     if (this._mode === "battle") return;
     if (on) {
-      this.bg.setFillStyle(COLORS.cellHover).setAlpha(0.5);
+      this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.hover).setAlpha(0.5);
     } else {
-      this.bg.setFillStyle(COLORS.cell).setAlpha(0.3);
+      this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.bg).setAlpha(0.3);
     }
   }
 
   setSkillPreview(multiplier: number, isHeal = false): void {
-    const dim    = isHeal ? SKILL_PREVIEW.healDim    : SKILL_PREVIEW.damageDim;
-    const bright = isHeal ? SKILL_PREVIEW.healBright : SKILL_PREVIEW.damageBright;
+    const dim    = isHeal ? BATTLE_VISUAL_THEME.cell.skillPreview.healDim    : BATTLE_VISUAL_THEME.cell.skillPreview.damageDim;
+    const bright = isHeal ? BATTLE_VISUAL_THEME.cell.skillPreview.healBright : BATTLE_VISUAL_THEME.cell.skillPreview.damageBright;
     this.bg.setFillStyle(lerpColor(dim, bright, multiplier)).setAlpha(0.85);
   }
 
   setEffectPreview(isHeal: boolean): void {
-    const color = isHeal ? COLORS.validHeal : COLORS.validTarget;
+    const color = isHeal ? BATTLE_VISUAL_THEME.cell.validHeal : BATTLE_VISUAL_THEME.cell.validTarget;
     const thickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
     const half = CELL_SIZE / 2;
     const inset = thickness / 2;

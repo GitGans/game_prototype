@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BattleState, Unit } from '../battle/types';
-import { COLORS, LAYOUT_SCALE } from '../core/Constants';
+import { LAYOUT_SCALE } from '../core/Constants';
+import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 import { effectiveStats } from '../battle/combat';
 import { fontSize, VALUE_COLOR, INITIATIVE } from '../ui/theme';
@@ -88,8 +89,8 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     CARD_H: number
   ): void {
     const isPlayer = unit.anchor.side === 'player';
-    const baseColor = isPlayer ? COLORS.unitPlayer : COLORS.unitEnemy;
-    const borderColor = isActive ? COLORS.cellSelected : COLORS.cellBorder;
+    const baseColor = isPlayer ? BATTLE_VISUAL_THEME.unit.player : BATTLE_VISUAL_THEME.unit.enemy;
+    const borderColor = isActive ? BATTLE_VISUAL_THEME.cell.selected : BATTLE_VISUAL_THEME.cell.border;
 
     const border = this.scene.add.rectangle(
       x + CARD_W / 2, y + CARD_H / 2,
@@ -129,7 +130,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
           unit.name,
           {
             fontSize: fontSize('xs'),
-            color: isPlayer ? COLORS.label : COLORS.labelEnemy,
+            color: isPlayer ? BATTLE_VISUAL_THEME.unit.labelPlayer : BATTLE_VISUAL_THEME.unit.labelEnemy,
             align: 'center',
           }
         ).setOrigin(0.5, 0).setAlpha(alpha);
@@ -137,7 +138,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     const effInit = effectiveStats(unit).initiative;
     const initColor = effInit > unit.initiative ? VALUE_COLOR.positive
                     : effInit < unit.initiative ? VALUE_COLOR.negative
-                    : COLORS.textLight;
+                    : BATTLE_VISUAL_THEME.unit.textLight;
     const initText = this.scene.add.text(
       x + CARD_W / 2, y + CARD_H - Math.round(18 * LAYOUT_SCALE),
       `★${effInit}`,

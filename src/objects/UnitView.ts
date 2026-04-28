@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { CELL_SIZE, CELL_GAP, COLORS, LAYOUT_SCALE } from '../core/Constants';
+import { CELL_SIZE, CELL_GAP, LAYOUT_SCALE } from '../core/Constants';
+import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { Unit, SpriteState, SpriteSheetConfig } from '../battle/types';
 import { EffectTooltip } from './EffectTooltip';
 import { fontSize, VALUE_COLOR, HP_COLOR } from '../ui/theme';
@@ -57,11 +58,11 @@ export class UnitView extends Phaser.GameObjects.Container {
       img.setDisplaySize(wFull, hFull);
       this.bgSprite = img;
     } else {
-      const color = this.isPlayer ? COLORS.unitPlayer : COLORS.unitEnemy;
+      const color = this.isPlayer ? BATTLE_VISUAL_THEME.unit.player : BATTLE_VISUAL_THEME.unit.enemy;
       this.bgSprite = scene.add.rectangle(0, 0, w, h, color, 0.85);
     }
 
-    const labelColor = this.isPlayer ? COLORS.label : COLORS.labelEnemy;
+    const labelColor = this.isPlayer ? BATTLE_VISUAL_THEME.unit.labelPlayer : BATTLE_VISUAL_THEME.unit.labelEnemy;
     this.nameText = scene.add.text(0, -h / 2 + Math.round(10 * LAYOUT_SCALE), unit.name, {
       fontSize: fontSize('md'),
       color: labelColor,
@@ -73,7 +74,7 @@ export class UnitView extends Phaser.GameObjects.Container {
 
     this.hpText = scene.add.text(0, h / 2 - Math.round(24 * LAYOUT_SCALE), `${unit.hp}/${unit.maxHp}`, {
       fontSize: fontSize('sm'),
-      color: COLORS.textDark,
+      color: BATTLE_VISUAL_THEME.unit.textDark,
       align: 'center',
       stroke: '#000000',
       strokeThickness: Math.round(2 * LAYOUT_SCALE),
@@ -114,7 +115,7 @@ export class UnitView extends Phaser.GameObjects.Container {
       this.setSpriteState('death');
 
       if (this.bgSprite instanceof Phaser.GameObjects.Rectangle) {
-        (this.bgSprite as Phaser.GameObjects.Rectangle).setFillStyle(COLORS.unitDead, 0.4);
+        (this.bgSprite as Phaser.GameObjects.Rectangle).setFillStyle(BATTLE_VISUAL_THEME.unit.dead, 0.4);
       } else {
         (this.bgSprite as Phaser.GameObjects.Image).setTint(0x888888).setAlpha(0.6);
       }

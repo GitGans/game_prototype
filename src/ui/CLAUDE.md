@@ -14,7 +14,7 @@ Game-agnostic UI primitive library. Provides reusable visual components and desi
 
 ## Key Files
 
-- `theme.ts` — All design tokens: `BTN`, `FONT_SIZE`, `ALPHA`, `VALUE_COLOR`, `HP_COLOR`, `TOOLTIP`, and scene/map palettes
+- `theme.ts` — All design tokens: `BTN`, `FONT_SIZE`, `ALPHA`, `VALUE_COLOR`, `HP_COLOR`, `TOOLTIP`, and scene/map palettes. Game-specific visual tokens (battle cells, units, bench, skill types) live in `src/objects/battleVisualTheme.ts`.
 - `Button.ts` — Styled button with hover/idle/disabled states; exports `Button` and `ButtonConfig`
 - `BaseTooltip.ts` — Abstract generic base for all tooltips; subclasses implement `buildContent(data)`
 - `HpBar.ts` — Health bar with optional tri-color (green/yellow/red) mode

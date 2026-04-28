@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
-// Stage 4 compat: COLORS preserves exact legacy hex values (hpBarBg/hpBarFg differ from
-// HP_COLOR.bg/high). Migrate to UI_THEME.component.benchCard in Stage 8 / COLORS removal.
-import { COLORS, LAYOUT_SCALE } from '../core/Constants';
+import { LAYOUT_SCALE } from '../core/Constants';
+import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import type { BenchUnitSnapshot } from '../shared/battleSnapshots';
 
 export type BenchCardMode = 'placement' | 'battle';
@@ -43,12 +42,12 @@ export class BenchCard extends Phaser.GameObjects.Container {
   private buildEmptySlot(cfg: BenchCardConfig): void {
     const thickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
 
-    const border = cfg.scene.add.rectangle(0, 0, cfg.width, cfg.height, COLORS.cellBorder);
+    const border = cfg.scene.add.rectangle(0, 0, cfg.width, cfg.height, BATTLE_VISUAL_THEME.cell.border);
     const bg     = cfg.scene.add.rectangle(
       0, 0,
       cfg.width  - thickness,
       cfg.height - thickness,
-      COLORS.benchEmpty, 0.5,
+      BATTLE_VISUAL_THEME.bench.empty, 0.5,
     );
 
     if (cfg.mode === 'battle') {
@@ -68,10 +67,10 @@ export class BenchCard extends Phaser.GameObjects.Container {
 
   private buildOccupiedSlot(cfg: BenchCardConfig, snapshot: BenchUnitSnapshot): void {
     const thickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
-    const fillColor = cfg.selected ? COLORS.benchSelected : COLORS.bench;
+    const fillColor = cfg.selected ? BATTLE_VISUAL_THEME.bench.selected : BATTLE_VISUAL_THEME.bench.bg;
 
     // Border + background — two-rect pattern required: bg fill changes on hover/selected
-    const border = cfg.scene.add.rectangle(0, 0, cfg.width, cfg.height, COLORS.cellBorder);
+    const border = cfg.scene.add.rectangle(0, 0, cfg.width, cfg.height, BATTLE_VISUAL_THEME.cell.border);
     const bg     = cfg.scene.add.rectangle(
       0, 0,
       cfg.width  - thickness,
@@ -93,7 +92,7 @@ export class BenchCard extends Phaser.GameObjects.Container {
       snapshot.name,
       {
         fontSize:        `${Math.round(11 * LAYOUT_SCALE)}px`,
-        color:           COLORS.label,
+        color:           BATTLE_VISUAL_THEME.unit.labelPlayer,
         fontStyle:       'bold',
         align:           'center',
         stroke:          '#000000',
@@ -114,17 +113,16 @@ export class BenchCard extends Phaser.GameObjects.Container {
       `${hp}/${hp}`,
       {
         fontSize:        `${Math.round(11 * LAYOUT_SCALE)}px`,
-        color:           COLORS.textDark,
+        color:           BATTLE_VISUAL_THEME.unit.textDark,
         align:           'center',
         stroke:          '#000000',
         strokeThickness: Math.round(2 * LAYOUT_SCALE),
       },
     ).setOrigin(0.5, 0);
 
-    // HP bar — manual rects to match COLORS.hpBarBg/hpBarFg exactly.
-    // HpBar uses HP_COLOR which has different hex values; swap in Stage 8.
-    const hpBarBg = cfg.scene.add.rectangle(0,         barY, barW, barH, COLORS.hpBarBg);
-    const hpBarFg = cfg.scene.add.rectangle(-barW / 2, barY, barW, barH, COLORS.hpBarFg)
+    // HP bar — manual rects to preserve bench-specific colors (differ from HP_COLOR; see BATTLE_VISUAL_THEME.bench).
+    const hpBarBg = cfg.scene.add.rectangle(0,         barY, barW, barH, BATTLE_VISUAL_THEME.bench.hpBg);
+    const hpBarFg = cfg.scene.add.rectangle(-barW / 2, barY, barW, barH, BATTLE_VISUAL_THEME.bench.hpFg)
       .setOrigin(0, 0.5);
 
     // Compose children
@@ -154,7 +152,7 @@ export class BenchCard extends Phaser.GameObjects.Container {
     }
 
     this.on('pointerover', () => {
-      if (!cfg.selected) bg.setFillStyle(COLORS.benchHover, 0.9);
+      if (!cfg.selected) bg.setFillStyle(BATTLE_VISUAL_THEME.bench.hover, 0.9);
       cfg.callbacks?.onHoverStart?.(snapshot);
     });
 

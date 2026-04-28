@@ -8,9 +8,9 @@ import {
   BENCH_PANEL_WIDTH,
   BENCH_GAP,
   BENCH_SLOTS,
-  COLORS,
   LAYOUT_SCALE,
 } from "../core/Constants";
+import { BATTLE_VISUAL_THEME } from "../objects/battleVisualTheme";
 import { EventBus, Events } from "../core/EventBus";
 import { GameState } from "../core/GameState";
 import { CellView } from "../objects/CellView";
@@ -371,7 +371,7 @@ export class Game extends Phaser.Scene {
         "",
         {
           fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-          color: COLORS.textLight,
+          color: BATTLE_VISUAL_THEME.unit.textLight,
           align: "center",
           wordWrap: { width: this.logW },
         },
@@ -386,7 +386,7 @@ export class Game extends Phaser.Scene {
         "",
         {
           fontSize: `${Math.round(11 * LAYOUT_SCALE)}px`,
-          color: COLORS.textLight,
+          color: BATTLE_VISUAL_THEME.unit.textLight,
           align: "center",
           wordWrap: { width: this.logW },
         },
@@ -854,9 +854,9 @@ export class Game extends Phaser.Scene {
     const preview = `Preview:\n${previewParts.join("\n")}\n[click again to confirm]`;
     this.setStatus(preview);
 
-    const headerColor = skill.damageBlock?.damageType === 'magical' ? COLORS.skillMagical
-                      : skill.damageBlock?.damageType === 'physical' ? COLORS.skillPhysical
-                      : COLORS.textLight;
+    const headerColor = skill.damageBlock?.damageType === 'magical' ? BATTLE_VISUAL_THEME.skill.magical
+                      : skill.damageBlock?.damageType === 'physical' ? BATTLE_VISUAL_THEME.skill.physical
+                      : BATTLE_VISUAL_THEME.unit.textLight;
     const lineH = Math.round(14 * LAYOUT_SCALE);
     this.statusHeaderText
       .setColor(headerColor)

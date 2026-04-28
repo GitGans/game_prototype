@@ -14,6 +14,7 @@ Game-specific visual components that know game data and render it using primitiv
 
 ## Key Files
 
+- `battleVisualTheme.ts` — game-specific visual tokens for battle-flow screens (cell, unit, bench, skill colors); the single source of truth replacing the removed `COLORS` from `core/Constants`
 - `UnitView.ts` — unit card in battle (sprite, HP bar, effect squares); key methods: `setSpriteState()`, `update()`
 - `CellView.ts` — grid cell with hover, highlight, and skill/effect preview; key methods: `setMode()`, `setHighlight()`, `setSkillPreview()`
 - `InitiativeBar.ts` — turn-order strip; dynamically sizes cards to viewport; key method: `update()`
