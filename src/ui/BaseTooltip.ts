@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { TOOLTIP } from "./theme";
+import { UI_THEME } from "./theme";
 
 export abstract class BaseTooltip<T> extends Phaser.GameObjects.Container {
   protected bg:           Phaser.GameObjects.Rectangle;
@@ -8,7 +8,7 @@ export abstract class BaseTooltip<T> extends Phaser.GameObjects.Container {
   constructor(
     scene: Phaser.Scene,
     protected readonly tooltipW: number,
-    bgColor: number = TOOLTIP.bg,
+    bgColor: number = UI_THEME.component.tooltip.bg,
     bgAlpha: number = 0,
   ) {
     super(scene, 0, 0);
@@ -17,7 +17,7 @@ export abstract class BaseTooltip<T> extends Phaser.GameObjects.Container {
     this.bg.setOrigin(0, 0);
     this.add(this.bg);
 
-    this.setDepth(TOOLTIP.depth);
+    this.setDepth(UI_THEME.depth.tooltip);
     this.setVisible(false);
     scene.add.existing(this);
   }
@@ -51,11 +51,11 @@ export abstract class BaseTooltip<T> extends Phaser.GameObjects.Container {
     anchorY: number,
     h:       number,
     side:    "left" | "right",
-    gapPx  = TOOLTIP.pad,
+    gapPx  = UI_THEME.component.tooltip.pad,
   ): void {
     const { width: sw, height: sh } = this.scene.scale;
     const w   = this.tooltipW;
-    const pad = TOOLTIP.pad;
+    const pad = UI_THEME.component.tooltip.pad;
 
     let tx = side === "right" ? anchorX + gapPx : anchorX - w - gapPx;
     let ty = anchorY - h / 2;

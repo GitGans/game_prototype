@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
-import { fontSize, VALUE_COLOR } from './theme';
+import { UI_THEME, fontSize } from './theme';
 
 export interface NumberInputConfig {
   scene: Phaser.Scene;
@@ -29,19 +29,19 @@ export class NumberInput extends Phaser.GameObjects.Container {
     const w = cfg.width  ?? Math.round(120 * LAYOUT_SCALE);
     const h = cfg.height ?? Math.round(48  * LAYOUT_SCALE);
 
-    this.bg = cfg.scene.add.rectangle(0, 0, w, h, 0x222233)
-      .setStrokeStyle(Math.round(2 * LAYOUT_SCALE), 0x6a6a8a);
+    this.bg = cfg.scene.add.rectangle(0, 0, w, h, UI_THEME.component.numberInput.bg)
+      .setStrokeStyle(Math.round(2 * LAYOUT_SCALE), UI_THEME.component.numberInput.border);
     this.add(this.bg);
 
     this.valueText = cfg.scene.add.text(0, 0, this.raw, {
       fontSize: fontSize('lg'),
-      color: VALUE_COLOR.white,
+      color: UI_THEME.color.value.white,
     }).setOrigin(0.5);
     this.add(this.valueText);
 
     this.errorText = cfg.scene.add.text(0, h / 2 + Math.round(6 * LAYOUT_SCALE), '', {
       fontSize: fontSize('sm'),
-      color: VALUE_COLOR.negative,
+      color: UI_THEME.color.value.negative,
     }).setOrigin(0.5, 0);
     this.add(this.errorText);
 
@@ -65,15 +65,15 @@ export class NumberInput extends Phaser.GameObjects.Container {
     this.valueText.setText(this.raw);
     if (isNaN(n) || n < this.cfg.min) {
       this.errorText.setText(`Min: ${this.cfg.min}`);
-      this.bg.setStrokeStyle(Math.round(2 * LAYOUT_SCALE), 0x8a3a3a);
+      this.bg.setStrokeStyle(Math.round(2 * LAYOUT_SCALE), UI_THEME.component.numberInput.borderError);
       this.cfg.onChange?.(null);
     } else if (n > this.cfg.max) {
       this.errorText.setText(`Max: ${this.cfg.max}`);
-      this.bg.setStrokeStyle(Math.round(2 * LAYOUT_SCALE), 0x8a3a3a);
+      this.bg.setStrokeStyle(Math.round(2 * LAYOUT_SCALE), UI_THEME.component.numberInput.borderError);
       this.cfg.onChange?.(null);
     } else {
       this.errorText.setText('');
-      this.bg.setStrokeStyle(Math.round(2 * LAYOUT_SCALE), 0x3a8a3a);
+      this.bg.setStrokeStyle(Math.round(2 * LAYOUT_SCALE), UI_THEME.component.numberInput.borderValid);
       this.cfg.onChange?.(n);
     }
   }

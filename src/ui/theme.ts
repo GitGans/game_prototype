@@ -122,6 +122,20 @@ const PANEL = {
   bg: 0x222244,   // matches SCENE_BG.panel — dark navy surface
 } as const;
 
+// ─── Context menu ─────────────────────────────────────────────────────────────
+const CONTEXT_MENU = {
+  bg:     0x1a1a2e,
+  border: 0x445566,
+} as const;
+
+// ─── Number input ─────────────────────────────────────────────────────────────
+const NUMBER_INPUT = {
+  bg:          0x222233,
+  border:      0x6a6a8a,
+  borderError: 0x8a3a3a,
+  borderValid: 0x3a8a3a,
+} as const;
+
 // ─── Battle result card ───────────────────────────────────────────────────────
 const RESULT_CARD = {
   bg:       0x1a1a2e,  // dark navy card background
@@ -138,7 +152,8 @@ const DEPTH = {
   overlay: 30,            // fullscreen dim overlays (battle end, confirm)
   modal:   40,            // floating modals above overlays
   menu:    80,            // context menus, dropdowns
-  tooltip: TOOLTIP.depth, // 100 — single source; TOOLTIP.depth is a legacy bridge until Stage 7
+  tooltip:     TOOLTIP.depth, // 100 — single source; TOOLTIP.depth is a legacy bridge until Stage 7
+  contextMenu: 200,
 } as const;
 
 // ─── Overlay dim ─────────────────────────────────────────────────────────────
@@ -185,6 +200,8 @@ export const UI_THEME = {
     resultCard:       RESULT_CARD,
     overlay:          OVERLAY,
     battleEndOverlay: BATTLE_END_OVERLAY,
+    contextMenu:      CONTEXT_MENU,
+    numberInput:      NUMBER_INPUT,
   },
   depth: DEPTH,
 } as const;
