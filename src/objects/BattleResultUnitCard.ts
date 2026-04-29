@@ -3,6 +3,7 @@ import type { BattleResultUnit } from '../core/phases';
 import { Panel } from '../ui/Panel';
 import { scaled } from '../ui/layout';
 import { UI_THEME } from '../ui/theme';
+import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 
 export interface BattleResultUnitCardConfig {
   scene:  Phaser.Scene;
@@ -21,7 +22,7 @@ export class BattleResultUnitCard extends Phaser.GameObjects.Container {
     const alpha  = unit.isAlive ? 1 : 0.45;
     const sprSz  = scaled(72);
     const sprY   = -scaled(30);
-    const colors = UI_THEME.component.resultCard;
+    const colors = BATTLE_VISUAL_THEME.resultCard;
 
     this.add(new Panel({
       scene,

@@ -3,6 +3,7 @@ import { GamePhase } from '../../core/phases';
 import { ItemSlotSnapshot } from '../../battle/types';
 import { scaled } from '../../ui/layout';
 import { UI_THEME } from '../../ui/theme';
+import { ITEM_VISUAL_THEME } from '../itemVisualTheme';
 import { Button } from '../../ui/Button';
 import { UnitTooltip } from '../UnitTooltip';
 import { EquipmentMatrix } from '../EquipmentMatrix';
@@ -190,7 +191,7 @@ export class EquipmentPanel {
         .setDisplaySize(SPRITE_SZ, SPRITE_SZ)
         .setOrigin(0.5);
     } else {
-      this.scene.add.rectangle(x + SPRITE_SZ / 2, y + SPRITE_SZ / 2, SPRITE_SZ, SPRITE_SZ, 0x4a4a6a);
+      this.scene.add.rectangle(x + SPRITE_SZ / 2, y + SPRITE_SZ / 2, SPRITE_SZ, SPRITE_SZ, ITEM_VISUAL_THEME.equipmentPlaceholder);
     }
   }
 }

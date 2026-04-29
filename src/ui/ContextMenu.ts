@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { UI_THEME } from './theme';
 import { Button } from './Button';
 import { LAYOUT_SCALE } from '../core/Constants';
 
@@ -23,7 +24,7 @@ export class ContextMenu extends Phaser.GameObjects.Container {
     const sw = cfg.scene.scale.width;
     const sh = cfg.scene.scale.height;
 
-    // Full-screen invisible overlay — catches outside clicks
+    // Invisible click-catcher; color is irrelevant because alpha is 0.
     const overlay = cfg.scene.add.rectangle(
       sw / 2 - cfg.x,
       sh / 2 - cfg.y,
@@ -33,12 +34,16 @@ export class ContextMenu extends Phaser.GameObjects.Container {
     overlay.on('pointerup', () => cfg.onDismiss?.());
     this.add(overlay);
 
-    // Panel background with border
-    const bg = cfg.scene.add.rectangle(panelW / 2, panelH / 2, panelW, panelH, 0x1a1a2e);
-    bg.setStrokeStyle(1, 0x445566);
+    const bg = cfg.scene.add.rectangle(
+      panelW / 2,
+      panelH / 2,
+      panelW,
+      panelH,
+      UI_THEME.component.contextMenu.bg,
+    );
+    bg.setStrokeStyle(1, UI_THEME.component.contextMenu.border);
     this.add(bg);
 
-    // One Button per option, stacked vertically
     cfg.options.forEach((opt, i) => {
       const btn = new Button({
         scene: cfg.scene,
@@ -53,7 +58,7 @@ export class ContextMenu extends Phaser.GameObjects.Container {
       this.add(btn);
     });
 
-    this.setDepth(200);
+    this.setDepth(UI_THEME.depth.contextMenu);
   }
 
   dismiss(): void {

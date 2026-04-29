@@ -109,10 +109,20 @@ No manual UI creation or duplicated patterns.
 
 ### 4. Styles & constants
 
-- UI styles → `src/ui/theme.ts`
+- Generic UI styles → `src/ui/theme.ts` (via `UI_THEME`):
+  fonts, alpha states, depth layers, semantic value colors, screen backgrounds,
+  component tokens (button / tooltip / panel / overlay / contextMenu / numberInput)
+- Game-domain visual tokens → `src/objects/*VisualTheme.ts`:
+  - `battleVisualTheme.ts` — cells, units, bench, skills, upgrade cards, portraits
+  - `worldMapVisualTheme.ts` — map cell palette
+  - `itemVisualTheme.ts` — item cell and equipment slot colors
+  - `prepVisualTheme.ts` — prep-screen action tile colors
 - Game constants → `src/core/Constants.ts`
 
-No colors or sizes inside scenes.
+**Isolation rule:** `*VisualTheme.ts` files must NOT import from `ui/theme`.
+They define raw hex tokens only. Enforced by `scripts/check-boundaries.mjs`.
+
+No colors or sizes inside scenes or components directly.
 
 ---
 
@@ -122,6 +132,7 @@ No colors or sizes inside scenes.
 - Tied to game data → `src/objects/`
 - Repeated ≥2 times → extract into component
 - Depends on `GameState` → not `ui`
+- Game-specific hex colors → `src/objects/*VisualTheme.ts` (not `ui/theme`)
 
 ---
 
@@ -132,6 +143,8 @@ No colors or sizes inside scenes.
 - Hardcoded styles in scenes
 - Tooltips without a base class
 - UI calling `PhaseManager`
+- Game-specific colors inside `ui/theme.ts`
+- `*VisualTheme.ts` file importing from `ui/theme`
 
 ---
 

@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
-import { TOOLTIP, fontSize, VALUE_COLOR } from "../ui/theme";
+import { UI_THEME, fontSize } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
 import { ActiveEffect } from "../battle/types";
 
@@ -15,7 +15,7 @@ export class EffectTooltip extends BaseTooltip<ActiveEffect> {
   // BaseTooltip.show() calls buildContent() then placeNear() automatically.
 
   protected buildContent(ae: ActiveEffect): number {
-    const pad = TOOLTIP.pad;
+    const pad = UI_THEME.component.tooltip.pad;
 
     let desc = ae.effect.description ?? "";
     if (ae.computedPerTurn !== undefined) {
@@ -25,17 +25,17 @@ export class EffectTooltip extends BaseTooltip<ActiveEffect> {
 
     this.addText(pad, pad, ae.effectDisplayName, {
       fontSize:  fontSize("sm"),
-      color:     VALUE_COLOR.white,
+      color:     UI_THEME.color.value.white,
       fontStyle: "bold",
       wordWrap:  { width: TW - pad * 2 },
     });
 
-    const descTxt = this.addText(pad, pad + TOOLTIP.lineH, desc, {
+    const descTxt = this.addText(pad, pad + UI_THEME.component.tooltip.lineH, desc, {
       fontSize: fontSize("xs"),
-      color:    VALUE_COLOR.muted,
+      color:    UI_THEME.color.value.muted,
       wordWrap: { width: TW - pad * 2 },
     });
 
-    return pad + TOOLTIP.lineH + descTxt.height + pad;
+    return pad + UI_THEME.component.tooltip.lineH + descTxt.height + pad;
   }
 }

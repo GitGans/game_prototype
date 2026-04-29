@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { HP_COLOR } from './theme';
+import { UI_THEME } from './theme';
 
 export interface HpBarConfig {
   scene:     Phaser.Scene;
@@ -26,8 +26,8 @@ export class HpBar extends Phaser.GameObjects.Container {
     this.tricolor = cfg.tricolor ?? false;
     const a = cfg.alpha ?? 1;
 
-    this.bg   = cfg.scene.add.rectangle(0, 0, this.barW, this.barH, HP_COLOR.bg, a);
-    this.fill = cfg.scene.add.rectangle(-this.barW / 2, 0, this.barW, this.barH, HP_COLOR.high, a)
+    this.bg   = cfg.scene.add.rectangle(0, 0, this.barW, this.barH, UI_THEME.color.hp.bg, a);
+    this.fill = cfg.scene.add.rectangle(-this.barW / 2, 0, this.barW, this.barH, UI_THEME.color.hp.high, a)
       .setOrigin(0, 0.5);
     this.add([this.bg, this.fill]);
 
@@ -47,8 +47,12 @@ export class HpBar extends Phaser.GameObjects.Container {
     }
 
     const color = this.tricolor
-      ? (clamped > 0.5 ? HP_COLOR.high : clamped > 0.25 ? HP_COLOR.medium : HP_COLOR.low)
-      : HP_COLOR.high;
+      ? (clamped > 0.5
+          ? UI_THEME.color.hp.high
+          : clamped > 0.25
+            ? UI_THEME.color.hp.medium
+            : UI_THEME.color.hp.low)
+      : UI_THEME.color.hp.high;
 
     this.fill
       .setVisible(true)

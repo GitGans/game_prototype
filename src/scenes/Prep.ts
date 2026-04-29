@@ -3,11 +3,12 @@ import { LAYOUT_SCALE } from "../core/Constants";
 import { PhaseManager } from "../core/PhaseManager";
 import { EventBus, Events } from "../core/EventBus";
 import { Button } from "../ui/Button";
-import { VALUE_COLOR, SCENE_BG, BTN, ALPHA } from "../ui/theme";
+import { UI_THEME, fontSize } from "../ui/theme";
 import { scaled } from "../ui/layout";
 import { EnemyGroupSelector } from "../objects/EnemyGroupSelector";
 import { CampPanel } from "../objects/panels/CampPanel";
 import { PartyPanel } from "../objects/panels/PartyPanel";
+import { PrepActionTile } from "../objects/PrepActionTile";
 
 export class Prep extends Phaser.Scene {
   private _activePanelKey: 'camp' | 'party' | 'shop' | null = null;
@@ -16,8 +17,7 @@ export class Prep extends Phaser.Scene {
   private _shopPanel:     Phaser.GameObjects.Container | null = null;
   private _enemySelector: EnemyGroupSelector | null = null;
   private _isCampMode = false;
-  private battleBtn!: Phaser.GameObjects.Rectangle;
-  private battleBtnText!: Phaser.GameObjects.Text;
+  private battleBtn!: Button;
   private _w = 0;
   private _h = 0;
 
@@ -34,52 +34,53 @@ export class Prep extends Phaser.Scene {
     this._w = w;
     this._h = h;
 
-    this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.default);
+    this.add.rectangle(w / 2, h / 2, w, h, UI_THEME.color.background.default);
     this.add
       .text(w / 2, Math.round(60 * LAYOUT_SCALE), "PREPARATION", {
-        fontSize: `${Math.round(32 * LAYOUT_SCALE)}px`,
-        color: VALUE_COLOR.neutral,
+        fontSize: fontSize('xxl'),
+        color: UI_THEME.color.value.neutral,
         fontStyle: "bold",
       })
       .setOrigin(0.5);
 
-    // ── Shop stub (legacy; replaced in Stage 6+) ───────────────────────────────
+    // ── Shop stub (replaced by ShopPanel in a future stage) ───────────────────
     this._shopPanel = this.buildShopPanel(w, h);
 
     this.input.keyboard!.on("keydown-ESC", () => {
       if (this._activePanelKey) this._closeActivePanel();
     });
 
-    // ── Three icon buttons ─────────────────────────────────────────────────────
+    // ── Three action tiles ────────────────────────────────────────────────────
     const iconSize = Math.round(90 * LAYOUT_SCALE);
-    const iconY = h / 2 - Math.round(60 * LAYOUT_SCALE);
-    const spacing = Math.round(160 * LAYOUT_SCALE);
-    const iconDefs: Array<{ label: string; color: number; key: string }> = [
-      { label: "Camp", color: 0x5a3a1a, key: "camp" },
-      { label: "Shop", color: 0x1a3a5a, key: "shop" },
-      { label: "Party", color: 0x3a1a5a, key: "party" },
+    const iconY    = h / 2 - Math.round(60 * LAYOUT_SCALE);
+    const spacing  = Math.round(160 * LAYOUT_SCALE);
+
+    const iconDefs: Array<{
+      label:    string;
+      styleKey: 'camp' | 'shop' | 'party';
+      key:      'camp' | 'shop' | 'party';
+    }> = [
+      { label: "Camp",  styleKey: 'camp',  key: 'camp'  },
+      { label: "Shop",  styleKey: 'shop',  key: 'shop'  },
+      { label: "Party", styleKey: 'party', key: 'party' },
     ];
 
-    iconDefs.forEach(({ label, color, key }, i) => {
+    iconDefs.forEach(({ label, styleKey, key }, i) => {
       const x = w / 2 + (i - 1) * spacing;
-      const icon = this.add
-        .rectangle(x, iconY, iconSize, iconSize, color)
-        .setInteractive({ useHandCursor: true });
-      this.add
-        .text(x, iconY, label, {
-          fontSize: `${Math.round(14 * LAYOUT_SCALE)}px`,
-          color: VALUE_COLOR.white,
-        })
-        .setOrigin(0.5);
-
-      icon.on("pointerover", () => icon.setAlpha(ALPHA.hover));
-      icon.on("pointerout",  () => icon.setAlpha(ALPHA.active));
-      icon.on("pointerup",   () => {
-        if (key === 'camp')  { this._openCampPanel();  return; }
-        if (key === 'party') { this._openPartyPanel(); return; }
-        this._closeActivePanel();
-        this._shopPanel!.setVisible(true);
-        this._activePanelKey = 'shop';
+      new PrepActionTile({
+        scene: this,
+        x,
+        y: iconY,
+        size: iconSize,
+        label,
+        styleKey,
+        onClick: () => {
+          if (key === 'camp')  { this._openCampPanel();  return; }
+          if (key === 'party') { this._openPartyPanel(); return; }
+          this._closeActivePanel();
+          this._shopPanel!.setVisible(true);
+          this._activePanelKey = 'shop';
+        },
       });
     });
 
@@ -88,28 +89,25 @@ export class Prep extends Phaser.Scene {
     const btnH = Math.round(56 * LAYOUT_SCALE);
     const btnY = h / 2 + Math.round(160 * LAYOUT_SCALE);
 
-    this.battleBtn = this.add
-      .rectangle(w / 2, btnY, btnW, btnH, BTN.primary.base)
-      .setInteractive({ useHandCursor: true });
-    this.battleBtnText = this.add
-      .text(w / 2, btnY, "Go to Battle", {
-        fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-        color: VALUE_COLOR.white,
-        fontStyle: "bold",
-        align: "center",
-      })
-      .setOrigin(0.5);
+    this.battleBtn = new Button({
+      scene:           this,
+      x:               w / 2,
+      y:               btnY,
+      w:               btnW,
+      h:               btnH,
+      label:           this._isCampMode ? 'Exit Camp' : 'Go to Battle',
+      style:           'primary',
+      fontKey:         'lg',
+      dimWhenDisabled: false,
+      onClick: () => {
+        if (this._isCampMode) {
+          PhaseManager.transition({ type: 'exit_camp' });
+          return;
+        }
+        this._showEnemyGroupSelector();
+      },
+    });
 
-    if (this._isCampMode) {
-      this.battleBtnText.setText('Exit Camp');
-      this.battleBtn.setFillStyle(BTN.primary.base);
-      this.battleBtn.setInteractive({ useHandCursor: true });
-      this.battleBtn.on('pointerup', () =>
-        PhaseManager.transition({ type: 'exit_camp' })
-      );
-    } else {
-      this.battleBtn.on('pointerup', () => this._showEnemyGroupSelector());
-    }
     this.refreshBattleButton();
 
     EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);
@@ -186,10 +184,10 @@ export class Prep extends Phaser.Scene {
     if (this._isCampMode) return;
 
     const active = this.getActiveCount();
-    const valid = active > 0 && active <= 9;
+    const valid  = active > 0 && active <= 9;
     const excess = active - 9;
 
-    this.battleBtn.setFillStyle(valid ? BTN.primary.base : BTN.danger.base);
+    this.battleBtn.setStyle(valid ? 'primary' : 'danger');
 
     let label = "Go to Battle";
     if (active === 0) {
@@ -197,13 +195,8 @@ export class Prep extends Phaser.Scene {
     } else if (excess > 0) {
       label = `Go to Battle\n(move ${excess} to camp)`;
     }
-    this.battleBtnText.setText(label);
-
-    if (valid) {
-      this.battleBtn.setInteractive({ useHandCursor: true });
-    } else {
-      this.battleBtn.disableInteractive();
-    }
+    this.battleBtn.setLabel(label);
+    this.battleBtn.setDisabled(!valid);
   }
 
   // ── Shop Panel (legacy stub) ────────────────────────────────────────────────
@@ -216,14 +209,14 @@ export class Prep extends Phaser.Scene {
         h / 2,
         Math.round(500 * LAYOUT_SCALE),
         Math.round(400 * LAYOUT_SCALE),
-        SCENE_BG.panel,
+        UI_THEME.color.background.panel,
       ),
     );
     panel.add(
       this.add
         .text(w / 2, h / 2 - Math.round(160 * LAYOUT_SCALE), "Shop", {
           fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-          color: VALUE_COLOR.highlight,
+          color: UI_THEME.color.value.highlight,
           fontStyle: "bold",
         })
         .setOrigin(0.5),
@@ -232,7 +225,7 @@ export class Prep extends Phaser.Scene {
       this.add
         .text(w / 2, h / 2, "Coming soon...", {
           fontSize: `${Math.round(18 * LAYOUT_SCALE)}px`,
-          color: VALUE_COLOR.inactive,
+          color: UI_THEME.color.value.inactive,
         })
         .setOrigin(0.5),
     );

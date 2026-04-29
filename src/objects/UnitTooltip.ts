@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
-import { TOOLTIP, fontSize, VALUE_COLOR } from "../ui/theme";
+import { UI_THEME, fontSize } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
 import { Unit } from "../battle/types";
 import type { BenchUnitSnapshot } from "../shared/battleSnapshots";
@@ -20,9 +20,9 @@ interface UnitIdentitySnapshot {
 interface StatValue { value: number; base: number }
 function flat(v: number): StatValue { return { value: v, base: v }; }
 function statColor(sv: StatValue): string {
-  if (sv.value > sv.base) return VALUE_COLOR.positive;
-  if (sv.value < sv.base) return VALUE_COLOR.negative;
-  return VALUE_COLOR.neutral;
+  if (sv.value > sv.base) return UI_THEME.color.value.positive;
+  if (sv.value < sv.base) return UI_THEME.color.value.negative;
+  return UI_THEME.color.value.neutral;
 }
 
 interface TooltipData {
@@ -170,12 +170,12 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
   protected buildContent(data: TooltipData, opts: BuildOptions = {}): number {
     const scene  = this.scene;
     const panelW = this.tooltipW;
-    const pad    = TOOLTIP.pad;
+    const pad    = UI_THEME.component.tooltip.pad;
     let y        = pad;
 
     if (opts.showNameHeader) {
       this.addText(pad, y, `${data.name}  Lvl ${data.level ?? 1}`, {
-        fontSize: fontSize('md'), color: VALUE_COLOR.highlight, fontStyle: 'bold',
+        fontSize: fontSize('md'), color: UI_THEME.color.value.highlight, fontStyle: 'bold',
       });
       y += Math.round(18 * LAYOUT_SCALE);
     }
@@ -207,14 +207,14 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       y += SPRITE_SIZE + pad;
 
       // Divider
-      this.addRect(pad, y, panelW - pad * 2, 1, TOOLTIP.divider);
+      this.addRect(pad, y, panelW - pad * 2, 1, UI_THEME.component.tooltip.divider);
       y += Math.round(6 * LAYOUT_SCALE);
     }
 
     if (opts.showStats !== false) {
     // Stats section
     this.addText(pad, y, "Stats", {
-      fontSize: fontSize("md"), color: VALUE_COLOR.highlight, fontStyle: "bold",
+      fontSize: fontSize("md"), color: UI_THEME.color.value.highlight, fontStyle: "bold",
     });
     y += Math.round(18 * LAYOUT_SCALE);
 
@@ -230,9 +230,9 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     ];
 
     for (const { label, display, color } of statLines) {
-      const labelObj = this.addText(pad, y, `${label}: `, { fontSize: fontSize("sm"), color: VALUE_COLOR.neutral });
+      const labelObj = this.addText(pad, y, `${label}: `, { fontSize: fontSize("sm"), color: UI_THEME.color.value.neutral });
       this.addText(pad + labelObj.width, y, display, { fontSize: fontSize("sm"), color });
-      y += TOOLTIP.lineH;
+      y += UI_THEME.component.tooltip.lineH;
     }
     } // end showStats
 
@@ -241,21 +241,21 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 
       // Skills section
       this.addText(pad, y, "Skills", {
-        fontSize: fontSize("md"), color: VALUE_COLOR.highlight, fontStyle: "bold",
+        fontSize: fontSize("md"), color: UI_THEME.color.value.highlight, fontStyle: "bold",
       });
       y += Math.round(18 * LAYOUT_SCALE);
 
       if (data.skills.length === 0) {
-        this.addText(pad, y, "No skills", { fontSize: fontSize("sm"), color: VALUE_COLOR.muted });
-        y += TOOLTIP.lineH;
+        this.addText(pad, y, "No skills", { fontSize: fontSize("sm"), color: UI_THEME.color.value.muted });
+        y += UI_THEME.component.tooltip.lineH;
       } else {
         for (const skill of data.skills) {
           const nameCol =
             skill.damageBlock?.damageType === "magical"  ? BATTLE_VISUAL_THEME.skill.magical  :
             skill.damageBlock?.damageType === "physical" ? BATTLE_VISUAL_THEME.skill.physical :
-            (skill.isActive ? VALUE_COLOR.white : VALUE_COLOR.inactive);
+            (skill.isActive ? UI_THEME.color.value.white : UI_THEME.color.value.inactive);
           this.addText(pad, y, skill.name, { fontSize: fontSize("sm"), color: nameCol });
-          y += TOOLTIP.lineH;
+          y += UI_THEME.component.tooltip.lineH;
         }
       }
     }

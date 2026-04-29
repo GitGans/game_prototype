@@ -3,7 +3,7 @@ import { CELL_SIZE, CELL_GAP, LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { Unit, SpriteState, SpriteSheetConfig } from '../battle/types';
 import { EffectTooltip } from './EffectTooltip';
-import { fontSize, VALUE_COLOR, HP_COLOR } from '../ui/theme';
+import { UI_THEME, fontSize } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
 
 export class UnitView extends Phaser.GameObjects.Container {
@@ -68,7 +68,7 @@ export class UnitView extends Phaser.GameObjects.Container {
       color: labelColor,
       fontStyle: 'bold',
       align: 'center',
-      stroke: '#000000',
+      stroke: BATTLE_VISUAL_THEME.unit.textStroke,
       strokeThickness: Math.round(3 * LAYOUT_SCALE),
     }).setOrigin(0.5, 0);
 
@@ -76,7 +76,7 @@ export class UnitView extends Phaser.GameObjects.Container {
       fontSize: fontSize('sm'),
       color: BATTLE_VISUAL_THEME.unit.textDark,
       align: 'center',
-      stroke: '#000000',
+      stroke: BATTLE_VISUAL_THEME.unit.textStroke,
       strokeThickness: Math.round(2 * LAYOUT_SCALE),
     }).setOrigin(0.5, 0);
 
@@ -117,7 +117,7 @@ export class UnitView extends Phaser.GameObjects.Container {
       if (this.bgSprite instanceof Phaser.GameObjects.Rectangle) {
         (this.bgSprite as Phaser.GameObjects.Rectangle).setFillStyle(BATTLE_VISUAL_THEME.unit.dead, 0.4);
       } else {
-        (this.bgSprite as Phaser.GameObjects.Image).setTint(0x888888).setAlpha(0.6);
+        (this.bgSprite as Phaser.GameObjects.Image).setTint(BATTLE_VISUAL_THEME.unit.deadTint).setAlpha(0.6);
       }
 
       this.nameText.setAlpha(0.4);
@@ -157,7 +157,7 @@ export class UnitView extends Phaser.GameObjects.Container {
       :  this.footprintW / 2 - sqSize / 2;  // enemy  → top-right
 
     unit.activeEffects.forEach((ae, i) => {
-      const color = ae.effect.isBuff ? HP_COLOR.high : HP_COLOR.low;
+      const color = ae.effect.isBuff ? UI_THEME.color.hp.high : UI_THEME.color.hp.low;
       const x = baseX;
       const y = topY + i * (sqSize + gap);
 
@@ -178,9 +178,9 @@ export class UnitView extends Phaser.GameObjects.Container {
 
       const lbl = this.scene.add.text(x, y, String(ae.remainingRounds), {
         fontSize: fontSize('xs'),
-        color: VALUE_COLOR.white,
+        color: UI_THEME.color.value.white,
         fontStyle: 'bold',
-        stroke: '#000000',
+        stroke: BATTLE_VISUAL_THEME.unit.textStroke,
         strokeThickness: Math.round(2 * LAYOUT_SCALE),
       }).setOrigin(0.5, 0.5);
       this.add(lbl);

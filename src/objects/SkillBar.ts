@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Unit } from '../battle/types';
-import { BTN } from '../ui/theme';
+import { UI_THEME } from '../ui/theme';
+import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { SkillTooltip } from './SkillTooltip';
 
 export class SkillBar extends Phaser.GameObjects.Container {
@@ -27,9 +28,10 @@ export class SkillBar extends Phaser.GameObjects.Container {
     unit.skills.forEach((skill, i) => {
       const iconY       = startY + i * (iconSize + iconGap);
       const isActive    = i === unit.activeSkillIndex;
-      const baseColor   = isActive ? 0xffcc00 : BTN.dark.base;
-      const hoverColor  = isActive ? 0xffdd44 : BTN.dark.hover;
-      const strokeColor = isActive ? 0xffffff : 0x888888;
+      const s = BATTLE_VISUAL_THEME.skillBar;
+      const baseColor   = isActive ? s.activeBase   : UI_THEME.component.button.dark.base;
+      const hoverColor  = isActive ? s.activeHover  : UI_THEME.component.button.dark.hover;
+      const strokeColor = isActive ? s.activeStroke : s.inactiveStroke;
 
       const bg = this.scene.add.rectangle(0, 0, iconSize, iconSize, baseColor)
         .setStrokeStyle(2, strokeColor);

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { scaled } from '../ui/layout';
 import { UI_THEME } from '../ui/theme';
+import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 
 export interface UnitPortraitConfig {
   scene:      Phaser.Scene;
@@ -25,7 +26,7 @@ export class UnitPortrait extends Phaser.GameObjects.Container {
     const { scene, size, spriteKey, name = '', showLabel, dimmed = false, onClick } = cfg;
     const navyBase  = UI_THEME.component.button.navy.base;
     const navyHover = UI_THEME.component.button.navy.hover;
-    const tint      = dimmed ? 0xaaaaaa : 0xffffff;
+    const tint      = dimmed ? BATTLE_VISUAL_THEME.unitPortrait.dimmedTint : BATTLE_VISUAL_THEME.unitPortrait.normalTint;
 
     if (spriteKey && scene.textures.exists(spriteKey)) {
       const img = scene.add.image(size / 2, size / 2, spriteKey)
@@ -35,7 +36,7 @@ export class UnitPortrait extends Phaser.GameObjects.Container {
       if (onClick) {
         img.setInteractive({ useHandCursor: true });
         if (dimmed) {
-          img.on('pointerover', () => img.setTint(0xffffff));
+          img.on('pointerover', () => img.setTint(BATTLE_VISUAL_THEME.unitPortrait.normalTint));
           img.on('pointerout',  () => img.setTint(tint));
         }
         img.on('pointerup', onClick);

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
-import { fontSize, BATTLE_LOG } from "../ui/theme";
+import { fontSize } from "../ui/theme";
+import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 
 type EntryType = "positive" | "negative" | "neutral";
 
@@ -15,9 +16,9 @@ const LINE_H = Math.round(18 * LAYOUT_SCALE);
 const PAD = Math.round(6 * LAYOUT_SCALE);
 
 function entryColor(type: EntryType): string {
-  if (type === "positive") return BATTLE_LOG.positive;
-  if (type === "negative") return BATTLE_LOG.negative;
-  return BATTLE_LOG.neutral;
+  if (type === "positive") return BATTLE_VISUAL_THEME.log.positive;
+  if (type === "negative") return BATTLE_VISUAL_THEME.log.negative;
+  return BATTLE_VISUAL_THEME.log.neutral;
 }
 
 export class BattleLog extends Phaser.GameObjects.Container {
@@ -60,20 +61,20 @@ export class BattleLog extends Phaser.GameObjects.Container {
 
   private buildCollapsed(): void {
     this.collapsedBg = this.scene.add
-      .rectangle(0, 0, this.panelW, COLLAPSED_H, BATTLE_LOG.bg, 0.92)
+      .rectangle(0, 0, this.panelW, COLLAPSED_H, BATTLE_VISUAL_THEME.log.bg, 0.92)
       .setOrigin(0, 0);
 
     this.collapsedText = this.scene.add
       .text(PAD, COLLAPSED_H / 2, "", {
         fontSize: fontSize("sm"),
-        color: BATTLE_LOG.neutral,
+        color: BATTLE_VISUAL_THEME.log.neutral,
       })
       .setOrigin(0, 0.5);
 
     this.collapsedBtn = this.scene.add
       .text(this.panelW - PAD, COLLAPSED_H / 2, "[▼]", {
         fontSize: fontSize("sm"),
-        color: BATTLE_LOG.btn,
+        color: BATTLE_VISUAL_THEME.log.btn,
       })
       .setOrigin(1, 0.5)
       .setInteractive({ useHandCursor: true })
@@ -88,13 +89,13 @@ export class BattleLog extends Phaser.GameObjects.Container {
     const expandedH = COLLAPSED_H + MAX_VISIBLE * LINE_H + PAD;
 
     this.expandedBg = this.scene.add
-      .rectangle(0, 0, this.panelW, expandedH, BATTLE_LOG.bg, 0.95)
+      .rectangle(0, 0, this.panelW, expandedH, BATTLE_VISUAL_THEME.log.bg, 0.95)
       .setOrigin(0, 0);
 
     this.expandedBtn = this.scene.add
       .text(this.panelW - PAD, PAD, "[▲]", {
         fontSize: fontSize("sm"),
-        color: BATTLE_LOG.btn,
+        color: BATTLE_VISUAL_THEME.log.btn,
       })
       .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
@@ -105,7 +106,7 @@ export class BattleLog extends Phaser.GameObjects.Container {
       const t = this.scene.add
         .text(PAD, COLLAPSED_H + i * LINE_H + PAD / 2, "", {
           fontSize: fontSize("sm"),
-          color: BATTLE_LOG.neutral,
+          color: BATTLE_VISUAL_THEME.log.neutral,
           wordWrap: { width: this.panelW - PAD * 2 },
         })
         .setOrigin(0, 0);
@@ -162,7 +163,7 @@ export class BattleLog extends Phaser.GameObjects.Container {
     if (last) {
       this.collapsedText.setText(last.text).setColor(entryColor(last.type));
     } else {
-      this.collapsedText.setText("").setColor(BATTLE_LOG.neutral);
+      this.collapsedText.setText("").setColor(BATTLE_VISUAL_THEME.log.neutral);
     }
   }
 

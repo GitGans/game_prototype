@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-// Boundary checker — Step 1 foundation rules.
+// Boundary checker.
 // Run: node scripts/check-boundaries.mjs
-// Full battle→core enforcement added in Step 3.
 //
 // Catches both `import ... from 'x'` and `export ... from 'x'` patterns.
 
@@ -49,10 +48,39 @@ const RULES = [
     // core/Constants, core/phases, core/unitSpriteKey, battle/types, battle/combat are allowed
     banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'scenes/'],
   },
+  {
+    layer: 'core/**',
+    dir: join(SRC, 'core'),
+    banned: [
+      'ui/theme',
+      'objects/battleVisualTheme',
+      'objects/worldMapVisualTheme',
+      'objects/itemVisualTheme',
+      'objects/prepVisualTheme',
+    ],
+  },
 ];
 
 // Matches both `import ... from 'x'` and `export ... from 'x'`
 const FROM_RE = /(?:import|export)[^'"]*from\s+['"]([^'"]+)['"]/g;
+
+// ─── Visual theme isolation ────────────────────────────────────────────────
+// Domain visual theme files must not import from ui/theme.
+// Importing UI_THEME would create a layering violation and risk circular deps.
+for (const [file, content] of walkFiles(join(SRC, 'objects'))) {
+  if (!file.endsWith('VisualTheme.ts')) continue;
+  const lines = content.split('\n');
+  lines.forEach((line, i) => {
+    let m;
+    FROM_RE.lastIndex = 0;
+    while ((m = FROM_RE.exec(line)) !== null) {
+      if (m[1].includes('ui/theme')) {
+        const rel = relative(SRC, file);
+        errors.push(`  ${rel}:${i + 1}  [*VisualTheme.ts] must not import ui/theme  →  "${m[1]}"`);
+      }
+    }
+  });
+}
 
 for (const { layer, dir, banned } of RULES) {
   for (const [file, content] of walkFiles(dir)) {
@@ -78,5 +106,5 @@ if (errors.length > 0) {
   errors.forEach(e => console.error(e));
   process.exit(1);
 } else {
-  console.log('✓ All boundaries clean (ui + objects + foundation rules)');
+  console.log('✓ All boundaries clean');
 }

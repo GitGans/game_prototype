@@ -1,23 +1,8 @@
 import Phaser from 'phaser';
-import { fontSize, VALUE_COLOR, ITEM_CELL } from '../ui/theme';
+import { fontSize, UI_THEME } from '../ui/theme';
+import { ITEM_VISUAL_THEME } from './itemVisualTheme';
 import { ItemSlotSnapshot } from '../battle/types';
 import { ItemTooltip, ItemTooltipData } from './ItemTooltip';
-
-const SLOT_COLORS: Record<string, number> = {
-  necklace:    0x3a5a7a,
-  helmet:      0x7a4a4a,
-  artifact:    0x5a3a7a,
-  hand_left:   0x3a6a4a,
-  armor:       0x4a4a6a,
-  hand_right:  0x7a5a3a,
-  ring_1:      0x3a7a7a,
-  belt:        0x6a6a3a,
-  ring_2:      0x3a7a7a,
-  gloves:      0x5a5a4a,
-  boots:       0x4a3a5a,
-  activatable: 0x7a4a3a,
-  default:     0x4a4a4a,
-};
 
 export interface ItemCellConfig {
   scene: Phaser.Scene;
@@ -43,12 +28,12 @@ export class ItemCell extends Phaser.GameObjects.Container {
     this.currentItem = cfg.item;
 
     // Background
-    const bgRect = cfg.scene.add.rectangle(-cfg.size / 2, -cfg.size / 2, cfg.size, cfg.size, ITEM_CELL.bg).setOrigin(0, 0);
+    const bgRect = cfg.scene.add.rectangle(-cfg.size / 2, -cfg.size / 2, cfg.size, cfg.size, ITEM_VISUAL_THEME.cell.bg).setOrigin(0, 0);
     this.add(bgRect);
 
     // Hover border (initially invisible)
     this.borderRect = cfg.scene.add.rectangle(-cfg.size / 2, -cfg.size / 2, cfg.size, cfg.size, 0x000000, 0).setOrigin(0, 0);
-    this.borderRect.setStrokeStyle(1, ITEM_CELL.hoverBorder, 0);
+    this.borderRect.setStrokeStyle(1, ITEM_VISUAL_THEME.cell.hoverBorder, 0);
     this.add(this.borderRect);
 
     this.buildContent(cfg.item);
@@ -61,7 +46,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
     if (cfg.onClick) this.input!.cursor = 'pointer';
 
     this.on('pointerover', () => {
-      this.borderRect.setStrokeStyle(1, ITEM_CELL.hoverBorder, 1);
+      this.borderRect.setStrokeStyle(1, ITEM_VISUAL_THEME.cell.hoverBorder, 1);
       if (this.currentItem) this.showTooltip(this.currentItem);
     });
     this.on('pointerout', () => {
@@ -88,7 +73,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
     if (!item) {
       const label = scene.add.text(0, 0, slotLabel, {
         fontSize: fontSize('xs'),
-        color: ITEM_CELL.emptySlot,
+        color: ITEM_VISUAL_THEME.cell.emptySlot,
       }).setOrigin(0.5);
       this.add(label);
       this.contentObjects.push(label);
@@ -103,11 +88,11 @@ export class ItemCell extends Phaser.GameObjects.Container {
       this.add(img);
       this.contentObjects.push(img);
     } else {
-      const color = SLOT_COLORS[slotKey] ?? SLOT_COLORS['default'];
+      const color = ITEM_VISUAL_THEME.slotTypeColors[slotKey] ?? ITEM_VISUAL_THEME.slotTypeColors['default'];
       const rect = scene.add.rectangle(-size / 2, -size / 2, size, size, color).setOrigin(0, 0);
       const letter = scene.add.text(0, 0, item.definition.name.charAt(0), {
         fontSize: fontSize('md'),
-        color: VALUE_COLOR.white,
+        color: UI_THEME.color.value.white,
         fontStyle: 'bold',
       }).setOrigin(0.5);
       this.add(rect);

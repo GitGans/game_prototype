@@ -21,6 +21,8 @@ export const BATTLE_VISUAL_THEME = {
     labelEnemy:  "#ffaaaa",
     textLight:   "#ffffff",
     textDark:    "#cccccc",
+    deadTint:    0x888888,
+    textStroke:  '#000000',
   },
   bench: {
     bg:       0x1a2a3a,
@@ -34,5 +36,68 @@ export const BATTLE_VISUAL_THEME = {
   skill: {
     magical:  "#89CFF0",
     physical: "#B0C4DE",
+  },
+
+  log: {
+    bg:       0xd8d8d8,
+    positive: "#1a8c1a",
+    negative: "#aa2222",
+    neutral:  "#555555",
+    btn:      "#333333",
+  },
+
+  initiative: {
+    divider: 0x8899bb,
+  },
+
+  endOverlay: {
+    titleVictory: "#ffdd44",
+    titleDefeat:  "#ff4444",
+    titleStroke:  "#000000",
+  },
+
+  resultCard: {
+    bg:       0x1a1a2e,
+    border:   0x44445a,
+    fallback: 0x556677,
+  },
+
+  skillIconRow: {
+    cellBg:       0x2a2a3a,
+    cellFallback: 0x666666,
+    cellBorder:   0x556677,
+    labelColor:   "#cccccc",
+  },
+
+  skillBar: {
+    activeBase:     0xffcc00,
+    activeHover:    0xffdd44,
+    activeStroke:   0xffffff,
+    inactiveStroke: 0x888888,
+  },
+
+  floatingText: {
+    damage: "#ff4444",
+    heal:   "#44dd44",
+    stroke: "#000000",
+  },
+
+  skillCellTooltip: {
+    physical: "#ff6666",
+    magical:  "#6699ff",
+  },
+
+  upgradeCard: {
+    bg:              0x1a1a2e,
+    borderChosen:    0xffdd44,
+    borderAvailable: 0x44aa44,
+    borderLocked:    0x445566,
+    placeholder:     0x4a4a6a,
+    hoverBg:         0x6a6a8a,
+  },
+
+  unitPortrait: {
+    dimmedTint: 0xaaaaaa,
+    normalTint: 0xffffff,
   },
 } as const;

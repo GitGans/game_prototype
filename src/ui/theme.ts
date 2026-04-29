@@ -1,6 +1,6 @@
 import { LAYOUT_SCALE } from "../core/Constants";
 
-// ─── Font sizes (raw px before scale) ───────────────────────────────────────
+// ─── Font sizes ───────────────────────────────────────────────────────────────
 export const FONT_SIZE = {
   xs:  10,
   sm:  11,
@@ -17,42 +17,35 @@ export function fontSize(key: keyof typeof FONT_SIZE): string {
   return `${Math.round(FONT_SIZE[key] * LAYOUT_SCALE)}px`;
 }
 
-// ─── Button colors ───────────────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.button in new code. Remove in Stage 7. */
-export const BTN = {
-  primary: { base: 0x2a6a2a, hover: 0x3a8a3a },  // green — main actions
-  danger:  { base: 0x6a2a2a, hover: 0x8a3a3a },  // red — destructive / defeat
-  neutral: { base: 0x4a4a6a, hover: 0x6a6a8a },  // purple-gray — secondary
-  ghost:   { base: 0x334466, hover: 0x4455aa },  // subtle — list rows
-  navy:    { base: 0x2a2a6a, hover: 0x3a3a8a },  // dark blue — navigation
-  dark:    { base: 0x444444, hover: 0x666666 },  // dark gray — debug/disabled
+// ─── Private design tokens ────────────────────────────────────────────────────
+
+const BUTTON = {
+  primary: { base: 0x2a6a2a, hover: 0x3a8a3a },
+  danger:  { base: 0x6a2a2a, hover: 0x8a3a3a },
+  neutral: { base: 0x4a4a6a, hover: 0x6a6a8a },
+  ghost:   { base: 0x334466, hover: 0x4455aa },
+  navy:    { base: 0x2a2a6a, hover: 0x3a3a8a },
+  dark:    { base: 0x444444, hover: 0x666666 },
 } as const;
 
-export type BtnStyle = keyof typeof BTN;
+export type BtnStyle = keyof typeof BUTTON;
 
-// ─── Alpha states ────────────────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.alpha in new code. Remove in Stage 7. */
-export const ALPHA = {
+const ALPHA = {
   active:   1.0,
   hover:    0.85,
-  idle:     0.4,   // "waiting" buttons (skill, charge) before a turn starts
+  idle:     0.4,
   disabled: 0.3,
 } as const;
 
-// ─── Tooltip ─────────────────────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.tooltip in new code. Remove in Stage 7. */
-export const TOOLTIP = {
+const TOOLTIP = {
   bg:      0x0d1520,
   bgAlpha: 0.92,
   divider: 0x445566,
   pad:     Math.round(8  * LAYOUT_SCALE),
   lineH:   Math.round(17 * LAYOUT_SCALE),
-  depth:   100,
 } as const;
 
-// ─── Semantic value colors ───────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.color.value in new code. Remove in Stage 7. */
-export const VALUE_COLOR = {
+const VALUE = {
   positive:  "#44ff88",
   negative:  "#ff4444",
   neutral:   "#cccccc",
@@ -62,129 +55,74 @@ export const VALUE_COLOR = {
   inactive:  "#888888",
 } as const;
 
-// ─── HP bar fill colors ───────────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.color.hp in new code. Remove in Stage 7. */
-export const HP_COLOR = {
-  high:   0x44cc44,  // > 50%
-  medium: 0xddaa00,  // 25–50%
-  low:    0xdd2222,  // < 25%
+const HP = {
+  high:   0x44cc44,
+  medium: 0xddaa00,
+  low:    0xdd2222,
   bg:     0x333333,
 } as const;
 
-// ─── BattleLog colors (lighter palette, intentionally distinct) ───────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.battleLog in new code. Remove in Stage 7. */
-export const BATTLE_LOG = {
-  bg:       0xd8d8d8,
-  positive: "#1a8c1a",
-  negative: "#aa2222",
-  neutral:  "#555555",
-  btn:      "#333333",
-} as const;
-
-// ─── ItemCell slot background ────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.itemCell in new code. Remove in Stage 7. */
-export const ITEM_CELL = {
-  bg:          0x2a2a3a,
-  hoverBorder: 0xffffff,
-  emptySlot:   "#555566",
-} as const;
-
-// ─── Scene backgrounds ───────────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.color.background in new code. Remove in Stage 7. */
-export const SCENE_BG = {
+const BACKGROUND = {
   default: 0x1a1a2e,
   victory: 0x1a2e1a,
   panel:   0x222244,
 } as const;
 
-// ─── WorldMap cell type colors ───────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.worldMapCell in new code. Remove in Stage 7. */
-export const WORLD_MAP_CELL = {
-  empty:    0x555555,
-  forest:   0x4a7c3f,
-  enemy:    0xcc3333,
-  camp:     0xcc9933,
-  town:     0x3355cc,
-  dungeon:  0x9933cc,
-  start:    0xffffff,
-  fog:      0x888888,
-  party:    0x4488ff,
-} as const;
-
-// ─── Initiative bar ──────────────────────────────────────────────────────────
-/** @deprecated Migration bridge. Use UI_THEME.component.initiative in new code. Remove in Stage 7. */
-export const INITIATIVE = {
-  divider: 0x8899bb,
-} as const;
-
-// ─── Panel ───────────────────────────────────────────────────────────────────
 const PANEL = {
-  bg: 0x222244,   // matches SCENE_BG.panel — dark navy surface
+  bg: 0x222244,
 } as const;
 
-// ─── Battle result card ───────────────────────────────────────────────────────
-const RESULT_CARD = {
-  bg:       0x1a1a2e,  // dark navy card background
-  border:   0x44445a,  // subtle blue-gray border
-  fallback: 0x556677,  // placeholder when sprite is missing
+const CONTEXT_MENU = {
+  bg:     0x1a1a2e,
+  border: 0x445566,
 } as const;
 
-// ─── Z-order depth layers ────────────────────────────────────────────────────
-// New and migrated code must use these values. Legacy hardcoded depths are
-// migration debt tracked for removal in Stage 8.
+const NUMBER_INPUT = {
+  bg:          0x222233,
+  border:      0x6a6a8a,
+  borderError: 0x8a3a3a,
+  borderValid: 0x3a8a3a,
+} as const;
+
 const DEPTH = {
-  scene:   0,             // scene background elements
-  panel:   10,            // in-scene panels and cards
-  overlay: 30,            // fullscreen dim overlays (battle end, confirm)
-  modal:   40,            // floating modals above overlays
-  menu:    80,            // context menus, dropdowns
-  tooltip: TOOLTIP.depth, // 100 — single source; TOOLTIP.depth is a legacy bridge until Stage 7
+  scene:       0,
+  panel:       10,
+  overlay:     30,
+  modal:       40,
+  menu:        80,
+  tooltip:     100,
+  contextMenu: 200,
 } as const;
 
-// ─── Overlay dim ─────────────────────────────────────────────────────────────
 const OVERLAY = {
   dim:      0x000000,
   dimAlpha: 0.72,
 } as const;
 
-// ─── Text style ──────────────────────────────────────────────────────────────
 const TEXT_STYLE = {
   titleStroke: '#000000',
 } as const;
 
-// ─── Battle end overlay ───────────────────────────────────────────────────────
-// References VALUE_COLOR — no value duplication.
-const BATTLE_END_OVERLAY = {
-  titleVictory: VALUE_COLOR.highlight, // '#ffdd44' gold
-  titleDefeat:  VALUE_COLOR.negative,  // '#ff4444' red
-  titleStroke:  TEXT_STYLE.titleStroke,
-} as const;
+// ─── Public API ───────────────────────────────────────────────────────────────
 
-// ─── Structured entry point for new code ────────────────────────────────────
-// References existing objects — no value duplication.
-// Old flat exports above are @deprecated bridges; removed in Stage 7.
 export const UI_THEME = {
   font: {
     size: FONT_SIZE,
   },
   alpha: ALPHA,
   color: {
-    value:      VALUE_COLOR,
-    hp:         HP_COLOR,
-    background: SCENE_BG,
+    value:      VALUE,
+    hp:         HP,
+    background: BACKGROUND,
     text:       TEXT_STYLE,
   },
   component: {
-    button:           BTN,
-    tooltip:          TOOLTIP,
-    itemCell:         ITEM_CELL,
-    battleLog:        BATTLE_LOG,
-    worldMapCell:     WORLD_MAP_CELL,
-    initiative:       INITIATIVE,
-    panel:            PANEL,
-    resultCard:       RESULT_CARD,
-    overlay:          OVERLAY,
-    battleEndOverlay: BATTLE_END_OVERLAY,
+    button:      BUTTON,
+    tooltip:     TOOLTIP,
+    panel:       PANEL,
+    overlay:     OVERLAY,
+    contextMenu: CONTEXT_MENU,
+    numberInput: NUMBER_INPUT,
   },
   depth: DEPTH,
 } as const;
