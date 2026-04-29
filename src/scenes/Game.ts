@@ -60,6 +60,8 @@ import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffect
 import { resolvePattern } from "../battle/skillPatterns";
 import { getSkillPattern, getEffectPattern, getInstantEffectPattern, getDamageModifierPercent } from "../data/skillDefinitions";
 import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/initiative";
+import { executeSkillUse } from '../battle/skillExecution';
+import type { BattleEvent } from '../battle/battleEvents';
 
 export class Game extends Phaser.Scene {
   private cellViews: Map<string, CellView> = new Map();
@@ -738,147 +740,117 @@ export class Game extends Phaser.Scene {
 
   private handleTargetSelect(coord: CellCoord, state: BattleState): void {
     const isValid = state.validTargets.some(
-      (c) =>
-        c.side === coord.side && c.row === coord.row && c.col === coord.col,
+      (c) => c.side === coord.side && c.row === coord.row && c.col === coord.col,
     );
     if (!isValid) return;
 
-    const activeUnit = state.units.get(state.roundQueue[0]);
-    const targetUnit = state.occupancy.cellToUnit.get(cellKey(coord));
-
-    if (activeUnit && isEnchantmentSkill(getActiveSkill(activeUnit))) {
-      const healerView = this.unitViews.get(state.roundQueue[0]);
-      healerView?.setSpriteState("attack");
-      this.time.delayedCall(400, () => {
-        const current = GameState.get().units.get(state.roundQueue[0]);
-        if (current && current.hp > 0) healerView?.setSpriteState("idle");
-      });
-      if (targetUnit) {
-        const view = this.unitViews.get(targetUnit.id);
-        if (view)
-          this.showFloatingHeal(view.x, view.y, activeUnit?.magicalDamage ?? 0);
-        this.battleLog.addEntry(
-          `${activeUnit?.name ?? "?"} heals ${targetUnit.name} +${activeUnit?.magicalDamage ?? 0}`,
-          "positive",
-        );
-      }
-      let next = resolveHeal(
-        activeUnit
-          ? getSkillHitCells(activeUnit, coord)
-          : [{ coord, multiplier: 1.0 }],
-        activeUnit?.magicalDamage ?? 0,
-        state,
-      );
-      const enchantSkill = getActiveSkill(activeUnit);
-      if (enchantSkill?.effectBlock) {
-        const [eff, perTurn] = resolveEffectArgs(enchantSkill, activeUnit);
-        const { state: effState, events: effEvents } = applyEffectBlock(enchantSkill.effectBlock, getEffectPattern(enchantSkill.effectBlock), coord, next, eff, perTurn);
-        next = effState;
-        for (const e of effEvents) this.logEffectEvent(e);
-      }
-      next = this.advanceQueue(next);
-      GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
-        this.startActiveUnitTurn(next),
-      );
-      return;
-    }
-
-    // Flash attack state briefly
     const attackerId = state.roundQueue[0];
+    const activeUnit = state.units.get(attackerId);
+
+    // Sprite animation — stays in scene (Phaser, not logic)
     const attackerView = this.unitViews.get(attackerId);
-    attackerView?.setSpriteState("attack");
+    attackerView?.setSpriteState('attack');
     this.time.delayedCall(400, () => {
       const current = GameState.get().units.get(attackerId);
-      if (current && current.hp > 0) attackerView?.setSpriteState("idle");
+      if (current && current.hp > 0) attackerView?.setSpriteState('idle');
     });
 
-    const attackSkill = activeUnit ? getActiveSkill(activeUnit) : undefined;
-    const damageType = attackSkill?.damageBlock?.damageType ?? "physical";
-    const attackResult2 = resolveAttack(
-      activeUnit
-        ? getSkillHitCells(activeUnit, coord)
-        : [{ coord, multiplier: 1.0 }],
-      damageType === "physical"
-        ? (activeUnit ? effectiveStats(activeUnit).physicalDamage : 0)
-        : (activeUnit ? effectiveStats(activeUnit).magicalDamage : 0),
-      damageType,
+    const result = executeSkillUse({
       state,
-      attackSkill?.damageModifierBlocks,
-    );
-    let { state: next, events } = attackResult2;
-    if (activeUnit && attackSkill?.postDamageBlock && attackResult2.totalRealDamage > 0) {
-      const { state: afterVamp, events: vampEvents } = applyVampirism(attackSkill.postDamageBlock, activeUnit, attackResult2.totalRealDamage, next);
-      next = afterVamp;
-      events = [...events, ...vampEvents];
-    }
+      casterId: attackerId,
+      target: coord,
+      queueContext: { chargedThisRound: this.chargedThisRound },
+    });
 
-    for (const event of events) {
-      if (event.type === "vampirism_heal") {
-        const view = this.unitViews.get(event.unitId);
-        if (view) this.showFloatingHeal(view.x, view.y, event.amount);
-        this.battleLog.addEntry(`${event.unitName} restored ${event.amount} HP (vampirism)`, "positive");
-        continue;
-      }
-      if (event.type === "dodged") {
-        this.battleLog.addEntry(`${event.unitName} dodged the attack!`, "neutral");
-      } else {
-        const view = this.unitViews.get(event.unitId);
-        if (view) this.showFloatingDamage(view.x, view.y, event.damage);
-        if (event.type === "blocked") {
-          this.battleLog.addEntry(
-            `${activeUnit?.name ?? "?"} attacks ${event.unitName} — blocked! -${event.damage}`,
-            "neutral",
-          );
-        } else {
-          this.battleLog.addEntry(
-            `${activeUnit?.name ?? "?"} attacks ${event.unitName} -${event.damage}`,
-            "positive",
-          );
-        }
-      }
-    }
-
-    if (activeUnit && attackSkill?.effectBlock) {
-      const [eff, perTurn] = resolveEffectArgs(attackSkill, activeUnit);
-      const { state: effState, events: effEvents } = applyEffectBlock(attackSkill.effectBlock, getEffectPattern(attackSkill.effectBlock), coord, next, eff, perTurn);
-      next = effState;
-      for (const e of effEvents) this.logEffectEvent(e);
-      if ((eff?.initiativeBonus ?? 0) !== 0) {
-        next = {
-          ...next,
-          roundQueue: rebuildRemainingQueue(
-            next.roundQueue[0],
-            next.roundQueue.slice(1),
-            this.chargedThisRound,
-            next.units
-          )
-        };
-      }
-    }
-
-    if (activeUnit && attackSkill?.instantEffectBlock) {
-      next = this.applyInstantEffects(next, activeUnit.id, coord, attackSkill);
-    }
+    this.presentBattleEvents(result.events, activeUnit);
+    let next = result.state;
 
     const winner = checkGameOver(next);
     if (winner) {
-      next = { ...next, phase: "end" };
+      next = { ...next, phase: 'end' };
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(Game.DELAY_GAMEOVER, () =>
-        this.showGameOver(winner),
-      );
+      this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
       return;
     }
 
     next = this.advanceQueue(next);
     GameState.set(next);
     EventBus.emit(Events.STATE_CHANGED);
-    this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
-      this.startActiveUnitTurn(next),
-    );
+    this.time.delayedCall(Game.DELAY_NEXT_TURN, () => this.startActiveUnitTurn(next));
+  }
+
+  private presentBattleEvents(events: BattleEvent[], activeUnit: Unit | undefined): void {
+    const style = activeUnit?.anchor.side === 'player' ? 'positive' : 'negative';
+
+    for (const e of events) {
+      switch (e.type) {
+        case 'skill_heal': {
+          const view = this.unitViews.get(e.targetId);
+          if (view) this.showFloatingHeal(view.x, view.y, e.amount);
+          this.battleLog.addEntry(`${e.casterName} heals ${e.targetName} +${e.amount}`, style);
+          break;
+        }
+        case 'skill_damage': {
+          const view = this.unitViews.get(e.targetId);
+          if (view) this.showFloatingDamage(view.x, view.y, e.amount);
+          this.battleLog.addEntry(
+            e.blocked
+              ? `${e.casterName} attacks ${e.targetName} — blocked! -${e.amount}`
+              : `${e.casterName} attacks ${e.targetName} -${e.amount}`,
+            e.blocked ? 'neutral' : style,
+          );
+          break;
+        }
+        case 'skill_dodged':
+          this.battleLog.addEntry(`${e.targetName} dodged the attack!`, 'neutral');
+          break;
+        case 'vampirism_heal': {
+          const view = this.unitViews.get(e.unitId);
+          if (view) this.showFloatingHeal(view.x, view.y, e.amount);
+          this.battleLog.addEntry(`${e.unitName} restored ${e.amount} HP (vampirism)`, 'positive');
+          break;
+        }
+        case 'effect_applied':
+          this.battleLog.addEntry(`${e.unitName} is affected by ${e.effectDisplayName}`, 'neutral');
+          break;
+        case 'instant_effect_applied':
+          this.battleLog.addEntry(`${e.unitName} is affected by ${e.displayName}!`, 'neutral');
+          break;
+        case 'instant_effect_failed':
+          this.battleLog.addEntry(`${e.displayName} failed on ${e.unitName}`, 'neutral');
+          break;
+        case 'unit_distracted':
+          this.battleLog.addEntry(`${e.unitName} is distracted and skips its turn!`, 'neutral');
+          break;
+        case 'counter_attack_start':
+          this.battleLog.addEntry(`${e.attackerName} is provoked — counter-attacks ${e.targetName}!`, 'neutral');
+          break;
+        case 'counter_attack_hit': {
+          const view = this.unitViews.get(e.targetId);
+          if (view) this.showFloatingDamage(view.x, view.y, e.amount);
+          this.battleLog.addEntry(
+            e.blocked
+              ? `${e.attackerName} counter-attacks ${e.targetName} — blocked! -${e.amount}`
+              : `${e.attackerName} counter-attacks ${e.targetName} -${e.amount}`,
+            'neutral',
+          );
+          break;
+        }
+        case 'counter_attack_dodged':
+          this.battleLog.addEntry(`${e.targetName} dodged the counter-attack!`, 'neutral');
+          break;
+        case 'counter_attack_unavailable': {
+          const msg = e.reason === 'out_of_range'
+            ? `${e.unitName} was provoked but can't reach ${e.targetName} — skips turn`
+            : e.reason === 'caster_dead'
+              ? `${e.unitName} was provoked but the provoker is gone — skips turn`
+              : `${e.unitName} was provoked but has no basic attack — skips turn`;
+          this.battleLog.addEntry(msg, 'neutral');
+          break;
+        }
+      }
+    }
   }
 
   private autoTurn(): void {
@@ -1171,7 +1143,6 @@ export class Game extends Phaser.Scene {
       block, pattern, targetCoord, state, state.roundQueue,
     );
 
-    // Log instant effect results
     for (const e of events) {
       if (e.type === 'instant_effect_applied') {
         this.battleLog.addEntry(`${e.unitName} is affected by ${e.displayName}!`, 'neutral');
@@ -1182,7 +1153,6 @@ export class Game extends Phaser.Scene {
 
     let next = state;
 
-    // ── Distracted units — remove from queue ─────────────────────────────
     for (const unitId of distractedUnitIds) {
       const unit = next.units.get(unitId);
       if (!unit) continue;
@@ -1190,15 +1160,12 @@ export class Game extends Phaser.Scene {
       this.battleLog.addEntry(`${unit.name} is distracted and skips its turn!`, 'neutral');
     }
 
-    // ── Provoked units — remove from queue, then counter-attack ──────────
     for (const unitId of provokedUnitIds) {
       const provokedUnit = next.units.get(unitId);
       if (!provokedUnit) continue;
 
-      // Remove provoked unit's turn from the queue first
       next = { ...next, roundQueue: next.roundQueue.filter(id => id !== unitId) };
 
-      // Check if caster is still alive
       const caster = next.units.get(casterId);
       if (!caster || caster.hp <= 0) {
         this.battleLog.addEntry(
@@ -1208,7 +1175,6 @@ export class Game extends Phaser.Scene {
         continue;
       }
 
-      // Find provoked unit's basic attack (first melee or ranged skill)
       const basicSkill = provokedUnit.skills.find(
         s => s.actionType === 'melee' || s.actionType === 'ranged',
       );
@@ -1220,13 +1186,11 @@ export class Game extends Phaser.Scene {
         continue;
       }
 
-      // Determine valid targets for the basic skill from the provoked unit's position
       const validTargets =
         basicSkill.actionType === 'melee'
           ? getMeleeTargets(provokedUnit, next.occupancy)
           : getRangedTargets(provokedUnit.anchor.side, next.occupancy);
 
-      // Check if caster's anchor is among valid targets
       const casterIsReachable = validTargets.some(
         c => c.side === caster.anchor.side && c.row === caster.anchor.row && c.col === caster.anchor.col,
       );
@@ -1244,7 +1208,6 @@ export class Game extends Phaser.Scene {
         'neutral',
       );
 
-      // Execute counter-attack: resolve basic skill pattern centered on caster's anchor
       const counterPattern = getSkillPattern(basicSkill);
       const hitCells = resolvePattern(caster.anchor, counterPattern);
       const dmgType = basicSkill.damageBlock.damageType;

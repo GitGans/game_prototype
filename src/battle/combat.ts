@@ -172,15 +172,18 @@ export function applyVampirism(
   return { state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) }, events };
 }
 
+export type HealEvent = { unitId: string; unitName: string; amount: number };
+
 /**
- * Heals all units in hitCells.
- * Large units deduplicated — they receive the single highest heal value.
+ * Heals all units in hitCells and returns per-unit heal events.
+ * amount in each event = actually applied HP gain (capped to missing HP).
+ * Units where applied == 0 are omitted from the events array.
  */
-export function resolveHeal(
+export function resolveHealWithEvents(
   hitCells: ResolvedHitCell[],
   baseHeal: number,
   state: BattleState,
-): BattleState {
+): { state: BattleState; heals: HealEvent[] } {
   const hitUnits = new Map<string, { unit: Unit; heal: number }>();
 
   for (const { coord, multiplier } of hitCells) {
@@ -194,11 +197,28 @@ export function resolveHeal(
   }
 
   const newUnits = new Map(state.units);
+  const heals: HealEvent[] = [];
   for (const { unit, heal } of hitUnits.values()) {
-    newUnits.set(unit.id, { ...unit, hp: Math.min(unit.maxHp, unit.hp + heal) });
+    const applied = Math.min(heal, unit.maxHp - unit.hp);
+    newUnits.set(unit.id, { ...unit, hp: unit.hp + applied });
+    if (applied > 0) {
+      heals.push({ unitId: unit.id, unitName: unit.name, amount: applied });
+    }
   }
 
-  return { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) };
+  return {
+    state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) },
+    heals,
+  };
+}
+
+/** Thin wrapper — signature unchanged; autoTurn and computeOneTurn call this. */
+export function resolveHeal(
+  hitCells: ResolvedHitCell[],
+  baseHeal: number,
+  state: BattleState,
+): BattleState {
+  return resolveHealWithEvents(hitCells, baseHeal, state).state;
 }
 
 /**

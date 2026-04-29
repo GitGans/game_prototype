@@ -30,13 +30,17 @@ export function getActiveSkill(unit: Unit): Skill {
 }
 
 /**
- * Resolves the hit cells for a unit's active skill at the given anchor.
- * Falls back to single-cell pattern if the skill has no damageBlock.
+ * Resolves hit cells directly from a skill — does not read unit.activeSkillIndex.
+ * Use this when the skill is already resolved by the caller (e.g. inside executeSkillUse).
  */
-export function getSkillHitCells(unit: Unit, anchor: CellCoord): ResolvedHitCell[] {
-  const skill = getActiveSkill(unit);
-  const pattern = skill?.damageBlock ? getSkillPattern(skill) : DAMAGE_MATRICES.single.levels[0];
+export function getSkillHitCellsForSkill(skill: Skill, anchor: CellCoord): ResolvedHitCell[] {
+  const pattern = skill.damageBlock ? getSkillPattern(skill) : DAMAGE_MATRICES.single.levels[0];
   return resolvePattern(anchor, pattern);
+}
+
+/** Convenience wrapper — resolves the active skill from the unit, then delegates. */
+export function getSkillHitCells(unit: Unit, anchor: CellCoord): ResolvedHitCell[] {
+  return getSkillHitCellsForSkill(getActiveSkill(unit), anchor);
 }
 
 /**
