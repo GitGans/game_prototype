@@ -67,7 +67,7 @@ export function pruneQueue(queue: string[], units: Map<string, Unit>): string[] 
 export function rebuildRemainingQueue(
   currentId: string,
   remaining: string[],
-  chargedThisRound: Set<string>,
+  chargedThisRound: ReadonlySet<string>,
   units: Map<string, Unit>
 ): string[] {
   const effectiveInit = (id: string): number => {
