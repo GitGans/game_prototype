@@ -20,4 +20,6 @@ export const ITEM_VISUAL_THEME = {
     activatable: 0x7a4a3a,
     default:     0x4a4a4a,
   } as Record<string, number>,
+
+  equipmentPlaceholder: 0x4a4a6a,
 } as const;

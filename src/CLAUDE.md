@@ -93,5 +93,9 @@ scene reads GamePhase and renders
 * change persistent progression                       → core/GameState.ts
 * change a visual component tied to game data         → objects/
 * change a reusable UI primitive                      → ui/
-* change global styles or constants                   → ui/theme.ts, core/Constants.ts
+* change global styles or constants                   → ui/theme.ts (UI_THEME), core/Constants.ts
+* change battle/unit visual tokens                    → objects/battleVisualTheme.ts
+* change world-map visual tokens                      → objects/worldMapVisualTheme.ts
+* change item/equipment visual tokens                 → objects/itemVisualTheme.ts
+* change prep-screen visual tokens                    → objects/prepVisualTheme.ts
 * change layout scale helper                          → ui/layout.ts

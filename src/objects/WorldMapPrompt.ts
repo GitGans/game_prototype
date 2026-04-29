@@ -15,7 +15,7 @@ export class WorldMapPrompt {
       .text(x, y, '', {
         fontSize: '20px',
         color: UI_THEME.color.value.highlight,
-        stroke: '#000',
+        stroke: UI_THEME.color.text.titleStroke,
         strokeThickness: 3,
       })
       .setOrigin(0.5)

@@ -14,7 +14,10 @@ Game-specific visual components that know game data and render it using primitiv
 
 ## Key Files
 
-- `battleVisualTheme.ts` — game-specific visual tokens for battle-flow screens (cell, unit, bench, skill colors); the single source of truth replacing the removed `COLORS` from `core/Constants`
+- `battleVisualTheme.ts` — battle-flow visual tokens: cells, units, bench, skills, log, upgrade cards, unit portraits
+- `worldMapVisualTheme.ts` — world-map cell visual tokens
+- `itemVisualTheme.ts` — item cell and equipment slot visual tokens
+- `prepVisualTheme.ts` — prep-screen action tile visual tokens
 - `UnitView.ts` — unit card in battle (sprite, HP bar, effect squares); key methods: `setSpriteState()`, `update()`
 - `CellView.ts` — grid cell with hover, highlight, and skill/effect preview; key methods: `setMode()`, `setHighlight()`, `setSkillPreview()`
 - `InitiativeBar.ts` — turn-order strip; dynamically sizes cards to viewport; key method: `update()`
@@ -61,6 +64,9 @@ Scene receives user interaction via callback — no state mutation here
 
 ## Invariants
 
+- `objects/*VisualTheme.ts` files must not import `UI_THEME` or any other `ui/` module
+- objects/ components may use `UI_THEME` for generic primitives and text semantics
+- objects/ components should use domain visual themes for game-specific presentation
 - Components do not call `PhaseManager` or mutate game state — they only fire callbacks
 - Overlay components (e.g. `BattleEndOverlay`) receive `outcome` and `isDebugBattle` as plain typed values — they never read `PhaseManager` or `GameState` internally; the scene resolves these and passes the results as constructor arguments
 - All tooltips extend `BaseTooltip` from `src/ui/`

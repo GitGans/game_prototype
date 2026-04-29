@@ -5,7 +5,7 @@ import { EventBus, Events } from '../core/EventBus';
 import { GamePhase } from '../core/phases';
 import { ItemSlotSnapshot } from '../battle/types';
 import { ContextMenu } from '../ui/ContextMenu';
-import { SCENE_BG } from '../ui/theme';
+import { UI_THEME } from '../ui/theme';
 import { ItemTooltip } from '../objects/ItemTooltip';
 import { EnemyGroupSelector } from '../objects/EnemyGroupSelector';
 import { UnitTabRow } from '../objects/UnitTabRow';
@@ -38,7 +38,7 @@ export class EquipScreen extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    this.add.rectangle(w / 2, h / 2, w, h, SCENE_BG.default);
+    this.add.rectangle(w / 2, h / 2, w, h, UI_THEME.color.background.default);
     this.itemTooltip = new ItemTooltip(this);
 
     if (!phase.selectedUnitTemplateId) {

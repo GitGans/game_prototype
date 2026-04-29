@@ -14,7 +14,7 @@ Game-agnostic UI primitive library. Provides reusable visual components and desi
 
 ## Key Files
 
-- `theme.ts` — All design tokens: `BTN`, `FONT_SIZE`, `ALPHA`, `VALUE_COLOR`, `HP_COLOR`, `TOOLTIP`, and scene/map palettes. Game-specific visual tokens (battle cells, units, bench, skill types) live in `src/objects/battleVisualTheme.ts`.
+- `theme.ts` — Generic UI/app design tokens exposed only through `UI_THEME`: fonts (`FONT_SIZE`, `fontSize()`), alpha states, depth layers, semantic text colors, screen backgrounds, and generic component tokens for button / tooltip / panel / overlay / contextMenu / numberInput. Game-domain visual tokens live in `src/objects/*VisualTheme.ts`.
 - `Button.ts` — Styled button with hover/idle/disabled states; exports `Button` and `ButtonConfig`
 - `BaseTooltip.ts` — Abstract generic base for all tooltips; subclasses implement `buildContent(data)`
 - `HpBar.ts` — Health bar with optional tri-color (green/yellow/red) mode
@@ -47,7 +47,8 @@ caller manages state changes and re-renders
 - No imports from `src/core/GameState`, `src/battle/`, `src/objects/`, or `src/scenes/`
 - No calls to `PhaseManager` or any transition logic
 - All colors and font sizes must come from `theme.ts` — no hardcoded values in components
-- New and migrated UI code must use `UI_THEME.depth` for z-order values. Legacy hardcoded depths elsewhere are migration debt tracked for removal in Stage 8.
+- New and migrated UI code must use `UI_THEME.depth` for z-order values
+- `*VisualTheme.ts` files in `src/objects/` must not import from `ui/theme`
 - Components are stateless regarding game data — they receive data via config and emit events via callbacks
 - `BaseTooltip` subclasses must only override `buildContent()` and use `addText`/`addRect` helpers
 - Texts are always plain strings — no label keys or translation IDs in primitives
@@ -55,10 +56,13 @@ caller manages state changes and re-renders
 
 ## Where to Modify
 
-- change button colors or styles → `theme.ts` (`BTN`, `BtnStyle`)
-- change font sizes → `theme.ts` (`FONT_SIZE`, `fontSize()`)
-- change health bar colors → `theme.ts` (`HP_COLOR`)
-- change tooltip background/padding/depth → `theme.ts` (`TOOLTIP`)
+- change button colors or styles        → `theme.ts` (`UI_THEME.component.button`, `BtnStyle`)
+- change font sizes                     → `theme.ts` (`FONT_SIZE`, `fontSize()`)
+- change health bar colors              → `theme.ts` (`UI_THEME.color.hp`)
+- change tooltip background/padding    → `theme.ts` (`UI_THEME.component.tooltip`)
+- change alpha states                   → `theme.ts` (`UI_THEME.alpha`)
+- change scene background colors       → `theme.ts` (`UI_THEME.color.background`)
+- change semantic value text colors    → `theme.ts` (`UI_THEME.color.value`)
 - change button behavior (hover, disabled, idle) → `Button.ts`
 - add a new tooltip type → extend `BaseTooltip` in `src/objects/`
 - change health bar color thresholds → `HpBar.ts` (`setRatio`)

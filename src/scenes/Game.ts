@@ -19,7 +19,7 @@ import { InitiativeBar } from "../objects/InitiativeBar";
 import { BattleLog } from "../objects/BattleLog";
 import { UnitTooltip } from "../objects/UnitTooltip";
 import { EffectTooltip } from "../objects/EffectTooltip";
-import { TOOLTIP } from "../ui/theme";
+import { UI_THEME } from "../ui/theme";
 import {
   BattleState,
   CellCoord,
@@ -224,7 +224,7 @@ export class Game extends Phaser.Scene {
     this.unitViews.clear();
 
     this.buildGrid();
-    this.unitTooltip = new UnitTooltip(this, TOOLTIP.bg, TOOLTIP.bgAlpha);
+    this.unitTooltip = new UnitTooltip(this, UI_THEME.component.tooltip.bg, UI_THEME.component.tooltip.bgAlpha);
     this.effectTooltip = new EffectTooltip(this);
     this.skillBar = new SkillBar(this, new SkillTooltip(this));
     this.buildUnitViews();

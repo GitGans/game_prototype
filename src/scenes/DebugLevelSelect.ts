@@ -3,7 +3,7 @@ import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
 import { Button } from '../ui/Button';
 import { NumberInput } from '../ui/NumberInput';
-import { fontSize, VALUE_COLOR, SCENE_BG } from '../ui/theme';
+import { UI_THEME, fontSize } from '../ui/theme';
 
 export class DebugLevelSelect extends Phaser.Scene {
   constructor() {
@@ -16,17 +16,17 @@ export class DebugLevelSelect extends Phaser.Scene {
     const cx = w / 2;
     const cy = h / 2;
 
-    this.add.rectangle(cx, cy, w, h, SCENE_BG.default);
+    this.add.rectangle(cx, cy, w, h, UI_THEME.color.background.default);
 
     this.add.text(cx, Math.round(80 * LAYOUT_SCALE), 'Debug Battle', {
       fontSize: fontSize('xl'),
-      color: VALUE_COLOR.highlight,
+      color: UI_THEME.color.value.highlight,
       fontStyle: 'bold',
     }).setOrigin(0.5);
 
     this.add.text(cx, cy - Math.round(70 * LAYOUT_SCALE), 'Player unit level (1 – 30)', {
       fontSize: fontSize('md'),
-      color: VALUE_COLOR.neutral,
+      color: UI_THEME.color.value.neutral,
     }).setOrigin(0.5);
 
     let selectedLevel: number | null = 1;

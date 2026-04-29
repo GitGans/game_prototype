@@ -21,6 +21,8 @@ export const BATTLE_VISUAL_THEME = {
     labelEnemy:  "#ffaaaa",
     textLight:   "#ffffff",
     textDark:    "#cccccc",
+    deadTint:    0x888888,
+    textStroke:  '#000000',
   },
   bench: {
     bg:       0x1a2a3a,
@@ -83,5 +85,19 @@ export const BATTLE_VISUAL_THEME = {
   skillCellTooltip: {
     physical: "#ff6666",
     magical:  "#6699ff",
+  },
+
+  upgradeCard: {
+    bg:              0x1a1a2e,
+    borderChosen:    0xffdd44,
+    borderAvailable: 0x44aa44,
+    borderLocked:    0x445566,
+    placeholder:     0x4a4a6a,
+    hoverBg:         0x6a6a8a,
+  },
+
+  unitPortrait: {
+    dimmedTint: 0xaaaaaa,
+    normalTint: 0xffffff,
   },
 } as const;

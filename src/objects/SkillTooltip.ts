@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
-import { TOOLTIP, fontSize, VALUE_COLOR } from "../ui/theme";
+import { UI_THEME, fontSize } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
 
 const TW = Math.round(140 * LAYOUT_SCALE);
@@ -20,11 +20,11 @@ export class SkillTooltip extends BaseTooltip<SkillTooltipData> {
   // Game.ts calls: skillTooltip.show(data, iconRightX, iconCenterY, "right")
 
   protected buildContent(data: SkillTooltipData): number {
-    const pad = TOOLTIP.pad;
+    const pad = UI_THEME.component.tooltip.pad;
     const color =
       data.damageType === "magical"  ? BATTLE_VISUAL_THEME.skill.magical  :
       data.damageType === "physical" ? BATTLE_VISUAL_THEME.skill.physical :
-      VALUE_COLOR.white;
+      UI_THEME.color.value.white;
 
     const t = this.addText(pad, pad, data.name, {
       fontSize:  fontSize("sm"),

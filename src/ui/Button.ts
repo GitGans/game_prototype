@@ -14,6 +14,8 @@ export interface ButtonConfig {
   idle?:    boolean;
   /** Override font size token. Defaults to "md". */
   fontKey?: keyof typeof FONT_SIZE;
+  /** If false, disabled state blocks clicks without changing alpha. Defaults to true. */
+  dimWhenDisabled?: boolean;
 }
 
 export class Button extends Phaser.GameObjects.Container {
@@ -22,12 +24,14 @@ export class Button extends Phaser.GameObjects.Container {
   private _idle:     boolean;
   private _disabled  = false;
   private colors:    { base: number; hover: number };
+  private readonly dimWhenDisabled: boolean;
 
   constructor(cfg: ButtonConfig) {
     super(cfg.scene, cfg.x, cfg.y);
 
     this.colors = UI_THEME.component.button[cfg.style];
     this._idle = cfg.idle ?? false;
+    this.dimWhenDisabled = cfg.dimWhenDisabled ?? true;
 
     this.bg = cfg.scene.add.rectangle(0, 0, cfg.w, cfg.h, this.colors.base);
     this.txt = cfg.scene.add.text(0, 0, cfg.label, {
@@ -62,8 +66,12 @@ export class Button extends Phaser.GameObjects.Container {
 
   setDisabled(on: boolean): this {
     this._disabled = on;
-    this.setAlpha(on ? UI_THEME.alpha.disabled : UI_THEME.alpha.active);
-    if (this.input) this.input.cursor = on ? "default" : "pointer";
+    this.setAlpha(
+      on && this.dimWhenDisabled
+        ? UI_THEME.alpha.disabled
+        : this._idle ? UI_THEME.alpha.idle : UI_THEME.alpha.active,
+    );
+    if (this.input) this.input.cursor = on ? 'default' : 'pointer';
     return this;
   }
 
