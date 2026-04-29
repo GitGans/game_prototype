@@ -1,4 +1,4 @@
-import { CellCoord, Col, OccupancyMap, Row, Side, Unit } from './types';
+import { CellCoord, Col, OccupancyMap, Row, Side, Skill, Unit } from './types';
 import { cellKey } from './field';
 
 const ENEMY_SIDE: Record<Side, Side> = {
@@ -91,4 +91,25 @@ export function getRangedTargets(attackerSide: Side, occupancy: OccupancyMap): C
   }
 
   return cells;
+}
+
+/**
+ * Returns valid target cells for a unit using the given skill.
+ * Routes to the four low-level target helpers based on skill actionType.
+ */
+export function resolveSkillTargets(
+  unit: Unit,
+  skill: Skill,
+  occupancy: OccupancyMap,
+): CellCoord[] {
+  if (skill.actionType === 'mass_enchantment') {
+    return getFriendlyTargets(unit.anchor.side, occupancy);
+  }
+  if (skill.actionType === 'self_enchantment') {
+    return getSelfTarget(unit);
+  }
+  if (skill.actionType === 'ranged') {
+    return getRangedTargets(unit.anchor.side, occupancy);
+  }
+  return getMeleeTargets(unit, occupancy);
 }
