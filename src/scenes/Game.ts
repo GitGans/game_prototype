@@ -25,7 +25,6 @@ import {
   CellCoord,
   Col,
   Side,
-  Skill,
   Unit,
   SpriteSheetConfig,
 } from "../battle/types";
@@ -41,11 +40,7 @@ import { BenchCard, type BenchCardMode } from '../objects/BenchCard';
 import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
-import {
-  getMeleeTargets,
-  getRangedTargets,
-  resolveSkillTargets,
-} from "../battle/targeting";
+import { resolveSkillTargets } from "../battle/targeting";
 import {
   getActiveSkill,
   getSkillHitCells,
@@ -54,12 +49,12 @@ import {
   resolveRandomSkillIndex,
   resolveRandomTarget,
   resolveBestHealTarget,
-  computeOneTurn,
 } from "../battle/skillRuntime";
-import { resolveAttack, resolveHeal, checkGameOver, applyEffectBlock, tickEffects, effectiveStats, EffectEvent, resolveInstantEffects, applyVampirism, computeDamageVsUnit } from "../battle/combat";
+import { computeOneTurn } from "../battle/quickTurn";
+import { checkGameOver, tickEffects, effectiveStats, EffectEvent, computeDamageVsUnit } from "../battle/combat";
 import { resolvePattern } from "../battle/skillPatterns";
-import { getSkillPattern, getEffectPattern, getInstantEffectPattern, getDamageModifierPercent } from "../data/skillDefinitions";
-import { buildRoundQueue, pruneQueue, rebuildRemainingQueue } from "../battle/initiative";
+import { getEffectPattern, getDamageModifierPercent } from "../data/skillDefinitions";
+import { buildRoundQueue, pruneQueue } from "../battle/initiative";
 import { executeSkillUse } from '../battle/skillExecution';
 import type { BattleEvent } from '../battle/battleEvents';
 
@@ -855,16 +850,16 @@ export class Game extends Phaser.Scene {
 
   private autoTurn(): void {
     let state = GameState.get();
-    if (state.phase === "end") return;
+    if (state.phase === 'end') return;
 
     const unitId = state.roundQueue[0];
     let activeUnit = state.units.get(unitId);
-    const isEnemy = activeUnit?.anchor.side === "enemy";
+    const isEnemy = activeUnit?.anchor.side === 'enemy';
 
     // Guard applies only to player units in non-auto mode.
     // Enemy units always act automatically, regardless of battle mode.
-    if (!isEnemy && GameState.getBattleMode() !== "auto") {
-      if (GameState.getBattleMode() === "manual") {
+    if (!isEnemy && GameState.getBattleMode() !== 'auto') {
+      if (GameState.getBattleMode() === 'manual') {
         this.startActiveUnitTurn(state);
       }
       return;
@@ -885,63 +880,14 @@ export class Game extends Phaser.Scene {
     GameState.set(state);
     activeUnit = updatedUnit;
 
-    const isPlayer = activeUnit.anchor.side === "player";
-    const logStyle = isPlayer ? "positive" : "negative";
     const nextDelay = Game.DELAY_AUTO_NEXT;
-
     const currentSkill = getActiveSkill(activeUnit);
-
-    // ── Heal ────────────────────────────────────────────────────────────────
-    if (isEnchantmentSkill(currentSkill)) {
-      const healerView = this.unitViews.get(unitId);
-      healerView?.setSpriteState("attack");
-      this.time.delayedCall(400, () => {
-        const current = GameState.get().units.get(unitId);
-        if (current && current.hp > 0) healerView?.setSpriteState("idle");
-      });
-
-      const healTargets = resolveSkillTargets(activeUnit, currentSkill, state.occupancy);
-      if (healTargets.length === 0) {
-        const next = this.advanceQueue(state);
-        GameState.set(next);
-        EventBus.emit(Events.STATE_CHANGED);
-        this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
-        return;
-      }
-
-      const target = resolveBestHealTarget(state.occupancy, healTargets)!;
-
-      const healedUnit = state.occupancy.cellToUnit.get(cellKey(target));
-      if (healedUnit) {
-        const view = this.unitViews.get(healedUnit.id);
-        if (view) this.showFloatingHeal(view.x, view.y, activeUnit.magicalDamage);
-        this.battleLog.addEntry(
-          `${activeUnit.name} heals ${healedUnit.name} +${activeUnit.magicalDamage}`,
-          logStyle,
-        );
-      }
-
-      let next = resolveHeal(
-        getSkillHitCells(activeUnit, target),
-        activeUnit.magicalDamage,
-        state,
-      );
-      next = this.advanceQueue(next);
-      GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
-      return;
-    }
-
-    // ── Attack ───────────────────────────────────────────────────────────────
     const targets = resolveSkillTargets(activeUnit, currentSkill, state.occupancy);
 
     if (targets.length === 0) {
-      if (currentSkill.actionType === "melee")
-        this.battleLog.addEntry(
-          `${activeUnit.name} — blocked, skipping turn`,
-          "neutral",
-        );
+      if (currentSkill.actionType === 'melee') {
+        this.battleLog.addEntry(`${activeUnit.name} — blocked, skipping turn`, 'neutral');
+      }
       const next = this.advanceQueue(state);
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED);
@@ -949,84 +895,39 @@ export class Game extends Phaser.Scene {
       return;
     }
 
-    const target = resolveRandomTarget(targets)!;
+    const target = isEnchantmentSkill(currentSkill)
+      ? resolveBestHealTarget(state.occupancy, targets)
+      : resolveRandomTarget(targets);
+    if (!target) {
+      const next = this.advanceQueue(state);
+      GameState.set(next);
+      EventBus.emit(Events.STATE_CHANGED);
+      this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
+      return;
+    }
 
-    const attackerView = this.unitViews.get(unitId);
-    attackerView?.setSpriteState("attack");
+    // Sprite animation — stays in scene (Phaser, not logic)
+    const unitView = this.unitViews.get(unitId);
+    unitView?.setSpriteState('attack');
     this.time.delayedCall(400, () => {
       const current = GameState.get().units.get(unitId);
-      if (current && current.hp > 0) attackerView?.setSpriteState("idle");
+      if (current && current.hp > 0) unitView?.setSpriteState('idle');
     });
 
-    const autoAttackDmgType = currentSkill.damageBlock?.damageType ?? "physical";
-    const activeUnitStats = effectiveStats(activeUnit);
-    const attackResult3 = resolveAttack(
-      getSkillHitCells(activeUnit, target),
-      autoAttackDmgType === "physical"
-        ? activeUnitStats.physicalDamage
-        : activeUnitStats.magicalDamage,
-      autoAttackDmgType,
+    const result = executeSkillUse({
       state,
-      currentSkill.damageModifierBlocks,
-    );
-    let { state: next, events } = attackResult3;
-    if (currentSkill.postDamageBlock && attackResult3.totalRealDamage > 0) {
-      const { state: afterVamp, events: vampEvents } = applyVampirism(currentSkill.postDamageBlock, activeUnit, attackResult3.totalRealDamage, next);
-      next = afterVamp;
-      events = [...events, ...vampEvents];
-    }
+      casterId: activeUnit.id,
+      skill: currentSkill,
+      target,
+      queueContext: { chargedThisRound: this.chargedThisRound },
+    });
 
-    for (const event of events) {
-      if (event.type === "vampirism_heal") {
-        const view = this.unitViews.get(event.unitId);
-        if (view) this.showFloatingHeal(view.x, view.y, event.amount);
-        this.battleLog.addEntry(`${event.unitName} restored ${event.amount} HP (vampirism)`, "positive");
-        continue;
-      }
-      if (event.type === "dodged") {
-        this.battleLog.addEntry(`${event.unitName} dodged the attack!`, "neutral");
-      } else {
-        const view = this.unitViews.get(event.unitId);
-        if (view) this.showFloatingDamage(view.x, view.y, event.damage);
-        if (event.type === "blocked") {
-          this.battleLog.addEntry(
-            `${activeUnit.name} attacks ${event.unitName} — blocked! -${event.damage}`,
-            "neutral",
-          );
-        } else {
-          this.battleLog.addEntry(
-            `${activeUnit.name} attacks ${event.unitName} -${event.damage}`,
-            logStyle,
-          );
-        }
-      }
-    }
-
-    if (currentSkill.effectBlock) {
-      const [eff, perTurn] = resolveEffectArgs(currentSkill, activeUnit);
-      const { state: effState, events: effEvents } = applyEffectBlock(currentSkill.effectBlock, getEffectPattern(currentSkill.effectBlock), target, next, eff, perTurn);
-      next = effState;
-      for (const e of effEvents) this.logEffectEvent(e);
-      if ((eff?.initiativeBonus ?? 0) !== 0) {
-        next = {
-          ...next,
-          roundQueue: rebuildRemainingQueue(
-            next.roundQueue[0],
-            next.roundQueue.slice(1),
-            this.chargedThisRound,
-            next.units
-          )
-        };
-      }
-    }
-
-    if (currentSkill.instantEffectBlock) {
-      next = this.applyInstantEffects(next, activeUnit.id, target, currentSkill);
-    }
+    this.presentBattleEvents(result.events, activeUnit);
+    let next = result.state;
 
     const winner = checkGameOver(next);
     if (winner) {
-      next = { ...next, phase: "end" };
+      next = { ...next, phase: 'end' };
       GameState.set(next);
       EventBus.emit(Events.STATE_CHANGED);
       this.time.delayedCall(Game.DELAY_GAMEOVER, () => {
@@ -1121,127 +1022,6 @@ export class Game extends Phaser.Scene {
     for (const btn of this.manualTurnButtons) btn.destroy();
     this.manualTurnButtons = [];
     this.chargeBtn = null;
-  }
-
-  /**
-   * Applies instant effects (provoke / distract) after a skill resolves.
-   * Removes affected units' turns from roundQueue.
-   * For provoked units, executes an immediate counter-attack using the unit's
-   * first melee/ranged skill. Normal dodge/block/defense apply to the counter-attack.
-   */
-  private applyInstantEffects(
-    state: BattleState,
-    casterId: string,
-    targetCoord: CellCoord,
-    skill: Skill,
-  ): BattleState {
-    if (!skill.instantEffectBlock) return state;
-
-    const block = skill.instantEffectBlock;
-    const pattern = getInstantEffectPattern(block);
-    const { events, provokedUnitIds, distractedUnitIds } = resolveInstantEffects(
-      block, pattern, targetCoord, state, state.roundQueue,
-    );
-
-    for (const e of events) {
-      if (e.type === 'instant_effect_applied') {
-        this.battleLog.addEntry(`${e.unitName} is affected by ${e.displayName}!`, 'neutral');
-      } else if (e.type === 'instant_effect_failed') {
-        this.battleLog.addEntry(`${e.displayName} failed on ${e.unitName}`, 'neutral');
-      }
-    }
-
-    let next = state;
-
-    for (const unitId of distractedUnitIds) {
-      const unit = next.units.get(unitId);
-      if (!unit) continue;
-      next = { ...next, roundQueue: next.roundQueue.filter(id => id !== unitId) };
-      this.battleLog.addEntry(`${unit.name} is distracted and skips its turn!`, 'neutral');
-    }
-
-    for (const unitId of provokedUnitIds) {
-      const provokedUnit = next.units.get(unitId);
-      if (!provokedUnit) continue;
-
-      next = { ...next, roundQueue: next.roundQueue.filter(id => id !== unitId) };
-
-      const caster = next.units.get(casterId);
-      if (!caster || caster.hp <= 0) {
-        this.battleLog.addEntry(
-          `${provokedUnit.name} was provoked but the provoker is gone — skips turn`,
-          'neutral',
-        );
-        continue;
-      }
-
-      const basicSkill = provokedUnit.skills.find(
-        s => s.actionType === 'melee' || s.actionType === 'ranged',
-      );
-      if (!basicSkill || !basicSkill.damageBlock) {
-        this.battleLog.addEntry(
-          `${provokedUnit.name} was provoked but has no basic attack — skips turn`,
-          'neutral',
-        );
-        continue;
-      }
-
-      const validTargets =
-        basicSkill.actionType === 'melee'
-          ? getMeleeTargets(provokedUnit, next.occupancy)
-          : getRangedTargets(provokedUnit.anchor.side, next.occupancy);
-
-      const casterIsReachable = validTargets.some(
-        c => c.side === caster.anchor.side && c.row === caster.anchor.row && c.col === caster.anchor.col,
-      );
-
-      if (!casterIsReachable) {
-        this.battleLog.addEntry(
-          `${provokedUnit.name} was provoked but can't reach ${caster.name} — skips turn`,
-          'neutral',
-        );
-        continue;
-      }
-
-      this.battleLog.addEntry(
-        `${provokedUnit.name} is provoked — counter-attacks ${caster.name}!`,
-        'neutral',
-      );
-
-      const counterPattern = getSkillPattern(basicSkill);
-      const hitCells = resolvePattern(caster.anchor, counterPattern);
-      const dmgType = basicSkill.damageBlock.damageType;
-      const provokedStats = effectiveStats(provokedUnit);
-      const baseDmg = dmgType === 'physical' ? provokedStats.physicalDamage : provokedStats.magicalDamage;
-
-      const { state: afterCounter, events: counterEvents } = resolveAttack(
-        hitCells, baseDmg, dmgType, next,
-      );
-      next = afterCounter;
-
-      for (const event of counterEvents) {
-        if (event.type === 'vampirism_heal') continue;
-        if (event.type === 'dodged') {
-          this.battleLog.addEntry(`${event.unitName} dodged the counter-attack!`, 'neutral');
-        } else {
-          const view = this.unitViews.get(event.unitId);
-          if (view) this.showFloatingDamage(view.x, view.y, event.damage);
-          if (event.type === 'blocked') {
-            this.battleLog.addEntry(
-              `${provokedUnit.name} counter-attacks ${event.unitName} — blocked! -${event.damage}`,
-              'neutral',
-            );
-          } else {
-            this.battleLog.addEntry(
-              `${provokedUnit.name} counter-attacks ${event.unitName} -${event.damage}`,
-              'neutral',
-            );
-          }
-        }
-      }
-    }
-
-    return next;
   }
 
   private advanceQueue(state: BattleState): BattleState {

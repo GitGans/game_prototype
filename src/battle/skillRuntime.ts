@@ -1,5 +1,4 @@
 import {
-  BattleState,
   CellCoord,
   Effect,
   OccupancyMap,
@@ -14,15 +13,7 @@ import {
   getSkillPattern,
   getEffectPattern,
 } from '../data/skillDefinitions';
-import {
-  resolveAttack,
-  resolveHeal,
-  applyEffectBlock,
-  applyVampirism,
-  effectiveStats,
-} from './combat';
 import { cellKey } from './field';
-import { resolveSkillTargets } from './targeting';
 
 /** Returns the active skill for a unit, falling back to the first skill. */
 export function getActiveSkill(unit: Unit): Skill {
@@ -132,82 +123,3 @@ export function resolveBestHealTarget(
   });
 }
 
-/**
- * Computes one turn for the given unit and returns the resulting BattleState.
- * Pure — no Phaser, no animations, no GameState reads. Used by runQuickBattle().
- *
- * NOTE: autoTurn (handles enemy turns in manual mode; player/enemy turns in auto mode)
- * heal path intentionally does NOT apply effectBlock.
- * This gap between auto and quick is preserved in Stage 1. Fix in Stage 3.
- */
-export function computeOneTurn(
-  state: BattleState,
-  unitId: string,
-  rng: () => number = Math.random,
-): BattleState {
-  const unit = state.units.get(unitId);
-  if (!unit) return state;
-
-  // Immutable skill selection — does not mutate the unit object in the map
-  const randomSkillIdx = resolveRandomSkillIndex(unit, rng);
-  const updatedUnit = { ...unit, activeSkillIndex: randomSkillIdx };
-  const updatedUnits = new Map(state.units);
-  updatedUnits.set(unitId, updatedUnit);
-  state = { ...state, units: updatedUnits };
-
-  const skill = getActiveSkill(updatedUnit);
-  const targets = resolveSkillTargets(updatedUnit, skill, state.occupancy);
-
-  if (isEnchantmentSkill(skill)) {
-    const target = resolveBestHealTarget(state.occupancy, targets);
-    if (!target) return state;
-
-    let next = resolveHeal(getSkillHitCells(updatedUnit, target), updatedUnit.magicalDamage, state);
-    if (skill.effectBlock) {
-      const [eff, perTurn] = resolveEffectArgs(skill, updatedUnit);
-      next = applyEffectBlock(
-        skill.effectBlock,
-        getEffectPattern(skill.effectBlock),
-        target,
-        next,
-        eff,
-        perTurn,
-      ).state;
-    }
-    return next;
-  }
-
-  const target = resolveRandomTarget(targets, rng);
-  if (!target) return state;
-
-  const damageType = skill.damageBlock?.damageType ?? 'physical';
-  const casterStats = effectiveStats(updatedUnit);
-  const baseDamage = damageType === 'physical' ? casterStats.physicalDamage : casterStats.magicalDamage;
-
-  let next = state;
-  if (skill.damageBlock) {
-    const attackResult = resolveAttack(
-      getSkillHitCells(updatedUnit, target),
-      baseDamage,
-      damageType,
-      state,
-      skill.damageModifierBlocks,
-    );
-    next = attackResult.state;
-    if (skill.postDamageBlock && attackResult.totalRealDamage > 0) {
-      next = applyVampirism(skill.postDamageBlock, updatedUnit, attackResult.totalRealDamage, next).state;
-    }
-  }
-  if (skill.effectBlock) {
-    const [eff, perTurn] = resolveEffectArgs(skill, updatedUnit);
-    next = applyEffectBlock(
-      skill.effectBlock,
-      getEffectPattern(skill.effectBlock),
-      target,
-      next,
-      eff,
-      perTurn,
-    ).state;
-  }
-  return next;
-}
