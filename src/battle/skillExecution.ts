@@ -1,7 +1,7 @@
 // src/battle/skillExecution.ts
 
-import type { BattleState, CellCoord, Skill } from './types';
-import type { BattleEvent } from './battleEvents';
+import type { BattleState, CellCoord, Skill } from "./types";
+import type { BattleEvent } from "./battleEvents";
 import {
   resolveAttack,
   resolveHealWithEvents,
@@ -9,21 +9,21 @@ import {
   applyVampirism,
   effectiveStats,
   resolveInstantEffects,
-} from './combat';
+} from "./combat";
 import {
   getActiveSkill,
   getSkillHitCellsForSkill,
   isEnchantmentSkill,
   resolveEffectArgs,
-} from './skillRuntime';
+} from "./skillRuntime";
 import {
   getEffectPattern,
   getInstantEffectPattern,
   getSkillPattern,
-} from '../data/skillDefinitions';
-import { getMeleeTargets, getRangedTargets } from './targeting';
-import { rebuildRemainingQueue } from './initiative';
-import { resolvePattern } from './skillPatterns';
+} from "../data/skillDefinitions";
+import { getMeleeTargets, getRangedTargets } from "./targeting";
+import { rebuildRemainingQueue } from "./initiative";
+import { resolvePattern } from "./skillPatterns";
 
 // ─── Public contract ───────────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ export type SkillExecutionResult = {
   /**
    * Fully updated state: HP, effects, occupancy, roundQueue.
    * roundQueue already reflects queue changes from initiative rebuild and
-   * instant-effect unit removal — Game.ts only needs to call advanceQueue after.
+   * instant-effect unit removal — Game.ts only needs to call advanceTurn after.
    */
   state: BattleState;
   events: BattleEvent[];
@@ -62,7 +62,9 @@ export type SkillExecutionResult = {
  *
  * Does NOT call: advanceQueue, tickEffects, checkGameOver.
  */
-export function executeSkillUse(input: SkillExecutionInput): SkillExecutionResult {
+export function executeSkillUse(
+  input: SkillExecutionInput,
+): SkillExecutionResult {
   const { casterId, target, queueContext } = input;
   let state = input.state;
   const events: BattleEvent[] = [];
@@ -82,24 +84,43 @@ export function executeSkillUse(input: SkillExecutionInput): SkillExecutionResul
     );
     state = healed;
     for (const h of heals) {
-      events.push({ type: 'skill_heal', casterId, casterName, targetId: h.unitId, targetName: h.unitName, amount: h.amount });
+      events.push({
+        type: "skill_heal",
+        casterId,
+        casterName,
+        targetId: h.unitId,
+        targetName: h.unitName,
+        amount: h.amount,
+      });
     }
 
     if (skill.effectBlock) {
       const [eff, perTurn] = resolveEffectArgs(skill, caster);
       const { state: withEffect, events: effEvents } = applyEffectBlock(
-        skill.effectBlock, getEffectPattern(skill.effectBlock), target, state, eff, perTurn,
+        skill.effectBlock,
+        getEffectPattern(skill.effectBlock),
+        target,
+        state,
+        eff,
+        perTurn,
       );
       state = withEffect;
       for (const e of effEvents) {
-        events.push({ type: 'effect_applied', unitId: e.unitId, unitName: e.unitName, effectDisplayName: e.effectDisplayName });
+        events.push({
+          type: "effect_applied",
+          unitId: e.unitId,
+          unitName: e.unitName,
+          effectDisplayName: e.effectDisplayName,
+        });
       }
       if ((eff.initiativeBonus ?? 0) !== 0) {
         state = {
           ...state,
           roundQueue: rebuildRemainingQueue(
-            state.roundQueue[0], state.roundQueue.slice(1),
-            queueContext.chargedThisRound, state.units,
+            state.roundQueue[0],
+            state.roundQueue.slice(1),
+            queueContext.chargedThisRound,
+            state.units,
           ),
         };
       }
@@ -109,9 +130,12 @@ export function executeSkillUse(input: SkillExecutionInput): SkillExecutionResul
   }
 
   // ── 2. Attack path ─────────────────────────────────────────────────────────
-  const damageType = skill.damageBlock?.damageType ?? 'physical';
+  const damageType = skill.damageBlock?.damageType ?? "physical";
   const casterStats = effectiveStats(caster);
-  const baseDamage = damageType === 'physical' ? casterStats.physicalDamage : casterStats.magicalDamage;
+  const baseDamage =
+    damageType === "physical"
+      ? casterStats.physicalDamage
+      : casterStats.magicalDamage;
 
   const attackResult = resolveAttack(
     getSkillHitCellsForSkill(skill, target),
@@ -123,26 +147,61 @@ export function executeSkillUse(input: SkillExecutionInput): SkillExecutionResul
   state = attackResult.state;
 
   for (const e of attackResult.events) {
-    if (e.type === 'hit') {
-      events.push({ type: 'skill_damage', casterId, casterName, targetId: e.unitId, targetName: e.unitName, amount: e.damage, blocked: false });
-    } else if (e.type === 'blocked') {
-      events.push({ type: 'skill_damage', casterId, casterName, targetId: e.unitId, targetName: e.unitName, amount: e.damage, blocked: true });
-    } else if (e.type === 'dodged') {
-      events.push({ type: 'skill_dodged', casterId, casterName, targetId: e.unitId, targetName: e.unitName });
-    } else if (e.type === 'vampirism_heal') {
-      events.push({ type: 'vampirism_heal', unitId: e.unitId, unitName: e.unitName, amount: e.amount });
+    if (e.type === "hit") {
+      events.push({
+        type: "skill_damage",
+        casterId,
+        casterName,
+        targetId: e.unitId,
+        targetName: e.unitName,
+        amount: e.damage,
+        blocked: false,
+      });
+    } else if (e.type === "blocked") {
+      events.push({
+        type: "skill_damage",
+        casterId,
+        casterName,
+        targetId: e.unitId,
+        targetName: e.unitName,
+        amount: e.damage,
+        blocked: true,
+      });
+    } else if (e.type === "dodged") {
+      events.push({
+        type: "skill_dodged",
+        casterId,
+        casterName,
+        targetId: e.unitId,
+        targetName: e.unitName,
+      });
+    } else if (e.type === "vampirism_heal") {
+      events.push({
+        type: "vampirism_heal",
+        unitId: e.unitId,
+        unitName: e.unitName,
+        amount: e.amount,
+      });
     }
   }
 
   // Vampirism (postDamageBlock)
   if (skill.postDamageBlock && attackResult.totalRealDamage > 0) {
     const { state: afterVamp, events: vampEvents } = applyVampirism(
-      skill.postDamageBlock, caster, attackResult.totalRealDamage, state,
+      skill.postDamageBlock,
+      caster,
+      attackResult.totalRealDamage,
+      state,
     );
     state = afterVamp;
     for (const e of vampEvents) {
-      if (e.type === 'vampirism_heal') {
-        events.push({ type: 'vampirism_heal', unitId: e.unitId, unitName: e.unitName, amount: e.amount });
+      if (e.type === "vampirism_heal") {
+        events.push({
+          type: "vampirism_heal",
+          unitId: e.unitId,
+          unitName: e.unitName,
+          amount: e.amount,
+        });
       }
     }
   }
@@ -151,18 +210,30 @@ export function executeSkillUse(input: SkillExecutionInput): SkillExecutionResul
   if (skill.effectBlock) {
     const [eff, perTurn] = resolveEffectArgs(skill, caster);
     const { state: withEffect, events: effEvents } = applyEffectBlock(
-      skill.effectBlock, getEffectPattern(skill.effectBlock), target, state, eff, perTurn,
+      skill.effectBlock,
+      getEffectPattern(skill.effectBlock),
+      target,
+      state,
+      eff,
+      perTurn,
     );
     state = withEffect;
     for (const e of effEvents) {
-      events.push({ type: 'effect_applied', unitId: e.unitId, unitName: e.unitName, effectDisplayName: e.effectDisplayName });
+      events.push({
+        type: "effect_applied",
+        unitId: e.unitId,
+        unitName: e.unitName,
+        effectDisplayName: e.effectDisplayName,
+      });
     }
     if ((eff.initiativeBonus ?? 0) !== 0) {
       state = {
         ...state,
         roundQueue: rebuildRemainingQueue(
-          state.roundQueue[0], state.roundQueue.slice(1),
-          queueContext.chargedThisRound, state.units,
+          state.roundQueue[0],
+          state.roundQueue.slice(1),
+          queueContext.chargedThisRound,
+          state.units,
         ),
       };
     }
@@ -191,15 +262,33 @@ function applyInstantEffects(
 ): BattleState {
   const block = skill.instantEffectBlock!;
   const pattern = getInstantEffectPattern(block);
-  const { events: ieEvents, provokedUnitIds, distractedUnitIds } = resolveInstantEffects(
-    block, pattern, targetCoord, state, state.roundQueue,
+  const {
+    events: ieEvents,
+    provokedUnitIds,
+    distractedUnitIds,
+  } = resolveInstantEffects(
+    block,
+    pattern,
+    targetCoord,
+    state,
+    state.roundQueue,
   );
 
   for (const e of ieEvents) {
-    if (e.type === 'instant_effect_applied') {
-      events.push({ type: 'instant_effect_applied', unitId: e.unitId, unitName: e.unitName, displayName: e.displayName });
-    } else if (e.type === 'instant_effect_failed') {
-      events.push({ type: 'instant_effect_failed', unitId: e.unitId, unitName: e.unitName, displayName: e.displayName });
+    if (e.type === "instant_effect_applied") {
+      events.push({
+        type: "instant_effect_applied",
+        unitId: e.unitId,
+        unitName: e.unitName,
+        displayName: e.displayName,
+      });
+    } else if (e.type === "instant_effect_failed") {
+      events.push({
+        type: "instant_effect_failed",
+        unitId: e.unitId,
+        unitName: e.unitName,
+        displayName: e.displayName,
+      });
     }
   }
 
@@ -209,8 +298,15 @@ function applyInstantEffects(
   for (const unitId of distractedUnitIds) {
     const unit = next.units.get(unitId);
     if (!unit) continue;
-    next = { ...next, roundQueue: next.roundQueue.filter(id => id !== unitId) };
-    events.push({ type: 'unit_distracted', unitId: unit.id, unitName: unit.name });
+    next = {
+      ...next,
+      roundQueue: next.roundQueue.filter((id) => id !== unitId),
+    };
+    events.push({
+      type: "unit_distracted",
+      unitId: unit.id,
+      unitName: unit.name,
+    });
   }
 
   // ── Provoked: remove from queue, then counter-attack ──────────────────────
@@ -218,51 +314,110 @@ function applyInstantEffects(
     const provokedUnit = next.units.get(unitId);
     if (!provokedUnit) continue;
 
-    next = { ...next, roundQueue: next.roundQueue.filter(id => id !== unitId) };
+    next = {
+      ...next,
+      roundQueue: next.roundQueue.filter((id) => id !== unitId),
+    };
 
     const caster = next.units.get(casterId);
     if (!caster || caster.hp <= 0) {
-      events.push({ type: 'counter_attack_unavailable', unitId, unitName: provokedUnit.name, reason: 'caster_dead' });
+      events.push({
+        type: "counter_attack_unavailable",
+        unitId,
+        unitName: provokedUnit.name,
+        reason: "caster_dead",
+      });
       continue;
     }
 
     const basicSkill = provokedUnit.skills.find(
-      s => s.actionType === 'melee' || s.actionType === 'ranged',
+      (s) => s.actionType === "melee" || s.actionType === "ranged",
     );
     if (!basicSkill?.damageBlock) {
-      events.push({ type: 'counter_attack_unavailable', unitId, unitName: provokedUnit.name, reason: 'no_basic_attack' });
+      events.push({
+        type: "counter_attack_unavailable",
+        unitId,
+        unitName: provokedUnit.name,
+        reason: "no_basic_attack",
+      });
       continue;
     }
 
-    const validTargets = basicSkill.actionType === 'melee'
-      ? getMeleeTargets(provokedUnit, next.occupancy)
-      : getRangedTargets(provokedUnit.anchor.side, next.occupancy);
+    const validTargets =
+      basicSkill.actionType === "melee"
+        ? getMeleeTargets(provokedUnit, next.occupancy)
+        : getRangedTargets(provokedUnit.anchor.side, next.occupancy);
 
     const casterIsReachable = validTargets.some(
-      c => c.side === caster.anchor.side && c.row === caster.anchor.row && c.col === caster.anchor.col,
+      (c) =>
+        c.side === caster.anchor.side &&
+        c.row === caster.anchor.row &&
+        c.col === caster.anchor.col,
     );
     if (!casterIsReachable) {
-      events.push({ type: 'counter_attack_unavailable', unitId, unitName: provokedUnit.name, reason: 'out_of_range', targetName: caster.name });
+      events.push({
+        type: "counter_attack_unavailable",
+        unitId,
+        unitName: provokedUnit.name,
+        reason: "out_of_range",
+        targetName: caster.name,
+      });
       continue;
     }
 
-    events.push({ type: 'counter_attack_start', attackerId: unitId, attackerName: provokedUnit.name, targetId: caster.id, targetName: caster.name });
+    events.push({
+      type: "counter_attack_start",
+      attackerId: unitId,
+      attackerName: provokedUnit.name,
+      targetId: caster.id,
+      targetName: caster.name,
+    });
 
     const hitCells = resolvePattern(caster.anchor, getSkillPattern(basicSkill));
     const dmgType = basicSkill.damageBlock.damageType;
     const provokedStats = effectiveStats(provokedUnit);
-    const baseDmg = dmgType === 'physical' ? provokedStats.physicalDamage : provokedStats.magicalDamage;
+    const baseDmg =
+      dmgType === "physical"
+        ? provokedStats.physicalDamage
+        : provokedStats.magicalDamage;
 
-    const { state: afterCounter, events: counterEvents } = resolveAttack(hitCells, baseDmg, dmgType, next);
+    const { state: afterCounter, events: counterEvents } = resolveAttack(
+      hitCells,
+      baseDmg,
+      dmgType,
+      next,
+    );
     next = afterCounter;
 
     for (const e of counterEvents) {
-      if (e.type === 'hit') {
-        events.push({ type: 'counter_attack_hit', attackerId: unitId, attackerName: provokedUnit.name, targetId: e.unitId, targetName: e.unitName, amount: e.damage, blocked: false });
-      } else if (e.type === 'blocked') {
-        events.push({ type: 'counter_attack_hit', attackerId: unitId, attackerName: provokedUnit.name, targetId: e.unitId, targetName: e.unitName, amount: e.damage, blocked: true });
-      } else if (e.type === 'dodged') {
-        events.push({ type: 'counter_attack_dodged', attackerId: unitId, attackerName: provokedUnit.name, targetId: e.unitId, targetName: e.unitName });
+      if (e.type === "hit") {
+        events.push({
+          type: "counter_attack_hit",
+          attackerId: unitId,
+          attackerName: provokedUnit.name,
+          targetId: e.unitId,
+          targetName: e.unitName,
+          amount: e.damage,
+          blocked: false,
+        });
+      } else if (e.type === "blocked") {
+        events.push({
+          type: "counter_attack_hit",
+          attackerId: unitId,
+          attackerName: provokedUnit.name,
+          targetId: e.unitId,
+          targetName: e.unitName,
+          amount: e.damage,
+          blocked: true,
+        });
+      } else if (e.type === "dodged") {
+        events.push({
+          type: "counter_attack_dodged",
+          attackerId: unitId,
+          attackerName: provokedUnit.name,
+          targetId: e.unitId,
+          targetName: e.unitName,
+        });
       }
     }
   }

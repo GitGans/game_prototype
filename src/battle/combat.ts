@@ -1,22 +1,71 @@
-import { ActiveEffect, BattleState, CellCoord, DamageModifierBlock, DamageType, Effect, InstantEffectBlock, InstantEffectEvent, PostDamageBlock, ResolvedHitCell, Side, SkillEffectBlock, SkillPattern, Unit } from './types';
-import { cellKey } from './field';
-import { buildOccupancy, removeUnit } from './occupancy';
-import { resolvePattern } from './skillPatterns';
-import { getDamageModifierPercent, getVampirismPercent } from '../data/skillDefinitions';
+import {
+  ActiveEffect,
+  BattleState,
+  CellCoord,
+  DamageModifierBlock,
+  DamageType,
+  Effect,
+  InstantEffectBlock,
+  InstantEffectEvent,
+  PostDamageBlock,
+  ResolvedHitCell,
+  Side,
+  SkillEffectBlock,
+  SkillPattern,
+  Unit,
+} from "./types";
+import { cellKey } from "./field";
+import { buildOccupancy, removeUnit } from "./occupancy";
+import { resolvePattern } from "./skillPatterns";
+import {
+  getDamageModifierPercent,
+  getVampirismPercent,
+} from "../data/skillDefinitions";
 
 export type CombatEvent =
-  | { type: 'hit';            unitId: string; unitName: string; damage: number }
-  | { type: 'dodged';         unitId: string; unitName: string }
-  | { type: 'blocked';        unitId: string; unitName: string; damage: number }
-  | { type: 'vampirism_heal'; unitId: string; unitName: string; amount: number };
+  | { type: "hit"; unitId: string; unitName: string; damage: number }
+  | { type: "dodged"; unitId: string; unitName: string }
+  | { type: "blocked"; unitId: string; unitName: string; damage: number }
+  | {
+      type: "vampirism_heal";
+      unitId: string;
+      unitName: string;
+      amount: number;
+    };
 
-export type AttackResult = { state: BattleState; events: CombatEvent[]; totalRealDamage: number };
+export type AttackResult = {
+  state: BattleState;
+  events: CombatEvent[];
+  totalRealDamage: number;
+};
 
 export type EffectEvent =
-  | { type: 'effect_applied';     unitId: string; unitName: string; effectDisplayName: string }
-  | { type: 'effect_tick_heal';   unitId: string; unitName: string; effectDisplayName: string; amount: number }
-  | { type: 'effect_tick_damage'; unitId: string; unitName: string; effectDisplayName: string; amount: number }
-  | { type: 'effect_expired';     unitId: string; unitName: string; effectDisplayName: string };
+  | {
+      type: "effect_applied";
+      unitId: string;
+      unitName: string;
+      effectDisplayName: string;
+    }
+  | {
+      type: "effect_tick_heal";
+      unitId: string;
+      unitName: string;
+      effectDisplayName: string;
+      amount: number;
+    }
+  | {
+      type: "effect_tick_damage";
+      unitId: string;
+      unitName: string;
+      effectDisplayName: string;
+      amount: number;
+    }
+  | {
+      type: "effect_expired";
+      unitId: string;
+      unitName: string;
+      effectDisplayName: string;
+    };
 
 /**
  * Applies damage to all units in hitCells.
@@ -38,10 +87,14 @@ export function computeDamageVsUnit(
   defIgnorePercent: number,
 ): number {
   const stats = effectiveStats(target);
-  const rawDefense = damageType === 'physical' ? stats.physicalDefense : stats.magicalDefense;
+  const rawDefense =
+    damageType === "physical" ? stats.physicalDefense : stats.magicalDefense;
   const defense = rawDefense * (1 - defIgnorePercent / 100);
   const minDamage = Math.round(baseDamage * 0.1);
-  const effectiveBase = Math.max(minDamage, Math.round(baseDamage * (1 - defense / 100)));
+  const effectiveBase = Math.max(
+    minDamage,
+    Math.round(baseDamage * (1 - defense / 100)),
+  );
   return Math.round(effectiveBase * multiplier);
 }
 
@@ -66,9 +119,18 @@ export function resolveAttack(
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
     if (!unit) continue;
 
-    const defIgnoreKey = damageType === 'physical' ? 'ignore_physical_defense' : 'ignore_magical_defense';
+    const defIgnoreKey =
+      damageType === "physical"
+        ? "ignore_physical_defense"
+        : "ignore_magical_defense";
     const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
-    const dmg = computeDamageVsUnit(baseDamage, damageType, unit, multiplier, defIgnore);
+    const dmg = computeDamageVsUnit(
+      baseDamage,
+      damageType,
+      unit,
+      multiplier,
+      defIgnore,
+    );
     const existing = hitUnits.get(unit.id);
     if (!existing || dmg > existing.damage) {
       hitUnits.set(unit.id, { unit, damage: dmg });
@@ -83,24 +145,40 @@ export function resolveAttack(
     const unitStats = effectiveStats(unit);
 
     // Apply ignore_dodge
-    const dodgeIgnore = ignorePercent['ignore_dodge'] ?? 0;
-    const effectiveDodge = Math.min(unitStats.dodge * (1 - dodgeIgnore / 100), 90);
+    const dodgeIgnore = ignorePercent["ignore_dodge"] ?? 0;
+    const effectiveDodge = Math.min(
+      unitStats.dodge * (1 - dodgeIgnore / 100),
+      90,
+    );
 
     // Apply ignore_block
-    const blockIgnore = ignorePercent['ignore_block'] ?? 0;
-    const effectiveBlock = Math.min(unitStats.block * (1 - blockIgnore / 100), 90);
+    const blockIgnore = ignorePercent["ignore_block"] ?? 0;
+    const effectiveBlock = Math.min(
+      unitStats.block * (1 - blockIgnore / 100),
+      90,
+    );
 
     if (Math.random() * 100 < effectiveDodge) {
-      events.push({ type: 'dodged', unitId: unit.id, unitName: unit.name });
+      events.push({ type: "dodged", unitId: unit.id, unitName: unit.name });
       continue;
     }
 
     let finalDmg = rawDmg;
     if (Math.random() * 100 < effectiveBlock) {
       finalDmg = Math.round(rawDmg / 2);
-      events.push({ type: 'blocked', unitId: unit.id, unitName: unit.name, damage: finalDmg });
+      events.push({
+        type: "blocked",
+        unitId: unit.id,
+        unitName: unit.name,
+        damage: finalDmg,
+      });
     } else {
-      events.push({ type: 'hit', unitId: unit.id, unitName: unit.name, damage: finalDmg });
+      events.push({
+        type: "hit",
+        unitId: unit.id,
+        unitName: unit.name,
+        damage: finalDmg,
+      });
     }
 
     // Real damage = capped at current HP (no overkill for vampirism)
@@ -117,7 +195,11 @@ export function resolveAttack(
     }
   }
 
-  return { state: { ...state, units: newUnits, occupancy }, events, totalRealDamage };
+  return {
+    state: { ...state, units: newUnits, occupancy },
+    events,
+    totalRealDamage,
+  };
 }
 
 /**
@@ -133,27 +215,35 @@ export function applyVampirism(
   state: BattleState,
 ): { state: BattleState; events: CombatEvent[] } {
   const percent = getVampirismPercent(postDamageBlock);
-  const healPool = Math.floor(totalRealDamage * percent / 100);
+  const healPool = Math.floor((totalRealDamage * percent) / 100);
 
   if (healPool <= 0) return { state, events: [] };
 
   const events: CombatEvent[] = [];
   const newUnits = new Map(state.units);
 
-  if (postDamageBlock.type === 'self_vampirism') {
+  if (postDamageBlock.type === "self_vampirism") {
     const currentCaster = newUnits.get(caster.id);
     if (currentCaster && currentCaster.hp > 0) {
       const healed = Math.min(healPool, currentCaster.maxHp - currentCaster.hp);
       if (healed > 0) {
-        newUnits.set(caster.id, { ...currentCaster, hp: currentCaster.hp + healed });
-        events.push({ type: 'vampirism_heal', unitId: caster.id, unitName: caster.name, amount: healed });
+        newUnits.set(caster.id, {
+          ...currentCaster,
+          hp: currentCaster.hp + healed,
+        });
+        events.push({
+          type: "vampirism_heal",
+          unitId: caster.id,
+          unitName: caster.name,
+          amount: healed,
+        });
       }
     }
   } else {
     // mass_vampirism: find all friendly alive units with missing HP
     const friendlySide = caster.anchor.side;
     const targets = [...newUnits.values()].filter(
-      u => u.anchor.side === friendlySide && u.hp > 0 && u.hp < u.maxHp,
+      (u) => u.anchor.side === friendlySide && u.hp > 0 && u.hp < u.maxHp,
     );
     if (targets.length > 0) {
       const healPerUnit = Math.floor(healPool / targets.length);
@@ -162,14 +252,22 @@ export function applyVampirism(
           const healed = Math.min(healPerUnit, target.maxHp - target.hp);
           if (healed > 0) {
             newUnits.set(target.id, { ...target, hp: target.hp + healed });
-            events.push({ type: 'vampirism_heal', unitId: target.id, unitName: target.name, amount: healed });
+            events.push({
+              type: "vampirism_heal",
+              unitId: target.id,
+              unitName: target.name,
+              amount: healed,
+            });
           }
         }
       }
     }
   }
 
-  return { state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) }, events };
+  return {
+    state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) },
+    events,
+  };
 }
 
 export type HealEvent = { unitId: string; unitName: string; amount: number };
@@ -212,7 +310,6 @@ export function resolveHealWithEvents(
   };
 }
 
-/** Thin wrapper — signature unchanged; autoTurn and computeOneTurn call this. */
 export function resolveHeal(
   hitCells: ResolvedHitCell[],
   baseHeal: number,
@@ -254,17 +351,27 @@ export function applyEffectBlock(
       computedPerTurn,
     };
 
-    const effects = unit.activeEffects.filter(ae => ae.effect.id !== resolvedEffect.id);
+    const effects = unit.activeEffects.filter(
+      (ae) => ae.effect.id !== resolvedEffect.id,
+    );
     if (effects.length >= 2) {
       effects.shift(); // evict oldest (non-duplicate)
     }
     effects.push(newEffect);
 
     newUnits.set(unit.id, { ...unit, activeEffects: effects });
-    events.push({ type: 'effect_applied', unitId: unit.id, unitName: unit.name, effectDisplayName: block.effectDisplayName });
+    events.push({
+      type: "effect_applied",
+      unitId: unit.id,
+      unitName: unit.name,
+      effectDisplayName: block.effectDisplayName,
+    });
   }
 
-  return { state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) }, events };
+  return {
+    state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) },
+    events,
+  };
 }
 
 /**
@@ -273,7 +380,10 @@ export function applyEffectBlock(
  * - Decrements remainingRounds; removes expired effects.
  * - Units that die from damagePerTurn are removed from state.
  */
-export function tickEffects(state: BattleState): { state: BattleState; events: EffectEvent[] } {
+export function tickEffects(state: BattleState): {
+  state: BattleState;
+  events: EffectEvent[];
+} {
   const events: EffectEvent[] = [];
   const newUnits = new Map(state.units);
 
@@ -285,10 +395,22 @@ export function tickEffects(state: BattleState): { state: BattleState; events: E
       if (ae.computedPerTurn !== undefined) {
         if (ae.effect.isBuff) {
           hp = Math.min(unit.maxHp, hp + ae.computedPerTurn);
-          events.push({ type: 'effect_tick_heal', unitId: unit.id, unitName: unit.name, effectDisplayName: ae.effectDisplayName, amount: ae.computedPerTurn });
+          events.push({
+            type: "effect_tick_heal",
+            unitId: unit.id,
+            unitName: unit.name,
+            effectDisplayName: ae.effectDisplayName,
+            amount: ae.computedPerTurn,
+          });
         } else {
           hp = Math.max(0, hp - ae.computedPerTurn);
-          events.push({ type: 'effect_tick_damage', unitId: unit.id, unitName: unit.name, effectDisplayName: ae.effectDisplayName, amount: ae.computedPerTurn });
+          events.push({
+            type: "effect_tick_damage",
+            unitId: unit.id,
+            unitName: unit.name,
+            effectDisplayName: ae.effectDisplayName,
+            amount: ae.computedPerTurn,
+          });
         }
       }
 
@@ -296,7 +418,12 @@ export function tickEffects(state: BattleState): { state: BattleState; events: E
       if (remaining > 0) {
         nextEffects.push({ ...ae, remainingRounds: remaining });
       } else {
-        events.push({ type: 'effect_expired', unitId: unit.id, unitName: unit.name, effectDisplayName: ae.effectDisplayName });
+        events.push({
+          type: "effect_expired",
+          unitId: unit.id,
+          unitName: unit.name,
+          effectDisplayName: ae.effectDisplayName,
+        });
       }
     }
 
@@ -329,22 +456,23 @@ export interface EffectiveStats {
 export function effectiveStats(unit: Unit): EffectiveStats {
   return unit.activeEffects.reduce<EffectiveStats>(
     (acc, ae) => ({
-      physicalDamage:  acc.physicalDamage  + (ae.effect.physicalDamageBonus  ?? 0),
-      magicalDamage:   acc.magicalDamage   + (ae.effect.magicalDamageBonus   ?? 0),
-      physicalDefense: acc.physicalDefense + (ae.effect.physicalDefenseBonus ?? 0),
-      magicalDefense:  acc.magicalDefense  + (ae.effect.magicalDefenseBonus  ?? 0),
-      dodge:           acc.dodge           + (ae.effect.dodgeBonus            ?? 0),
-      block:           acc.block           + (ae.effect.blockBonus            ?? 0),
-      initiative:      acc.initiative      + (ae.effect.initiativeBonus       ?? 0),
+      physicalDamage: acc.physicalDamage + (ae.effect.physicalDamageBonus ?? 0),
+      magicalDamage: acc.magicalDamage + (ae.effect.magicalDamageBonus ?? 0),
+      physicalDefense:
+        acc.physicalDefense + (ae.effect.physicalDefenseBonus ?? 0),
+      magicalDefense: acc.magicalDefense + (ae.effect.magicalDefenseBonus ?? 0),
+      dodge: acc.dodge + (ae.effect.dodgeBonus ?? 0),
+      block: acc.block + (ae.effect.blockBonus ?? 0),
+      initiative: acc.initiative + (ae.effect.initiativeBonus ?? 0),
     }),
     {
-      physicalDamage:  unit.physicalDamage,
-      magicalDamage:   unit.magicalDamage,
+      physicalDamage: unit.physicalDamage,
+      magicalDamage: unit.magicalDamage,
       physicalDefense: unit.physicalDefense,
-      magicalDefense:  unit.magicalDefense,
-      dodge:           unit.dodge,
-      block:           unit.block,
-      initiative:      unit.initiative,
+      magicalDefense: unit.magicalDefense,
+      dodge: unit.dodge,
+      block: unit.block,
+      initiative: unit.initiative,
     },
   );
 }
@@ -354,11 +482,11 @@ export function checkGameOver(state: BattleState): Side | null {
   let playerAlive = false;
   let enemyAlive = false;
   for (const unit of state.units.values()) {
-    if (unit.anchor.side === 'player') playerAlive = true;
-    if (unit.anchor.side === 'enemy') enemyAlive = true;
+    if (unit.anchor.side === "player") playerAlive = true;
+    if (unit.anchor.side === "enemy") enemyAlive = true;
   }
-  if (!playerAlive) return 'player';
-  if (!enemyAlive) return 'enemy';
+  if (!playerAlive) return "player";
+  if (!enemyAlive) return "enemy";
   return null;
 }
 
@@ -409,16 +537,26 @@ export function resolveInstantEffects(
 
     // Probability roll — no dodge/block/defense
     if (Math.random() >= probability) {
-      events.push({ type: 'instant_effect_failed', unitId: unit.id, unitName: unit.name, displayName: block.displayName });
+      events.push({
+        type: "instant_effect_failed",
+        unitId: unit.id,
+        unitName: unit.name,
+        displayName: block.displayName,
+      });
       continue;
     }
 
     // Only affects units that still have a turn this round
     if (!remainingSet.has(unit.id)) continue;
 
-    events.push({ type: 'instant_effect_applied', unitId: unit.id, unitName: unit.name, displayName: block.displayName });
+    events.push({
+      type: "instant_effect_applied",
+      unitId: unit.id,
+      unitName: unit.name,
+      displayName: block.displayName,
+    });
 
-    if (block.instantEffectType === 'provoke') {
+    if (block.instantEffectType === "provoke") {
       provokedUnitIds.push(unit.id);
     } else {
       distractedUnitIds.push(unit.id);
