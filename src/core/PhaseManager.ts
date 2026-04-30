@@ -30,6 +30,9 @@ import {
 import {
   isBattlePlacementAction,
   applyBattlePlacementAction,
+  isBattleTurnAction,
+  applyBattleTurnAction,
+  type BattlePhaseActionResult,
 } from './phaseHandlers/battlePhaseHandler';
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
@@ -50,6 +53,7 @@ class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
   private game!: Phaser.Game;
   private debugState: DebugBattleState | null = null;
+  private lastBattleTransition: BattlePhaseActionResult | null = null;
 
   init(game: Phaser.Game): void {
     this.game = game;
@@ -93,7 +97,12 @@ class PhaseManagerClass {
     };
   }
 
+  getLastBattleTransition(): BattlePhaseActionResult | null {
+    return this.lastBattleTransition;
+  }
+
   transition(action: PhaseAction): void {
+    this.lastBattleTransition = null;
     let mapCleared = false;
     if (action.type === 'exit_battle' && this.phase.type === 'battle') {
       mapCleared = wouldClearMap(this.phase);
@@ -305,6 +314,20 @@ class PhaseManagerClass {
   }
 
   private applyActionSideEffects(action: PhaseAction, prev: GamePhase): void {
+    // ── Battle turn ──
+    if (isBattleTurnAction(action) && prev.type === 'battle') {
+      const result = applyBattleTurnAction({
+        state:   GameState.get(),
+        context: GameState.getBattleTurnContext(),
+        action,
+        mode:    GameState.getBattleMode(),
+      });
+      GameState.set(result.state);
+      GameState.setBattleTurnContext(result.context);
+      this.lastBattleTransition = result;
+      return;
+    }
+
     // ── Battle placement ──
     if (isBattlePlacementAction(action) && prev.type === 'battle') {
       const state    = GameState.get();
@@ -856,9 +879,18 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'swap_field_units':
       if (current.type !== 'battle') return null;
       return current; // applyActionSideEffects mutates BattleState; rebuildSnapshot refreshes phase
-  }
 
-  return null;
+    // ── Battle turn (mutation-only) ───────────────────────────────────────
+    case 'battle_start_turn':
+    case 'battle_select_skill':
+    case 'battle_use_skill':
+    case 'battle_advance_turn':
+    case 'battle_skip_turn':
+    case 'battle_charge_turn':
+    case 'battle_quick_turn':
+      if (current.type !== 'battle') return null;
+      return current; // applyActionSideEffects mutates state; rebuildSnapshot refreshes phase
+  }
 }
 
 // ─── Helpers (kept for future shop phase) ─────────────────────────────────────

@@ -146,7 +146,15 @@ export type PhaseAction =
   | { type: 'move_field_unit';            unitId:   string; anchor: CellCoord }
   | { type: 'move_field_unit_to_bench';   unitId:   string; benchIdx: number }
   | { type: 'return_field_unit_to_bench'; unitId:   string }
-  | { type: 'swap_field_units';           unitAId:  string; unitBId: string };
+  | { type: 'swap_field_units';           unitAId:  string; unitBId: string }
+  // ── Battle turn actions (mutation-only: resolveTransition returns current) ──
+  | { type: 'battle_start_turn' }
+  | { type: 'battle_select_skill'; skillIndex: number }
+  | { type: 'battle_use_skill'; unitId: string; target: CellCoord; skillIndex?: number }
+  | { type: 'battle_advance_turn' }
+  | { type: 'battle_skip_turn' }
+  | { type: 'battle_charge_turn' }
+  | { type: 'battle_quick_turn'; unitId: string };
 
 // Empty snapshots used by resolveTransition as placeholders —
 // rebuildSnapshot fills them with real data after side effects run.

@@ -1,6 +1,14 @@
-import type { BattleState }       from '../../battle/types';
-import type { PhaseAction }       from '../phases';
-import type { PlayerBattleSetup } from '../battleSetup';
+import type { BattleState, BattleMode } from '../../battle/types';
+import type { PhaseAction }            from '../phases';
+import type { PlayerBattleSetup }      from '../battleSetup';
+import type { BattleEvent }            from '../../battle/battleEvents';
+import type { Side }                   from '../../shared/gridTypes';
+import {
+  type TurnContext,
+  type TurnStartDirective,
+} from '../../battle/turnResolver';
+import { checkGameOver }               from '../../battle/combat';
+import { resolveBattleTransition }     from '../../battle/battleTransition';
 import { buildPlayerUnitInput }   from '../battleSetupProjection';
 import { createUnitInstance }     from '../../battle/unitFactory';
 import {
@@ -37,6 +45,134 @@ const PLACEMENT_ACTION_TYPES = new Set<string>([
 export function isBattlePlacementAction(action: PhaseAction): action is BattlePlacementAction {
   return PLACEMENT_ACTION_TYPES.has(action.type);
 }
+
+// ─── Battle Turn Actions ──────────────────────────────────────────────────────
+
+export type BattleTurnPhaseAction = Extract<PhaseAction, {
+  type:
+    | 'battle_start_turn'
+    | 'battle_select_skill'
+    | 'battle_use_skill'
+    | 'battle_advance_turn'
+    | 'battle_skip_turn'
+    | 'battle_charge_turn'
+    | 'battle_quick_turn'
+}>;
+
+const BATTLE_TURN_ACTION_TYPES = new Set<string>([
+  'battle_start_turn', 'battle_select_skill', 'battle_use_skill',
+  'battle_advance_turn', 'battle_skip_turn', 'battle_charge_turn',
+  'battle_quick_turn',
+]);
+
+export function isBattleTurnAction(action: PhaseAction): action is BattleTurnPhaseAction {
+  return BATTLE_TURN_ACTION_TYPES.has(action.type);
+}
+
+export type BattlePhaseActionResult = {
+  state:      BattleState;
+  context:    TurnContext;
+  events:     BattleEvent[];
+  directive?: TurnStartDirective;
+  winner?:    Side;
+};
+
+function withWinner(
+  result: Omit<BattlePhaseActionResult, 'winner'>,
+): BattlePhaseActionResult {
+  const winner = checkGameOver(result.state);
+  if (!winner) return result;
+  return { ...result, state: { ...result.state, phase: 'end' }, winner };
+}
+
+export function applyBattleTurnAction(input: {
+  state:   BattleState;
+  context: TurnContext;
+  action:  BattleTurnPhaseAction;
+  mode:    BattleMode;
+  rng?:    () => number;
+}): BattlePhaseActionResult {
+  const { state, context, action, mode, rng } = input;
+
+  switch (action.type) {
+
+    // resolveActiveTurnStart can call advanceTurn internally (missing active
+    // unit, or manual melee blocked and auto-skipped). advanceTurn ticks
+    // round effects which can kill units → check game-over.
+    case 'battle_start_turn': {
+      const result = resolveBattleTransition({ state, context, action: { type: 'start_turn', mode }, rng });
+      return withWinner({ state: result.state, context: result.context, events: result.events, directive: result.directive });
+    }
+
+    // Pure UI state — no damage, no queue advancement.
+    case 'battle_select_skill': {
+      const result = resolveBattleTransition({ state, context, action: { type: 'select_skill', skillIndex: action.skillIndex }, rng });
+      return { state: result.state, context: result.context, events: result.events };
+    }
+
+    // Compound: skill → game-over → advance turn → game-over.
+    // Two explicit checks because the order is load-bearing (matches Game.ts).
+    // Do NOT collapse into withWinner.
+    case 'battle_use_skill': {
+      const used = resolveBattleTransition({
+        state,
+        context,
+        action: { type: 'use_skill', unitId: action.unitId, target: action.target, skillIndex: action.skillIndex },
+        rng,
+      });
+
+      let nextState   = used.state;
+      let nextContext = used.context;
+      let events      = used.events;
+
+      const winnerAfterSkill = checkGameOver(nextState);
+      if (winnerAfterSkill) {
+        return { state: { ...nextState, phase: 'end' }, context: nextContext, events, winner: winnerAfterSkill };
+      }
+
+      const advanced = resolveBattleTransition({ state: nextState, context: nextContext, action: { type: 'advance_turn' }, rng });
+      nextState   = advanced.state;
+      nextContext = advanced.context;
+      events      = [...events, ...advanced.events];
+
+      const winnerAfterAdvance = checkGameOver(nextState);
+      if (winnerAfterAdvance) {
+        return { state: { ...nextState, phase: 'end' }, context: nextContext, events, winner: winnerAfterAdvance };
+      }
+
+      return { state: nextState, context: nextContext, events };
+    }
+
+    // Round-end effect ticks happen inside advanceTurn and can kill units.
+    case 'battle_advance_turn': {
+      const result = resolveBattleTransition({ state, context, action: { type: 'advance_turn' }, rng });
+      return withWinner({ state: result.state, context: result.context, events: result.events });
+    }
+
+    // Skip may advance the queue and trigger round effects.
+    case 'battle_skip_turn': {
+      const result = resolveBattleTransition({ state, context, action: { type: 'skip_turn' }, rng });
+      return withWinner({ state: result.state, context: result.context, events: result.events });
+    }
+
+    // Current charge never deals damage, but check defensively.
+    case 'battle_charge_turn': {
+      const result = resolveBattleTransition({ state, context, action: { type: 'charge_turn' }, rng });
+      return withWinner({ state: result.state, context: result.context, events: result.events });
+    }
+
+    // One quick-battle iteration: quick_turn → advance_turn → game-over.
+    // Does NOT loop — the caller (Stage 3 quick-battle loop) iterates.
+    case 'battle_quick_turn': {
+      const quick    = resolveBattleTransition({ state, context, action: { type: 'quick_turn', unitId: action.unitId }, rng });
+      const advanced = resolveBattleTransition({ state: quick.state, context: quick.context, action: { type: 'advance_turn' }, rng });
+      const events   = [...quick.events, ...advanced.events];
+      return withWinner({ state: advanced.state, context: advanced.context, events });
+    }
+  }
+}
+
+// ─── Battle Placement Actions ─────────────────────────────────────────────────
 
 export function applyBattlePlacementAction(
   state:  BattleState,
