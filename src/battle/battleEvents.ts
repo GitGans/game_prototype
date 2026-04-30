@@ -51,4 +51,25 @@ export type BattleEvent =
   | { type: 'counter_attack_unavailable';
       unitId: string; unitName: string;
       reason: 'caster_dead' | 'no_basic_attack' | 'out_of_range';
-      targetName?: string };
+      targetName?: string }
+
+  // ── Turn-level events (normalized from TurnEvent) ──────────────────────
+  | { type: 'turn_skipped';
+      unitId: string; unitName: string;
+      reason: 'manual_skip' | 'blocked_melee' }
+
+  | { type: 'turn_charged';
+      unitId: string; unitName: string }
+
+  // ── Round-end effect ticks (normalized from TurnEvent round_effect) ────
+  | { type: 'effect_tick_heal';
+      unitId: string; unitName: string;
+      effectDisplayName: string; amount: number }
+
+  | { type: 'effect_tick_damage';
+      unitId: string; unitName: string;
+      effectDisplayName: string; amount: number }
+
+  | { type: 'effect_expired';
+      unitId: string; unitName: string;
+      effectDisplayName: string };
