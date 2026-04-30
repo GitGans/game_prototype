@@ -22,7 +22,7 @@ export type BattleAction =
   | { type: 'select_skill'; skillIndex: number }
   | { type: 'use_skill'; unitId: string; target: CellCoord; skillIndex?: number }
   | { type: 'advance_turn' }
-  | { type: 'skip_turn' }
+  | { type: 'skip_turn'; reason?: 'manual_skip' | 'blocked_melee' }
   | { type: 'charge_turn' }
   | { type: 'quick_turn'; unitId: string };
 
@@ -108,7 +108,7 @@ export function resolveBattleTransition(input: {
     }
 
     case 'skip_turn': {
-      const result = skipActiveTurn({ state, context });
+      const result = skipActiveTurn({ state, context, reason: action.reason });
       return {
         state: result.state,
         context: result.context,

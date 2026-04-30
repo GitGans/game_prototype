@@ -151,7 +151,7 @@ export function applyBattleTurnAction(input: {
 
     // Skip may advance the queue and trigger round effects.
     case 'battle_skip_turn': {
-      const result = resolveBattleTransition({ state, context, action: { type: 'skip_turn' }, rng });
+      const result = resolveBattleTransition({ state, context, action: { type: 'skip_turn', reason: action.reason }, rng });
       return withWinner({ state: result.state, context: result.context, events: result.events });
     }
 

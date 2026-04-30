@@ -100,8 +100,9 @@ export type SkipTurnResult = AdvanceTurnResult & {
 export function skipActiveTurn(input: {
   state: BattleState;
   context: TurnContext;
+  reason?: 'manual_skip' | 'blocked_melee';
 }): SkipTurnResult {
-  const { state, context } = input;
+  const { state, context, reason = 'manual_skip' } = input;
   const activeUnit = state.units.get(state.roundQueue[0]);
   if (!activeUnit) {
     return { state, context, events: [], skipped: false };
@@ -111,7 +112,7 @@ export function skipActiveTurn(input: {
     type: 'turn_skipped',
     unitId: activeUnit.id,
     unitName: activeUnit.name,
-    reason: 'manual_skip',
+    reason,
   };
 
   const advanced = advanceTurn({ state, context });

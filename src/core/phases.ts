@@ -152,7 +152,7 @@ export type PhaseAction =
   | { type: 'battle_select_skill'; skillIndex: number }
   | { type: 'battle_use_skill'; unitId: string; target: CellCoord; skillIndex?: number }
   | { type: 'battle_advance_turn' }
-  | { type: 'battle_skip_turn' }
+  | { type: 'battle_skip_turn'; reason?: 'manual_skip' | 'blocked_melee' }
   | { type: 'battle_charge_turn' }
   | { type: 'battle_quick_turn'; unitId: string };
 

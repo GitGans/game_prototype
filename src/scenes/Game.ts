@@ -31,7 +31,8 @@ import {
 import type { PlacementSelection } from "../battle/types";
 import type { BenchUnitSnapshot } from "../shared/battleSnapshots";
 import { PhaseManager } from '../core/PhaseManager';
-import { BattleParticipant } from '../core/phases';
+import { type PhaseAction, BattleParticipant } from '../core/phases';
+import { type BattlePhaseActionResult } from '../core/phaseHandlers/battlePhaseHandler';
 import { Button } from '../ui/Button';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
@@ -50,25 +51,24 @@ import {
   resolveRandomTarget,
   resolveBestHealTarget,
 } from "../battle/skillRuntime";
-import { computeOneTurn } from "../battle/quickTurn";
-import { checkGameOver, effectiveStats, EffectEvent, computeDamageVsUnit } from "../battle/combat";
+import { effectiveStats, computeDamageVsUnit } from "../battle/combat";
 import { resolvePattern } from "../battle/skillPatterns";
 import { getEffectPattern, getDamageModifierPercent } from "../data/skillDefinitions";
 import { buildRoundQueue } from "../battle/initiative";
-import { executeSkillUse } from '../battle/skillExecution';
 import type { BattleEvent } from '../battle/battleEvents';
-import {
-  resolveActiveTurnStart,
-  advanceTurn,
-  skipActiveTurn,
-  chargeActiveTurn,
-  switchActiveSkillForManualTurn,
-  createTurnContext,
-  resetTurnContextForNewBattle,
-  getSkillQueueContext,
-  hasChargedThisRound,
-  type TurnEvent,
-} from '../battle/turnResolver';
+import { hasChargedThisRound } from '../battle/turnResolver';
+
+// Local alias over PhaseAction so TypeScript can check battle turn dispatch sites.
+type BattleTurnSceneAction = Extract<PhaseAction, {
+  type:
+    | 'battle_start_turn'
+    | 'battle_select_skill'
+    | 'battle_use_skill'
+    | 'battle_advance_turn'
+    | 'battle_skip_turn'
+    | 'battle_charge_turn'
+    | 'battle_quick_turn'
+}>;
 
 export class Game extends Phaser.Scene {
   private cellViews: Map<string, CellView> = new Map();
@@ -96,7 +96,6 @@ export class Game extends Phaser.Scene {
   private benchCards: BenchCard[] = [];
   private startBattleBtn: Button | null = null;
   private autoBattleButtons: Button[] = [];
-  private turnContext = createTurnContext();
   private manualTurnButtons: Button[] = [];
   private chargeBtn: Button | null = null;
   private pendingTargetCoord: CellCoord | null = null;
@@ -549,9 +548,29 @@ export class Game extends Phaser.Scene {
     EventBus.emit(Events.STATE_CHANGED);
     this.setStatus("");
     this.battleLog.setVisible(true);
-    this.turnContext = resetTurnContextForNewBattle();
+    GameState.resetBattleTurnContext();
     this.buildAutoBattleButtons();
     this.startActiveUnitTurn(state);
+  }
+
+  // ─── Turn Action Helpers ────────────────────────────────────────────────────
+
+  private runBattleAction(action: BattleTurnSceneAction): BattlePhaseActionResult | null {
+    PhaseManager.transition(action);
+    return PhaseManager.getLastBattleTransition();
+  }
+
+  private handleBattleWinner(
+    result: BattlePhaseActionResult | null,
+    options?: { destroyAutoButtons?: boolean; delay?: number },
+  ): boolean {
+    if (!result?.winner) return false;
+    const delay = options?.delay ?? Game.DELAY_GAMEOVER;
+    this.time.delayedCall(delay, () => {
+      if (options?.destroyAutoButtons) this.destroyAutoBattleButtons();
+      this.showGameOver(result.winner!);
+    });
+    return true;
   }
 
   // ─── Turn Flow ─────────────────────────────────────────────────────────────
@@ -560,49 +579,29 @@ export class Game extends Phaser.Scene {
     this.pendingTargetCoord = null;
     this.clearSkillIcons();
 
-    const result = resolveActiveTurnStart({
-      state,
-      context: this.turnContext,
-      mode: GameState.getBattleMode(),
-    });
+    const result = this.runBattleAction({ type: 'battle_start_turn' });
+    if (!result) return;
 
-    // Early exit: battle ended, quick mode, or empty queue — nothing to commit
-    if (result.directive.type === 'none') {
-      return;
-    }
+    // 'none' means empty queue or battle already ended — nothing to commit
+    if (!result.directive || result.directive.type === 'none') return;
 
-    this.turnContext = result.context;
-    GameState.set(result.state);
-    EventBus.emit(Events.STATE_CHANGED);
-    this.presentTurnEvents(result.events);
+    // activeUnit before turn start — only needed for presentBattleEvents style hint
+    const activeUnit = state.units.get(state.roundQueue[0]);
+    this.presentBattleEvents(result.events, activeUnit);
     this.updateManualButtons(result.state);
 
     switch (result.directive.type) {
       case 'continue_immediately': {
-        // Technical queue recovery: active unit was missing.
-        // advanceTurn may have ticked effects — check game-over before recursing.
-        const winner = checkGameOver(result.state);
-        if (winner) {
-          const final: BattleState = { ...result.state, phase: 'end' };
-          GameState.set(final);
-          EventBus.emit(Events.STATE_CHANGED);
-          this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
-          return;
-        }
+        // Queue recovery: active unit was missing; battle_start_turn advanced queue.
+        // Effect ticks may have killed units — check before recursing.
+        if (this.handleBattleWinner(result)) return;
         this.startActiveUnitTurn(result.state);
         return;
       }
 
       case 'schedule_next_turn': {
-        // Melee unit was blocked — advanceTurn may have ticked effects.
-        const winner = checkGameOver(result.state);
-        if (winner) {
-          const final: BattleState = { ...result.state, phase: 'end' };
-          GameState.set(final);
-          EventBus.emit(Events.STATE_CHANGED);
-          this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
-          return;
-        }
+        // Melee unit was blocked; battle_start_turn advanced queue.
+        if (this.handleBattleWinner(result)) return;
         this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
           this.startActiveUnitTurn(result.state),
         );
@@ -610,7 +609,6 @@ export class Game extends Phaser.Scene {
       }
 
       case 'schedule_auto_turn': {
-        // No queue advancement here — autoTurn handles execution and advancement.
         const unit = result.state.units.get(result.directive.activeUnitId);
         if (result.directive.delayKind === 'auto_player') {
           this.setStatus(`${unit?.name ?? '?'} turn… (auto)`);
@@ -751,42 +749,21 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) attackerView?.setSpriteState('idle');
     });
 
-    const result = executeSkillUse({
-      state,
-      casterId: attackerId,
+    // battle_use_skill composes: executeSkillUse → checkGameOver → advanceTurn → checkGameOver
+    const result = this.runBattleAction({
+      type: 'battle_use_skill',
+      unitId: attackerId,
       target: coord,
-      queueContext: getSkillQueueContext(this.turnContext),
     });
+    if (!result) return;
 
     this.presentBattleEvents(result.events, activeUnit);
-    let next = result.state;
 
-    const winner = checkGameOver(next);
-    if (winner) {
-      next = { ...next, phase: 'end' };
-      GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
-      return;
-    }
+    if (this.handleBattleWinner(result)) return;
 
-    const advanced = advanceTurn({ state: next, context: this.turnContext });
-    this.turnContext = advanced.context;
-    this.presentTurnEvents(advanced.events);
-    next = advanced.state;
-
-    const winnerAfterAdvance = checkGameOver(next);
-    if (winnerAfterAdvance) {
-      next = { ...next, phase: 'end' };
-      GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winnerAfterAdvance));
-      return;
-    }
-
-    GameState.set(next);
-    EventBus.emit(Events.STATE_CHANGED);
-    this.time.delayedCall(Game.DELAY_NEXT_TURN, () => this.startActiveUnitTurn(next));
+    this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
+      this.startActiveUnitTurn(result.state),
+    );
   }
 
   private presentBattleEvents(events: BattleEvent[], activeUnit: Unit | undefined): void {
@@ -858,13 +835,7 @@ export class Game extends Phaser.Scene {
           this.battleLog.addEntry(msg, 'neutral');
           break;
         }
-      }
-    }
-  }
 
-  private presentTurnEvents(events: TurnEvent[]): void {
-    for (const e of events) {
-      switch (e.type) {
         case 'turn_skipped':
           if (e.reason === 'manual_skip') {
             this.battleLog.addEntry(`${e.unitName} skips their turn`, 'neutral');
@@ -872,117 +843,123 @@ export class Game extends Phaser.Scene {
             this.battleLog.addEntry(`${e.unitName} — blocked, skipping turn`, 'neutral');
           }
           break;
+
         case 'turn_charged':
           this.battleLog.addEntry(
             `${e.unitName} charges their turn (acts last this round)`,
             'neutral',
           );
           break;
-        case 'round_effect':
-          this.logEffectEvent(e.event);
+
+        case 'effect_tick_heal':
+          this.battleLog.addEntry(
+            `${e.unitName} regenerates +${e.amount} HP (${e.effectDisplayName})`,
+            'positive',
+          );
+          break;
+
+        case 'effect_tick_damage':
+          this.battleLog.addEntry(
+            `${e.unitName} takes -${e.amount} HP (${e.effectDisplayName})`,
+            'negative',
+          );
+          break;
+
+        case 'effect_expired':
+          this.battleLog.addEntry(`${e.effectDisplayName} expired on ${e.unitName}`, 'neutral');
           break;
       }
     }
   }
 
   private autoTurn(): void {
-    let state = GameState.get();
+    const state = GameState.get();
     if (state.phase === 'end') return;
 
     const unitId = state.roundQueue[0];
     let activeUnit = state.units.get(unitId);
     const isEnemy = activeUnit?.anchor.side === 'enemy';
 
-    // Guard applies only to player units in non-auto mode.
-    // Enemy units always act automatically, regardless of battle mode.
+    // Guard: player units in non-auto mode hand control back to startActiveUnitTurn.
+    // Enemy units always act automatically regardless of battle mode.
     if (!isEnemy && GameState.getBattleMode() !== 'auto') {
       if (GameState.getBattleMode() === 'manual') {
         this.startActiveUnitTurn(state);
       }
       return;
     }
+
+    // Branch A: missing active unit — delegate fully to startActiveUnitTurn.
+    // battle_start_turn advances the queue and returns continue_immediately,
+    // which startActiveUnitTurn handles with a game-over check before recursing.
     if (!activeUnit) {
-      // 4b: missing active unit — advance, present events, check game-over
-      const advanced = advanceTurn({ state, context: this.turnContext });
-      this.turnContext = advanced.context;
-      this.presentTurnEvents(advanced.events);
-
-      const winner = checkGameOver(advanced.state);
-      if (winner) {
-        const final: BattleState = { ...advanced.state, phase: 'end' };
-        GameState.set(final);
-        EventBus.emit(Events.STATE_CHANGED);
-        this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
-        return;
-      }
-
-      GameState.set(advanced.state);
-      this.startActiveUnitTurn(advanced.state);
+      this.startActiveUnitTurn(state);
       return;
     }
 
-    // Pick a random skill for this auto/enemy turn
+    // Pick a random skill. Dispatch select_skill so the skill choice is persisted
+    // in GameState before resolving targets or executing.
     const randomSkillIdx = resolveRandomSkillIndex(activeUnit);
-    const updatedUnit = { ...activeUnit, activeSkillIndex: randomSkillIdx };
-    const updatedUnits = new Map(state.units);
-    updatedUnits.set(unitId, updatedUnit);
-    state = { ...state, units: updatedUnits };
-    GameState.set(state);
-    activeUnit = updatedUnit;
+    const selected = this.runBattleAction({
+      type: 'battle_select_skill',
+      skillIndex: randomSkillIdx,
+    });
+    if (!selected) return;
 
-    const nextDelay = Game.DELAY_AUTO_NEXT;
+    // Re-read active unit and skill from the updated state.
+    activeUnit = selected.state.units.get(unitId) ?? activeUnit;
+    if (!activeUnit) return;
     const currentSkill = getActiveSkill(activeUnit);
-    const targets = resolveSkillTargets(activeUnit, currentSkill, state.occupancy);
+    const targets = resolveSkillTargets(activeUnit, currentSkill, selected.state.occupancy);
 
+    // Branch B: no valid targets.
+    // Melee units emit turn_skipped with 'blocked_melee'.
+    // Non-melee units (ranged/enchantment with no reachable target) silently advance —
+    // emitting blocked_melee for them would be semantically wrong.
     if (targets.length === 0) {
-      // 4c: no valid targets
       if (currentSkill.actionType === 'melee') {
-        this.battleLog.addEntry(`${activeUnit.name} — blocked, skipping turn`, 'neutral');
+        const result = this.runBattleAction({
+          type: 'battle_skip_turn',
+          reason: 'blocked_melee',
+        });
+        if (!result) return;
+        this.presentBattleEvents(result.events, activeUnit);
+        if (this.handleBattleWinner(result, { destroyAutoButtons: true })) return;
+        this.time.delayedCall(Game.DELAY_AUTO_NEXT, () =>
+          this.startActiveUnitTurn(result.state),
+        );
+      } else {
+        const result = this.runBattleAction({ type: 'battle_advance_turn' });
+        if (!result) return;
+        this.presentBattleEvents(result.events, activeUnit);
+        if (this.handleBattleWinner(result, { destroyAutoButtons: true })) return;
+        this.time.delayedCall(Game.DELAY_AUTO_NEXT, () =>
+          this.startActiveUnitTurn(result.state),
+        );
       }
-      const advanced = advanceTurn({ state, context: this.turnContext });
-      this.turnContext = advanced.context;
-      this.presentTurnEvents(advanced.events);
-
-      const winner = checkGameOver(advanced.state);
-      if (winner) {
-        const final: BattleState = { ...advanced.state, phase: 'end' };
-        GameState.set(final);
-        EventBus.emit(Events.STATE_CHANGED);
-        this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
-        return;
-      }
-
-      GameState.set(advanced.state);
-      EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(advanced.state));
       return;
     }
 
     const target = isEnchantmentSkill(currentSkill)
-      ? resolveBestHealTarget(state.occupancy, targets)
+      ? resolveBestHealTarget(selected.state.occupancy, targets)
       : resolveRandomTarget(targets);
+
+    // Branch C: target helpers returned null (edge case in enchantment/heal logic).
+    // Silent advance — preserves current behavior of skipping without a log entry.
     if (!target) {
-      // 4d: null target
-      const advanced = advanceTurn({ state, context: this.turnContext });
-      this.turnContext = advanced.context;
-      this.presentTurnEvents(advanced.events);
-
-      const winner = checkGameOver(advanced.state);
-      if (winner) {
-        const final: BattleState = { ...advanced.state, phase: 'end' };
-        GameState.set(final);
-        EventBus.emit(Events.STATE_CHANGED);
-        this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
-        return;
-      }
-
-      GameState.set(advanced.state);
-      EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(advanced.state));
+      const result = this.runBattleAction({ type: 'battle_advance_turn' });
+      if (!result) return;
+      this.presentBattleEvents(result.events, activeUnit);
+      if (this.handleBattleWinner(result, { destroyAutoButtons: true })) return;
+      this.time.delayedCall(Game.DELAY_AUTO_NEXT, () =>
+        this.startActiveUnitTurn(result.state),
+      );
       return;
     }
 
-    // Sprite animation — stays in scene (Phaser, not logic)
+    // Branch D: valid target — execute skill.
+    // battle_use_skill composes: executeSkillUse → checkGameOver → advanceTurn → checkGameOver.
+    // Do NOT dispatch battle_advance_turn after this.
     const unitView = this.unitViews.get(unitId);
     unitView?.setSpriteState('attack');
     this.time.delayedCall(400, () => {
@@ -990,84 +967,61 @@ export class Game extends Phaser.Scene {
       if (current && current.hp > 0) unitView?.setSpriteState('idle');
     });
 
-    const result = executeSkillUse({
-      state,
-      casterId: activeUnit.id,
-      skill: currentSkill,
+    const result = this.runBattleAction({
+      type: 'battle_use_skill',
+      unitId,
       target,
-      queueContext: getSkillQueueContext(this.turnContext),
+      skillIndex: randomSkillIdx,
     });
+    if (!result) return;
 
     this.presentBattleEvents(result.events, activeUnit);
-    let next = result.state;
-
-    const winner = checkGameOver(next);
-    if (winner) {
-      next = { ...next, phase: 'end' };
-      GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(Game.DELAY_GAMEOVER, () => {
-        this.destroyAutoBattleButtons();
-        this.showGameOver(winner);
-      });
-      return;
-    }
-
-    // 4e: post-execution advancement
-    const advanced = advanceTurn({ state: next, context: this.turnContext });
-    this.turnContext = advanced.context;
-    this.presentTurnEvents(advanced.events);
-    next = advanced.state;
-
-    const winnerAfterAdvance = checkGameOver(next);
-    if (winnerAfterAdvance) {
-      next = { ...next, phase: 'end' };
-      GameState.set(next);
-      EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(Game.DELAY_GAMEOVER, () => {
-        this.destroyAutoBattleButtons();
-        this.showGameOver(winnerAfterAdvance);
-      });
-      return;
-    }
-
-    GameState.set(next);
-    EventBus.emit(Events.STATE_CHANGED);
-    this.time.delayedCall(nextDelay, () => this.startActiveUnitTurn(next));
+    if (this.handleBattleWinner(result, { destroyAutoButtons: true })) return;
+    this.time.delayedCall(Game.DELAY_AUTO_NEXT, () =>
+      this.startActiveUnitTurn(result.state),
+    );
   }
 
   private runQuickBattle(): void {
-    let state = GameState.get();
-    let context = resetTurnContextForNewBattle();
+    // Reset turn context so charge-tracking from a prior manual turn does not leak in.
+    GameState.resetBattleTurnContext();
+
+    // Detach this scene's listener: quick battle is a silent simulation — no redraws
+    // until done. This does not suppress global EventBus emission; other listeners still
+    // receive STATE_CHANGED on every iteration.
+    EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
+
     const MAX_ITERATIONS = 2000;
     let i = 0;
+    let finalWinner: Side | null = null;
 
-    while (i++ < MAX_ITERATIONS) {
-      const unitId = state.roundQueue[0];
-      if (!unitId) break;
+    try {
+      while (i++ < MAX_ITERATIONS) {
+        const state = GameState.get();
+        const unitId = state.roundQueue[0];
+        if (!unitId) break;
 
-      state = computeOneTurn(state, unitId, {
-        queueContext: getSkillQueueContext(context),
-      });
+        const result = this.runBattleAction({ type: 'battle_quick_turn', unitId });
+        if (!result) break;
 
-      const advanced = advanceTurn({ state, context });
-      state = advanced.state;
-      context = advanced.context;
-      // TurnEvents are not rendered in quick battle — it is a silent simulation
-
-      const winner = checkGameOver(state);
-      if (winner) {
-        state = { ...state, phase: "end" };
-        break;
+        if (result.winner) {
+          finalWinner = result.winner;
+          break;
+        }
       }
+    } finally {
+      // Always reattach, even if an error occurs, so the scene stays live.
+      EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);
     }
 
-    state = { ...state, phase: "end" };
-    GameState.set(state);
+    // Terminal presentation write: mark the battle as ended and trigger a single re-render.
+    // This is the one direct GameState.set allowed in Stage 3 — it is not a turn mutation
+    // but a final phase transition for display purposes.
+    const finalState: BattleState = { ...GameState.get(), phase: 'end' };
+    GameState.set(finalState);
     EventBus.emit(Events.STATE_CHANGED);
 
-    const winner = checkGameOver(state);
-    this.time.delayedCall(200, () => this.showGameOver(winner ?? "player"));
+    this.time.delayedCall(200, () => this.showGameOver(finalWinner ?? 'player'));
   }
 
   private buildAutoBattleButtons(): void {
@@ -1094,10 +1048,15 @@ export class Game extends Phaser.Scene {
         if (s.phase === "select_target") {
           const active = s.units.get(s.roundQueue[0]);
           if (active?.anchor.side === "player") {
-            const next: BattleState = { ...s, validTargets: [] };
-            GameState.set(next);
-            EventBus.emit(Events.STATE_CHANGED);
-            this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
+            // battle_start_turn resets validTargets and recomputes directive.
+            // Must consume events and winner: start_turn may advance internally.
+            const result = this.runBattleAction({ type: 'battle_start_turn' });
+            if (!result) return;
+            this.presentBattleEvents(result.events, active);
+            if (this.handleBattleWinner(result)) return;
+            if (result.directive?.type === 'schedule_auto_turn') {
+              this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
+            }
           }
         }
       },
@@ -1124,43 +1083,18 @@ export class Game extends Phaser.Scene {
     this.chargeBtn = null;
   }
 
-  private logEffectEvent(e: EffectEvent): void {
-    switch (e.type) {
-      case 'effect_applied':
-        this.battleLog.addEntry(`${e.unitName} is affected by ${e.effectDisplayName}`, 'neutral');
-        break;
-      case 'effect_tick_heal':
-        this.battleLog.addEntry(`${e.unitName} regenerates +${e.amount} HP (${e.effectDisplayName})`, 'positive');
-        break;
-      case 'effect_tick_damage':
-        this.battleLog.addEntry(`${e.unitName} takes -${e.amount} HP (${e.effectDisplayName})`, 'negative');
-        break;
-      case 'effect_expired':
-        this.battleLog.addEntry(`${e.effectDisplayName} expired on ${e.unitName}`, 'neutral');
-        break;
-    }
-  }
-
   private handleSkipTurn(): void {
+    // Pre-action active unit: used only as style hint for presentBattleEvents.
     const state = GameState.get();
-    const result = skipActiveTurn({ state, context: this.turnContext });
+    const activeUnit = state.units.get(state.roundQueue[0]);
 
-    if (!result.skipped) return;
+    const result = this.runBattleAction({ type: 'battle_skip_turn', reason: 'manual_skip' });
+    if (!result) return;
 
-    this.turnContext = result.context;
-    GameState.set(result.state);
-    EventBus.emit(Events.STATE_CHANGED);
-    this.presentTurnEvents(result.events);
+    this.presentBattleEvents(result.events, activeUnit);
     this.updateManualButtons(result.state);
 
-    const winner = checkGameOver(result.state);
-    if (winner) {
-      const final: BattleState = { ...result.state, phase: 'end' };
-      GameState.set(final);
-      EventBus.emit(Events.STATE_CHANGED);
-      this.time.delayedCall(Game.DELAY_GAMEOVER, () => this.showGameOver(winner));
-      return;
-    }
+    if (this.handleBattleWinner(result)) return;
 
     this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
       this.startActiveUnitTurn(result.state),
@@ -1169,15 +1103,16 @@ export class Game extends Phaser.Scene {
 
   private handleChargeTurn(): void {
     const state = GameState.get();
-    const result = chargeActiveTurn({ state, context: this.turnContext });
+    const activeUnit = state.units.get(state.roundQueue[0]);
 
-    if (!result.charged) return;
+    const result = this.runBattleAction({ type: 'battle_charge_turn' });
+    if (!result) return;
 
-    this.turnContext = result.context;
-    GameState.set(result.state);
-    EventBus.emit(Events.STATE_CHANGED);
-    this.presentTurnEvents(result.events);
+    this.presentBattleEvents(result.events, activeUnit);
     this.updateManualButtons(result.state);
+
+    // Charge does not deal damage, but withWinner() wraps defensively — respect it.
+    if (this.handleBattleWinner(result)) return;
 
     this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
       this.startActiveUnitTurn(result.state),
@@ -1191,7 +1126,7 @@ export class Game extends Phaser.Scene {
     const show = mode === "manual" && activeUnit?.anchor.side === "player";
     for (const btn of this.manualTurnButtons) btn.setVisible(show);
     if (show && this.chargeBtn) {
-      const used = hasChargedThisRound(this.turnContext, state.roundQueue[0]);
+      const used = hasChargedThisRound(GameState.getBattleTurnContext(), state.roundQueue[0]);
       this.chargeBtn.setDisabled(used);
     }
   }
@@ -1341,14 +1276,15 @@ export class Game extends Phaser.Scene {
   }
 
   private switchActiveSkill(index: number): void {
-    const state = GameState.get();
-    const result = switchActiveSkillForManualTurn({ state, skillIndex: index });
+    const result = this.runBattleAction({ type: 'battle_select_skill', skillIndex: index });
+    if (!result) return;
 
     this.pendingTargetCoord = null;
-    GameState.set(result.state);
-    EventBus.emit(Events.STATE_CHANGED);
 
-    const { activeUnit: unit, activeSkill: skill } = result;
+    const unitId = result.state.roundQueue[0];
+    const unit = result.state.units.get(unitId);
+    const skill = unit ? getActiveSkill(unit) : undefined;
+
     if (!unit || !skill) return;
 
     this.setStatus(
