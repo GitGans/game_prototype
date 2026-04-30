@@ -34,16 +34,16 @@ export type SkillExecutionInput = {
   /** Defaults to getActiveSkill(caster) when omitted. */
   skill?: Skill;
   queueContext: {
-    /** Read-only — lifecycle stays in Game.ts until Stage 4. */
+    /** Read-only queue context supplied by the turn resolver. */
     chargedThisRound: ReadonlySet<string>;
   };
 };
 
 export type SkillExecutionResult = {
   /**
-   * Fully updated state: HP, effects, occupancy, roundQueue.
-   * roundQueue already reflects queue changes from initiative rebuild and
-   * instant-effect unit removal — Game.ts only needs to call advanceTurn after.
+   * Fully updated skill-use state: HP, effects, occupancy, and queue changes
+   * caused by skill effects. Normal turn advancement remains outside the
+   * executor and is handled by turnResolver.advanceTurn().
    */
   state: BattleState;
   events: BattleEvent[];
@@ -60,7 +60,7 @@ export type SkillExecutionResult = {
  *   1. enchantment: resolveHealWithEvents → effectBlock → initiative rebuild
  *   2. attack:      resolveAttack → vampirism → effectBlock → initiative rebuild → instantEffectBlock
  *
- * Does NOT call: advanceQueue, tickEffects, checkGameOver.
+ * Does NOT call: advanceTurn, tickEffects, checkGameOver.
  */
 export function executeSkillUse(
   input: SkillExecutionInput,

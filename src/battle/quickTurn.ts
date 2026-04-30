@@ -22,6 +22,9 @@ export type ComputeOneTurnOptions = {
  *
  * `options.rng` controls skill index and target selection.
  * Combat rolls (dodge, block) still use Math.random inside executeSkillUse.
+ *
+ * TODO(post-refactor): consider extracting shared auto/quick skill-target selection.
+ * autoTurn in Game.ts performs the same skill/target selection independently.
  */
 export function computeOneTurn(
   state: BattleState,

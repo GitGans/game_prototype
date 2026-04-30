@@ -516,7 +516,7 @@ export class Game extends Phaser.Scene {
   // ─── Start Battle ──────────────────────────────────────────────────────────
 
   private startBattle(): void {
-    // TODO Stage 6: move startBattle combat-init into PhaseManager pipeline
+    // TODO(post-refactor): move startBattle combat init into the PhaseManager pipeline.
     // Tear down placement UI; keep bench visible as display-only
     this.buildBenchPanel(false);
     if (this.startBattleBtn) {
@@ -1193,7 +1193,6 @@ export class Game extends Phaser.Scene {
     if (show && this.chargeBtn) {
       const used = hasChargedThisRound(this.turnContext, state.roundQueue[0]);
       this.chargeBtn.setDisabled(used);
-      if (used) this.chargeBtn.setAlpha(0.2);
     }
   }
 
@@ -1406,14 +1405,12 @@ export class Game extends Phaser.Scene {
     });
   }
 
-  private showGameOver(winner: Side): void {
+  private showGameOver(eliminatedSide: Side): void {
     // Battle runtime cleanup — stays in Game.ts, not in the overlay component.
     this.destroyAutoBattleButtons();
 
-    // Translate game-semantic `winner` to UI-semantic `outcome`.
-    // `winner === 'enemy'` means the enemy side was eliminated → player victory.
-    // (Tech debt: `winner` naming appears inverted — tracked for rename outside Stage 3.)
-    const outcome: BattleEndOutcome = winner === 'enemy' ? 'victory' : 'defeat';
+    // checkGameOver returns the side with no surviving units.
+    const outcome: BattleEndOutcome = eliminatedSide === 'enemy' ? 'victory' : 'defeat';
 
     const phase         = PhaseManager.getPhase();
     const isDebugBattle = phase.type === 'battle' && phase.returnPhase.type === 'main_menu';

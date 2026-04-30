@@ -66,6 +66,10 @@ Browser-based game with a turn-based game on a grid.
 
 ---
 
+Use node scripts/check-boundaries.mjs 2>&1 to check boundaries.
+
+---
+
 ### Core Idea
 
 - **Single source of truth — GamePhase**

@@ -1,4 +1,4 @@
-// ─── Migration re-exports — TODO Step 3: remove all of these; migrate each caller to direct shared/ import ───
+// ─── Re-exports — TODO(post-refactor): migrate each caller to direct shared/ import and remove these. ───
 export type { Side, Row, Col, CellCoord, ShapeOffset, UnitShape } from '../shared/gridTypes';
 export type {
   DamageType, SkillActionType,
