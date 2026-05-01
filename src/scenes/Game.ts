@@ -54,8 +54,15 @@ import {
 import { effectiveStats, computeDamageVsUnit } from "../battle/combat";
 import { resolvePattern } from "../battle/skillPatterns";
 import { getEffectPattern, getDamageModifierPercent } from "../data/skillDefinitions";
-import { buildRoundQueue } from "../battle/initiative";
 import type { BattleEvent } from '../battle/battleEvents';
+import {
+  buildBattleEventPresentations,
+  type BattleEventPresentation,
+} from '../objects/battleEventPresentation';
+import {
+  buildBattleDirectivePresentation,
+  buildManualTargetStatusText,
+} from '../objects/battleDirectivePresentation';
 import { hasChargedThisRound } from '../battle/turnResolver';
 
 type BattlePhase = Extract<import('../core/phases').GamePhase, { type: 'battle' }>;
@@ -510,7 +517,6 @@ export class Game extends Phaser.Scene {
   // ─── Start Battle ──────────────────────────────────────────────────────────
 
   private startBattle(): void {
-    // TODO(post-refactor): move startBattle combat init into the PhaseManager pipeline.
     // Tear down placement UI; keep bench visible as display-only
     this.buildBenchPanel(false);
     if (this.startBattleBtn) {
@@ -523,30 +529,12 @@ export class Game extends Phaser.Scene {
       cell.setMode('battle');
     }
 
-    let state = GameState.get();
+    PhaseManager.transition({ type: 'battle_begin_combat' });
 
-    // Save player unit positions so they can be restored next battle
-    for (const unit of state.units.values()) {
-      if (unit.anchor.side !== 'player') continue;
-      const us = GameState.playerUnits[unit.templateId];
-      if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
-    }
-
-    const queue = buildRoundQueue(state.units);
-    state = {
-      ...state,
-      roundQueue:         queue,
-      phase:              'select_target',
-      placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },
-    };
-    GameState.set(state);
-    PhaseManager.refreshSnapshot(); // TODO(stage-5): fold startBattle into PhaseManager.transition so this emit goes away
-    EventBus.emit(Events.STATE_CHANGED);
     this.setStatus("");
     this.battleLog.setVisible(true);
-    GameState.resetBattleTurnContext();
     this.buildAutoBattleButtons();
-    this.startActiveUnitTurn(state);
+    this.startActiveUnitTurn(GameState.get());
   }
 
   // ─── Turn Action Helpers ────────────────────────────────────────────────────
@@ -606,26 +594,37 @@ export class Game extends Phaser.Scene {
 
       case 'schedule_auto_turn': {
         const unit = result.state.units.get(result.directive.activeUnitId);
+        const presentation = buildBattleDirectivePresentation(result.directive, {
+          unitName: unit?.name ?? null,
+        });
+
+        if (presentation.statusText) {
+          this.setStatus(presentation.statusText);
+        }
+
         if (result.directive.delayKind === 'auto_player') {
-          this.setStatus(`${unit?.name ?? '?'} turn… (auto)`);
           this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
         } else {
-          this.setStatus(`${unit?.name ?? '?'} turn…`);
           this.time.delayedCall(Game.DELAY_ENEMY_THINK, () => this.autoTurn());
         }
         return;
       }
 
       case 'await_manual_target': {
-        const { promptKind } = result.directive;
         const phase = PhaseManager.getPhase();
         const activeUnit = phase.type === 'battle' ? phase.activeUnit : null;
-        this.setStatus(
-          promptKind === 'heal'
-            ? `${activeUnit?.name ?? '?'} — Click on the green cell to heal`
-            : `${activeUnit?.name ?? '?'} — Click on the red cell to attack`,
-        );
-        if (activeUnit) this.showSkillIcons(activeUnit);
+
+        const presentation = buildBattleDirectivePresentation(result.directive, {
+          unitName: activeUnit?.name ?? null,
+        });
+
+        if (presentation.statusText) {
+          this.setStatus(presentation.statusText);
+        }
+
+        if (presentation.displaySkillBar && activeUnit) {
+          this.showSkillIcons(activeUnit);
+        }
         return;
       }
     }
@@ -756,109 +755,39 @@ export class Game extends Phaser.Scene {
     );
   }
 
-  private presentBattleEvents(events: BattleEvent[], activeUnit: BattleUnitSnapshot | Unit | null | undefined): void {
-    const style = activeUnit?.anchor.side === 'player' ? 'positive' : 'negative';
+  private presentBattleEvents(
+    events: BattleEvent[],
+    activeUnit: BattleUnitSnapshot | Unit | null | undefined,
+  ): void {
+    const presentations = buildBattleEventPresentations(events, {
+      activeUnitSide: activeUnit?.anchor.side ?? null,
+    });
 
-    for (const e of events) {
-      switch (e.type) {
-        case 'skill_heal': {
-          const view = this.unitViews.get(e.targetId);
-          if (view) this.showFloatingHeal(view.x, view.y, e.amount);
-          this.battleLog.addEntry(`${e.casterName} heals ${e.targetName} +${e.amount}`, style);
-          break;
+    for (const presentation of presentations) {
+      this.applyBattleEventPresentation(presentation);
+    }
+  }
+
+  private applyBattleEventPresentation(presentation: BattleEventPresentation): void {
+    if (presentation.floatingText) {
+      const { unitId, kind, amount } = presentation.floatingText;
+      const view = this.unitViews.get(unitId);
+
+      // If the unit view is gone (dead unit, mid-animation), skip — matches current behavior.
+      if (view) {
+        if (kind === 'heal') {
+          this.showFloatingHeal(view.x, view.y, amount);
+        } else {
+          this.showFloatingDamage(view.x, view.y, amount);
         }
-        case 'skill_damage': {
-          const view = this.unitViews.get(e.targetId);
-          if (view) this.showFloatingDamage(view.x, view.y, e.amount);
-          this.battleLog.addEntry(
-            e.blocked
-              ? `${e.casterName} attacks ${e.targetName} — blocked! -${e.amount}`
-              : `${e.casterName} attacks ${e.targetName} -${e.amount}`,
-            e.blocked ? 'neutral' : style,
-          );
-          break;
-        }
-        case 'skill_dodged':
-          this.battleLog.addEntry(`${e.targetName} dodged the attack!`, 'neutral');
-          break;
-        case 'vampirism_heal': {
-          const view = this.unitViews.get(e.unitId);
-          if (view) this.showFloatingHeal(view.x, view.y, e.amount);
-          this.battleLog.addEntry(`${e.unitName} restored ${e.amount} HP (vampirism)`, 'positive');
-          break;
-        }
-        case 'effect_applied':
-          this.battleLog.addEntry(`${e.unitName} is affected by ${e.effectDisplayName}`, 'neutral');
-          break;
-        case 'instant_effect_applied':
-          this.battleLog.addEntry(`${e.unitName} is affected by ${e.displayName}!`, 'neutral');
-          break;
-        case 'instant_effect_failed':
-          this.battleLog.addEntry(`${e.displayName} failed on ${e.unitName}`, 'neutral');
-          break;
-        case 'unit_distracted':
-          this.battleLog.addEntry(`${e.unitName} is distracted and skips its turn!`, 'neutral');
-          break;
-        case 'counter_attack_start':
-          this.battleLog.addEntry(`${e.attackerName} is provoked — counter-attacks ${e.targetName}!`, 'neutral');
-          break;
-        case 'counter_attack_hit': {
-          const view = this.unitViews.get(e.targetId);
-          if (view) this.showFloatingDamage(view.x, view.y, e.amount);
-          this.battleLog.addEntry(
-            e.blocked
-              ? `${e.attackerName} counter-attacks ${e.targetName} — blocked! -${e.amount}`
-              : `${e.attackerName} counter-attacks ${e.targetName} -${e.amount}`,
-            'neutral',
-          );
-          break;
-        }
-        case 'counter_attack_dodged':
-          this.battleLog.addEntry(`${e.targetName} dodged the counter-attack!`, 'neutral');
-          break;
-        case 'counter_attack_unavailable': {
-          const msg = e.reason === 'out_of_range'
-            ? `${e.unitName} was provoked but can't reach ${e.targetName} — skips turn`
-            : e.reason === 'caster_dead'
-              ? `${e.unitName} was provoked but the provoker is gone — skips turn`
-              : `${e.unitName} was provoked but has no basic attack — skips turn`;
-          this.battleLog.addEntry(msg, 'neutral');
-          break;
-        }
-
-        case 'turn_skipped':
-          if (e.reason === 'manual_skip') {
-            this.battleLog.addEntry(`${e.unitName} skips their turn`, 'neutral');
-          } else {
-            this.battleLog.addEntry(`${e.unitName} — blocked, skipping turn`, 'neutral');
-          }
-          break;
-
-        case 'turn_charged':
-          this.battleLog.addEntry(
-            `${e.unitName} charges their turn (acts last this round)`,
-            'neutral',
-          );
-          break;
-
-        case 'effect_tick_heal':
-          this.battleLog.addEntry(
-            `${e.unitName} regenerates +${e.amount} HP (${e.effectDisplayName})`,
-            'positive',
-          );
-          break;
-
-        case 'effect_tick_damage':
-          this.battleLog.addEntry(
-            `${e.unitName} takes -${e.amount} HP (${e.effectDisplayName})`,
-            'negative',
-          );
-          break;
-
-        case 'effect_expired':
-          this.battleLog.addEntry(`${e.effectDisplayName} expired on ${e.unitName}`, 'neutral');
-          break;
       }
+    }
+
+    if (presentation.logEntry) {
+      this.battleLog.addEntry(
+        presentation.logEntry.text,
+        presentation.logEntry.type,
+      );
     }
   }
 
@@ -974,7 +903,8 @@ export class Game extends Phaser.Scene {
 
   private runQuickBattle(): void {
     // Reset turn context so charge-tracking from a prior manual turn does not leak in.
-    GameState.resetBattleTurnContext();
+    // Emits one STATE_CHANGED before the scene goes silent — that is acceptable.
+    PhaseManager.transition({ type: 'battle_prepare_quick_battle' });
 
     // Detach this scene's listener: quick battle is a silent simulation — no redraws
     // until done. This does not suppress global EventBus emission; other listeners still
@@ -1004,13 +934,7 @@ export class Game extends Phaser.Scene {
       EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);
     }
 
-    // Terminal presentation write: mark the battle as ended and trigger a single re-render.
-    // This is the one direct GameState.set allowed in Stage 3 — it is not a turn mutation
-    // but a final phase transition for display purposes.
-    const finalState: BattleState = { ...GameState.get(), phase: 'end' };
-    GameState.set(finalState);
-    PhaseManager.refreshSnapshot(); // TODO(stage-5): fold quick battle terminal state into PhaseManager.transition so this emit goes away
-    EventBus.emit(Events.STATE_CHANGED);
+    PhaseManager.transition({ type: 'battle_mark_quick_battle_complete' });
 
     this.time.delayedCall(200, () => this.showGameOver(finalWinner ?? 'player'));
   }
@@ -1028,12 +952,12 @@ export class Game extends Phaser.Scene {
       label: "▶▶", style: "navy", fontKey: "lg", idle: true,
       onClick: () => {
         if (GameState.getBattleMode() === "auto") {
-          GameState.setBattleMode("manual");
+          PhaseManager.transition({ type: 'battle_set_mode', mode: 'manual' });
           this.updateManualButtons(GameState.get());
           return;
         }
         if (GameState.getBattleMode() !== "manual") return;
-        GameState.setBattleMode("auto");
+        PhaseManager.transition({ type: 'battle_set_mode', mode: 'auto' });
         this.updateManualButtons(GameState.get());
         const s = GameState.get();
         if (s.phase === "select_target") {
@@ -1057,7 +981,7 @@ export class Game extends Phaser.Scene {
       scene: this, x: x2, y, w: btnW, h: btnH,
       label: "⚡", style: "neutral", fontKey: "lg", idle: true,
       onClick: () => {
-        GameState.setBattleMode("quick");
+        PhaseManager.transition({ type: 'battle_set_mode', mode: 'quick' });
         this.runQuickBattle();
       },
     });
@@ -1296,9 +1220,10 @@ export class Game extends Phaser.Scene {
     if (!activeUnit || !skill) return;
 
     this.setStatus(
-      isEnchantmentSkill(skill)
-        ? `${activeUnit.name} — Click on the green cell to heal`
-        : `${activeUnit.name} — Click on the red cell to attack`,
+      buildManualTargetStatusText(
+        isEnchantmentSkill(skill) ? 'heal' : 'attack',
+        activeUnit.name,
+      ),
     );
     this.showSkillIcons(activeUnit);
   }

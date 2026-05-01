@@ -6,7 +6,7 @@ import type {
 } from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
 import type { BenchUnitSnapshot, BattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/battleSnapshots';
-import type { PlacementSelection, BattleState } from '../battle/types';
+import type { PlacementSelection, BattleState, BattleMode } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 
 export interface CampUnitSnapshot {
@@ -157,6 +157,12 @@ export type PhaseAction =
   | { type: 'move_field_unit_to_bench';   unitId:   string; benchIdx: number }
   | { type: 'return_field_unit_to_bench'; unitId:   string }
   | { type: 'swap_field_units';           unitAId:  string; unitBId: string }
+  // ── Battle lifecycle actions (mutation-only: resolveTransition returns current) ──
+  | { type: 'battle_begin_combat' }
+  | { type: 'battle_mark_quick_battle_complete' }
+  // ── Battle control (mutation-only: resolveTransition returns current) ──
+  | { type: 'battle_set_mode'; mode: BattleMode }
+  | { type: 'battle_prepare_quick_battle' }
   // ── Battle turn actions (mutation-only: resolveTransition returns current) ──
   | { type: 'battle_start_turn' }
   | { type: 'battle_select_skill'; skillIndex: number }

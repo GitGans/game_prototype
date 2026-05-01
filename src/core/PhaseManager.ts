@@ -32,6 +32,8 @@ import {
   applyBattlePlacementAction,
   isBattleTurnAction,
   applyBattleTurnAction,
+  isBattleLifecycleAction,
+  applyBattleLifecycleAction,
   type BattlePhaseActionResult,
 } from './phaseHandlers/battlePhaseHandler';
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
@@ -347,6 +349,37 @@ class PhaseManagerClass {
   }
 
   private applyActionSideEffects(action: PhaseAction, prev: GamePhase): void {
+    // ── Battle lifecycle ──
+    if (isBattleLifecycleAction(action) && prev.type === 'battle') {
+      const currentState = GameState.get();
+      const result = applyBattleLifecycleAction({ state: currentState, action });
+
+      if (result.persistCampaignPlacements && !prev.isDebug) {
+        for (const unit of currentState.units.values()) {
+          if (unit.anchor.side !== 'player') continue;
+          const unitState = GameState.playerUnits[unit.templateId];
+          if (!unitState) continue;
+          GameState.playerUnits[unit.templateId] = { ...unitState, lastPlacement: unit.anchor };
+        }
+      }
+
+      GameState.set(result.state);
+      if (result.resetTurnContext) GameState.resetBattleTurnContext();
+      return;
+    }
+
+    // ── Battle control ──
+    if (prev.type === 'battle') {
+      if (action.type === 'battle_set_mode') {
+        GameState.setBattleMode(action.mode);
+        return;
+      }
+      if (action.type === 'battle_prepare_quick_battle') {
+        GameState.resetBattleTurnContext();
+        return;
+      }
+    }
+
     // ── Battle turn ──
     if (isBattleTurnAction(action) && prev.type === 'battle') {
       const result = applyBattleTurnAction({
@@ -917,6 +950,18 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'buy_item':
     case 'sell_item':
       return null; // no shop phase yet
+
+    // ── Battle lifecycle (mutation-only) ─────────────────────────────────────
+    case 'battle_begin_combat':
+    case 'battle_mark_quick_battle_complete':
+      if (current.type !== 'battle') return null;
+      return current;
+
+    // ── Battle control (mutation-only) ───────────────────────────────────────
+    case 'battle_set_mode':
+    case 'battle_prepare_quick_battle':
+      if (current.type !== 'battle') return null;
+      return current;
 
     // ── Battle placement (mutation-only) ─────────────────────────────────────
     case 'select_bench_slot':

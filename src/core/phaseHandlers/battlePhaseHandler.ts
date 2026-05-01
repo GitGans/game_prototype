@@ -1,5 +1,6 @@
 import type { BattleState, BattleMode } from '../../battle/types';
 import type { PhaseAction }            from '../phases';
+import { buildRoundQueue }             from '../../battle/initiative';
 import type { PlayerBattleSetup }      from '../battleSetup';
 import type { BattleEvent }            from '../../battle/battleEvents';
 import type { Side }                   from '../../shared/gridTypes';
@@ -22,6 +23,57 @@ import {
   moveFieldUnitToBench,
   returnFieldUnitToBench,
 } from '../../battle/placementState';
+
+// ─── Battle Lifecycle Actions ─────────────────────────────────────────────────
+
+export type BattleLifecycleAction = Extract<PhaseAction, {
+  type:
+    | 'battle_begin_combat'
+    | 'battle_mark_quick_battle_complete'
+}>;
+
+const BATTLE_LIFECYCLE_ACTION_TYPES = new Set<string>([
+  'battle_begin_combat',
+  'battle_mark_quick_battle_complete',
+]);
+
+export function isBattleLifecycleAction(action: PhaseAction): action is BattleLifecycleAction {
+  return BATTLE_LIFECYCLE_ACTION_TYPES.has(action.type);
+}
+
+export type BattleLifecycleActionResult = {
+  state: BattleState;
+  resetTurnContext?: boolean;
+  persistCampaignPlacements?: boolean;
+};
+
+export function applyBattleLifecycleAction(input: {
+  state:  BattleState;
+  action: BattleLifecycleAction;
+}): BattleLifecycleActionResult {
+  const { state, action } = input;
+
+  switch (action.type) {
+    case 'battle_begin_combat': {
+      if (state.phase !== 'placement') return { state };
+      return {
+        state: {
+          ...state,
+          roundQueue:         buildRoundQueue(state.units),
+          phase:              'select_target',
+          placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },
+        },
+        resetTurnContext:          true,
+        persistCampaignPlacements: true,
+      };
+    }
+
+    case 'battle_mark_quick_battle_complete':
+      return { state: { ...state, phase: 'end' } };
+  }
+}
+
+// ─── Battle Placement Actions ─────────────────────────────────────────────────
 
 export type BattlePlacementAction = Extract<PhaseAction, {
   type:
