@@ -110,7 +110,7 @@ class PhaseManagerClass {
   transition(action: PhaseAction): void {
     this.lastBattleTransition = null;
     let mapCleared = false;
-    if (action.type === 'exit_battle' && this.phase.type === 'battle') {
+    if (action.type === 'exit_battle' && action.outcome === 'victory' && this.phase.type === 'battle') {
       mapCleared = wouldClearMap(this.phase);
     }
 
@@ -599,8 +599,12 @@ class PhaseManagerClass {
           if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
         }
 
-        // Mark trigger entity dead on the map
-        if (prev.mapId && prev.triggerPos) {
+        // Mark trigger entity dead on the map — victory only; defeat must leave the encounter intact
+        // INVARIANT: action.outcome === 'victory' is required before mutating entityStates.
+        // Test cases when a harness exists:
+        //   victory + mapId + triggerPos → entityStates[key].alive === false
+        //   defeat  + mapId + triggerPos → entityStates[key] unchanged (still alive)
+        if (action.outcome === 'victory' && prev.mapId && prev.triggerPos) {
           const key = `${prev.triggerPos.x},${prev.triggerPos.y}`;
           const mapState = GameState.subMapStates[prev.mapId];
           if (mapState) mapState.entityStates[key] = { alive: false };
