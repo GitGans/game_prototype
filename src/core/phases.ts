@@ -5,8 +5,8 @@ import type {
   BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
 } from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
-import type { BenchUnitSnapshot } from '../shared/battleSnapshots';
-import type { PlacementSelection } from '../battle/types';
+import type { BenchUnitSnapshot, BattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/battleSnapshots';
+import type { PlacementSelection, BattleState } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 
 export interface CampUnitSnapshot {
@@ -67,6 +67,16 @@ export type GamePhase =
       participants:       BattleParticipant[];     // battle-start snapshot; never rebuilt from current placement
       benchUnits:         (BenchUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
+      // ── Stage 4: scene-facing render data ─────────────────────────────────
+      battlePhase:         BattleState['phase'];
+      units:               BattleUnitSnapshot[];
+      unitsById:           Map<string, BattleUnitSnapshot>;
+      occupancy:           BattleOccupancySnapshot;
+      roundQueue:          string[];
+      activeUnitId:        string | null;
+      activeUnit:          BattleUnitSnapshot | null;
+      validTargets:        CellCoord[];
+      targetHighlightKind: 'target' | 'heal_target' | 'none';
     }
   | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
   | { type: 'debug_level_select' }

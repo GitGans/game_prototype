@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Unit } from '../battle/types';
+import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 import { UI_THEME } from '../ui/theme';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { SkillTooltip } from './SkillTooltip';
@@ -16,7 +16,7 @@ export class SkillBar extends Phaser.GameObjects.Container {
   }
 
   show(
-    unit:     Unit,
+    unit:     BattleUnitSnapshot,
     iconX:    number,
     startY:   number,
     iconSize: number,

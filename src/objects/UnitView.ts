@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { CELL_SIZE, CELL_GAP, LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
-import { Unit, SpriteState, SpriteSheetConfig } from '../battle/types';
+import { SpriteState, SpriteSheetConfig } from '../battle/types';
+import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 import { EffectTooltip } from './EffectTooltip';
 import { UI_THEME, fontSize } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
@@ -29,7 +30,7 @@ export class UnitView extends Phaser.GameObjects.Container {
     scene: Phaser.Scene,
     x: number,
     y: number,
-    unit: Unit,
+    unit: BattleUnitSnapshot,
     colSpan: number,
     rowSpan: number,
     textureKey?: string,
@@ -109,7 +110,7 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.bgSprite.setFrame(frameIndex);
   }
 
-  update(unit: Unit | null): void {
+  update(unit: BattleUnitSnapshot | null): void {
     if (!unit || unit.hp <= 0) {
       this.isDead = true;
       this.setSpriteState('death');
@@ -138,7 +139,7 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.updateEffectSquares(unit);
   }
 
-  private updateEffectSquares(unit: Unit): void {
+  private updateEffectSquares(unit: BattleUnitSnapshot): void {
     this.effectTooltip?.hide();
 
     for (const sq of this.effectSquares) sq.destroy();

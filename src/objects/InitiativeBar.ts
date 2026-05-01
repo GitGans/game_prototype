@@ -1,9 +1,8 @@
 import Phaser from 'phaser';
-import { BattleState, Unit } from '../battle/types';
+import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
-import { effectiveStats } from '../battle/combat';
 import { fontSize, UI_THEME } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
 
@@ -17,12 +16,11 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  update(state: BattleState): void {
+  update(snapshot: { roundQueue: string[]; unitsById: Map<string, BattleUnitSnapshot> }): void {
     this.removeAll(true);
-    if (state.phase === 'end') return;
 
-    const { units, roundQueue } = state;
-    const nextRound = this.buildNextRound(units);
+    const { roundQueue, unitsById } = snapshot;
+    const nextRound = this.buildNextRound(unitsById);
 
     // ── Card size: fit MAX_CARDS across full screen width ──────────────────
     const MAX_CARDS = 18;
@@ -49,7 +47,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
 
     // ── Current round ────────────────────────────────────────────────────────
     for (let i = 0; i < displayedCurrent.length; i++) {
-      const unit = units.get(displayedCurrent[i]);
+      const unit = unitsById.get(displayedCurrent[i]);
       if (!unit) continue;
       const isActive = i === 0;
       const cardY = isActive ? -ACTIVE_LIFT : 0;
@@ -82,7 +80,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
   private drawCard(
     x: number,
     y: number,
-    unit: Unit,
+    unit: BattleUnitSnapshot,
     isActive: boolean,
     alpha: number,
     CARD_W: number,
@@ -135,7 +133,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
           }
         ).setOrigin(0.5, 0).setAlpha(alpha);
 
-    const effInit = effectiveStats(unit).initiative;
+    const effInit = unit.effectiveInitiative;
     const initColor = effInit > unit.initiative ? UI_THEME.color.value.positive
                     : effInit < unit.initiative ? UI_THEME.color.value.negative
                     : BATTLE_VISUAL_THEME.unit.textLight;
@@ -168,14 +166,12 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     this.add(toAdd);
   }
 
-  private buildNextRound(units: Map<string, Unit>): Unit[] {
-    return Array.from(units.values())
+  private buildNextRound(unitsById: Map<string, BattleUnitSnapshot>): BattleUnitSnapshot[] {
+    return Array.from(unitsById.values())
       .filter(u => u.hp > 0)
       .sort((a, b) => {
-        const ia = effectiveStats(a).initiative;
-        const ib = effectiveStats(b).initiative;
-        if (ib !== ia) return ib - ia;
-        // same initiative: player first
+        if (b.effectiveInitiative !== a.effectiveInitiative)
+          return b.effectiveInitiative - a.effectiveInitiative;
         if (a.anchor.side !== b.anchor.side) return a.anchor.side === 'player' ? -1 : 1;
         return 0;
       });

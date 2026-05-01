@@ -28,8 +28,8 @@ import {
   Unit,
   SpriteSheetConfig,
 } from "../battle/types";
-import type { PlacementSelection } from "../battle/types";
-import type { BenchUnitSnapshot } from "../shared/battleSnapshots";
+import type { BenchUnitSnapshot, BattleUnitSnapshot } from "../shared/battleSnapshots";
+import { buildBattleUnitSnapshot } from "../core/battleSnapshotBuilder";
 import { PhaseManager } from '../core/PhaseManager';
 import { type PhaseAction, BattleParticipant } from '../core/phases';
 import { type BattlePhaseActionResult } from '../core/phaseHandlers/battlePhaseHandler';
@@ -57,6 +57,8 @@ import { getEffectPattern, getDamageModifierPercent } from "../data/skillDefinit
 import { buildRoundQueue } from "../battle/initiative";
 import type { BattleEvent } from '../battle/battleEvents';
 import { hasChargedThisRound } from '../battle/turnResolver';
+
+type BattlePhase = Extract<import('../core/phases').GamePhase, { type: 'battle' }>;
 
 // Local alias over PhaseAction so TypeScript can check battle turn dispatch sites.
 type BattleTurnSceneAction = Extract<PhaseAction, {
@@ -103,7 +105,7 @@ export class Game extends Phaser.Scene {
   private skillBar!: SkillBar;
   private lastClickTime = 0;
 
-  private prevPlacementUnits: Map<string, Unit> | null = null;
+  private prevPlacementUnitsSignature: string | null = null;
 
   constructor() {
     super("Game");
@@ -117,7 +119,7 @@ export class Game extends Phaser.Scene {
     this.effectTooltip = new EffectTooltip(this);
     this.skillBar = new SkillBar(this, new SkillTooltip(this));
     this.buildUnitViews();
-    this.prevPlacementUnits = null;
+    this.prevPlacementUnitsSignature = null;
     this.buildUI();
     this.setupInput();
     this.enterPlacementPhase();
@@ -180,11 +182,11 @@ export class Game extends Phaser.Scene {
   private buildUnitViews(): void {
     const state = GameState.get();
     for (const unit of state.units.values()) {
-      this.createUnitView(unit);
+      this.createUnitView(buildBattleUnitSnapshot(unit));
     }
   }
 
-  private createUnitView(unit: Unit): void {
+  private createUnitView(unit: BattleUnitSnapshot): void {
     const cells = getOccupiedCells(unit.anchor, unit.shape);
     const rowSpan =
       Math.max(...cells.map((c) => c.row)) -
@@ -223,7 +225,7 @@ export class Game extends Phaser.Scene {
     }
   }
 
-  private getSpriteKeyAndConfig(unit: Unit): {
+  private getSpriteKeyAndConfig(unit: BattleUnitSnapshot): {
     key: string | undefined;
     config: SpriteSheetConfig | undefined;
   } {
@@ -360,10 +362,8 @@ export class Game extends Phaser.Scene {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'battle') return;
     const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
-    const state = GameState.get();
 
-    if (!state.benchUnits[idx]) {
-      // Empty slot: move selected field unit here
+    if (phase.benchUnits[idx] === null) {
       if (selectedFieldUnitId !== null) {
         PhaseManager.transition({ type: 'move_field_unit_to_bench', unitId: selectedFieldUnitId, benchIdx: idx });
       }
@@ -371,12 +371,10 @@ export class Game extends Phaser.Scene {
     }
 
     if (selectedFieldUnitId !== null) {
-      // Occupied slot + field selected: swap
       PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: idx, fieldUnitId: selectedFieldUnitId });
       return;
     }
 
-    // Toggle bench selection
     if (selectedBenchIdx === idx) {
       PhaseManager.transition({ type: 'clear_placement_selection' });
     } else {
@@ -410,30 +408,27 @@ export class Game extends Phaser.Scene {
 
   // ─── Placement Input ───────────────────────────────────────────────────────
 
-  private onPlacementCellClick(coord: CellCoord): void {
+  private onPlacementCellClick(coord: CellCoord, phase: BattlePhase): void {
     if (coord.side !== 'player') return;
-    const phase = PhaseManager.getPhase();
-    if (phase.type !== 'battle') return;
     const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
-    const unitAtCell = GameState.get().occupancy.cellToUnit.get(cellKey(coord));
+    const unitId = phase.occupancy.cellToUnitId.get(cellKey(coord));
 
     if (selectedBenchIdx !== null) {
-      if (!unitAtCell) {
+      if (!unitId) {
         PhaseManager.transition({ type: 'place_bench_unit', benchIdx: selectedBenchIdx, anchor: coord });
       } else {
-        PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: selectedBenchIdx, fieldUnitId: unitAtCell.id });
+        PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: selectedBenchIdx, fieldUnitId: unitId });
       }
       return;
     }
 
-    // No bench unit selected
-    if (unitAtCell) {
+    if (unitId) {
       if (selectedFieldUnitId === null) {
-        PhaseManager.transition({ type: 'select_field_unit', unitId: unitAtCell.id });
-      } else if (selectedFieldUnitId === unitAtCell.id) {
+        PhaseManager.transition({ type: 'select_field_unit', unitId });
+      } else if (selectedFieldUnitId === unitId) {
         PhaseManager.transition({ type: 'clear_placement_selection' });
       } else {
-        PhaseManager.transition({ type: 'swap_field_units', unitAId: selectedFieldUnitId, unitBId: unitAtCell.id });
+        PhaseManager.transition({ type: 'swap_field_units', unitAId: selectedFieldUnitId, unitBId: unitId });
       }
     } else if (selectedFieldUnitId !== null) {
       PhaseManager.transition({ type: 'move_field_unit', unitId: selectedFieldUnitId, anchor: coord });
@@ -443,17 +438,17 @@ export class Game extends Phaser.Scene {
   // ─── Double Click Detection ────────────────────────────────────────────────
 
   private handlePointerDown(coord: CellCoord): void {
-    if (GameState.get().phase !== "placement") return;
-    if (coord.side !== "player") return;
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'battle' || phase.battlePhase !== 'placement') return;
+    if (coord.side !== 'player') return;
 
     const key = cellKey(coord);
     const now = Date.now();
 
     if (key === this.lastClickCoordKey && now - this.lastClickTime < 300) {
-      // Double click — return unit to first free bench slot
-      const doubleClickUnit = GameState.get().occupancy.cellToUnit.get(key);
-      if (doubleClickUnit) {
-        PhaseManager.transition({ type: 'return_field_unit_to_bench', unitId: doubleClickUnit.id });
+      const unitId = phase.occupancy.cellToUnitId.get(key);
+      if (unitId) {
+        PhaseManager.transition({ type: 'return_field_unit_to_bench', unitId });
       }
       this.lastClickCoordKey = null;
       this.lastClickTime = 0;
@@ -467,48 +462,48 @@ export class Game extends Phaser.Scene {
 
   private setupInput(): void {
     for (const [, cell] of this.cellViews) {
-      cell.on("pointerdown", () => this.handlePointerDown(cell.coord));
-      cell.on("pointerup", () => {
-        if (GameState.get().phase === "placement") {
-          this.onPlacementCellClick(cell.coord);
+      cell.on('pointerdown', () => this.handlePointerDown(cell.coord));
+      cell.on('pointerup', () => {
+        const phase = PhaseManager.getPhase();
+        if (phase.type !== 'battle') return;
+        if (phase.battlePhase === 'placement') {
+          this.onPlacementCellClick(cell.coord, phase);
         } else {
-          this.onCellClick(cell.coord);
+          this.onCellClick(cell.coord, phase);
         }
       });
 
-      cell.on("pointerover", () => {
-        const state = GameState.get();
-        const unit = state.occupancy.cellToUnit.get(cell.key);
+      cell.on('pointerover', () => {
+        const phase = PhaseManager.getPhase();
+        if (phase.type !== 'battle') return;
+        const unitId = phase.occupancy.cellToUnitId.get(cell.key);
+        const unit   = unitId ? phase.unitsById.get(unitId) : undefined;
         if (unit && unit.hp > 0) {
           this.unitTooltip.showFixed(unit, this.logX, this.logY, this.logW);
         }
       });
-      cell.on("pointerout", () => {
-        this.unitTooltip.hide();
-      });
+      cell.on('pointerout', () => this.unitTooltip.hide());
     }
   }
 
-  private onCellClick(coord: CellCoord): void {
+  private onCellClick(coord: CellCoord, phase: BattlePhase): void {
     this.unitTooltip.hide();
-    const state = GameState.get();
-    if (state.phase !== "select_target") return;
+    if (phase.battlePhase !== 'select_target') return;
+    if (!phase.activeUnitId) return;
 
-    const isValid = state.validTargets.some(
-      (c) => c.side === coord.side && c.row === coord.row && c.col === coord.col,
+    const isValid = phase.validTargets.some(
+      c => c.side === coord.side && c.row === coord.row && c.col === coord.col,
     );
     if (!isValid) return;
 
     const p = this.pendingTargetCoord;
     if (p && p.side === coord.side && p.row === coord.row && p.col === coord.col) {
-      // Second click on the same cell → execute
       this.pendingTargetCoord = null;
-      this.refreshCells(state);
-      this.handleTargetSelect(coord, state);
+      this.refreshCells(phase);
+      this.handleTargetSelect(coord, phase);
     } else {
-      // First click or switching target → show preview
       this.pendingTargetCoord = coord;
-      this.showSkillPreview(state, coord);
+      this.showSkillPreview(phase, coord);
     }
   }
 
@@ -545,6 +540,7 @@ export class Game extends Phaser.Scene {
       placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },
     };
     GameState.set(state);
+    PhaseManager.refreshSnapshot(); // TODO(stage-5): fold startBattle into PhaseManager.transition so this emit goes away
     EventBus.emit(Events.STATE_CHANGED);
     this.setStatus("");
     this.battleLog.setVisible(true);
@@ -621,24 +617,25 @@ export class Game extends Phaser.Scene {
       }
 
       case 'await_manual_target': {
-        const { promptKind, activeUnitId } = result.directive;
-        const unit = result.state.units.get(activeUnitId);
+        const { promptKind } = result.directive;
+        const phase = PhaseManager.getPhase();
+        const activeUnit = phase.type === 'battle' ? phase.activeUnit : null;
         this.setStatus(
           promptKind === 'heal'
-            ? `${unit?.name ?? '?'} — Click on the green cell to heal`
-            : `${unit?.name ?? '?'} — Click on the red cell to attack`,
+            ? `${activeUnit?.name ?? '?'} — Click on the green cell to heal`
+            : `${activeUnit?.name ?? '?'} — Click on the red cell to attack`,
         );
-        if (unit) this.showSkillIcons(unit);
+        if (activeUnit) this.showSkillIcons(activeUnit);
         return;
       }
     }
   }
 
-  private showSkillPreview(state: BattleState, coord: CellCoord): void {
-    const activeUnit = state.units.get(state.roundQueue[0]);
+  private showSkillPreview(phase: BattlePhase, coord: CellCoord): void {
+    const activeUnit = phase.activeUnit;
     if (!activeUnit) return;
 
-    this.refreshCells(state);
+    this.refreshCells(phase);
 
     const currentSkill = getActiveSkill(activeUnit);
     const hitCells = getSkillHitCells(activeUnit, coord);
@@ -660,20 +657,19 @@ export class Game extends Phaser.Scene {
     const seen = new Set<string>();
     const skill = currentSkill;
 
-    // ── Skill header ──────────────────────────────────────────────────────────
-
     // ── Skill damage / heal lines ─────────────────────────────────────────────
     if (isHeal) {
       for (const { coord: hc } of hitCells) {
-        const unit = state.occupancy.cellToUnit.get(cellKey(hc));
+        const unitId = phase.occupancy.cellToUnitId.get(cellKey(hc));
+        const unit = unitId ? phase.unitsById.get(unitId) : undefined;
         if (!unit || seen.has(unit.id)) continue;
         seen.add(unit.id);
         previewParts.push(`${unit.name} +${effectiveStats(activeUnit).magicalDamage}`);
       }
     } else {
-      const damageType = skill.damageBlock?.damageType ?? "physical";
+      const damageType = skill.damageBlock?.damageType ?? 'physical';
       const attackerStats = effectiveStats(activeUnit);
-      const baseDamage = damageType === "physical" ? attackerStats.physicalDamage : attackerStats.magicalDamage;
+      const baseDamage = damageType === 'physical' ? attackerStats.physicalDamage : attackerStats.magicalDamage;
 
       const ignorePercent: Partial<Record<string, number>> = {};
       if (skill.damageModifierBlocks) {
@@ -681,11 +677,12 @@ export class Game extends Phaser.Scene {
           ignorePercent[block.type] = getDamageModifierPercent(block);
         }
       }
-      const defIgnoreKey = damageType === "physical" ? "ignore_physical_defense" : "ignore_magical_defense";
+      const defIgnoreKey = damageType === 'physical' ? 'ignore_physical_defense' : 'ignore_magical_defense';
       const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
 
       for (const { coord: hc, multiplier } of hitCells) {
-        const unit = state.occupancy.cellToUnit.get(cellKey(hc));
+        const unitId = phase.occupancy.cellToUnitId.get(cellKey(hc));
+        const unit = unitId ? phase.unitsById.get(unitId) : undefined;
         if (!unit || seen.has(unit.id)) continue;
         seen.add(unit.id);
         const dmg = computeDamageVsUnit(baseDamage, damageType, unit, multiplier, defIgnore);
@@ -699,25 +696,23 @@ export class Game extends Phaser.Scene {
       const [resolvedEffect, computedPerTurn] = resolveEffectArgs(skill, activeUnit);
       const effectCellCoords = resolvePattern(coord, getEffectPattern(eb));
 
-      // Effect header
       previewParts.push(`[${eb.effectDisplayName}]`);
 
-      // Per-unit lines only for stat-based effects (damage or heal per round)
       if (computedPerTurn !== undefined) {
         const seenEffect = new Set<string>();
-        const sign = resolvedEffect.isBuff ? "+" : "-";
+        const sign = resolvedEffect.isBuff ? '+' : '-';
         for (const { coord: ec } of effectCellCoords) {
-          const unit = state.occupancy.cellToUnit.get(cellKey(ec));
+          const unitId = phase.occupancy.cellToUnitId.get(cellKey(ec));
+          const unit = unitId ? phase.unitsById.get(unitId) : undefined;
           if (!unit || seenEffect.has(unit.id)) continue;
           seenEffect.add(unit.id);
           previewParts.push(`${unit.name} ${sign}${computedPerTurn} HP/round`);
         }
       }
-      // Defense-only effects: no per-unit lines (no numeric HP value to show)
     }
 
     // ── Assemble status text ──────────────────────────────────────────────────
-    const preview = `Preview:\n${previewParts.join("\n")}\n[click again to confirm]`;
+    const preview = `Preview:\n${previewParts.join('\n')}\n[click again to confirm]`;
     this.setStatus(preview);
 
     const headerColor = skill.damageBlock?.damageType === 'magical' ? BATTLE_VISUAL_THEME.skill.magical
@@ -732,14 +727,9 @@ export class Game extends Phaser.Scene {
     this.statusText.setY(this.statusBaseY + lineH);
   }
 
-  private handleTargetSelect(coord: CellCoord, state: BattleState): void {
-    const isValid = state.validTargets.some(
-      (c) => c.side === coord.side && c.row === coord.row && c.col === coord.col,
-    );
-    if (!isValid) return;
-
-    const attackerId = state.roundQueue[0];
-    const activeUnit = state.units.get(attackerId);
+  private handleTargetSelect(coord: CellCoord, phase: BattlePhase): void {
+    const attackerId = phase.activeUnitId!;
+    const activeUnit = phase.activeUnit;
 
     // Sprite animation — stays in scene (Phaser, not logic)
     const attackerView = this.unitViews.get(attackerId);
@@ -766,7 +756,7 @@ export class Game extends Phaser.Scene {
     );
   }
 
-  private presentBattleEvents(events: BattleEvent[], activeUnit: Unit | undefined): void {
+  private presentBattleEvents(events: BattleEvent[], activeUnit: BattleUnitSnapshot | Unit | null | undefined): void {
     const style = activeUnit?.anchor.side === 'player' ? 'positive' : 'negative';
 
     for (const e of events) {
@@ -1019,6 +1009,7 @@ export class Game extends Phaser.Scene {
     // but a final phase transition for display purposes.
     const finalState: BattleState = { ...GameState.get(), phase: 'end' };
     GameState.set(finalState);
+    PhaseManager.refreshSnapshot(); // TODO(stage-5): fold quick battle terminal state into PhaseManager.transition so this emit goes away
     EventBus.emit(Events.STATE_CHANGED);
 
     this.time.delayedCall(200, () => this.showGameOver(finalWinner ?? 'player'));
@@ -1166,48 +1157,72 @@ export class Game extends Phaser.Scene {
   // ─── State Refresh ─────────────────────────────────────────────────────────
 
   private onStateChanged(): void {
-    const state = GameState.get();
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'battle') return;
 
-    if (state.phase === 'placement') {
+    if (phase.battlePhase === 'placement') {
       this.onPlacementStateChanged(phase);
-    } else {
-      this.refreshCells(state);
-      this.refreshUnits(state);
-      this.initiativeBar.update(state);
+    } else if (phase.battlePhase !== 'end') {
+      this.refreshCells(phase);
+      this.refreshUnits(phase);
+      this.initiativeBar.update({ roundQueue: phase.roundQueue, unitsById: phase.unitsById });
     }
   }
 
-  private onPlacementStateChanged(
-    phase: import('../core/phases').GamePhase & { type: 'battle' },
-  ): void {
-    const state = GameState.get();
+  private onPlacementStateChanged(phase: BattlePhase): void {
+    const sig = this.buildPlacementUnitsSignature(phase);
 
-    // Re-render player unit views if units map changed (placement/swap/move)
-    if (this.prevPlacementUnits !== state.units) {
-      // destroyUnitView calls this.unitViews.delete(id) internally — safe to use in this loop
-      const toDestroy = [...this.unitViews.keys()].filter(id => {
-        const unit = state.units.get(id);
-        return !unit || unit.anchor.side === 'player';
-      });
-      for (const id of toDestroy) this.destroyUnitView(id);
-      for (const unit of state.units.values()) {
-        if (unit.anchor.side === 'player' && !this.unitViews.has(unit.id)) {
-          this.createUnitView(unit);
-        }
-      }
-      this.prevPlacementUnits = state.units;
+    if (sig !== this.prevPlacementUnitsSignature) {
+      this.reconcilePlacementUnitViews(phase);
+      this.prevPlacementUnitsSignature = sig;
     }
 
     this.buildBenchPanel();
-    this.applyPlacementHighlights(phase.placementSelection);
+    this.applyPlacementHighlights(phase);
   }
 
-  private applyPlacementHighlights(selection: PlacementSelection): void {
+  private buildPlacementUnitsSignature(phase: BattlePhase): string {
+    return phase.units
+      .filter(u => u.anchor.side === 'player')
+      .map(u => `${u.id}:${u.anchor.row}:${u.anchor.col}`)
+      .sort()
+      .join(';');
+  }
+
+  private reconcilePlacementUnitViews(phase: BattlePhase): void {
+    const playerUnitIds = new Set(
+      phase.units.filter(u => u.anchor.side === 'player').map(u => u.id),
+    );
+
+    for (const [id] of [...this.unitViews]) {
+      const unit = phase.unitsById.get(id);
+      if (!unit) {
+        this.destroyUnitView(id);
+        continue;
+      }
+      if (unit.anchor.side === 'player' && !playerUnitIds.has(id)) {
+        this.destroyUnitView(id);
+      }
+    }
+
+    for (const unit of phase.units) {
+      if (unit.anchor.side === 'player' && !this.unitViews.has(unit.id)) {
+        this.createUnitView(unit);
+      }
+    }
+
+    for (const unit of phase.units) {
+      if (unit.anchor.side === 'player') {
+        this.unitViews.get(unit.id)?.update(unit);
+      }
+    }
+  }
+
+  private applyPlacementHighlights(phase: BattlePhase): void {
     this.clearPlacementHighlights();
-    if (!selection.selectedFieldUnitId) return;
-    const unit = GameState.get().units.get(selection.selectedFieldUnitId);
+    const selectedId = phase.placementSelection.selectedFieldUnitId;
+    if (!selectedId) return;
+    const unit = phase.unitsById.get(selectedId);
     if (!unit) return;
     const cells = getOccupiedCells(unit.anchor, unit.shape);
     for (const coord of cells) {
@@ -1215,39 +1230,32 @@ export class Game extends Phaser.Scene {
     }
   }
 
-  private refreshCells(state: BattleState): void {
-    if (state.phase === "placement") return; // placement uses its own highlight logic
-
-    const validKeys = new Set(state.validTargets.map(cellKey));
-    const activeUnit = state.units.get(state.roundQueue[0]);
-    const targetHighlight =
-      (activeUnit && isEnchantmentSkill(getActiveSkill(activeUnit)))
-        ? "heal_target"
-        : "target";
+  private refreshCells(phase: BattlePhase): void {
+    const validKeys = new Set(phase.validTargets.map(cellKey));
 
     for (const [key, cell] of this.cellViews) {
-      cell.setHighlight(validKeys.has(key) ? targetHighlight : "none");
+      cell.setHighlight(validKeys.has(key) ? phase.targetHighlightKind : 'none');
       cell.clearEffectPreview();
     }
 
-    if (activeUnit) {
-      const cells = getOccupiedCells(activeUnit.anchor, activeUnit.shape);
+    if (phase.activeUnit) {
+      const cells = getOccupiedCells(phase.activeUnit.anchor, phase.activeUnit.shape);
       for (const coord of cells) {
-        this.cellViews.get(cellKey(coord))?.setHighlight("selected");
+        this.cellViews.get(cellKey(coord))?.setHighlight('selected');
       }
     }
   }
 
-  private refreshUnits(state: BattleState): void {
+  private refreshUnits(phase: BattlePhase): void {
     for (const [id, view] of this.unitViews) {
       if (!view.active) continue;
-      view.update(state.units.get(id) ?? null);
+      view.update(phase.unitsById.get(id) ?? null);
     }
   }
 
   // ─── Skill Icon UI ─────────────────────────────────────────────────────────
 
-  private showSkillIcons(unit: Unit): void {
+  private showSkillIcons(unit: BattleUnitSnapshot): void {
     if (unit.skills.length < 1) { this.skillBar.hide(); return; }
 
     // 6 icons × 20px + 5 gaps × 3px = 135px — fits within one CELL_SIZE (126*LAYOUT_SCALE).
@@ -1281,18 +1289,18 @@ export class Game extends Phaser.Scene {
 
     this.pendingTargetCoord = null;
 
-    const unitId = result.state.roundQueue[0];
-    const unit = result.state.units.get(unitId);
-    const skill = unit ? getActiveSkill(unit) : undefined;
+    const phase = PhaseManager.getPhase();
+    const activeUnit = phase.type === 'battle' ? phase.activeUnit : null;
+    const skill = activeUnit ? getActiveSkill(activeUnit) : undefined;
 
-    if (!unit || !skill) return;
+    if (!activeUnit || !skill) return;
 
     this.setStatus(
       isEnchantmentSkill(skill)
-        ? `${unit.name} — Click on the green cell to heal`
-        : `${unit.name} — Click on the red cell to attack`,
+        ? `${activeUnit.name} — Click on the green cell to heal`
+        : `${activeUnit.name} — Click on the red cell to attack`,
     );
-    this.showSkillIcons(unit);
+    this.showSkillIcons(activeUnit);
   }
 
   // ─── Visual Effects ────────────────────────────────────────────────────────

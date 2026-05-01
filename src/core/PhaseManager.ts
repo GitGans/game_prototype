@@ -35,6 +35,8 @@ import {
   type BattlePhaseActionResult,
 } from './phaseHandlers/battlePhaseHandler';
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
+import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
+import { getActiveSkill, isEnchantmentSkill } from '../battle/skillRuntime';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
@@ -299,18 +301,49 @@ class PhaseManagerClass {
       case 'battle': {
         const battleState = GameState.get();
         const setup       = this.getActiveBattleSetup();
-        const benchUnits  = buildBenchUnitSnapshots(battleState.benchUnits, setup);
+
+        // ── Existing bench/participants rebuild ───────────────────────────
+        const benchUnits = buildBenchUnitSnapshots(battleState.benchUnits, setup);
+
+        // ── Stage 4: full scene-facing render data ────────────────────────
+        const units     = buildBattleUnitSnapshots(battleState.units);
+        const unitsById = new Map(units.map(u => [u.id, u]));
+        const occupancy = buildBattleOccupancySnapshot(battleState);
+
+        const activeUnitId = battleState.roundQueue[0] ?? null;
+        const activeUnit   = activeUnitId ? (unitsById.get(activeUnitId) ?? null) : null;
+
+        let targetHighlightKind: 'target' | 'heal_target' | 'none' = 'none';
+        if (activeUnit && battleState.validTargets.length > 0) {
+          targetHighlightKind = isEnchantmentSkill(getActiveSkill(activeUnit))
+            ? 'heal_target'
+            : 'target';
+        }
+
         // participants = battle-start snapshot; do NOT rebuild from current placement state
         return {
           ...phase,
-          participants:       GameState.battleParticipants,
+          participants:        GameState.battleParticipants,
           benchUnits,
-          placementSelection: battleState.placementSelection,
+          placementSelection:  battleState.placementSelection,
+          battlePhase:         battleState.phase,
+          units,
+          unitsById,
+          occupancy,
+          roundQueue:          [...battleState.roundQueue],
+          activeUnitId,
+          activeUnit,
+          validTargets:        battleState.validTargets.map(c => ({ ...c })),
+          targetHighlightKind,
         };
       }
       default:
         return phase; // phases without snapshots pass through unchanged
     }
+  }
+
+  refreshSnapshot(): void {
+    this.phase = this.rebuildSnapshot(this.phase);
   }
 
   private applyActionSideEffects(action: PhaseAction, prev: GamePhase): void {
@@ -741,6 +774,15 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
         placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
+        battlePhase:         'placement',
+        units:               [],
+        unitsById:           new Map(),
+        occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
+        roundQueue:          [],
+        activeUnitId:        null,
+        activeUnit:          null,
+        validTargets:        [],
+        targetHighlightKind: 'none',
       };
 
     case 'enter_camp':
@@ -761,6 +803,15 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
         placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
+        battlePhase:         'placement',
+        units:               [],
+        unitsById:           new Map(),
+        occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
+        roundQueue:          [],
+        activeUnitId:        null,
+        activeUnit:          null,
+        validTargets:        [],
+        targetHighlightKind: 'none',
       };
 
     case 'exit_battle':
