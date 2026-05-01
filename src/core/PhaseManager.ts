@@ -594,7 +594,7 @@ class PhaseManagerClass {
 
         // Save last field placement
         for (const unit of GameState.get().units.values()) {
-          if (!unit.id.startsWith('p')) continue;
+          if (unit.anchor.side !== 'player') continue;
           const us = GameState.playerUnits[unit.templateId];
           if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
         }
@@ -806,7 +806,7 @@ class PhaseManagerClass {
 
     const aliveTemplateIds = new Set(
       [...GameState.get().units.values()]
-        .filter(u => u.id.startsWith('p'))
+        .filter(u => u.anchor.side === 'player')
         .map(u => u.templateId),
     );
 
