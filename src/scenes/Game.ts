@@ -43,13 +43,12 @@ import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
 import {
   getActiveSkill,
-  getSkillHitCells,
   isEnchantmentSkill,
-  resolveEffectArgs,
 } from "../battle/skillRuntime";
-import { effectiveStats, computeDamageVsUnit } from "../battle/combat";
-import { resolvePattern } from "../battle/skillPatterns";
-import { getEffectPattern, getDamageModifierPercent } from "../data/skillDefinitions";
+import {
+  buildBattleSkillPreviewPresentation,
+  type BattleSkillPreviewHeaderColorKind,
+} from '../objects/battleSkillPreviewPresentation';
 import type { BattleEvent } from '../battle/battleEvents';
 import {
   buildBattleEventPresentations,
@@ -638,97 +637,37 @@ export class Game extends Phaser.Scene {
     }
   }
 
+  private skillPreviewHeaderColor(kind: BattleSkillPreviewHeaderColorKind): string {
+    switch (kind) {
+      case 'magical':  return BATTLE_VISUAL_THEME.skill.magical;
+      case 'physical': return BATTLE_VISUAL_THEME.skill.physical;
+      case 'neutral':  return BATTLE_VISUAL_THEME.unit.textLight;
+    }
+  }
+
   private showSkillPreview(phase: BattlePhase, coord: CellCoord): void {
-    const activeUnit = phase.activeUnit;
-    if (!activeUnit) return;
+    const presentation = buildBattleSkillPreviewPresentation({ phase, coord });
+    if (!presentation) return;
 
     this.refreshCells(phase);
 
-    const currentSkill = getActiveSkill(activeUnit);
-    const hitCells = getSkillHitCells(activeUnit, coord);
-    const isHeal = isEnchantmentSkill(currentSkill);
+    for (const cell of presentation.cells) {
+      const view = this.cellViews.get(cellKey(cell.coord));
+      if (!view) continue;
 
-    for (const { coord: hc, multiplier } of hitCells) {
-      this.cellViews.get(cellKey(hc))?.setSkillPreview(multiplier, isHeal);
-    }
-
-    if (currentSkill.effectBlock) {
-      const effectCells = resolvePattern(coord, getEffectPattern(currentSkill.effectBlock));
-      const isEffectHeal = isEnchantmentSkill(currentSkill);
-      for (const { coord: ec } of effectCells) {
-        this.cellViews.get(cellKey(ec))?.setEffectPreview(isEffectHeal);
+      if (cell.kind === 'skill') {
+        view.setSkillPreview(cell.multiplier, cell.highlight === 'heal');
+      } else {
+        view.setEffectPreview(cell.highlight === 'heal');
       }
     }
 
-    const previewParts: string[] = [];
-    const seen = new Set<string>();
-    const skill = currentSkill;
+    this.setStatus(presentation.statusBody);
 
-    // ── Skill damage / heal lines ─────────────────────────────────────────────
-    if (isHeal) {
-      for (const { coord: hc } of hitCells) {
-        const unitId = phase.occupancy.cellToUnitId.get(cellKey(hc));
-        const unit = unitId ? phase.unitsById.get(unitId) : undefined;
-        if (!unit || seen.has(unit.id)) continue;
-        seen.add(unit.id);
-        previewParts.push(`${unit.name} +${effectiveStats(activeUnit).magicalDamage}`);
-      }
-    } else {
-      const damageType = skill.damageBlock?.damageType ?? 'physical';
-      const attackerStats = effectiveStats(activeUnit);
-      const baseDamage = damageType === 'physical' ? attackerStats.physicalDamage : attackerStats.magicalDamage;
-
-      const ignorePercent: Partial<Record<string, number>> = {};
-      if (skill.damageModifierBlocks) {
-        for (const block of skill.damageModifierBlocks) {
-          ignorePercent[block.type] = getDamageModifierPercent(block);
-        }
-      }
-      const defIgnoreKey = damageType === 'physical' ? 'ignore_physical_defense' : 'ignore_magical_defense';
-      const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
-
-      for (const { coord: hc, multiplier } of hitCells) {
-        const unitId = phase.occupancy.cellToUnitId.get(cellKey(hc));
-        const unit = unitId ? phase.unitsById.get(unitId) : undefined;
-        if (!unit || seen.has(unit.id)) continue;
-        seen.add(unit.id);
-        const dmg = computeDamageVsUnit(baseDamage, damageType, unit, multiplier, defIgnore);
-        previewParts.push(`${unit.name} ~${dmg}`);
-      }
-    }
-
-    // ── Effect block ──────────────────────────────────────────────────────────
-    if (skill.effectBlock) {
-      const eb = skill.effectBlock;
-      const [resolvedEffect, computedPerTurn] = resolveEffectArgs(skill, activeUnit);
-      const effectCellCoords = resolvePattern(coord, getEffectPattern(eb));
-
-      previewParts.push(`[${eb.effectDisplayName}]`);
-
-      if (computedPerTurn !== undefined) {
-        const seenEffect = new Set<string>();
-        const sign = resolvedEffect.isBuff ? '+' : '-';
-        for (const { coord: ec } of effectCellCoords) {
-          const unitId = phase.occupancy.cellToUnitId.get(cellKey(ec));
-          const unit = unitId ? phase.unitsById.get(unitId) : undefined;
-          if (!unit || seenEffect.has(unit.id)) continue;
-          seenEffect.add(unit.id);
-          previewParts.push(`${unit.name} ${sign}${computedPerTurn} HP/round`);
-        }
-      }
-    }
-
-    // ── Assemble status text ──────────────────────────────────────────────────
-    const preview = `Preview:\n${previewParts.join('\n')}\n[click again to confirm]`;
-    this.setStatus(preview);
-
-    const headerColor = skill.damageBlock?.damageType === 'magical' ? BATTLE_VISUAL_THEME.skill.magical
-                      : skill.damageBlock?.damageType === 'physical' ? BATTLE_VISUAL_THEME.skill.physical
-                      : BATTLE_VISUAL_THEME.unit.textLight;
     const lineH = Math.round(14 * LAYOUT_SCALE);
     this.statusHeaderText
-      .setColor(headerColor)
-      .setText(skill.name)
+      .setColor(this.skillPreviewHeaderColor(presentation.statusHeader.colorKind))
+      .setText(presentation.statusHeader.text)
       .setY(this.statusBaseY)
       .setVisible(true);
     this.statusText.setY(this.statusBaseY + lineH);
