@@ -113,10 +113,17 @@ class PhaseManagerClass {
     if (action.type === 'exit_battle' && this.phase.type === 'battle') {
       mapCleared = wouldClearMap(this.phase);
     }
-    const next = resolveTransition(this.phase, action, mapCleared);
+
+    // Derive exit participants here, outside resolveTransition, to keep it pure.
+    let exitParticipants: BattleParticipant[] = [];
+    if (action.type === 'exit_battle' && action.outcome === 'victory' && this.phase.type === 'battle') {
+      exitParticipants = this.buildExitParticipants();
+    }
+
+    const next = resolveTransition(this.phase, action, mapCleared, exitParticipants);
     if (next === null) return; // invalid action for current phase
 
-    this.applyActionSideEffects(action, this.phase);
+    this.applyActionSideEffects(action, this.phase, exitParticipants);
 
     if (next === this.phase) {
       // Mutation-only: rebuild snapshot in place, notify scene
@@ -350,7 +357,7 @@ class PhaseManagerClass {
     this.phase = this.rebuildSnapshot(this.phase);
   }
 
-  private applyActionSideEffects(action: PhaseAction, prev: GamePhase): void {
+  private applyActionSideEffects(action: PhaseAction, prev: GamePhase, exitParticipants: BattleParticipant[] = []): void {
     // ── Clear stale pending auto-turn intention on any action that disrupts battle flow ──
     // These actions can arrive during the 200 ms DELAY_AUTO_IMPACT window between decide and apply.
     if (
@@ -554,15 +561,15 @@ class PhaseManagerClass {
     if (action.type === 'exit_battle' && prev.type === 'battle') {
       if (prev.isDebug && this.debugState) {
         // Debug teardown: XP goes to DebugBattleState only — never touches GameState
-        if (action.participants.length > 0) {
+        if (action.outcome === 'victory') {
           this.debugState.level += 1;
         }
       } else {
         const state = GameState.get();
 
         // Level up all participants (field alive + field dead + bench) — not just state.units
-        if (action.participants.length > 0) {
-          action.participants.forEach((p) => {
+        if (action.outcome === 'victory') {
+          exitParticipants.forEach((p) => {
             const us = GameState.playerUnits[p.templateId];
             if (!us) return;
             const newLevel = us.level + 1;
@@ -788,11 +795,27 @@ class PhaseManagerClass {
     }
     sm.start(nextScene);
   }
+
+  private buildExitParticipants(): BattleParticipant[] {
+    const phase = this.phase;
+    if (phase.type !== 'battle') return [];
+
+    const aliveTemplateIds = new Set(
+      [...GameState.get().units.values()]
+        .filter(u => u.id.startsWith('p'))
+        .map(u => u.templateId),
+    );
+
+    return phase.participants.map(pp => ({
+      ...pp,
+      isAlive: pp.wasOnBench || aliveTemplateIds.has(pp.templateId),
+    }));
+  }
 }
 
 // ─── Pure transition logic — no Phaser imports, no GameState access ───────────
 
-export function resolveTransition(current: GamePhase, action: PhaseAction, mapCleared = false): GamePhase | null {
+export function resolveTransition(current: GamePhase, action: PhaseAction, mapCleared = false, derivedExitParticipants: BattleParticipant[] = []): GamePhase | null {
   switch (action.type) {
 
     case 'new_game':
@@ -877,10 +900,10 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
 
     case 'exit_battle':
       if (current.type !== 'battle') return null;
-      if (action.participants.length === 0) return current.returnPhase;
+      if (action.outcome === 'defeat') return current.returnPhase;
       return {
         type: 'battle_results',
-        units: action.participants.map(p => ({ ...p, newLevel: p.level + 1 })),
+        units: derivedExitParticipants.map(p => ({ ...p, newLevel: p.level + 1 })),
         returnPhase: current.returnPhase,
         mapCleared,
       };

@@ -31,7 +31,7 @@ import {
 import type { BenchUnitSnapshot, BattleUnitSnapshot } from "../shared/battleSnapshots";
 import { buildBattleUnitSnapshot } from "../core/battleSnapshotBuilder";
 import { PhaseManager } from '../core/PhaseManager';
-import { type PhaseAction, BattleParticipant } from '../core/phases';
+import type { PhaseAction } from '../core/phases';
 import { type BattlePhaseActionResult, type AutoTurnIntention } from '../core/phaseHandlers/battlePhaseHandler';
 import { Button } from '../ui/Button';
 import { SkillTooltip } from '../objects/SkillTooltip';
@@ -1173,25 +1173,9 @@ export class Game extends Phaser.Scene {
       PhaseManager.transition({ type: 'replay' });
     };
 
-    const onExit = outcome === 'victory'
-      ? (): void => {
-          const p = PhaseManager.getPhase();
-          if (p.type !== 'battle') return;
-
-          const aliveIds = new Set(
-            [...GameState.get().units.values()]
-              .filter(u => u.id.startsWith('p'))
-              .map(u => u.templateId),
-          );
-          const participants: BattleParticipant[] = p.participants.map(pp => ({
-            ...pp,
-            isAlive: pp.wasOnBench || aliveIds.has(pp.templateId),
-          }));
-          PhaseManager.transition({ type: 'exit_battle', participants });
-        }
-      : (): void => {
-          PhaseManager.transition({ type: 'exit_battle', participants: [] });
-        };
+    const onExit = (): void => {
+      PhaseManager.transition({ type: 'exit_battle', outcome });
+    };
 
     new BattleEndOverlay({
       scene: this,

@@ -42,6 +42,8 @@ export interface BattleParticipant {
   spriteKey: string | null;
 }
 
+export type BattleExitOutcome = 'victory' | 'defeat';
+
 /** Display data for BattleResults scene — level already incremented. */
 export interface BattleResultUnit {
   templateId: string;
@@ -124,7 +126,7 @@ export type PhaseAction =
   | { type: 'enter_camp' }
   | { type: 'exit_camp' }
   | { type: 'start_battle'; enemyGroupId: string }
-  | { type: 'exit_battle'; participants: BattleParticipant[] }
+  | { type: 'exit_battle'; outcome: BattleExitOutcome }
   | { type: 'exit_results' }
   | { type: 'replay' }
   | { type: 'exit_to_menu' }
