@@ -32,7 +32,7 @@ import type { BenchUnitSnapshot, BattleUnitSnapshot } from "../shared/battleSnap
 import { buildBattleUnitSnapshot } from "../core/battleSnapshotBuilder";
 import { PhaseManager } from '../core/PhaseManager';
 import { type PhaseAction, BattleParticipant } from '../core/phases';
-import { type BattlePhaseActionResult } from '../core/phaseHandlers/battlePhaseHandler';
+import { type BattlePhaseActionResult, type AutoTurnIntention } from '../core/phaseHandlers/battlePhaseHandler';
 import { Button } from '../ui/Button';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
@@ -41,15 +41,11 @@ import { BenchCard, type BenchCardMode } from '../objects/BenchCard';
 import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
-import { resolveSkillTargets } from "../battle/targeting";
 import {
   getActiveSkill,
   getSkillHitCells,
   isEnchantmentSkill,
   resolveEffectArgs,
-  resolveRandomSkillIndex,
-  resolveRandomTarget,
-  resolveBestHealTarget,
 } from "../battle/skillRuntime";
 import { effectiveStats, computeDamageVsUnit } from "../battle/combat";
 import { resolvePattern } from "../battle/skillPatterns";
@@ -77,6 +73,8 @@ type BattleTurnSceneAction = Extract<PhaseAction, {
     | 'battle_skip_turn'
     | 'battle_charge_turn'
     | 'battle_quick_turn'
+    | 'battle_decide_auto_turn'
+    | 'battle_apply_auto_turn'
 }>;
 
 export class Game extends Phaser.Scene {
@@ -98,8 +96,9 @@ export class Game extends Phaser.Scene {
   private static readonly DELAY_ENEMY_THINK = 700;
   private static readonly DELAY_AUTO_THINK = 200;
   private static readonly DELAY_NEXT_TURN = 500;
-  private static readonly DELAY_AUTO_NEXT = 150;
-  private static readonly DELAY_GAMEOVER = 600;
+  private static readonly DELAY_AUTO_NEXT   = 150;
+  private static readonly DELAY_GAMEOVER    = 600;
+  private static readonly DELAY_AUTO_IMPACT = 200;
 
   // Placement phase UI
   private benchCards: BenchCard[] = [];
@@ -544,6 +543,15 @@ export class Game extends Phaser.Scene {
     return PhaseManager.getLastBattleTransition();
   }
 
+  private playAttackAnimation(unitId: string): void {
+    const unitView = this.unitViews.get(unitId);
+    unitView?.setSpriteState('attack');
+    this.time.delayedCall(400, () => {
+      const current = GameState.get().units.get(unitId);
+      if (current && current.hp > 0) unitView?.setSpriteState('idle');
+    });
+  }
+
   private handleBattleWinner(
     result: BattlePhaseActionResult | null,
     options?: { destroyAutoButtons?: boolean; delay?: number },
@@ -731,12 +739,7 @@ export class Game extends Phaser.Scene {
     const activeUnit = phase.activeUnit;
 
     // Sprite animation — stays in scene (Phaser, not logic)
-    const attackerView = this.unitViews.get(attackerId);
-    attackerView?.setSpriteState('attack');
-    this.time.delayedCall(400, () => {
-      const current = GameState.get().units.get(attackerId);
-      if (current && current.hp > 0) attackerView?.setSpriteState('idle');
-    });
+    this.playAttackAnimation(attackerId);
 
     // battle_use_skill composes: executeSkillUse → checkGameOver → advanceTurn → checkGameOver
     const result = this.runBattleAction({
@@ -757,10 +760,15 @@ export class Game extends Phaser.Scene {
 
   private presentBattleEvents(
     events: BattleEvent[],
-    activeUnit: BattleUnitSnapshot | Unit | null | undefined,
+    activeUnitOrSide: BattleUnitSnapshot | Unit | Side | null | undefined,
   ): void {
+    const activeUnitSide =
+      typeof activeUnitOrSide === 'string'
+        ? activeUnitOrSide
+        : activeUnitOrSide?.anchor.side ?? null;
+
     const presentations = buildBattleEventPresentations(events, {
-      activeUnitSide: activeUnit?.anchor.side ?? null,
+      activeUnitSide,
     });
 
     for (const presentation of presentations) {
@@ -792,112 +800,48 @@ export class Game extends Phaser.Scene {
   }
 
   private autoTurn(): void {
-    const state = GameState.get();
-    if (state.phase === 'end') return;
+    // Core decides what the auto unit will do — no state mutation.
+    const decided = this.runBattleAction({ type: 'battle_decide_auto_turn' });
+    if (!decided) return;
 
-    const unitId = state.roundQueue[0];
-    let activeUnit = state.units.get(unitId);
-    const isEnemy = activeUnit?.anchor.side === 'enemy';
+    const directive = decided.autoTurnDirective;
 
-    // Guard: player units in non-auto mode hand control back to startActiveUnitTurn.
-    // Enemy units always act automatically regardless of battle mode.
-    if (!isEnemy && GameState.getBattleMode() !== 'auto') {
-      if (GameState.getBattleMode() === 'manual') {
-        this.startActiveUnitTurn(state);
-      }
+    if (!directive || directive.type === 'none') return;
+
+    if (directive.type === 'handoff_manual' || directive.type === 'restart_turn') {
+      this.startActiveUnitTurn(decided.state);
       return;
     }
 
-    // Branch A: missing active unit — delegate fully to startActiveUnitTurn.
-    // battle_start_turn advances the queue and returns continue_immediately,
-    // which startActiveUnitTurn handles with a game-over check before recursing.
-    if (!activeUnit) {
-      this.startActiveUnitTurn(state);
-      return;
-    }
+    // directive.type === 'intention'
+    const { intention, animateAttack } = directive;
 
-    // Pick a random skill. Dispatch select_skill so the skill choice is persisted
-    // in GameState before resolving targets or executing.
-    const randomSkillIdx = resolveRandomSkillIndex(activeUnit);
-    const selected = this.runBattleAction({
-      type: 'battle_select_skill',
-      skillIndex: randomSkillIdx,
-    });
-    if (!selected) return;
-
-    // Re-read active unit and skill from the updated state.
-    activeUnit = selected.state.units.get(unitId) ?? activeUnit;
-    if (!activeUnit) return;
-    const currentSkill = getActiveSkill(activeUnit);
-    const targets = resolveSkillTargets(activeUnit, currentSkill, selected.state.occupancy);
-
-    // Branch B: no valid targets.
-    // Melee units emit turn_skipped with 'blocked_melee'.
-    // Non-melee units (ranged/enchantment with no reachable target) silently advance —
-    // emitting blocked_melee for them would be semantically wrong.
-    if (targets.length === 0) {
-      if (currentSkill.actionType === 'melee') {
-        const result = this.runBattleAction({
-          type: 'battle_skip_turn',
-          reason: 'blocked_melee',
-        });
-        if (!result) return;
-        this.presentBattleEvents(result.events, activeUnit);
-        if (this.handleBattleWinner(result, { destroyAutoButtons: true })) return;
-        this.time.delayedCall(Game.DELAY_AUTO_NEXT, () =>
-          this.startActiveUnitTurn(result.state),
-        );
-      } else {
-        const result = this.runBattleAction({ type: 'battle_advance_turn' });
-        if (!result) return;
-        this.presentBattleEvents(result.events, activeUnit);
-        if (this.handleBattleWinner(result, { destroyAutoButtons: true })) return;
-        this.time.delayedCall(Game.DELAY_AUTO_NEXT, () =>
-          this.startActiveUnitTurn(result.state),
-        );
-      }
-      return;
-    }
-
-    const target = isEnchantmentSkill(currentSkill)
-      ? resolveBestHealTarget(selected.state.occupancy, targets)
-      : resolveRandomTarget(targets);
-
-    // Branch C: target helpers returned null (edge case in enchantment/heal logic).
-    // Silent advance — preserves current behavior of skipping without a log entry.
-    if (!target) {
-      const result = this.runBattleAction({ type: 'battle_advance_turn' });
-      if (!result) return;
-      this.presentBattleEvents(result.events, activeUnit);
-      if (this.handleBattleWinner(result, { destroyAutoButtons: true })) return;
-      this.time.delayedCall(Game.DELAY_AUTO_NEXT, () =>
-        this.startActiveUnitTurn(result.state),
+    if (animateAttack) {
+      // Animation starts; apply fires after the impact delay.
+      this.playAttackAnimation(intention.unitId);
+      this.time.delayedCall(Game.DELAY_AUTO_IMPACT, () =>
+        this.applyAutoTurnAndPresent(intention),
       );
-      return;
+    } else {
+      // Skip and advance have no animation — apply immediately.
+      this.applyAutoTurnAndPresent(intention);
     }
+  }
 
-    // Branch D: valid target — execute skill.
-    // battle_use_skill composes: executeSkillUse → checkGameOver → advanceTurn → checkGameOver.
-    // Do NOT dispatch battle_advance_turn after this.
-    const unitView = this.unitViews.get(unitId);
-    unitView?.setSpriteState('attack');
-    this.time.delayedCall(400, () => {
-      const current = GameState.get().units.get(unitId);
-      if (current && current.hp > 0) unitView?.setSpriteState('idle');
-    });
+  private applyAutoTurnAndPresent(intention: AutoTurnIntention): void {
+    const applied = this.runBattleAction({ type: 'battle_apply_auto_turn' });
+    if (!applied) return;
 
-    const result = this.runBattleAction({
-      type: 'battle_use_skill',
-      unitId,
-      target,
-      skillIndex: randomSkillIdx,
-    });
-    if (!result) return;
+    // If the intention became stale during DELAY_AUTO_IMPACT (mode change, battle
+    // end, replay), core returns autoTurnApplied: false — do not schedule next turn.
+    if (!applied.autoTurnApplied) return;
 
-    this.presentBattleEvents(result.events, activeUnit);
-    if (this.handleBattleWinner(result, { destroyAutoButtons: true })) return;
+    this.presentBattleEvents(applied.events, intention.activeUnitSide);
+
+    if (this.handleBattleWinner(applied, { destroyAutoButtons: true })) return;
+
     this.time.delayedCall(Game.DELAY_AUTO_NEXT, () =>
-      this.startActiveUnitTurn(result.state),
+      this.startActiveUnitTurn(applied.state),
     );
   }
 

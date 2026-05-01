@@ -35,6 +35,7 @@ import {
   isBattleLifecycleAction,
   applyBattleLifecycleAction,
   type BattlePhaseActionResult,
+  type AutoTurnIntention,
 } from './phaseHandlers/battlePhaseHandler';
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
 import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
@@ -57,7 +58,8 @@ class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
   private game!: Phaser.Game;
   private debugState: DebugBattleState | null = null;
-  private lastBattleTransition: BattlePhaseActionResult | null = null;
+  private lastBattleTransition:     BattlePhaseActionResult | null = null;
+  private pendingAutoTurnIntention: AutoTurnIntention | null       = null;
 
   init(game: Phaser.Game): void {
     this.game = game;
@@ -349,6 +351,19 @@ class PhaseManagerClass {
   }
 
   private applyActionSideEffects(action: PhaseAction, prev: GamePhase): void {
+    // ── Clear stale pending auto-turn intention on any action that disrupts battle flow ──
+    // These actions can arrive during the 200 ms DELAY_AUTO_IMPACT window between decide and apply.
+    if (
+      action.type === 'exit_battle'                       ||
+      action.type === 'replay'                            ||
+      action.type === 'battle_mark_quick_battle_complete' ||
+      action.type === 'battle_prepare_quick_battle'       ||
+      action.type === 'battle_begin_combat'               ||
+      action.type === 'battle_set_mode'
+    ) {
+      this.pendingAutoTurnIntention = null;
+    }
+
     // ── Battle lifecycle ──
     if (isBattleLifecycleAction(action) && prev.type === 'battle') {
       const currentState = GameState.get();
@@ -383,11 +398,24 @@ class PhaseManagerClass {
     // ── Battle turn ──
     if (isBattleTurnAction(action) && prev.type === 'battle') {
       const result = applyBattleTurnAction({
-        state:   GameState.get(),
-        context: GameState.getBattleTurnContext(),
+        state:                    GameState.get(),
+        context:                  GameState.getBattleTurnContext(),
         action,
-        mode:    GameState.getBattleMode(),
+        mode:                     GameState.getBattleMode(),
+        pendingAutoTurnIntention: this.pendingAutoTurnIntention,
       });
+
+      // Manage pending intention lifecycle:
+      // decide stores it; apply clears it; everything else leaves it untouched.
+      if (action.type === 'battle_decide_auto_turn') {
+        this.pendingAutoTurnIntention =
+          result.autoTurnDirective?.type === 'intention'
+            ? result.autoTurnDirective.intention
+            : null;
+      } else if (action.type === 'battle_apply_auto_turn') {
+        this.pendingAutoTurnIntention = null;
+      }
+
       GameState.set(result.state);
       GameState.setBattleTurnContext(result.context);
       this.lastBattleTransition = result;
@@ -984,6 +1012,8 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'battle_skip_turn':
     case 'battle_charge_turn':
     case 'battle_quick_turn':
+    case 'battle_decide_auto_turn':
+    case 'battle_apply_auto_turn':
       if (current.type !== 'battle') return null;
       return current; // applyActionSideEffects mutates state; rebuildSnapshot refreshes phase
   }

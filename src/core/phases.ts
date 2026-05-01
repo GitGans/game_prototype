@@ -170,7 +170,9 @@ export type PhaseAction =
   | { type: 'battle_advance_turn' }
   | { type: 'battle_skip_turn'; reason?: 'manual_skip' | 'blocked_melee' }
   | { type: 'battle_charge_turn' }
-  | { type: 'battle_quick_turn'; unitId: string };
+  | { type: 'battle_quick_turn'; unitId: string }
+  | { type: 'battle_decide_auto_turn' }
+  | { type: 'battle_apply_auto_turn' };
 
 // Empty snapshots used by resolveTransition as placeholders —
 // rebuildSnapshot fills them with real data after side effects run.
