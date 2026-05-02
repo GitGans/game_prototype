@@ -58,11 +58,14 @@ export class Game extends Phaser.Scene {
   private battlePlacement!: BattlePlacementController;
   private battleTurnFlow!: BattleTurnFlowController;
 
+  private cleanedUp = false;
+
   constructor() {
     super("Game");
   }
 
   create(): void {
+    this.cleanedUp = false;
     this.unitViews.clear();
 
     this.buildGrid();
@@ -119,11 +122,19 @@ export class Game extends Phaser.Scene {
     this.battlePlacement.enterPlacementPhase();
 
     EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
+    this.events.once(Phaser.Scenes.Events.DESTROY,  this.cleanup, this);
+  }
+
+  private cleanup(): void {
+    if (this.cleanedUp) return;
+    this.cleanedUp = true;
+    this.battleTurnFlow?.destroy();
+    EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
   }
 
   shutdown(): void {
-    this.battleTurnFlow?.destroy();
-    EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
+    this.cleanup();
   }
 
   // ─── Grid Layout ───────────────────────────────────────────────────────────
@@ -383,10 +394,12 @@ export class Game extends Phaser.Scene {
     // All game decisions (PhaseManager, GameState) stay here as closures.
     // BattleEndOverlay receives only the resulting functions, not the game knowledge.
     const onReplay = (): void => {
+      this.cleanup();
       PhaseManager.transition({ type: 'replay' });
     };
 
     const onExit = (): void => {
+      this.cleanup();
       PhaseManager.transition({ type: 'exit_battle', outcome });
     };
 

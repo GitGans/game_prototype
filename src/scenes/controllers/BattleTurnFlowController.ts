@@ -72,6 +72,7 @@ export class BattleTurnFlowController {
   // ─── Timer Helpers ────────────────────────────────────────────────────────
 
   private schedule(delay: number, callback: () => void): void {
+    if (this.destroyed) return;
     const timer = this.deps.scene.time.delayedCall(delay, () => {
       this.timers.delete(timer);
       if (!this.destroyed) callback();
@@ -85,9 +86,12 @@ export class BattleTurnFlowController {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
     this.destroyed = true;
     this.clearTimers();
     this.destroyControls();
+    this.pendingTargetCoord = null;
+    this.deps.skillBar.hide();
   }
 
   // ─── Battle Controls ──────────────────────────────────────────────────────
@@ -205,6 +209,8 @@ export class BattleTurnFlowController {
     if (!result?.winner) return false;
     this.clearTimers();
     this.destroyControls();
+    this.pendingTargetCoord = null;
+    this.deps.skillBar.hide();
     this.schedule(BattleTurnFlowController.DELAY_GAMEOVER, () => {
       this.deps.showGameOver(result.winner!);
     });
@@ -214,6 +220,7 @@ export class BattleTurnFlowController {
   // ─── Combat Entry Point ───────────────────────────────────────────────────
 
   beginCombat(): void {
+    if (this.destroyed) return;
     this.destroyControls();
     this.buildAutoBattleButtons();
 
@@ -226,6 +233,7 @@ export class BattleTurnFlowController {
   // ─── Turn Flow ────────────────────────────────────────────────────────────
 
   private startActiveUnitTurn(state: BattleState): void {
+    if (this.destroyed) return;
     this.pendingTargetCoord = null;
     this.clearSkillIcons();
 
@@ -292,6 +300,7 @@ export class BattleTurnFlowController {
   // ─── Cell Click (Manual Targeting) ───────────────────────────────────────
 
   handleCellClick(coord: CellCoord, phase: BattlePhase): void {
+    if (this.destroyed) return;
     if (phase.battlePhase !== "select_target") return;
     if (!phase.activeUnitId) return;
 
@@ -312,6 +321,7 @@ export class BattleTurnFlowController {
   }
 
   private handleTargetSelect(coord: CellCoord, phase: BattlePhase): void {
+    if (this.destroyed) return;
     const attackerId = phase.activeUnitId!;
     const activeUnit = phase.activeUnit;
 
@@ -337,6 +347,7 @@ export class BattleTurnFlowController {
   // ─── Auto Turn ────────────────────────────────────────────────────────────
 
   private autoTurn(): void {
+    if (this.destroyed) return;
     // Core decides what the auto unit will do — no state mutation.
     const decided = this.runBattleAction({ type: "battle_decide_auto_turn" });
     if (!decided) return;
@@ -366,6 +377,7 @@ export class BattleTurnFlowController {
   }
 
   private applyAutoTurnAndPresent(intention: AutoTurnIntention): void {
+    if (this.destroyed) return;
     const applied = this.runBattleAction({ type: "battle_apply_auto_turn" });
     if (!applied) return;
 
@@ -385,6 +397,7 @@ export class BattleTurnFlowController {
   // ─── Quick Battle ─────────────────────────────────────────────────────────
 
   runQuickBattle(): void {
+    if (this.destroyed) return;
     this.clearTimers(); // cancel any pending turn callbacks before silent simulation
     // Reset turn context so charge-tracking from a prior manual turn does not leak in.
     // Emits one STATE_CHANGED before the scene goes silent — that is acceptable.
@@ -430,6 +443,7 @@ export class BattleTurnFlowController {
   // ─── Skip / Charge ────────────────────────────────────────────────────────
 
   skipTurn(): void {
+    if (this.destroyed) return;
     // Pre-action active unit: used only as style hint for presentBattleEvents.
     const state = GameState.get();
     const activeUnit = state.units.get(state.roundQueue[0]);
@@ -448,6 +462,7 @@ export class BattleTurnFlowController {
   }
 
   chargeTurn(): void {
+    if (this.destroyed) return;
     const state = GameState.get();
     const activeUnit = state.units.get(state.roundQueue[0]);
 
@@ -468,6 +483,7 @@ export class BattleTurnFlowController {
   // ─── Auto-Mode Toggle ─────────────────────────────────────────────────────
 
   toggleAutoMode(): void {
+    if (this.destroyed) return;
     if (GameState.getBattleMode() === "auto") {
       PhaseManager.transition({ type: "battle_set_mode", mode: "manual" });
       this.updateManualButtons(GameState.get());
