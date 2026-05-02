@@ -37,6 +37,7 @@ export type SkillExecutionInput = {
     /** Read-only queue context supplied by the turn resolver. */
     chargedThisRound: ReadonlySet<string>;
   };
+  rng?: () => number;
 };
 
 export type SkillExecutionResult = {
@@ -54,7 +55,6 @@ export type SkillExecutionResult = {
 /**
  * Applies a skill use to the given state and returns the resulting state + event log.
  * Battle-layer only — no Phaser, no GameState, no EventBus.
- * Not deterministic: resolveAttack uses Math.random() for dodge/block rolls.
  *
  * Execution order (matches current handleTargetSelect):
  *   1. enchantment: resolveHealWithEvents → effectBlock → initiative rebuild
@@ -66,6 +66,7 @@ export function executeSkillUse(
   input: SkillExecutionInput,
 ): SkillExecutionResult {
   const { casterId, target, queueContext } = input;
+  const rng = input.rng ?? Math.random;
   let state = input.state;
   const events: BattleEvent[] = [];
 
@@ -142,7 +143,7 @@ export function executeSkillUse(
     baseDamage,
     damageType,
     state,
-    skill.damageModifierBlocks,
+    { damageModifierBlocks: skill.damageModifierBlocks, rng },
   );
   state = attackResult.state;
 
@@ -241,7 +242,7 @@ export function executeSkillUse(
 
   // instantEffectBlock (provoke / distract)
   if (skill.instantEffectBlock) {
-    state = applyInstantEffects(state, casterId, target, skill, events);
+    state = applyInstantEffects(state, casterId, target, skill, events, rng);
   }
 
   return { state, events };
@@ -259,6 +260,7 @@ function applyInstantEffects(
   targetCoord: CellCoord,
   skill: Skill,
   events: BattleEvent[],
+  rng: () => number,
 ): BattleState {
   const block = skill.instantEffectBlock!;
   const pattern = getInstantEffectPattern(block);
@@ -272,6 +274,7 @@ function applyInstantEffects(
     targetCoord,
     state,
     state.roundQueue,
+    rng,
   );
 
   for (const e of ieEvents) {
@@ -386,6 +389,7 @@ function applyInstantEffects(
       baseDmg,
       dmgType,
       next,
+      { rng },
     );
     next = afterCounter;
 

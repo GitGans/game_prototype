@@ -103,8 +103,12 @@ export function resolveAttack(
   baseDamage: number,
   damageType: DamageType,
   state: BattleState,
-  damageModifierBlocks?: DamageModifierBlock[],
+  options: {
+    damageModifierBlocks?: DamageModifierBlock[];
+    rng?: () => number;
+  } = {},
 ): AttackResult {
+  const { damageModifierBlocks, rng = Math.random } = options;
   // Build a quick lookup: modifier type → ignore percent
   const ignorePercent: Partial<Record<string, number>> = {};
   if (damageModifierBlocks) {
@@ -158,13 +162,13 @@ export function resolveAttack(
       90,
     );
 
-    if (Math.random() * 100 < effectiveDodge) {
+    if (rng() * 100 < effectiveDodge) {
       events.push({ type: "dodged", unitId: unit.id, unitName: unit.name });
       continue;
     }
 
     let finalDmg = rawDmg;
-    if (Math.random() * 100 < effectiveBlock) {
+    if (rng() * 100 < effectiveBlock) {
       finalDmg = Math.round(rawDmg / 2);
       events.push({
         type: "blocked",
@@ -514,6 +518,7 @@ export function resolveInstantEffects(
   targetAnchor: CellCoord,
   state: BattleState,
   roundQueue: string[],
+  rng: () => number = Math.random,
 ): {
   events: InstantEffectEvent[];
   provokedUnitIds: string[];
@@ -543,7 +548,7 @@ export function resolveInstantEffects(
     if (!unit) continue;
 
     // Probability roll — no dodge/block/defense
-    if (Math.random() >= probability) {
+    if (rng() >= probability) {
       events.push({
         type: "instant_effect_failed",
         unitId: unit.id,
