@@ -15,8 +15,10 @@ import {
 } from '../data/skillDefinitions';
 import { cellKey } from './field';
 
+interface SkillOwner { skills: readonly Skill[]; activeSkillIndex: number; }
+
 /** Returns the active skill for a unit, falling back to the first skill. */
-export function getActiveSkill(unit: Unit): Skill {
+export function getActiveSkill(unit: SkillOwner): Skill {
   return unit.skills[unit.activeSkillIndex] ?? unit.skills[0];
 }
 
@@ -30,7 +32,7 @@ export function getSkillHitCellsForSkill(skill: Skill, anchor: CellCoord): Resol
 }
 
 /** Convenience wrapper — resolves the active skill from the unit, then delegates. */
-export function getSkillHitCells(unit: Unit, anchor: CellCoord): ResolvedHitCell[] {
+export function getSkillHitCells(unit: SkillOwner, anchor: CellCoord): ResolvedHitCell[] {
   return getSkillHitCellsForSkill(getActiveSkill(unit), anchor);
 }
 
@@ -49,7 +51,8 @@ export function isEnchantmentSkill(skill: Skill): boolean {
  * - Stat-based effects (regeneration / lose_health): computedPerTurn = casterStat × matrix multiplier
  * - Defense-only effects (fortify / weaken / etc.): returns Effect copy with level-specific bonus
  */
-export function resolveEffectArgs(skill: Skill, caster: Unit): [Effect, number | undefined] {
+interface DamageOwner { physicalDamage: number; magicalDamage: number; }
+export function resolveEffectArgs(skill: Skill, caster: DamageOwner): [Effect, number | undefined] {
   const eb = skill.effectBlock!;
   const def = LEVELED_EFFECTS[eb.effectName];
 

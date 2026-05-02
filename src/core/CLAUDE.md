@@ -54,10 +54,22 @@ Scenes re-render from new `GamePhase`
 - Scenes never call `this.scene.start/stop` — only `PhaseManager` does
 - `GamePhase` is the single source of truth for every scene's render data
 
+## Battle Phase Boundary
+
+`PhaseManager` owns battle lifecycle transitions, all state mutation side effects, and `GamePhase` snapshot rebuilding.
+
+`PhaseManager.rebuildSnapshot()` is the bridge from mutable `GameState` / `BattleState` to the scene-facing render/control snapshot. It may import battle formulas (`getActiveSkill`, `isEnchantmentSkill`, `hasChargedThisRound`) to compute snapshot fields — this is correct because core is deriving presentation-relevant data from authoritative state.
+
+**Acceptable `GameState` reads:** core state initialization, `applyActionSideEffects()`, `rebuildSnapshot()`.
+
+**Not acceptable:** direct `GameState` reads in scenes, scene controllers, or battle render paths. Use `PhaseManager.getPhase()` and snapshot fields instead.
+
 ## Where to Modify
 - Add a new game screen → `phases.ts` (new `GamePhase` variant) + `PhaseManager.ts` (`resolveTransition`, `applyActionSideEffects`, `syncPhaserScenes`)
 - Add a new player action → `phases.ts` (`PhaseAction`) + `PhaseManager.ts` (`applyActionSideEffects`)
 - Change battle placement logic → `phaseHandlers/battlePhaseHandler.ts`
+- Change battle turn-flow action handling → `phaseHandlers/battlePhaseHandler.ts` and `PhaseManager.applyActionSideEffects()`
+- Change battle snapshot fields (what controllers see) → `PhaseManager.rebuildSnapshot()`
 - Change how units are initialized for battle → `battleInitialization.ts` / `battleSetupProjection.ts`
 - Change upgrade stat/skill resolution → `unitProgression.ts`
 - Change bench card display data → `unitPreviewSnapshot.ts`

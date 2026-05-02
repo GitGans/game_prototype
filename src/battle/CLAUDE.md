@@ -48,6 +48,8 @@ returned to `src/core` for phase transition or rendering
 - A unit may hold at most **2** active effects; the oldest is evicted when a third is applied
 - Placement validation is anchor-based: shape offsets from the anchor define all occupied cells
 - No Phaser, scene, or rendering imports anywhere in this folder
+- Battle modules must not import `src/scenes/`, `src/objects/`, or `src/ui/`
+- UI-facing display formatting (prompt text, log text, preview estimates) belongs in `src/objects/*Presentation.ts`, not in battle rule modules
 
 ## Where to Modify
 - add/change a unit stat computation → [itemOps.ts](itemOps.ts) `computeUnitBattleStats()`

@@ -12,6 +12,23 @@ Game-specific visual components that know game data and render it using primitiv
 - Display auxiliary battle UI: turn order bar, event log, equipment grid, backpack
 - Degrade gracefully when sprites are missing (rectangle or letter fallbacks)
 
+## Presentation Builders
+
+`objects/*Presentation.ts` files are pure formatting helpers. They accept typed snapshots, events, or directives and return structured display data.
+
+Current files:
+- `battleEventPresentation.ts` — formats battle events as floating-text and log entries
+- `battleDirectivePresentation.ts` — formats turn-start directives as status text and skill-bar visibility flags; also builds manual-target status text for skill switches
+- `battleSkillPreviewPresentation.ts` — formats skill-preview header color and damage/healing estimates
+
+Presentation builders:
+- may import battle formulas when the result is display-only (e.g. damage estimates, prompt text)
+- must not mutate state
+- must not call `PhaseManager`
+- must not own Phaser scene lifecycle
+
+Applying presentation output to Phaser objects is the responsibility of `BattlePresentationController`.
+
 ## Key Files
 
 - `battleVisualTheme.ts` — battle-flow visual tokens: cells, units, bench, skills, log, upgrade cards, unit portraits
@@ -78,6 +95,7 @@ Scene receives user interaction via callback — no state mutation here
 - Any UI pattern used in ≥2 places must be extracted into a component here or in `src/ui/`
 - Texts are passed as plain strings from phase snapshots — no formatting logic inside components
 - `ui/Panel.ts` is a game-agnostic background rectangle primitive. `objects/panels/*Panel.ts` are game-aware composite panel components that use `Panel` internally. The names share the word "panel" but operate at different abstraction levels.
+- Presentation builders (`objects/*Presentation.ts`) may import battle formulas for display-only computation; they must not dispatch actions or mutate state
 
 ## Where to Modify
 

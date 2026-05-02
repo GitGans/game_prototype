@@ -4,7 +4,7 @@ import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 import { UI_THEME, fontSize } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
 import { Unit } from "../battle/types";
-import type { BenchUnitSnapshot } from "../shared/battleSnapshots";
+import type { BattleUnitSnapshot, BenchUnitSnapshot } from "../shared/battleSnapshots";
 import { effectiveStats } from "../battle/combat";
 import type { UnitStatsSnapshot } from '../core/phases';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
@@ -70,7 +70,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     super.show(unitToData(unit), anchorX, anchorY, side);
   }
 
-  showFixed(unit: Unit, x: number, y: number, w: number): void {
+  showFixed(unit: BattleUnitSnapshot, x: number, y: number, w: number): void {
     const data = unitToData(unit);
     this.clearContent();
     const h = this.buildContent(data);
@@ -266,7 +266,26 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function unitToData(unit: Unit): TooltipData {
+interface UnitDisplayData {
+  templateId: string;
+  name: string;
+  anchor: { side: import('../shared/gridTypes').Side };
+  hp: number;
+  maxHp: number;
+  physicalDamage: number;
+  magicalDamage: number;
+  physicalDefense: number;
+  magicalDefense: number;
+  dodge: number;
+  block: number;
+  initiative: number;
+  activeEffects: readonly import('../shared/activeEffect').ActiveEffect[];
+  skills: readonly { name: string; damageBlock?: import('../shared/skillTypes').DamageBlock }[];
+  activeSkillIndex: number;
+  spriteSheet?: import('../shared/unitTypes').SpriteSheetConfig;
+}
+
+function unitToData(unit: UnitDisplayData): TooltipData {
   const stats = effectiveStats(unit);
   return {
     templateId:      unit.templateId,

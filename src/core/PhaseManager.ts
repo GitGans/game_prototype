@@ -30,8 +30,17 @@ import {
 import {
   isBattlePlacementAction,
   applyBattlePlacementAction,
+  isBattleTurnAction,
+  applyBattleTurnAction,
+  isBattleLifecycleAction,
+  applyBattleLifecycleAction,
+  type BattlePhaseActionResult,
+  type AutoTurnIntention,
 } from './phaseHandlers/battlePhaseHandler';
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
+import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
+import { getActiveSkill, isEnchantmentSkill } from '../battle/skillRuntime';
+import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
@@ -50,6 +59,8 @@ class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
   private game!: Phaser.Game;
   private debugState: DebugBattleState | null = null;
+  private lastBattleTransition:     BattlePhaseActionResult | null = null;
+  private pendingAutoTurnIntention: AutoTurnIntention | null       = null;
 
   init(game: Phaser.Game): void {
     this.game = game;
@@ -93,15 +104,27 @@ class PhaseManagerClass {
     };
   }
 
+  getLastBattleTransition(): BattlePhaseActionResult | null {
+    return this.lastBattleTransition;
+  }
+
   transition(action: PhaseAction): void {
+    this.lastBattleTransition = null;
     let mapCleared = false;
-    if (action.type === 'exit_battle' && this.phase.type === 'battle') {
+    if (action.type === 'exit_battle' && action.outcome === 'victory' && this.phase.type === 'battle') {
       mapCleared = wouldClearMap(this.phase);
     }
-    const next = resolveTransition(this.phase, action, mapCleared);
+
+    // Derive exit participants here, outside resolveTransition, to keep it pure.
+    let exitParticipants: BattleParticipant[] = [];
+    if (action.type === 'exit_battle' && action.outcome === 'victory' && this.phase.type === 'battle') {
+      exitParticipants = this.buildExitParticipants();
+    }
+
+    const next = resolveTransition(this.phase, action, mapCleared, exitParticipants);
     if (next === null) return; // invalid action for current phase
 
-    this.applyActionSideEffects(action, this.phase);
+    this.applyActionSideEffects(action, this.phase, exitParticipants);
 
     if (next === this.phase) {
       // Mutation-only: rebuild snapshot in place, notify scene
@@ -290,13 +313,54 @@ class PhaseManagerClass {
       case 'battle': {
         const battleState = GameState.get();
         const setup       = this.getActiveBattleSetup();
-        const benchUnits  = buildBenchUnitSnapshots(battleState.benchUnits, setup);
+
+        // ── Existing bench/participants rebuild ───────────────────────────
+        const benchUnits = buildBenchUnitSnapshots(battleState.benchUnits, setup);
+
+        // ── Stage 4: full scene-facing render data ────────────────────────
+        const units     = buildBattleUnitSnapshots(battleState.units);
+        const unitsById = new Map(units.map(u => [u.id, u]));
+        const occupancy = buildBattleOccupancySnapshot(battleState);
+
+        const activeUnitId = battleState.roundQueue[0] ?? null;
+        const activeUnit   = activeUnitId ? (unitsById.get(activeUnitId) ?? null) : null;
+
+        const battleMode     = GameState.getBattleMode();
+        const activeUnitSide = activeUnit?.anchor.side ?? null;
+
+        const manualTurnControlsVisible =
+          battleMode === 'manual' && activeUnitSide === 'player';
+
+        const manualChargeDisabled =
+          activeUnitId !== null &&
+          hasChargedThisRound(GameState.getBattleTurnContext(), activeUnitId);
+
+        let targetHighlightKind: 'target' | 'heal_target' | 'none' = 'none';
+        if (activeUnit && battleState.validTargets.length > 0) {
+          targetHighlightKind = isEnchantmentSkill(getActiveSkill(activeUnit))
+            ? 'heal_target'
+            : 'target';
+        }
+
         // participants = battle-start snapshot; do NOT rebuild from current placement state
         return {
           ...phase,
-          participants:       GameState.battleParticipants,
+          participants:        GameState.battleParticipants,
           benchUnits,
-          placementSelection: battleState.placementSelection,
+          placementSelection:  battleState.placementSelection,
+          battlePhase:         battleState.phase,
+          units,
+          unitsById,
+          occupancy,
+          roundQueue:          [...battleState.roundQueue],
+          activeUnitId,
+          activeUnit,
+          battleMode,
+          activeUnitSide,
+          manualTurnControlsVisible,
+          manualChargeDisabled,
+          validTargets:        battleState.validTargets.map(c => ({ ...c })),
+          targetHighlightKind,
         };
       }
       default:
@@ -304,7 +368,82 @@ class PhaseManagerClass {
     }
   }
 
-  private applyActionSideEffects(action: PhaseAction, prev: GamePhase): void {
+  refreshSnapshot(): void {
+    this.phase = this.rebuildSnapshot(this.phase);
+  }
+
+  private applyActionSideEffects(action: PhaseAction, prev: GamePhase, exitParticipants: BattleParticipant[] = []): void {
+    // ── Clear stale pending auto-turn intention on any action that disrupts battle flow ──
+    // These actions can arrive during the 200 ms DELAY_AUTO_IMPACT window between decide and apply.
+    if (
+      action.type === 'exit_battle'                       ||
+      action.type === 'replay'                            ||
+      action.type === 'battle_mark_quick_battle_complete' ||
+      action.type === 'battle_prepare_quick_battle'       ||
+      action.type === 'battle_begin_combat'               ||
+      action.type === 'battle_set_mode'
+    ) {
+      this.pendingAutoTurnIntention = null;
+    }
+
+    // ── Battle lifecycle ──
+    if (isBattleLifecycleAction(action) && prev.type === 'battle') {
+      const currentState = GameState.get();
+      const result = applyBattleLifecycleAction({ state: currentState, action });
+
+      if (result.persistCampaignPlacements && !prev.isDebug) {
+        for (const unit of currentState.units.values()) {
+          if (unit.anchor.side !== 'player') continue;
+          const unitState = GameState.playerUnits[unit.templateId];
+          if (!unitState) continue;
+          GameState.playerUnits[unit.templateId] = { ...unitState, lastPlacement: unit.anchor };
+        }
+      }
+
+      GameState.set(result.state);
+      if (result.resetTurnContext) GameState.resetBattleTurnContext();
+      return;
+    }
+
+    // ── Battle control ──
+    if (prev.type === 'battle') {
+      if (action.type === 'battle_set_mode') {
+        GameState.setBattleMode(action.mode);
+        return;
+      }
+      if (action.type === 'battle_prepare_quick_battle') {
+        GameState.resetBattleTurnContext();
+        return;
+      }
+    }
+
+    // ── Battle turn ──
+    if (isBattleTurnAction(action) && prev.type === 'battle') {
+      const result = applyBattleTurnAction({
+        state:                    GameState.get(),
+        context:                  GameState.getBattleTurnContext(),
+        action,
+        mode:                     GameState.getBattleMode(),
+        pendingAutoTurnIntention: this.pendingAutoTurnIntention,
+      });
+
+      // Manage pending intention lifecycle:
+      // decide stores it; apply clears it; everything else leaves it untouched.
+      if (action.type === 'battle_decide_auto_turn') {
+        this.pendingAutoTurnIntention =
+          result.autoTurnDirective?.type === 'intention'
+            ? result.autoTurnDirective.intention
+            : null;
+      } else if (action.type === 'battle_apply_auto_turn') {
+        this.pendingAutoTurnIntention = null;
+      }
+
+      GameState.set(result.state);
+      GameState.setBattleTurnContext(result.context);
+      this.lastBattleTransition = result;
+      return;
+    }
+
     // ── Battle placement ──
     if (isBattlePlacementAction(action) && prev.type === 'battle') {
       const state    = GameState.get();
@@ -437,15 +576,15 @@ class PhaseManagerClass {
     if (action.type === 'exit_battle' && prev.type === 'battle') {
       if (prev.isDebug && this.debugState) {
         // Debug teardown: XP goes to DebugBattleState only — never touches GameState
-        if (action.participants.length > 0) {
+        if (action.outcome === 'victory') {
           this.debugState.level += 1;
         }
       } else {
         const state = GameState.get();
 
         // Level up all participants (field alive + field dead + bench) — not just state.units
-        if (action.participants.length > 0) {
-          action.participants.forEach((p) => {
+        if (action.outcome === 'victory') {
+          exitParticipants.forEach((p) => {
             const us = GameState.playerUnits[p.templateId];
             if (!us) return;
             const newLevel = us.level + 1;
@@ -470,13 +609,17 @@ class PhaseManagerClass {
 
         // Save last field placement
         for (const unit of GameState.get().units.values()) {
-          if (!unit.id.startsWith('p')) continue;
+          if (unit.anchor.side !== 'player') continue;
           const us = GameState.playerUnits[unit.templateId];
           if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
         }
 
-        // Mark trigger entity dead on the map
-        if (prev.mapId && prev.triggerPos) {
+        // Mark trigger entity dead on the map — victory only; defeat must leave the encounter intact
+        // INVARIANT: action.outcome === 'victory' is required before mutating entityStates.
+        // Test cases when a harness exists:
+        //   victory + mapId + triggerPos → entityStates[key].alive === false
+        //   defeat  + mapId + triggerPos → entityStates[key] unchanged (still alive)
+        if (action.outcome === 'victory' && prev.mapId && prev.triggerPos) {
           const key = `${prev.triggerPos.x},${prev.triggerPos.y}`;
           const mapState = GameState.subMapStates[prev.mapId];
           if (mapState) mapState.entityStates[key] = { alive: false };
@@ -671,11 +814,27 @@ class PhaseManagerClass {
     }
     sm.start(nextScene);
   }
+
+  private buildExitParticipants(): BattleParticipant[] {
+    const phase = this.phase;
+    if (phase.type !== 'battle') return [];
+
+    const aliveTemplateIds = new Set(
+      [...GameState.get().units.values()]
+        .filter(u => u.anchor.side === 'player')
+        .map(u => u.templateId),
+    );
+
+    return phase.participants.map(pp => ({
+      ...pp,
+      isAlive: pp.wasOnBench || aliveTemplateIds.has(pp.templateId),
+    }));
+  }
 }
 
 // ─── Pure transition logic — no Phaser imports, no GameState access ───────────
 
-export function resolveTransition(current: GamePhase, action: PhaseAction, mapCleared = false): GamePhase | null {
+export function resolveTransition(current: GamePhase, action: PhaseAction, mapCleared = false, derivedExitParticipants: BattleParticipant[] = []): GamePhase | null {
   switch (action.type) {
 
     case 'new_game':
@@ -718,6 +877,19 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
         placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
+        battlePhase:         'placement',
+        units:               [],
+        unitsById:           new Map(),
+        occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
+        roundQueue:          [],
+        activeUnitId:        null,
+        activeUnit:          null,
+        battleMode:               'manual',                                           // filled by rebuildSnapshot
+        activeUnitSide:           null,                                               // filled by rebuildSnapshot
+        manualTurnControlsVisible: false,                                             // filled by rebuildSnapshot
+        manualChargeDisabled:     false,                                              // filled by rebuildSnapshot
+        validTargets:        [],
+        targetHighlightKind: 'none',
       };
 
     case 'enter_camp':
@@ -738,14 +910,27 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
         placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
+        battlePhase:         'placement',
+        units:               [],
+        unitsById:           new Map(),
+        occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
+        roundQueue:          [],
+        activeUnitId:        null,
+        activeUnit:          null,
+        battleMode:               'manual',                                           // filled by rebuildSnapshot
+        activeUnitSide:           null,                                               // filled by rebuildSnapshot
+        manualTurnControlsVisible: false,                                             // filled by rebuildSnapshot
+        manualChargeDisabled:     false,                                              // filled by rebuildSnapshot
+        validTargets:        [],
+        targetHighlightKind: 'none',
       };
 
     case 'exit_battle':
       if (current.type !== 'battle') return null;
-      if (action.participants.length === 0) return current.returnPhase;
+      if (action.outcome === 'defeat') return current.returnPhase;
       return {
         type: 'battle_results',
-        units: action.participants.map(p => ({ ...p, newLevel: p.level + 1 })),
+        units: derivedExitParticipants.map(p => ({ ...p, newLevel: p.level + 1 })),
         returnPhase: current.returnPhase,
         mapCleared,
       };
@@ -844,6 +1029,18 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'sell_item':
       return null; // no shop phase yet
 
+    // ── Battle lifecycle (mutation-only) ─────────────────────────────────────
+    case 'battle_begin_combat':
+    case 'battle_mark_quick_battle_complete':
+      if (current.type !== 'battle') return null;
+      return current;
+
+    // ── Battle control (mutation-only) ───────────────────────────────────────
+    case 'battle_set_mode':
+    case 'battle_prepare_quick_battle':
+      if (current.type !== 'battle') return null;
+      return current;
+
     // ── Battle placement (mutation-only) ─────────────────────────────────────
     case 'select_bench_slot':
     case 'select_field_unit':
@@ -856,9 +1053,20 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'swap_field_units':
       if (current.type !== 'battle') return null;
       return current; // applyActionSideEffects mutates BattleState; rebuildSnapshot refreshes phase
-  }
 
-  return null;
+    // ── Battle turn (mutation-only) ───────────────────────────────────────
+    case 'battle_start_turn':
+    case 'battle_select_skill':
+    case 'battle_use_skill':
+    case 'battle_advance_turn':
+    case 'battle_skip_turn':
+    case 'battle_charge_turn':
+    case 'battle_quick_turn':
+    case 'battle_decide_auto_turn':
+    case 'battle_apply_auto_turn':
+      if (current.type !== 'battle') return null;
+      return current; // applyActionSideEffects mutates state; rebuildSnapshot refreshes phase
+  }
 }
 
 // ─── Helpers (kept for future shop phase) ─────────────────────────────────────

@@ -5,8 +5,8 @@ import type {
   BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
 } from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
-import type { BenchUnitSnapshot } from '../shared/battleSnapshots';
-import type { PlacementSelection } from '../battle/types';
+import type { BenchUnitSnapshot, BattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/battleSnapshots';
+import type { PlacementSelection, BattleState, BattleMode, Side } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 
 export interface CampUnitSnapshot {
@@ -42,6 +42,8 @@ export interface BattleParticipant {
   spriteKey: string | null;
 }
 
+export type BattleExitOutcome = 'victory' | 'defeat';
+
 /** Display data for BattleResults scene — level already incremented. */
 export interface BattleResultUnit {
   templateId: string;
@@ -67,6 +69,20 @@ export type GamePhase =
       participants:       BattleParticipant[];     // battle-start snapshot; never rebuilt from current placement
       benchUnits:         (BenchUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
+      // ── Stage 4: scene-facing render data ─────────────────────────────────
+      battlePhase:         BattleState['phase'];
+      units:               BattleUnitSnapshot[];
+      unitsById:           Map<string, BattleUnitSnapshot>;
+      occupancy:           BattleOccupancySnapshot;
+      roundQueue:          string[];
+      activeUnitId:        string | null;
+      activeUnit:          BattleUnitSnapshot | null;
+      battleMode:              BattleMode;
+      activeUnitSide:          Side | null;
+      manualTurnControlsVisible: boolean;
+      manualChargeDisabled:    boolean;
+      validTargets:        CellCoord[];
+      targetHighlightKind: 'target' | 'heal_target' | 'none';
     }
   | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
   | { type: 'debug_level_select' }
@@ -114,7 +130,7 @@ export type PhaseAction =
   | { type: 'enter_camp' }
   | { type: 'exit_camp' }
   | { type: 'start_battle'; enemyGroupId: string }
-  | { type: 'exit_battle'; participants: BattleParticipant[] }
+  | { type: 'exit_battle'; outcome: BattleExitOutcome }
   | { type: 'exit_results' }
   | { type: 'replay' }
   | { type: 'exit_to_menu' }
@@ -146,7 +162,23 @@ export type PhaseAction =
   | { type: 'move_field_unit';            unitId:   string; anchor: CellCoord }
   | { type: 'move_field_unit_to_bench';   unitId:   string; benchIdx: number }
   | { type: 'return_field_unit_to_bench'; unitId:   string }
-  | { type: 'swap_field_units';           unitAId:  string; unitBId: string };
+  | { type: 'swap_field_units';           unitAId:  string; unitBId: string }
+  // ── Battle lifecycle actions (mutation-only: resolveTransition returns current) ──
+  | { type: 'battle_begin_combat' }
+  | { type: 'battle_mark_quick_battle_complete' }
+  // ── Battle control (mutation-only: resolveTransition returns current) ──
+  | { type: 'battle_set_mode'; mode: BattleMode }
+  | { type: 'battle_prepare_quick_battle' }
+  // ── Battle turn actions (mutation-only: resolveTransition returns current) ──
+  | { type: 'battle_start_turn' }
+  | { type: 'battle_select_skill'; skillIndex: number }
+  | { type: 'battle_use_skill'; unitId: string; target: CellCoord; skillIndex?: number }
+  | { type: 'battle_advance_turn' }
+  | { type: 'battle_skip_turn'; reason?: 'manual_skip' | 'blocked_melee' }
+  | { type: 'battle_charge_turn' }
+  | { type: 'battle_quick_turn'; unitId: string }
+  | { type: 'battle_decide_auto_turn' }
+  | { type: 'battle_apply_auto_turn' };
 
 // Empty snapshots used by resolveTransition as placeholders —
 // rebuildSnapshot fills them with real data after side effects run.

@@ -82,7 +82,7 @@ export type EffectEvent =
 export function computeDamageVsUnit(
   baseDamage: number,
   damageType: DamageType,
-  target: Unit,
+  target: StatOwner,
   multiplier: number,
   defIgnorePercent: number,
 ): number {
@@ -452,8 +452,15 @@ export interface EffectiveStats {
   initiative: number;
 }
 
+interface StatOwner {
+  physicalDamage: number; magicalDamage: number;
+  physicalDefense: number; magicalDefense: number;
+  dodge: number; block: number; initiative: number;
+  activeEffects: readonly ActiveEffect[];
+}
+
 /** Returns the unit's stats with all active effect bonuses applied. Pure, no side-effects. */
-export function effectiveStats(unit: Unit): EffectiveStats {
+export function effectiveStats(unit: StatOwner): EffectiveStats {
   return unit.activeEffects.reduce<EffectiveStats>(
     (acc, ae) => ({
       physicalDamage: acc.physicalDamage + (ae.effect.physicalDamageBonus ?? 0),

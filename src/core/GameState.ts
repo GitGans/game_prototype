@@ -8,6 +8,11 @@ import {
   ItemContainer,
   BattleStatBonuses,
 } from "../battle/types";
+import {
+  type TurnContext,
+  createTurnContext,
+  resetTurnContextForNewBattle,
+} from '../battle/turnResolver';
 import { BattleParticipant } from './phases';
 import { SubMapState } from '../world/types';
 import { buildOccupancy } from "../battle/occupancy";
@@ -44,6 +49,7 @@ export interface CampaignState {
 class GameStateManager {
   private state: BattleState = emptyState();
   private battleMode: BattleMode = "manual";
+  private battleTurnContext: TurnContext = createTurnContext();
 
   // Survive reset() — shared across scene restarts
   lastEnemyRace: UnitRace | null = null;
@@ -66,6 +72,7 @@ class GameStateManager {
   reset(): void {
     this.state = emptyState();
     this.battleMode = "manual";
+    this.battleTurnContext = resetTurnContextForNewBattle();
     // playerUnits, lastEnemyRace, lastEnemyPlacements are intentionally NOT cleared here
   }
 
@@ -79,6 +86,18 @@ class GameStateManager {
 
   setBattleMode(mode: BattleMode): void {
     this.battleMode = mode;
+  }
+
+  getBattleTurnContext(): TurnContext {
+    return this.battleTurnContext;
+  }
+
+  setBattleTurnContext(context: TurnContext): void {
+    this.battleTurnContext = context;
+  }
+
+  resetBattleTurnContext(): void {
+    this.battleTurnContext = resetTurnContextForNewBattle();
   }
 
   get campaign(): CampaignState {

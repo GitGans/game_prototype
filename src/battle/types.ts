@@ -26,9 +26,12 @@ export type {
 // ─── Runtime battle contracts (only types that exist during an active battle) ──
 
 import type { CellCoord, UnitShape } from '../shared/gridTypes';
-import type { Skill, Effect } from '../shared/skillTypes';
+import type { Skill } from '../shared/skillTypes';
 import type { SpriteSheetConfig, RowTrait, UnitRace } from '../shared/unitTypes';
 import type { UnitActivatableAbility } from '../shared/itemTypes';
+
+export type { ActiveEffect } from '../shared/activeEffect';
+import type { ActiveEffect } from '../shared/activeEffect';
 
 export interface Unit {
   id: string;
@@ -53,13 +56,6 @@ export interface Unit {
   spriteSheet?: SpriteSheetConfig;  // resolved at unit creation; undefined = no sprite
   activeEffects: ActiveEffect[]; // runtime only; max 2; ordered oldest-first
   activatableAbilities: UnitActivatableAbility[]; // [] for enemies
-}
-
-export interface ActiveEffect {
-  effectDisplayName: string; // display name shown in log/UI (e.g. "Poisoned")
-  effect: Effect;
-  remainingRounds: number;   // decremented at round end; removed when reaches 0
-  computedPerTurn?: number;  // heal (isBuff) or damage per tick; undefined for defense-only effects
 }
 
 export interface OccupancyMap {
