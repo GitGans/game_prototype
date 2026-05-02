@@ -5,8 +5,7 @@ import type { BattlePhaseActionResult, AutoTurnIntention } from "../../core/phas
 import type { CellCoord, Col, Side } from "../../battle/types";
 import type { BattleUnitSnapshot } from "../../shared/battleSnapshots";
 import { getOccupiedCells } from "../../battle/shapes";
-import { getActiveSkill, isEnchantmentSkill } from "../../battle/skillRuntime";
-import { buildManualTargetStatusText } from "../../objects/battleDirectivePresentation";
+import { buildManualTargetStatusTextForUnit } from "../../objects/battleDirectivePresentation";
 import type { CellView } from "../../objects/CellView";
 import type { UnitView } from "../../objects/UnitView";
 import type { SkillBar } from "../../objects/SkillBar";
@@ -45,7 +44,7 @@ type BattleTurnFlowControllerDeps = {
 };
 
 export class BattleTurnFlowController {
-  // Delay constants (ms) — moved from Game.ts
+  // Delay constants (ms)
   private static readonly DELAY_ENEMY_THINK = 700;
   private static readonly DELAY_AUTO_THINK  = 200;
   private static readonly DELAY_NEXT_TURN   = 500;
@@ -560,16 +559,12 @@ export class BattleTurnFlowController {
 
     const phase = PhaseManager.getPhase();
     const activeUnit = phase.type === "battle" ? phase.activeUnit : null;
-    const skill = activeUnit ? getActiveSkill(activeUnit) : undefined;
+    if (!activeUnit) return;
 
-    if (!activeUnit || !skill) return;
+    const status = buildManualTargetStatusTextForUnit(activeUnit);
+    if (!status) return;
 
-    this.deps.setStatus(
-      buildManualTargetStatusText(
-        isEnchantmentSkill(skill) ? "heal" : "attack",
-        activeUnit.name,
-      ),
-    );
+    this.deps.setStatus(status);
     this.showSkillIcons(activeUnit);
   }
 }

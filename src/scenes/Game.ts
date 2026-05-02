@@ -390,8 +390,7 @@ export class Game extends Phaser.Scene {
     const phase         = PhaseManager.getPhase();
     const isDebugBattle = phase.type === 'battle' && phase.returnPhase.type === 'main_menu';
 
-    // All game decisions (PhaseManager, GameState) stay here as closures.
-    // BattleEndOverlay receives only the resulting functions, not the game knowledge.
+    // Overlay navigation stays here as plain callbacks; the overlay does not know PhaseManager.
     const onReplay = (): void => {
       this.cleanup();
       PhaseManager.transition({ type: 'replay' });

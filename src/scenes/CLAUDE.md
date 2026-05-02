@@ -14,7 +14,10 @@ Scenes are the rendering and input layer of the game. Each scene corresponds to 
 - `Boot.ts` — initializes `PhaseManager`, transitions immediately to `Preloader`
 - `Preloader.ts` — loads all sprite sheets and images, then transitions to `MainMenu`
 - `MainMenu.ts` — entry screen; routes to new game or debug flow
-- `Game.ts` — battle scene; handles placement drag-and-drop, combat targeting, skill selection, and battle mode controls
+- `Game.ts` — battle scene shell; creates grid/unit views, wires battle controllers, routes pointer input, refreshes views from `GamePhase`, and constructs the battle-end overlay. Battle logic lives in the three controllers below.
+- `controllers/BattlePlacementController.ts` — placement UI, bench cards, drag/swap interaction; dispatches placement actions to `PhaseManager`
+- `controllers/BattleTurnFlowController.ts` — turn sequencing, battle control buttons, timers, quick battle, skip/charge flow, manual target confirmation, skill-bar flow; dispatches battle actions to `PhaseManager`
+- `controllers/BattlePresentationController.ts` — applies battle event, directive, and skill-preview presentations to Phaser objects
 - `WorldMap.ts` — keyboard-driven map navigation; triggers encounters, camps, and portals
 - `Prep.ts` — pre-battle camp screen; manages party composition and equipment access
 - `EquipScreen.ts` — unit equipment and item management; context-menu-driven equip/unequip/use
@@ -22,6 +25,20 @@ Scenes are the rendering and input layer of the game. Each scene corresponds to 
 - `BattleResults.ts` — post-battle summary and level-up display
 - `DebugLevelSelect.ts` — developer tool for picking a battle level directly
 - `MapVictory.ts` — map completion celebration; routes back to main menu
+
+## Battle Scene Architecture
+
+`Game.ts` is a thin Phaser shell. It owns:
+- Phaser scene lifecycle
+- controller construction and wiring
+- grid and unit view creation / destruction
+- high-level pointer routing to the correct controller
+- view refresh from `GamePhase` snapshot fields
+- battle-end overlay construction (overlay receives callbacks; it does not call `PhaseManager`)
+
+`Game.ts` does **not** own: battle rules, state mutations, turn sequencing, timers, control buttons, display formatting, or placement logic.
+
+Scenes and scene controllers dispatch intent to `PhaseManager`; they do not mutate battle state directly.
 
 ## Structural Role
 scenes → rendering + input forwarding (no logic ownership)
@@ -54,7 +71,12 @@ PhaseManager resolves next phase and syncs scenes
 - Note: `Boot.ts` and `Preloader.ts` use direct `scene.start()` for bootstrap only. All gameplay scene transitions go through PhaseManager.
 
 ## Where to Modify
-- change battle UI or combat interaction → `Game.ts`
+- change battle scene wiring, grid layout, or unit view lifecycle → `Game.ts`
+- change placement drag/swap interaction or bench cards → `controllers/BattlePlacementController.ts`
+- change turn sequencing, battle controls, timers, or skill-bar flow → `controllers/BattleTurnFlowController.ts`
+- change battle event / directive / skill-preview presentation application → `controllers/BattlePresentationController.ts`
+- change battle display text formatting or visual computation → `src/objects/*Presentation.ts`
+- change battle rules or state transitions → `src/battle/` and `src/core/phaseHandlers/battlePhaseHandler.ts`
 - change map movement or encounter triggers → `WorldMap.ts`
 - change camp/party composition UI → `Prep.ts`
 - change equipment or item interaction → `EquipScreen.ts`

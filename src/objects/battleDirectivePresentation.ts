@@ -1,4 +1,6 @@
 import type { TurnStartDirective } from '../battle/turnResolver';
+import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
+import { getActiveSkill, isEnchantmentSkill } from '../battle/skillRuntime';
 
 export type BattleDirectivePresentation = {
   statusText?: string;
@@ -53,5 +55,16 @@ export function buildBattleDirectivePresentation(
 function assertNever(value: never): never {
   throw new Error(
     `Unexpected battle directive presentation value: ${JSON.stringify(value)}`,
+  );
+}
+
+export function buildManualTargetStatusTextForUnit(
+  unit: BattleUnitSnapshot,
+): string | null {
+  const skill = getActiveSkill(unit);
+  if (!skill) return null;
+  return buildManualTargetStatusText(
+    isEnchantmentSkill(skill) ? 'heal' : 'attack',
+    unit.name,
   );
 }
