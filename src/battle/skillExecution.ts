@@ -24,6 +24,7 @@ import {
 import { getMeleeTargets, getRangedTargets } from "./targeting";
 import { rebuildRemainingQueue } from "./initiative";
 import { resolvePattern } from "./skillPatterns";
+import type { Rng } from '../shared/random';
 
 // ─── Public contract ───────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ export type SkillExecutionInput = {
     /** Read-only queue context supplied by the turn resolver. */
     chargedThisRound: ReadonlySet<string>;
   };
-  rng?: () => number;
+  rng: Rng;
 };
 
 export type SkillExecutionResult = {
@@ -65,8 +66,7 @@ export type SkillExecutionResult = {
 export function executeSkillUse(
   input: SkillExecutionInput,
 ): SkillExecutionResult {
-  const { casterId, target, queueContext } = input;
-  const rng = input.rng ?? Math.random;
+  const { casterId, target, queueContext, rng } = input;
   let state = input.state;
   const events: BattleEvent[] = [];
 
@@ -260,7 +260,7 @@ function applyInstantEffects(
   targetCoord: CellCoord,
   skill: Skill,
   events: BattleEvent[],
-  rng: () => number,
+  rng: Rng,
 ): BattleState {
   const block = skill.instantEffectBlock!;
   const pattern = getInstantEffectPattern(block);

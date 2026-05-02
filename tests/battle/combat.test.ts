@@ -32,7 +32,7 @@ describe("resolveAttack", () => {
       40,
       "physical",
       state,
-      { rng: fixedRng(1) }, // rng()=1 → rng()*100=100, never < dodge/block threshold
+      { rng: fixedRng(0.99) }, // 0.99*100=99, never < dodge/block threshold (capped at 90)
     );
 
     const hitEvents = events.filter((e) => e.type === "hit");
@@ -56,7 +56,7 @@ describe("resolveAttack", () => {
     ];
 
     const { state: after } = resolveAttack(hitCells, 100, "physical", state, {
-      rng: fixedRng(1),
+      rng: fixedRng(0.99),
     });
 
     expect(after.units.has("dead-unit")).toBe(false);
@@ -87,7 +87,7 @@ describe("resolveAttack", () => {
 
   it("blocks when RNG is below the block threshold after a dodge miss", () => {
     // dodge=0, block=50.
-    // sequenceRng([1, 0]): first call (dodge roll) → 1 → no dodge;
+    // sequenceRng([0.99, 0]): first call (dodge roll) → 0.99 → no dodge;
     //                       second call (block roll) → 0 → 0*100=0 < 50 → block.
     const target = makeUnit({
       id: "blocker",
@@ -101,7 +101,7 @@ describe("resolveAttack", () => {
     ];
 
     const { events } = resolveAttack(hitCells, 50, "physical", state, {
-      rng: sequenceRng([1, 0]),
+      rng: sequenceRng([0.99, 0]),
     });
 
     expect(events.find((e) => e.type === "blocked")).toBeTruthy();

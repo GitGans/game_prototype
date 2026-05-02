@@ -101,6 +101,27 @@ for (const { layer, dir, banned } of RULES) {
   }
 }
 
+// ─── No ambient Math.random() in gameplay/domain code ─────────────────────
+// Only src/core/random.ts may call Math.random(). All other battle and core
+// code must use the Rng interface injected from PhaseManager.
+const MATH_RANDOM_RE = /Math\.random\s*\(/g;
+const AMBIENT_RANDOM_DIRS = [join(SRC, 'battle'), join(SRC, 'core')];
+const AMBIENT_RANDOM_ALLOWLIST = [join(SRC, 'core', 'random.ts')];
+
+for (const dir of AMBIENT_RANDOM_DIRS) {
+  for (const [file, content] of walkFiles(dir)) {
+    if (AMBIENT_RANDOM_ALLOWLIST.includes(file)) continue;
+    const lines = content.split('\n');
+    lines.forEach((line, i) => {
+      MATH_RANDOM_RE.lastIndex = 0;
+      if (MATH_RANDOM_RE.test(line)) {
+        const rel = relative(SRC, file);
+        errors.push(`  ${rel}:${i + 1}  [no-ambient-random] Math.random() forbidden in gameplay code — use injected Rng`);
+      }
+    });
+  }
+}
+
 if (errors.length > 0) {
   console.error('Boundary violations found:\n');
   errors.forEach(e => console.error(e));

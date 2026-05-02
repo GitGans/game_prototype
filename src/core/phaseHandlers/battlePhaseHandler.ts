@@ -1,5 +1,6 @@
 import type { BattleState, BattleMode } from '../../battle/types';
 import type { PhaseAction }            from '../phases';
+import type { Rng }                    from '../../shared/random';
 import { buildRoundQueue }             from '../../battle/initiative';
 import type { PlayerBattleSetup }      from '../battleSetup';
 import type { BattleEvent }            from '../../battle/battleEvents';
@@ -10,6 +11,7 @@ import {
 } from '../../battle/turnResolver';
 import { checkGameOver }               from '../../battle/combat';
 import { resolveBattleTransition }     from '../../battle/battleTransition';
+import { resolveSkillTurn }            from '../../battle/skillTurnResolver';
 import { decideAutoTurn }             from '../../battle/autoTurn';
 import { buildPlayerUnitInput }   from '../battleSetupProjection';
 import { createUnitInstance }     from '../../battle/unitFactory';
@@ -160,7 +162,7 @@ export function applyBattleTurnAction(input: {
   context:                   TurnContext;
   action:                    BattleTurnPhaseAction;
   mode:                      BattleMode;
-  rng?:                      () => number;
+  rng:                       Rng;
   pendingAutoTurnIntention?: AutoTurnIntention | null;
 }): BattlePhaseActionResult {
   const { state, context, action, mode, rng } = input;
@@ -185,33 +187,20 @@ export function applyBattleTurnAction(input: {
     // Two explicit checks because the order is load-bearing (matches Game.ts).
     // Do NOT collapse into withWinner.
     case 'battle_use_skill': {
-      const used = resolveBattleTransition({
+      const result = resolveSkillTurn({
         state,
         context,
-        action: { type: 'use_skill', unitId: action.unitId, target: action.target, skillIndex: action.skillIndex },
+        unitId:     action.unitId,
+        target:     action.target,
+        skillIndex: action.skillIndex,
         rng,
       });
-
-      let nextState   = used.state;
-      let nextContext = used.context;
-      let events      = used.events;
-
-      const winnerAfterSkill = checkGameOver(nextState);
-      if (winnerAfterSkill) {
-        return { state: { ...nextState, phase: 'end' }, context: nextContext, events, winner: winnerAfterSkill };
-      }
-
-      const advanced = resolveBattleTransition({ state: nextState, context: nextContext, action: { type: 'advance_turn' }, rng });
-      nextState   = advanced.state;
-      nextContext = advanced.context;
-      events      = [...events, ...advanced.events];
-
-      const winnerAfterAdvance = checkGameOver(nextState);
-      if (winnerAfterAdvance) {
-        return { state: { ...nextState, phase: 'end' }, context: nextContext, events, winner: winnerAfterAdvance };
-      }
-
-      return { state: nextState, context: nextContext, events };
+      return {
+        state:   result.state,
+        context: result.context,
+        events:  result.events,
+        ...(result.winner ? { winner: result.winner } : {}),
+      };
     }
 
     // Round-end effect ticks happen inside advanceTurn and can kill units.
@@ -341,41 +330,22 @@ export function applyBattleTurnAction(input: {
         }
 
         case 'use_skill': {
-          const selected = resolveBattleTransition({
-            state, context, action: { type: 'select_skill', skillIndex: intention.skillIndex }, rng,
-          });
-
-          // Two explicit game-over checks — matches battle_use_skill sequencing exactly.
-          // Do NOT collapse into withWinner.
-          const used = resolveBattleTransition({
-            state: selected.state, context: selected.context,
-            action: { type: 'use_skill', unitId: intention.unitId, target: intention.target, skillIndex: intention.skillIndex },
+          const result = resolveSkillTurn({
+            state,
+            context,
+            unitId:                intention.unitId,
+            target:                intention.target,
+            skillIndex:            intention.skillIndex,
+            persistSkillSelection: true,
             rng,
           });
-
-          let nextState   = used.state;
-          let nextContext = used.context;
-          let events      = used.events;
-
-          const winnerAfterSkill = checkGameOver(nextState);
-          if (winnerAfterSkill) {
-            return { state: { ...nextState, phase: 'end' }, context: nextContext, events, winner: winnerAfterSkill, autoTurnApplied: true };
-          }
-
-          const advanced = resolveBattleTransition({
-            state: nextState, context: nextContext, action: { type: 'advance_turn' }, rng,
-          });
-
-          nextState   = advanced.state;
-          nextContext = advanced.context;
-          events      = [...events, ...advanced.events];
-
-          const winnerAfterAdvance = checkGameOver(nextState);
-          if (winnerAfterAdvance) {
-            return { state: { ...nextState, phase: 'end' }, context: nextContext, events, winner: winnerAfterAdvance, autoTurnApplied: true };
-          }
-
-          return { state: nextState, context: nextContext, events, autoTurnApplied: true };
+          return {
+            state:   result.state,
+            context: result.context,
+            events:  result.events,
+            ...(result.winner ? { winner: result.winner } : {}),
+            autoTurnApplied: true,
+          };
         }
 
         default: {

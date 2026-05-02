@@ -1,4 +1,5 @@
 import type { BattleMode, BattleState, CellCoord } from './types';
+import type { Rng } from '../shared/random';
 import {
   getActiveSkill,
   isEnchantmentSkill,
@@ -19,10 +20,9 @@ export type AutoTurnDecision =
 export function decideAutoTurn(input: {
   state: BattleState;
   mode:  BattleMode;
-  rng?:  () => number;
+  rng:   Rng;
 }): AutoTurnDecision {
-  const { state, mode } = input;
-  const rng = input.rng ?? Math.random;
+  const { state, mode, rng } = input;
 
   if (state.phase === 'end') {
     return { type: 'none', reason: 'battle_ended' };

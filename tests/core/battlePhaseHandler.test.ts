@@ -40,7 +40,7 @@ describe("applyBattleTurnAction — battle_use_skill", () => {
         target: coord("enemy", 0, 0),
       },
       mode: "manual",
-      rng: fixedRng(1),
+      rng: fixedRng(0.99),
     });
 
     expect(result.state.phase).toBe("end");
@@ -79,7 +79,7 @@ describe("applyBattleTurnAction — battle_use_skill", () => {
         target: coord("enemy", 0, 0),
       },
       mode: "manual",
-      rng: fixedRng(1),
+      rng: fixedRng(0.99),
     });
 
     expect(result.state.phase).not.toBe("end");

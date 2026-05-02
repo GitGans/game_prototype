@@ -337,8 +337,8 @@ export const INSTANT_EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
     levels: [
       { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
       { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-      { anchorRow: 0, anchorCol: 0, cells: [[P(1.25)]] },
-      { anchorRow: 0, anchorCol: 0, cells: [[P(1.5)]] },
+      { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+      { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
     ],
   },
 

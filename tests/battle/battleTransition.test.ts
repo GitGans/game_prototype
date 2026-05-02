@@ -33,7 +33,7 @@ describe("executeSkillUse", () => {
       target: coord("enemy", 0, 0),
       skill: testStrike,
       queueContext: { chargedThisRound: new Set() },
-      rng: fixedRng(1), // rng()=1 → always hits, never dodges/blocks
+      rng: fixedRng(0.99), // rng()=1 → always hits, never dodges/blocks
     });
 
     // executeSkillUse must not modify roundQueue
@@ -75,7 +75,7 @@ describe("resolveBattleTransition", () => {
         unitId: "attacker",
         target: coord("enemy", 0, 0),
       },
-      rng: fixedRng(1),
+      rng: fixedRng(0.99),
     });
 
     // use_skill does not advance the queue — that is advance_turn's job

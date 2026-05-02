@@ -1,4 +1,5 @@
 import type { BattleState } from './types';
+import type { Rng } from '../shared/random';
 import {
   getActiveSkill,
   isEnchantmentSkill,
@@ -10,7 +11,7 @@ import { resolveSkillTargets } from './targeting';
 import { executeSkillUse } from './skillExecution';
 
 export type ComputeOneTurnOptions = {
-  rng?: () => number;
+  rng: Rng;
   queueContext: {
     chargedThisRound: ReadonlySet<string>;
   };
@@ -30,7 +31,7 @@ export function computeOneTurn(
   unitId: string,
   options: ComputeOneTurnOptions,
 ): BattleState {
-  const { rng = Math.random, queueContext } = options;
+  const { rng, queueContext } = options;
   const unit = state.units.get(unitId);
   if (!unit) return state;
 

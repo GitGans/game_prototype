@@ -6,6 +6,8 @@ import {
   Skill,
   Unit,
 } from './types';
+import type { Rng } from '../shared/random';
+import { pickOneOrNull, randomInt } from '../shared/random';
 import { resolvePattern } from './skillPatterns';
 import {
   DAMAGE_MATRICES,
@@ -92,10 +94,9 @@ export function resolveEffectArgs(skill: Skill, caster: DamageOwner): [Effect, n
 /** Returns a random element from targets. Returns null if targets is empty. */
 export function resolveRandomTarget(
   targets: CellCoord[],
-  rng: () => number = Math.random,
+  rng: Rng,
 ): CellCoord | null {
-  if (targets.length === 0) return null;
-  return targets[Math.floor(rng() * targets.length)];
+  return pickOneOrNull(rng, targets);
 }
 
 /**
@@ -105,9 +106,12 @@ export function resolveRandomTarget(
  */
 export function resolveRandomSkillIndex(
   unit: Unit,
-  rng: () => number = Math.random,
+  rng: Rng,
 ): number {
-  return Math.floor(rng() * unit.skills.length);
+  // TODO(debt): units should be guaranteed to have at least one skill at creation.
+  // Enforce at buildNewBattleState or unit factory level, then remove this guard.
+  if (unit.skills.length === 0) return 0;
+  return randomInt(rng, unit.skills.length);
 }
 
 /**

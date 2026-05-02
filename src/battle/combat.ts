@@ -21,6 +21,8 @@ import {
   getDamageModifierPercent,
   getVampirismPercent,
 } from "../data/skillDefinitions";
+import type { Rng } from '../shared/random';
+import { rollPercent, rollProbability } from '../shared/random';
 
 export type CombatEvent =
   | { type: "hit"; unitId: string; unitName: string; damage: number }
@@ -105,10 +107,10 @@ export function resolveAttack(
   state: BattleState,
   options: {
     damageModifierBlocks?: DamageModifierBlock[];
-    rng?: () => number;
-  } = {},
+    rng: Rng;
+  },
 ): AttackResult {
-  const { damageModifierBlocks, rng = Math.random } = options;
+  const { damageModifierBlocks, rng } = options;
   // Build a quick lookup: modifier type → ignore percent
   const ignorePercent: Partial<Record<string, number>> = {};
   if (damageModifierBlocks) {
@@ -162,13 +164,13 @@ export function resolveAttack(
       90,
     );
 
-    if (rng() * 100 < effectiveDodge) {
+    if (rollPercent(rng, effectiveDodge)) {
       events.push({ type: "dodged", unitId: unit.id, unitName: unit.name });
       continue;
     }
 
     let finalDmg = rawDmg;
-    if (rng() * 100 < effectiveBlock) {
+    if (rollPercent(rng, effectiveBlock)) {
       finalDmg = Math.round(rawDmg / 2);
       events.push({
         type: "blocked",
@@ -505,7 +507,7 @@ export function checkGameOver(state: BattleState): Side | null {
  * Resolves instant effects (provoke / distract) for all units in the pattern.
  *
  * For each resolved cell with a unit:
- *   - Roll Math.random() against the cell's probability (multiplier field).
+ *   - Roll rng against the cell's probability (multiplier field).
  *   - If the roll fails → emit instant_effect_failed event, skip unit.
  *   - If the unit is NOT in roundQueue[1..] (already acted) → skip silently.
  *   - If success and unit is in queue → classify as provoked or distracted.
@@ -518,7 +520,7 @@ export function resolveInstantEffects(
   targetAnchor: CellCoord,
   state: BattleState,
   roundQueue: string[],
-  rng: () => number = Math.random,
+  rng: Rng,
 ): {
   events: InstantEffectEvent[];
   provokedUnitIds: string[];
@@ -548,7 +550,7 @@ export function resolveInstantEffects(
     if (!unit) continue;
 
     // Probability roll — no dodge/block/defense
-    if (rng() >= probability) {
+    if (!rollProbability(rng, probability)) {
       events.push({
         type: "instant_effect_failed",
         unitId: unit.id,
