@@ -84,6 +84,7 @@ export function resolveBattleTransition(input: {
         target: action.target,
         skill,
         queueContext: getSkillQueueContext(context),
+        rng,
       });
 
       // Transitional boundary: skill use and normal turn advancement remain separate.

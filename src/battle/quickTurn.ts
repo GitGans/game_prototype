@@ -20,8 +20,7 @@ export type ComputeOneTurnOptions = {
  * Computes one turn for the given unit and returns the resulting BattleState.
  * Pure — no Phaser, no animations, no GameState reads. Used by runQuickBattle().
  *
- * `options.rng` controls skill index and target selection.
- * Combat rolls (dodge, block) still use Math.random inside executeSkillUse.
+ * `options.rng` controls skill index, target selection, and combat rolls (dodge, block).
  *
  * TODO(post-refactor): consider extracting shared auto/quick skill-target selection.
  * autoTurn in Game.ts performs the same skill/target selection independently.
@@ -55,6 +54,7 @@ export function computeOneTurn(
     skill,
     target,
     queueContext,
+    rng,
   });
   return result.state;
 }
