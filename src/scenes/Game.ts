@@ -8,7 +8,6 @@ import {
   LAYOUT_SCALE,
 } from "../core/Constants";
 import { EventBus, Events } from "../core/EventBus";
-import { GameState } from "../core/GameState";
 import { CellView } from "../objects/CellView";
 import { UnitView } from "../objects/UnitView";
 import { InitiativeBar } from "../objects/InitiativeBar";
@@ -22,7 +21,6 @@ import {
   SpriteSheetConfig,
 } from "../battle/types";
 import type { BattleUnitSnapshot } from "../shared/battleSnapshots";
-import { buildBattleUnitSnapshot } from "../core/battleSnapshotBuilder";
 import { PhaseManager } from '../core/PhaseManager';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
@@ -186,9 +184,10 @@ export class Game extends Phaser.Scene {
   // ─── Unit Views ────────────────────────────────────────────────────────────
 
   private buildUnitViews(): void {
-    const state = GameState.get();
-    for (const unit of state.units.values()) {
-      this.createUnitView(buildBattleUnitSnapshot(unit));
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'battle') return;
+    for (const unit of phase.units) {
+      this.createUnitView(unit);
     }
   }
 

@@ -40,6 +40,7 @@ import {
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
 import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
 import { getActiveSkill, isEnchantmentSkill } from '../battle/skillRuntime';
+import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
@@ -324,6 +325,16 @@ class PhaseManagerClass {
         const activeUnitId = battleState.roundQueue[0] ?? null;
         const activeUnit   = activeUnitId ? (unitsById.get(activeUnitId) ?? null) : null;
 
+        const battleMode     = GameState.getBattleMode();
+        const activeUnitSide = activeUnit?.anchor.side ?? null;
+
+        const manualTurnControlsVisible =
+          battleMode === 'manual' && activeUnitSide === 'player';
+
+        const manualChargeDisabled =
+          activeUnitId !== null &&
+          hasChargedThisRound(GameState.getBattleTurnContext(), activeUnitId);
+
         let targetHighlightKind: 'target' | 'heal_target' | 'none' = 'none';
         if (activeUnit && battleState.validTargets.length > 0) {
           targetHighlightKind = isEnchantmentSkill(getActiveSkill(activeUnit))
@@ -344,6 +355,10 @@ class PhaseManagerClass {
           roundQueue:          [...battleState.roundQueue],
           activeUnitId,
           activeUnit,
+          battleMode,
+          activeUnitSide,
+          manualTurnControlsVisible,
+          manualChargeDisabled,
           validTargets:        battleState.validTargets.map(c => ({ ...c })),
           targetHighlightKind,
         };
@@ -869,6 +884,10 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         roundQueue:          [],
         activeUnitId:        null,
         activeUnit:          null,
+        battleMode:               'manual',                                           // filled by rebuildSnapshot
+        activeUnitSide:           null,                                               // filled by rebuildSnapshot
+        manualTurnControlsVisible: false,                                             // filled by rebuildSnapshot
+        manualChargeDisabled:     false,                                              // filled by rebuildSnapshot
         validTargets:        [],
         targetHighlightKind: 'none',
       };
@@ -898,6 +917,10 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         roundQueue:          [],
         activeUnitId:        null,
         activeUnit:          null,
+        battleMode:               'manual',                                           // filled by rebuildSnapshot
+        activeUnitSide:           null,                                               // filled by rebuildSnapshot
+        manualTurnControlsVisible: false,                                             // filled by rebuildSnapshot
+        manualChargeDisabled:     false,                                              // filled by rebuildSnapshot
         validTargets:        [],
         targetHighlightKind: 'none',
       };

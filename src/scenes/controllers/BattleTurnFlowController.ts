@@ -1,9 +1,8 @@
 import Phaser from "phaser";
-import { GameState } from "../../core/GameState";
 import { PhaseManager } from "../../core/PhaseManager";
 import type { PhaseAction } from "../../core/phases";
 import type { BattlePhaseActionResult, AutoTurnIntention } from "../../core/phaseHandlers/battlePhaseHandler";
-import type { BattleState, CellCoord, Col, Side } from "../../battle/types";
+import type { CellCoord, Col, Side } from "../../battle/types";
 import type { BattleUnitSnapshot } from "../../shared/battleSnapshots";
 import { getOccupiedCells } from "../../battle/shapes";
 import { getActiveSkill, isEnchantmentSkill } from "../../battle/skillRuntime";
@@ -14,7 +13,6 @@ import type { SkillBar } from "../../objects/SkillBar";
 import type { BattlePresentationController } from "./BattlePresentationController";
 import { CELL_SIZE, LAYOUT_SCALE } from "../../core/Constants";
 import { Button } from "../../ui/Button";
-import { hasChargedThisRound } from "../../battle/turnResolver";
 
 type BattlePhase = Extract<import("../../core/phases").GamePhase, { type: "battle" }>;
 
@@ -137,7 +135,7 @@ export class BattleTurnFlowController {
       scene, x: xSkip, y, w: btnW, h: btnH,
       label: "🛡️", style: "ghost", fontKey: "lg", idle: true,
       onClick: () => {
-        if (GameState.getBattleMode() !== "manual") return;
+        if (this.getBattlePhase()?.battleMode !== "manual") return;
         this.skipTurn();
       },
     });
@@ -146,7 +144,7 @@ export class BattleTurnFlowController {
       scene, x: xCharge, y, w: btnW, h: btnH,
       label: "⏳", style: "primary", fontKey: "lg", idle: true,
       onClick: () => {
-        if (GameState.getBattleMode() !== "manual") return;
+        if (this.getBattlePhase()?.battleMode !== "manual") return;
         this.chargeTurn();
       },
     });
@@ -157,21 +155,16 @@ export class BattleTurnFlowController {
     for (const b of this.manualTurnButtons) b.setVisible(false);
   }
 
-  private updateManualButtons(state: BattleState): void {
+  private updateManualButtons(): void {
     if (this.manualTurnButtons.length === 0) return;
 
-    const mode = GameState.getBattleMode();
-    const activeUnit = state.units.get(state.roundQueue[0]);
-    const show = mode === "manual" && activeUnit?.anchor.side === "player";
+    const phase = this.getBattlePhase();
+    const show = phase?.manualTurnControlsVisible === true;
 
     for (const btn of this.manualTurnButtons) btn.setVisible(show);
 
-    if (show && this.chargeBtn) {
-      const used = hasChargedThisRound(
-        GameState.getBattleTurnContext(),
-        state.roundQueue[0],
-      );
-      this.chargeBtn.setDisabled(used);
+    if (show && this.chargeBtn && phase) {
+      this.chargeBtn.setDisabled(phase.manualChargeDisabled);
     }
   }
 
@@ -183,6 +176,13 @@ export class BattleTurnFlowController {
     this.manualTurnButtons = [];
 
     this.chargeBtn = null;
+  }
+
+  // ─── Snapshot Helper ──────────────────────────────────────────────────────
+
+  private getBattlePhase(): BattlePhase | null {
+    const phase = PhaseManager.getPhase();
+    return phase.type === "battle" ? phase : null;
   }
 
   // ─── Core Action Helper ───────────────────────────────────────────────────
@@ -198,7 +198,7 @@ export class BattleTurnFlowController {
     const unitView = this.deps.unitViews.get(unitId);
     unitView?.setSpriteState("attack");
     this.schedule(400, () => {
-      const current = GameState.get().units.get(unitId);
+      const current = this.getBattlePhase()?.unitsById.get(unitId);
       if (current && current.hp > 0) unitView?.setSpriteState("idle");
     });
   }
@@ -227,15 +227,20 @@ export class BattleTurnFlowController {
     PhaseManager.transition({ type: "battle_begin_combat" });
     this.deps.setStatus("");
     this.deps.setBattleLogVisible(true);
-    this.startActiveUnitTurn(GameState.get());
+    this.startActiveUnitTurn();
   }
 
   // ─── Turn Flow ────────────────────────────────────────────────────────────
 
-  private startActiveUnitTurn(state: BattleState): void {
+  private startActiveUnitTurn(): void {
     if (this.destroyed) return;
     this.pendingTargetCoord = null;
     this.clearSkillIcons();
+
+    // Capture the active unit BEFORE the action — used as a style hint for event presentation.
+    // PhaseManager.transition() is synchronous and rebuilds the snapshot immediately,
+    // so reading from the snapshot here gives the correct pre-action unit.
+    const activeUnit = this.getBattlePhase()?.activeUnit ?? null;
 
     const result = this.runBattleAction({ type: "battle_start_turn" });
     if (!result) return;
@@ -243,17 +248,15 @@ export class BattleTurnFlowController {
     // 'none' means empty queue or battle already ended — nothing to commit
     if (!result.directive || result.directive.type === "none") return;
 
-    // activeUnit before turn start — only needed for presentBattleEvents style hint
-    const activeUnit = state.units.get(state.roundQueue[0]);
     this.deps.battlePresentation.presentBattleEvents(result.events, activeUnit);
-    this.updateManualButtons(result.state);
+    this.updateManualButtons();
 
     switch (result.directive.type) {
       case "continue_immediately": {
         // Queue recovery: active unit was missing; battle_start_turn advanced queue.
         // Effect ticks may have killed units — check before recursing.
         if (this.handleBattleWinner(result)) return;
-        this.startActiveUnitTurn(result.state);
+        this.startActiveUnitTurn();
         return;
       }
 
@@ -261,13 +264,13 @@ export class BattleTurnFlowController {
         // Melee unit was blocked; battle_start_turn advanced queue.
         if (this.handleBattleWinner(result)) return;
         this.schedule(BattleTurnFlowController.DELAY_NEXT_TURN, () =>
-          this.startActiveUnitTurn(result.state),
+          this.startActiveUnitTurn(),
         );
         return;
       }
 
       case "schedule_auto_turn": {
-        const unit = result.state.units.get(result.directive.activeUnitId);
+        const unit = this.getBattlePhase()?.unitsById.get(result.directive.activeUnitId) ?? null;
         this.deps.battlePresentation.applyDirectivePresentation({
           directive: result.directive,
           unitName: unit?.name ?? null,
@@ -340,7 +343,7 @@ export class BattleTurnFlowController {
     if (this.handleBattleWinner(result)) return;
 
     this.schedule(BattleTurnFlowController.DELAY_NEXT_TURN, () =>
-      this.startActiveUnitTurn(result.state),
+      this.startActiveUnitTurn(),
     );
   }
 
@@ -357,7 +360,7 @@ export class BattleTurnFlowController {
     if (!directive || directive.type === "none") return;
 
     if (directive.type === "handoff_manual" || directive.type === "restart_turn") {
-      this.startActiveUnitTurn(decided.state);
+      this.startActiveUnitTurn();
       return;
     }
 
@@ -390,7 +393,7 @@ export class BattleTurnFlowController {
     if (this.handleBattleWinner(applied)) return;
 
     this.schedule(BattleTurnFlowController.DELAY_AUTO_NEXT, () =>
-      this.startActiveUnitTurn(applied.state),
+      this.startActiveUnitTurn(),
     );
   }
 
@@ -413,8 +416,8 @@ export class BattleTurnFlowController {
 
     try {
       while (i++ < MAX_ITERATIONS) {
-        const state = GameState.get();
-        const unitId = state.roundQueue[0];
+        const phase = this.getBattlePhase();
+        const unitId = phase?.activeUnitId;
         if (!unitId) break;
 
         const result = this.runBattleAction({ type: "battle_quick_turn", unitId });
@@ -445,38 +448,37 @@ export class BattleTurnFlowController {
   skipTurn(): void {
     if (this.destroyed) return;
     // Pre-action active unit: used only as style hint for presentBattleEvents.
-    const state = GameState.get();
-    const activeUnit = state.units.get(state.roundQueue[0]);
+    const activeUnit = this.getBattlePhase()?.activeUnit ?? null;
 
     const result = this.runBattleAction({ type: "battle_skip_turn", reason: "manual_skip" });
     if (!result) return;
 
     this.deps.battlePresentation.presentBattleEvents(result.events, activeUnit);
-    this.updateManualButtons(result.state);
+    this.updateManualButtons();
 
     if (this.handleBattleWinner(result)) return;
 
     this.schedule(BattleTurnFlowController.DELAY_NEXT_TURN, () =>
-      this.startActiveUnitTurn(result.state),
+      this.startActiveUnitTurn(),
     );
   }
 
   chargeTurn(): void {
     if (this.destroyed) return;
-    const state = GameState.get();
-    const activeUnit = state.units.get(state.roundQueue[0]);
+    // Pre-action active unit: used only as style hint for presentBattleEvents.
+    const activeUnit = this.getBattlePhase()?.activeUnit ?? null;
 
     const result = this.runBattleAction({ type: "battle_charge_turn" });
     if (!result) return;
 
     this.deps.battlePresentation.presentBattleEvents(result.events, activeUnit);
-    this.updateManualButtons(result.state);
+    this.updateManualButtons();
 
     // Charge does not deal damage, but withWinner() wraps defensively — respect it.
     if (this.handleBattleWinner(result)) return;
 
     this.schedule(BattleTurnFlowController.DELAY_NEXT_TURN, () =>
-      this.startActiveUnitTurn(result.state),
+      this.startActiveUnitTurn(),
     );
   }
 
@@ -484,29 +486,39 @@ export class BattleTurnFlowController {
 
   toggleAutoMode(): void {
     if (this.destroyed) return;
-    if (GameState.getBattleMode() === "auto") {
+
+    const phase = this.getBattlePhase();
+    if (!phase) return;
+
+    if (phase.battleMode === "auto") {
       PhaseManager.transition({ type: "battle_set_mode", mode: "manual" });
-      this.updateManualButtons(GameState.get());
+      this.updateManualButtons();
       return;
     }
-    if (GameState.getBattleMode() !== "manual") return;
+
+    if (phase.battleMode !== "manual") return;
 
     PhaseManager.transition({ type: "battle_set_mode", mode: "auto" });
-    this.updateManualButtons(GameState.get());
+    this.updateManualButtons();
 
-    const s = GameState.get();
-    if (s.phase === "select_target") {
-      const active = s.units.get(s.roundQueue[0]);
-      if (active?.anchor.side === "player") {
-        // battle_start_turn resets validTargets and recomputes directive.
-        // Must consume events and winner: start_turn may advance internally.
-        const result = this.runBattleAction({ type: "battle_start_turn" });
-        if (!result) return;
-        this.deps.battlePresentation.presentBattleEvents(result.events, active);
-        if (this.handleBattleWinner(result)) return;
-        if (result.directive?.type === "schedule_auto_turn") {
-          this.schedule(BattleTurnFlowController.DELAY_AUTO_THINK, () => this.autoTurn());
-        }
+    // Read snapshot AFTER the mode transition.
+    // battle_set_mode only changes battleMode — it does not advance the queue
+    // or change the active unit, so activeUnitSide is still valid here.
+    const nextPhase = this.getBattlePhase();
+    if (
+      nextPhase?.battlePhase === "select_target" &&
+      nextPhase.activeUnitSide === "player" &&
+      nextPhase.activeUnit
+    ) {
+      const active = nextPhase.activeUnit;
+      // battle_start_turn resets validTargets and recomputes directive.
+      // Must consume events and winner: start_turn may advance internally.
+      const result = this.runBattleAction({ type: "battle_start_turn" });
+      if (!result) return;
+      this.deps.battlePresentation.presentBattleEvents(result.events, active);
+      if (this.handleBattleWinner(result)) return;
+      if (result.directive?.type === "schedule_auto_turn") {
+        this.schedule(BattleTurnFlowController.DELAY_AUTO_THINK, () => this.autoTurn());
       }
     }
   }

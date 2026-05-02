@@ -6,7 +6,7 @@ import type {
 } from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
 import type { BenchUnitSnapshot, BattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/battleSnapshots';
-import type { PlacementSelection, BattleState, BattleMode } from '../battle/types';
+import type { PlacementSelection, BattleState, BattleMode, Side } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 
 export interface CampUnitSnapshot {
@@ -77,6 +77,10 @@ export type GamePhase =
       roundQueue:          string[];
       activeUnitId:        string | null;
       activeUnit:          BattleUnitSnapshot | null;
+      battleMode:              BattleMode;
+      activeUnitSide:          Side | null;
+      manualTurnControlsVisible: boolean;
+      manualChargeDisabled:    boolean;
       validTargets:        CellCoord[];
       targetHighlightKind: 'target' | 'heal_target' | 'none';
     }
