@@ -19,15 +19,12 @@ import { UI_THEME } from "../ui/theme";
 import {
   BattleState,
   CellCoord,
-  Col,
   Side,
   SpriteSheetConfig,
 } from "../battle/types";
 import type { BattleUnitSnapshot } from "../shared/battleSnapshots";
 import { buildBattleUnitSnapshot } from "../core/battleSnapshotBuilder";
 import { PhaseManager } from '../core/PhaseManager';
-import type { PhaseAction } from '../core/phases';
-import { type BattlePhaseActionResult, type AutoTurnIntention } from '../core/phaseHandlers/battlePhaseHandler';
 import { Button } from '../ui/Button';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
@@ -35,31 +32,13 @@ import { BattleEndOverlay, BattleEndOutcome } from '../objects/BattleEndOverlay'
 import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
-import {
-  getActiveSkill,
-  isEnchantmentSkill,
-} from "../battle/skillRuntime";
 import { BATTLE_VISUAL_THEME } from "../objects/battleVisualTheme";
-import { buildManualTargetStatusText } from '../objects/battleDirectivePresentation';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { BattlePresentationController } from './controllers/BattlePresentationController';
 import { BattlePlacementController } from './controllers/BattlePlacementController';
+import { BattleTurnFlowController } from './controllers/BattleTurnFlowController';
 
 type BattlePhase = Extract<import('../core/phases').GamePhase, { type: 'battle' }>;
-
-// Local alias over PhaseAction so TypeScript can check battle turn dispatch sites.
-type BattleTurnSceneAction = Extract<PhaseAction, {
-  type:
-    | 'battle_start_turn'
-    | 'battle_select_skill'
-    | 'battle_use_skill'
-    | 'battle_advance_turn'
-    | 'battle_skip_turn'
-    | 'battle_charge_turn'
-    | 'battle_quick_turn'
-    | 'battle_decide_auto_turn'
-    | 'battle_apply_auto_turn'
-}>;
 
 export class Game extends Phaser.Scene {
   private cellViews: Map<string, CellView> = new Map();
@@ -76,22 +55,14 @@ export class Game extends Phaser.Scene {
   private logW = 0;
   private logH = 0;
 
-  // Delays (ms)
-  private static readonly DELAY_ENEMY_THINK = 700;
-  private static readonly DELAY_AUTO_THINK = 200;
-  private static readonly DELAY_NEXT_TURN = 500;
-  private static readonly DELAY_AUTO_NEXT   = 150;
-  private static readonly DELAY_GAMEOVER    = 600;
-  private static readonly DELAY_AUTO_IMPACT = 200;
-
   private autoBattleButtons: Button[] = [];
   private manualTurnButtons: Button[] = [];
   private chargeBtn: Button | null = null;
-  private pendingTargetCoord: CellCoord | null = null;
   private skillBar!: SkillBar;
 
   private battlePresentation!: BattlePresentationController;
   private battlePlacement!: BattlePlacementController;
+  private battleTurnFlow!: BattleTurnFlowController;
 
   constructor() {
     super("Game");
@@ -133,6 +104,24 @@ export class Game extends Phaser.Scene {
       onStartBattle: () => this.startBattle(),
     });
 
+    this.battleTurnFlow = new BattleTurnFlowController({
+      scene: this,
+      cellViews: this.cellViews,
+      unitViews: this.unitViews,
+      skillBar: this.skillBar,
+      battlePresentation: this.battlePresentation,
+      setStatus: text => this.setStatus(text),
+      refreshCells: phase => this.refreshCells(phase),
+      showGameOver: side => this.showGameOver(side),
+      setBattleLogVisible: visible => this.battleLog.setVisible(visible),
+      cellPixelPos: (side, row, col) => this.cellPixelPos(side, row, col),
+      updateManualButtons: state => this.updateManualButtons(state),
+      detachStateChangedListener: () =>
+        EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this),
+      attachStateChangedListener: () =>
+        EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this),
+    });
+
     this.setupInput();
     this.battlePlacement.enterPlacementPhase();
 
@@ -140,6 +129,7 @@ export class Game extends Phaser.Scene {
   }
 
   shutdown(): void {
+    this.battleTurnFlow?.destroy();
     EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
   }
 
@@ -336,23 +326,7 @@ export class Game extends Phaser.Scene {
 
   private onCellClick(coord: CellCoord, phase: BattlePhase): void {
     this.unitTooltip.hide();
-    if (phase.battlePhase !== 'select_target') return;
-    if (!phase.activeUnitId) return;
-
-    const isValid = phase.validTargets.some(
-      c => c.side === coord.side && c.row === coord.row && c.col === coord.col,
-    );
-    if (!isValid) return;
-
-    const p = this.pendingTargetCoord;
-    if (p && p.side === coord.side && p.row === coord.row && p.col === coord.col) {
-      this.pendingTargetCoord = null;
-      this.refreshCells(phase);
-      this.handleTargetSelect(coord, phase);
-    } else {
-      this.pendingTargetCoord = coord;
-      this.battlePresentation.applySkillPreview(phase, coord);
-    }
+    this.battleTurnFlow.handleCellClick(coord, phase);
   }
 
   // ─── Start Battle ──────────────────────────────────────────────────────────
@@ -364,219 +338,11 @@ export class Game extends Phaser.Scene {
       cell.setMode('battle');
     }
 
-    PhaseManager.transition({ type: 'battle_begin_combat' });
-
-    this.setStatus("");
-    this.battleLog.setVisible(true);
     this.buildAutoBattleButtons();
-    this.startActiveUnitTurn(GameState.get());
+    this.battleTurnFlow.beginCombat();
   }
 
-  // ─── Turn Action Helpers ────────────────────────────────────────────────────
-
-  private runBattleAction(action: BattleTurnSceneAction): BattlePhaseActionResult | null {
-    PhaseManager.transition(action);
-    return PhaseManager.getLastBattleTransition();
-  }
-
-  private playAttackAnimation(unitId: string): void {
-    const unitView = this.unitViews.get(unitId);
-    unitView?.setSpriteState('attack');
-    this.time.delayedCall(400, () => {
-      const current = GameState.get().units.get(unitId);
-      if (current && current.hp > 0) unitView?.setSpriteState('idle');
-    });
-  }
-
-  private handleBattleWinner(
-    result: BattlePhaseActionResult | null,
-    options?: { destroyAutoButtons?: boolean; delay?: number },
-  ): boolean {
-    if (!result?.winner) return false;
-    const delay = options?.delay ?? Game.DELAY_GAMEOVER;
-    this.time.delayedCall(delay, () => {
-      if (options?.destroyAutoButtons) this.destroyAutoBattleButtons();
-      this.showGameOver(result.winner!);
-    });
-    return true;
-  }
-
-  // ─── Turn Flow ─────────────────────────────────────────────────────────────
-
-  private startActiveUnitTurn(state: BattleState): void {
-    this.pendingTargetCoord = null;
-    this.clearSkillIcons();
-
-    const result = this.runBattleAction({ type: 'battle_start_turn' });
-    if (!result) return;
-
-    // 'none' means empty queue or battle already ended — nothing to commit
-    if (!result.directive || result.directive.type === 'none') return;
-
-    // activeUnit before turn start — only needed for presentBattleEvents style hint
-    const activeUnit = state.units.get(state.roundQueue[0]);
-    this.battlePresentation.presentBattleEvents(result.events, activeUnit);
-    this.updateManualButtons(result.state);
-
-    switch (result.directive.type) {
-      case 'continue_immediately': {
-        // Queue recovery: active unit was missing; battle_start_turn advanced queue.
-        // Effect ticks may have killed units — check before recursing.
-        if (this.handleBattleWinner(result)) return;
-        this.startActiveUnitTurn(result.state);
-        return;
-      }
-
-      case 'schedule_next_turn': {
-        // Melee unit was blocked; battle_start_turn advanced queue.
-        if (this.handleBattleWinner(result)) return;
-        this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
-          this.startActiveUnitTurn(result.state),
-        );
-        return;
-      }
-
-      case 'schedule_auto_turn': {
-        const unit = result.state.units.get(result.directive.activeUnitId);
-        this.battlePresentation.applyDirectivePresentation({
-          directive: result.directive,
-          unitName: unit?.name ?? null,
-        });
-
-        if (result.directive.delayKind === 'auto_player') {
-          this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
-        } else {
-          this.time.delayedCall(Game.DELAY_ENEMY_THINK, () => this.autoTurn());
-        }
-        return;
-      }
-
-      case 'await_manual_target': {
-        const phase = PhaseManager.getPhase();
-        const activeUnit = phase.type === 'battle' ? phase.activeUnit : null;
-
-        const presentation = this.battlePresentation.applyDirectivePresentation({
-          directive: result.directive,
-          unitName: activeUnit?.name ?? null,
-        });
-
-        if (presentation.displaySkillBar && activeUnit) {
-          this.showSkillIcons(activeUnit);
-        }
-        return;
-      }
-    }
-  }
-
-
-  private handleTargetSelect(coord: CellCoord, phase: BattlePhase): void {
-    const attackerId = phase.activeUnitId!;
-    const activeUnit = phase.activeUnit;
-
-    // Sprite animation — stays in scene (Phaser, not logic)
-    this.playAttackAnimation(attackerId);
-
-    // battle_use_skill composes: executeSkillUse → checkGameOver → advanceTurn → checkGameOver
-    const result = this.runBattleAction({
-      type: 'battle_use_skill',
-      unitId: attackerId,
-      target: coord,
-    });
-    if (!result) return;
-
-    this.battlePresentation.presentBattleEvents(result.events, activeUnit);
-
-    if (this.handleBattleWinner(result)) return;
-
-    this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
-      this.startActiveUnitTurn(result.state),
-    );
-  }
-
-
-  private autoTurn(): void {
-    // Core decides what the auto unit will do — no state mutation.
-    const decided = this.runBattleAction({ type: 'battle_decide_auto_turn' });
-    if (!decided) return;
-
-    const directive = decided.autoTurnDirective;
-
-    if (!directive || directive.type === 'none') return;
-
-    if (directive.type === 'handoff_manual' || directive.type === 'restart_turn') {
-      this.startActiveUnitTurn(decided.state);
-      return;
-    }
-
-    // directive.type === 'intention'
-    const { intention, animateAttack } = directive;
-
-    if (animateAttack) {
-      // Animation starts; apply fires after the impact delay.
-      this.playAttackAnimation(intention.unitId);
-      this.time.delayedCall(Game.DELAY_AUTO_IMPACT, () =>
-        this.applyAutoTurnAndPresent(intention),
-      );
-    } else {
-      // Skip and advance have no animation — apply immediately.
-      this.applyAutoTurnAndPresent(intention);
-    }
-  }
-
-  private applyAutoTurnAndPresent(intention: AutoTurnIntention): void {
-    const applied = this.runBattleAction({ type: 'battle_apply_auto_turn' });
-    if (!applied) return;
-
-    // If the intention became stale during DELAY_AUTO_IMPACT (mode change, battle
-    // end, replay), core returns autoTurnApplied: false — do not schedule next turn.
-    if (!applied.autoTurnApplied) return;
-
-    this.battlePresentation.presentBattleEvents(applied.events, intention.activeUnitSide);
-
-    if (this.handleBattleWinner(applied, { destroyAutoButtons: true })) return;
-
-    this.time.delayedCall(Game.DELAY_AUTO_NEXT, () =>
-      this.startActiveUnitTurn(applied.state),
-    );
-  }
-
-  private runQuickBattle(): void {
-    // Reset turn context so charge-tracking from a prior manual turn does not leak in.
-    // Emits one STATE_CHANGED before the scene goes silent — that is acceptable.
-    PhaseManager.transition({ type: 'battle_prepare_quick_battle' });
-
-    // Detach this scene's listener: quick battle is a silent simulation — no redraws
-    // until done. This does not suppress global EventBus emission; other listeners still
-    // receive STATE_CHANGED on every iteration.
-    EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this);
-
-    const MAX_ITERATIONS = 2000;
-    let i = 0;
-    let finalWinner: Side | null = null;
-
-    try {
-      while (i++ < MAX_ITERATIONS) {
-        const state = GameState.get();
-        const unitId = state.roundQueue[0];
-        if (!unitId) break;
-
-        const result = this.runBattleAction({ type: 'battle_quick_turn', unitId });
-        if (!result) break;
-
-        if (result.winner) {
-          finalWinner = result.winner;
-          break;
-        }
-      }
-    } finally {
-      // Always reattach, even if an error occurs, so the scene stays live.
-      EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);
-    }
-
-    PhaseManager.transition({ type: 'battle_mark_quick_battle_complete' });
-
-    this.time.delayedCall(200, () => this.showGameOver(finalWinner ?? 'player'));
-  }
+  // ─── Battle Control Buttons ────────────────────────────────────────────────
 
   private buildAutoBattleButtons(): void {
     const btnW = Math.round(44 * LAYOUT_SCALE);
@@ -589,31 +355,7 @@ export class Game extends Phaser.Scene {
     const autoBtn = new Button({
       scene: this, x: x1, y, w: btnW, h: btnH,
       label: "▶▶", style: "navy", fontKey: "lg", idle: true,
-      onClick: () => {
-        if (GameState.getBattleMode() === "auto") {
-          PhaseManager.transition({ type: 'battle_set_mode', mode: 'manual' });
-          this.updateManualButtons(GameState.get());
-          return;
-        }
-        if (GameState.getBattleMode() !== "manual") return;
-        PhaseManager.transition({ type: 'battle_set_mode', mode: 'auto' });
-        this.updateManualButtons(GameState.get());
-        const s = GameState.get();
-        if (s.phase === "select_target") {
-          const active = s.units.get(s.roundQueue[0]);
-          if (active?.anchor.side === "player") {
-            // battle_start_turn resets validTargets and recomputes directive.
-            // Must consume events and winner: start_turn may advance internally.
-            const result = this.runBattleAction({ type: 'battle_start_turn' });
-            if (!result) return;
-            this.battlePresentation.presentBattleEvents(result.events, active);
-            if (this.handleBattleWinner(result)) return;
-            if (result.directive?.type === 'schedule_auto_turn') {
-              this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
-            }
-          }
-        }
-      },
+      onClick: () => this.battleTurnFlow.toggleAutoMode(),
     });
 
     const quickBtn = new Button({
@@ -621,7 +363,7 @@ export class Game extends Phaser.Scene {
       label: "⚡", style: "neutral", fontKey: "lg", idle: true,
       onClick: () => {
         PhaseManager.transition({ type: 'battle_set_mode', mode: 'quick' });
-        this.runQuickBattle();
+        this.battleTurnFlow.runQuickBattle();
       },
     });
 
@@ -635,42 +377,6 @@ export class Game extends Phaser.Scene {
     for (const btn of this.manualTurnButtons) btn.destroy();
     this.manualTurnButtons = [];
     this.chargeBtn = null;
-  }
-
-  private handleSkipTurn(): void {
-    // Pre-action active unit: used only as style hint for presentBattleEvents.
-    const state = GameState.get();
-    const activeUnit = state.units.get(state.roundQueue[0]);
-
-    const result = this.runBattleAction({ type: 'battle_skip_turn', reason: 'manual_skip' });
-    if (!result) return;
-
-    this.battlePresentation.presentBattleEvents(result.events, activeUnit);
-    this.updateManualButtons(result.state);
-
-    if (this.handleBattleWinner(result)) return;
-
-    this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
-      this.startActiveUnitTurn(result.state),
-    );
-  }
-
-  private handleChargeTurn(): void {
-    const state = GameState.get();
-    const activeUnit = state.units.get(state.roundQueue[0]);
-
-    const result = this.runBattleAction({ type: 'battle_charge_turn' });
-    if (!result) return;
-
-    this.battlePresentation.presentBattleEvents(result.events, activeUnit);
-    this.updateManualButtons(result.state);
-
-    // Charge does not deal damage, but withWinner() wraps defensively — respect it.
-    if (this.handleBattleWinner(result)) return;
-
-    this.time.delayedCall(Game.DELAY_NEXT_TURN, () =>
-      this.startActiveUnitTurn(result.state),
-    );
   }
 
   private updateManualButtons(state: BattleState): void {
@@ -698,7 +404,7 @@ export class Game extends Phaser.Scene {
       label: "🛡️", style: "ghost", fontKey: "lg", idle: true,
       onClick: () => {
         if (GameState.getBattleMode() !== "manual") return;
-        this.handleSkipTurn();
+        this.battleTurnFlow.skipTurn();
       },
     });
 
@@ -707,7 +413,7 @@ export class Game extends Phaser.Scene {
       label: "⏳", style: "primary", fontKey: "lg", idle: true,
       onClick: () => {
         if (GameState.getBattleMode() !== "manual") return;
-        this.handleChargeTurn();
+        this.battleTurnFlow.chargeTurn();
       },
     });
 
@@ -755,57 +461,7 @@ export class Game extends Phaser.Scene {
     }
   }
 
-  // ─── Skill Icon UI ─────────────────────────────────────────────────────────
-
-  private showSkillIcons(unit: BattleUnitSnapshot): void {
-    if (unit.skills.length < 1) { this.skillBar.hide(); return; }
-
-    // 6 icons × 20px + 5 gaps × 3px = 135px — fits within one CELL_SIZE (126*LAYOUT_SCALE).
-    const iconSize = Math.round(20 * LAYOUT_SCALE);
-    const iconGap  = Math.round(3  * LAYOUT_SCALE);
-
-    const occupiedCells = getOccupiedCells(unit.anchor, unit.shape);
-    const rightmostCol  = Math.max(...occupiedCells.map(c => c.col)) as Col;
-    const topRow        = Math.min(...occupiedCells.map(c => c.row));
-    const bottomRow     = Math.max(...occupiedCells.map(c => c.row));
-
-    const rightCellPos = this.cellPixelPos(unit.anchor.side, topRow, rightmostCol);
-    const iconX        = rightCellPos.x + CELL_SIZE / 2 + iconGap + iconSize / 2;
-
-    const unitTopY    = this.cellPixelPos(unit.anchor.side, topRow,    rightmostCol).y - CELL_SIZE / 2;
-    const unitBottomY = this.cellPixelPos(unit.anchor.side, bottomRow, rightmostCol).y + CELL_SIZE / 2;
-    const unitCenterY = (unitTopY + unitBottomY) / 2;
-    const totalH      = unit.skills.length * iconSize + (unit.skills.length - 1) * iconGap;
-    const startY      = unitCenterY - totalH / 2 + iconSize / 2;
-
-    this.skillBar.show(unit, iconX, startY, iconSize, iconGap, i => this.switchActiveSkill(i));
-  }
-
-  private clearSkillIcons(): void {
-    this.skillBar.hide();
-  }
-
-  private switchActiveSkill(index: number): void {
-    const result = this.runBattleAction({ type: 'battle_select_skill', skillIndex: index });
-    if (!result) return;
-
-    this.pendingTargetCoord = null;
-
-    const phase = PhaseManager.getPhase();
-    const activeUnit = phase.type === 'battle' ? phase.activeUnit : null;
-    const skill = activeUnit ? getActiveSkill(activeUnit) : undefined;
-
-    if (!activeUnit || !skill) return;
-
-    this.setStatus(
-      buildManualTargetStatusText(
-        isEnchantmentSkill(skill) ? 'heal' : 'attack',
-        activeUnit.name,
-      ),
-    );
-    this.showSkillIcons(activeUnit);
-  }
-
+  // ─── Game Over ─────────────────────────────────────────────────────────────
 
   private showGameOver(eliminatedSide: Side): void {
     // Battle runtime cleanup — stays in Game.ts, not in the overlay component.
