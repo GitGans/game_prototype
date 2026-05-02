@@ -10,7 +10,6 @@ import {
   BENCH_SLOTS,
   LAYOUT_SCALE,
 } from "../core/Constants";
-import { BATTLE_VISUAL_THEME } from "../objects/battleVisualTheme";
 import { EventBus, Events } from "../core/EventBus";
 import { GameState } from "../core/GameState";
 import { CellView } from "../objects/CellView";
@@ -25,7 +24,6 @@ import {
   CellCoord,
   Col,
   Side,
-  Unit,
   SpriteSheetConfig,
 } from "../battle/types";
 import type { BenchUnitSnapshot, BattleUnitSnapshot } from "../shared/battleSnapshots";
@@ -45,20 +43,10 @@ import {
   getActiveSkill,
   isEnchantmentSkill,
 } from "../battle/skillRuntime";
-import {
-  buildBattleSkillPreviewPresentation,
-  type BattleSkillPreviewHeaderColorKind,
-} from '../objects/battleSkillPreviewPresentation';
-import type { BattleEvent } from '../battle/battleEvents';
-import {
-  buildBattleEventPresentations,
-  type BattleEventPresentation,
-} from '../objects/battleEventPresentation';
-import {
-  buildBattleDirectivePresentation,
-  buildManualTargetStatusText,
-} from '../objects/battleDirectivePresentation';
+import { BATTLE_VISUAL_THEME } from "../objects/battleVisualTheme";
+import { buildManualTargetStatusText } from '../objects/battleDirectivePresentation';
 import { hasChargedThisRound } from '../battle/turnResolver';
+import { BattlePresentationController } from './controllers/BattlePresentationController';
 
 type BattlePhase = Extract<import('../core/phases').GamePhase, { type: 'battle' }>;
 
@@ -111,6 +99,7 @@ export class Game extends Phaser.Scene {
   private lastClickTime = 0;
 
   private prevPlacementUnitsSignature: string | null = null;
+  private battlePresentation!: BattlePresentationController;
 
   constructor() {
     super("Game");
@@ -126,6 +115,19 @@ export class Game extends Phaser.Scene {
     this.buildUnitViews();
     this.prevPlacementUnitsSignature = null;
     this.buildUI();
+
+    this.battlePresentation = new BattlePresentationController({
+      scene: this,
+      cellViews: this.cellViews,
+      unitViews: this.unitViews,
+      battleLog: this.battleLog,
+      statusText: this.statusText,
+      statusHeaderText: this.statusHeaderText,
+      getStatusBaseY: () => this.statusBaseY,
+      setStatus: text => this.setStatus(text),
+      refreshCells: phase => this.refreshCells(phase),
+    });
+
     this.setupInput();
     this.enterPlacementPhase();
 
@@ -508,7 +510,7 @@ export class Game extends Phaser.Scene {
       this.handleTargetSelect(coord, phase);
     } else {
       this.pendingTargetCoord = coord;
-      this.showSkillPreview(phase, coord);
+      this.battlePresentation.applySkillPreview(phase, coord);
     }
   }
 
@@ -578,7 +580,7 @@ export class Game extends Phaser.Scene {
 
     // activeUnit before turn start — only needed for presentBattleEvents style hint
     const activeUnit = state.units.get(state.roundQueue[0]);
-    this.presentBattleEvents(result.events, activeUnit);
+    this.battlePresentation.presentBattleEvents(result.events, activeUnit);
     this.updateManualButtons(result.state);
 
     switch (result.directive.type) {
@@ -601,13 +603,10 @@ export class Game extends Phaser.Scene {
 
       case 'schedule_auto_turn': {
         const unit = result.state.units.get(result.directive.activeUnitId);
-        const presentation = buildBattleDirectivePresentation(result.directive, {
+        this.battlePresentation.applyDirectivePresentation({
+          directive: result.directive,
           unitName: unit?.name ?? null,
         });
-
-        if (presentation.statusText) {
-          this.setStatus(presentation.statusText);
-        }
 
         if (result.directive.delayKind === 'auto_player') {
           this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
@@ -621,13 +620,10 @@ export class Game extends Phaser.Scene {
         const phase = PhaseManager.getPhase();
         const activeUnit = phase.type === 'battle' ? phase.activeUnit : null;
 
-        const presentation = buildBattleDirectivePresentation(result.directive, {
+        const presentation = this.battlePresentation.applyDirectivePresentation({
+          directive: result.directive,
           unitName: activeUnit?.name ?? null,
         });
-
-        if (presentation.statusText) {
-          this.setStatus(presentation.statusText);
-        }
 
         if (presentation.displaySkillBar && activeUnit) {
           this.showSkillIcons(activeUnit);
@@ -637,41 +633,6 @@ export class Game extends Phaser.Scene {
     }
   }
 
-  private skillPreviewHeaderColor(kind: BattleSkillPreviewHeaderColorKind): string {
-    switch (kind) {
-      case 'magical':  return BATTLE_VISUAL_THEME.skill.magical;
-      case 'physical': return BATTLE_VISUAL_THEME.skill.physical;
-      case 'neutral':  return BATTLE_VISUAL_THEME.unit.textLight;
-    }
-  }
-
-  private showSkillPreview(phase: BattlePhase, coord: CellCoord): void {
-    const presentation = buildBattleSkillPreviewPresentation({ phase, coord });
-    if (!presentation) return;
-
-    this.refreshCells(phase);
-
-    for (const cell of presentation.cells) {
-      const view = this.cellViews.get(cellKey(cell.coord));
-      if (!view) continue;
-
-      if (cell.kind === 'skill') {
-        view.setSkillPreview(cell.multiplier, cell.highlight === 'heal');
-      } else {
-        view.setEffectPreview(cell.highlight === 'heal');
-      }
-    }
-
-    this.setStatus(presentation.statusBody);
-
-    const lineH = Math.round(14 * LAYOUT_SCALE);
-    this.statusHeaderText
-      .setColor(this.skillPreviewHeaderColor(presentation.statusHeader.colorKind))
-      .setText(presentation.statusHeader.text)
-      .setY(this.statusBaseY)
-      .setVisible(true);
-    this.statusText.setY(this.statusBaseY + lineH);
-  }
 
   private handleTargetSelect(coord: CellCoord, phase: BattlePhase): void {
     const attackerId = phase.activeUnitId!;
@@ -688,7 +649,7 @@ export class Game extends Phaser.Scene {
     });
     if (!result) return;
 
-    this.presentBattleEvents(result.events, activeUnit);
+    this.battlePresentation.presentBattleEvents(result.events, activeUnit);
 
     if (this.handleBattleWinner(result)) return;
 
@@ -697,46 +658,6 @@ export class Game extends Phaser.Scene {
     );
   }
 
-  private presentBattleEvents(
-    events: BattleEvent[],
-    activeUnitOrSide: BattleUnitSnapshot | Unit | Side | null | undefined,
-  ): void {
-    const activeUnitSide =
-      typeof activeUnitOrSide === 'string'
-        ? activeUnitOrSide
-        : activeUnitOrSide?.anchor.side ?? null;
-
-    const presentations = buildBattleEventPresentations(events, {
-      activeUnitSide,
-    });
-
-    for (const presentation of presentations) {
-      this.applyBattleEventPresentation(presentation);
-    }
-  }
-
-  private applyBattleEventPresentation(presentation: BattleEventPresentation): void {
-    if (presentation.floatingText) {
-      const { unitId, kind, amount } = presentation.floatingText;
-      const view = this.unitViews.get(unitId);
-
-      // If the unit view is gone (dead unit, mid-animation), skip — matches current behavior.
-      if (view) {
-        if (kind === 'heal') {
-          this.showFloatingHeal(view.x, view.y, amount);
-        } else {
-          this.showFloatingDamage(view.x, view.y, amount);
-        }
-      }
-    }
-
-    if (presentation.logEntry) {
-      this.battleLog.addEntry(
-        presentation.logEntry.text,
-        presentation.logEntry.type,
-      );
-    }
-  }
 
   private autoTurn(): void {
     // Core decides what the auto unit will do — no state mutation.
@@ -775,7 +696,7 @@ export class Game extends Phaser.Scene {
     // end, replay), core returns autoTurnApplied: false — do not schedule next turn.
     if (!applied.autoTurnApplied) return;
 
-    this.presentBattleEvents(applied.events, intention.activeUnitSide);
+    this.battlePresentation.presentBattleEvents(applied.events, intention.activeUnitSide);
 
     if (this.handleBattleWinner(applied, { destroyAutoButtons: true })) return;
 
@@ -850,7 +771,7 @@ export class Game extends Phaser.Scene {
             // Must consume events and winner: start_turn may advance internally.
             const result = this.runBattleAction({ type: 'battle_start_turn' });
             if (!result) return;
-            this.presentBattleEvents(result.events, active);
+            this.battlePresentation.presentBattleEvents(result.events, active);
             if (this.handleBattleWinner(result)) return;
             if (result.directive?.type === 'schedule_auto_turn') {
               this.time.delayedCall(Game.DELAY_AUTO_THINK, () => this.autoTurn());
@@ -889,7 +810,7 @@ export class Game extends Phaser.Scene {
     const result = this.runBattleAction({ type: 'battle_skip_turn', reason: 'manual_skip' });
     if (!result) return;
 
-    this.presentBattleEvents(result.events, activeUnit);
+    this.battlePresentation.presentBattleEvents(result.events, activeUnit);
     this.updateManualButtons(result.state);
 
     if (this.handleBattleWinner(result)) return;
@@ -906,7 +827,7 @@ export class Game extends Phaser.Scene {
     const result = this.runBattleAction({ type: 'battle_charge_turn' });
     if (!result) return;
 
-    this.presentBattleEvents(result.events, activeUnit);
+    this.battlePresentation.presentBattleEvents(result.events, activeUnit);
     this.updateManualButtons(result.state);
 
     // Charge does not deal damage, but withWinner() wraps defensively — respect it.
@@ -1111,51 +1032,6 @@ export class Game extends Phaser.Scene {
     this.showSkillIcons(activeUnit);
   }
 
-  // ─── Visual Effects ────────────────────────────────────────────────────────
-
-  private showFloatingDamage(x: number, y: number, amount: number): void {
-    const text = this.add
-      .text(x, y, `-${amount}`, {
-        fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-        color: BATTLE_VISUAL_THEME.floatingText.damage,
-        fontStyle: "bold",
-        stroke: BATTLE_VISUAL_THEME.floatingText.stroke,
-        strokeThickness: Math.round(3 * LAYOUT_SCALE),
-      })
-      .setOrigin(0.5)
-      .setDepth(20);
-
-    this.tweens.add({
-      targets: text,
-      y: y - Math.round(55 * LAYOUT_SCALE),
-      alpha: 0,
-      duration: 900,
-      ease: "Power2",
-      onComplete: () => text.destroy(),
-    });
-  }
-
-  private showFloatingHeal(x: number, y: number, amount: number): void {
-    const text = this.add
-      .text(x, y, `+${amount}`, {
-        fontSize: `${Math.round(22 * LAYOUT_SCALE)}px`,
-        color: BATTLE_VISUAL_THEME.floatingText.heal,
-        fontStyle: "bold",
-        stroke: BATTLE_VISUAL_THEME.floatingText.stroke,
-        strokeThickness: Math.round(3 * LAYOUT_SCALE),
-      })
-      .setOrigin(0.5)
-      .setDepth(20);
-
-    this.tweens.add({
-      targets: text,
-      y: y - Math.round(55 * LAYOUT_SCALE),
-      alpha: 0,
-      duration: 900,
-      ease: "Power2",
-      onComplete: () => text.destroy(),
-    });
-  }
 
   private showGameOver(eliminatedSide: Side): void {
     // Battle runtime cleanup — stays in Game.ts, not in the overlay component.
