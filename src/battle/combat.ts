@@ -20,7 +20,7 @@ import { resolvePattern } from "./skillPatterns";
 import {
   getDamageModifierPercent,
   getVampirismPercent,
-} from "../data/skillDefinitions";
+} from "./skillDefinitionRuntime";
 import type { Rng } from '../shared/random';
 import { rollPercent, rollProbability } from '../shared/random';
 

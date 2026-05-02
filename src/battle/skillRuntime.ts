@@ -12,9 +12,11 @@ import { resolvePattern } from './skillPatterns';
 import {
   DAMAGE_MATRICES,
   LEVELED_EFFECTS,
-  getSkillPattern,
-  getEffectPattern,
 } from '../data/skillDefinitions';
+import {
+  getEffectPattern,
+  getSkillPattern,
+} from './skillDefinitionRuntime';
 import { cellKey } from './field';
 
 interface SkillOwner { skills: readonly Skill[]; activeSkillIndex: number; }

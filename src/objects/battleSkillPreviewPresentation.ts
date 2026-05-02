@@ -9,7 +9,7 @@ import {
 } from '../battle/skillRuntime';
 import { effectiveStats, computeDamageVsUnit } from '../battle/combat';
 import { resolvePattern } from '../battle/skillPatterns';
-import { getEffectPattern, getDamageModifierPercent } from '../data/skillDefinitions';
+import { getDamageModifierPercent, getEffectPattern } from '../battle/skillDefinitionRuntime';
 
 // ─── Local alias ──────────────────────────────────────────────────────────────
 

@@ -20,7 +20,7 @@ import {
   getEffectPattern,
   getInstantEffectPattern,
   getSkillPattern,
-} from "../data/skillDefinitions";
+} from "./skillDefinitionRuntime";
 import { getMeleeTargets, getRangedTargets } from "./targeting";
 import { rebuildRemainingQueue } from "./initiative";
 import { resolvePattern } from "./skillPatterns";
