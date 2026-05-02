@@ -5,9 +5,6 @@ import {
   GRID_COLS,
   GRID_ROWS,
   SIDE_GAP,
-  BENCH_PANEL_WIDTH,
-  BENCH_GAP,
-  BENCH_SLOTS,
   LAYOUT_SCALE,
 } from "../core/Constants";
 import { EventBus, Events } from "../core/EventBus";
@@ -26,7 +23,7 @@ import {
   Side,
   SpriteSheetConfig,
 } from "../battle/types";
-import type { BenchUnitSnapshot, BattleUnitSnapshot } from "../shared/battleSnapshots";
+import type { BattleUnitSnapshot } from "../shared/battleSnapshots";
 import { buildBattleUnitSnapshot } from "../core/battleSnapshotBuilder";
 import { PhaseManager } from '../core/PhaseManager';
 import type { PhaseAction } from '../core/phases';
@@ -35,7 +32,6 @@ import { Button } from '../ui/Button';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
 import { BattleEndOverlay, BattleEndOutcome } from '../objects/BattleEndOverlay';
-import { BenchCard, type BenchCardMode } from '../objects/BenchCard';
 import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
@@ -47,6 +43,7 @@ import { BATTLE_VISUAL_THEME } from "../objects/battleVisualTheme";
 import { buildManualTargetStatusText } from '../objects/battleDirectivePresentation';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { BattlePresentationController } from './controllers/BattlePresentationController';
+import { BattlePlacementController } from './controllers/BattlePlacementController';
 
 type BattlePhase = Extract<import('../core/phases').GamePhase, { type: 'battle' }>;
 
@@ -87,19 +84,14 @@ export class Game extends Phaser.Scene {
   private static readonly DELAY_GAMEOVER    = 600;
   private static readonly DELAY_AUTO_IMPACT = 200;
 
-  // Placement phase UI
-  private benchCards: BenchCard[] = [];
-  private startBattleBtn: Button | null = null;
   private autoBattleButtons: Button[] = [];
   private manualTurnButtons: Button[] = [];
   private chargeBtn: Button | null = null;
   private pendingTargetCoord: CellCoord | null = null;
-  private lastClickCoordKey: string | null = null;
   private skillBar!: SkillBar;
-  private lastClickTime = 0;
 
-  private prevPlacementUnitsSignature: string | null = null;
   private battlePresentation!: BattlePresentationController;
+  private battlePlacement!: BattlePlacementController;
 
   constructor() {
     super("Game");
@@ -113,7 +105,6 @@ export class Game extends Phaser.Scene {
     this.effectTooltip = new EffectTooltip(this);
     this.skillBar = new SkillBar(this, new SkillTooltip(this));
     this.buildUnitViews();
-    this.prevPlacementUnitsSignature = null;
     this.buildUI();
 
     this.battlePresentation = new BattlePresentationController({
@@ -128,8 +119,22 @@ export class Game extends Phaser.Scene {
       refreshCells: phase => this.refreshCells(phase),
     });
 
+    this.battlePlacement = new BattlePlacementController({
+      scene: this,
+      cellViews: this.cellViews,
+      unitViews: this.unitViews,
+      unitTooltip: this.unitTooltip,
+      getLogBounds: () => ({ x: this.logX, y: this.logY, w: this.logW, h: this.logH }),
+      cellPixelPos: (side, row, col) => this.cellPixelPos(side, row, col),
+      setStatus: text => this.setStatus(text),
+      setBattleLogVisible: visible => this.battleLog.setVisible(visible),
+      createUnitView: unit => this.createUnitView(unit),
+      destroyUnitView: unitId => this.destroyUnitView(unitId),
+      onStartBattle: () => this.startBattle(),
+    });
+
     this.setupInput();
-    this.enterPlacementPhase();
+    this.battlePlacement.enterPlacementPhase();
 
     EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);
   }
@@ -299,182 +304,18 @@ export class Game extends Phaser.Scene {
     this.statusText.setText(msg);
   }
 
-  // ─── Placement Phase ───────────────────────────────────────────────────────
-
-  private enterPlacementPhase(): void {
-    this.setStatus('Place your troops and click "Battle"');
-    this.battleLog.setVisible(false);
-    this.buildBenchPanel();
-    this.buildStartBattleButton();
-  }
-
-  private benchCardHeight(): number {
-    return CELL_SIZE;
-  }
-
-  private benchPanelX(): number {
-    return BENCH_GAP + BENCH_PANEL_WIDTH / 2;
-  }
-
-  private buildBenchPanel(interactive = true): void {
-    for (const card of this.benchCards) card.destroy();
-    this.benchCards = [];
-
-    const phase = PhaseManager.getPhase();
-    if (phase.type !== 'battle') return;
-
-    const cardH  = this.benchCardHeight();
-    const panelX = this.benchPanelX();
-    const mode: BenchCardMode = interactive ? 'placement' : 'battle';
-
-    const gridTopY    = this.cellPixelPos('player', 0, 2).y - CELL_SIZE / 2;
-    const gridBottomY = this.cellPixelPos('player', 0, 0).y + CELL_SIZE / 2;
-    const totalH      = BENCH_SLOTS * cardH + (BENCH_SLOTS - 1) * CELL_GAP;
-    const startY      = (gridTopY + gridBottomY) / 2 - totalH / 2 + cardH / 2;
-
-    for (let i = 0; i < BENCH_SLOTS; i++) {
-      const snapshot   = phase.benchUnits[i] ?? null;
-      const cardY      = startY + i * (cardH + CELL_GAP);
-      const isSelected = phase.placementSelection.selectedBenchIdx === i;
-
-      // Build callbacks separately to avoid `...(false | object)` spread — TypeScript
-      // cannot narrow that to an object type inside a spread expression.
-      const callbacks =
-        snapshot === null
-          ? { onClick: () => this.onBenchCardClick(i) }
-          : {
-              onClick:      () => this.onBenchCardClick(i),
-              onHoverStart: (snap: BenchUnitSnapshot) =>
-                this.unitTooltip.showBenchSnapshot(snap, this.logX, this.logY, this.logW),
-              onHoverEnd:   () => this.unitTooltip.hide(),
-            };
-
-      const card = new BenchCard({
-        scene:    this,
-        x:        panelX,
-        y:        cardY,
-        width:    BENCH_PANEL_WIDTH,
-        height:   cardH,
-        snapshot,
-        selected: isSelected,
-        mode,
-        callbacks,
-      });
-
-      this.benchCards.push(card);
-    }
-  }
-
-  private onBenchCardClick(idx: number): void {
-    const phase = PhaseManager.getPhase();
-    if (phase.type !== 'battle') return;
-    const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
-
-    if (phase.benchUnits[idx] === null) {
-      if (selectedFieldUnitId !== null) {
-        PhaseManager.transition({ type: 'move_field_unit_to_bench', unitId: selectedFieldUnitId, benchIdx: idx });
-      }
-      return;
-    }
-
-    if (selectedFieldUnitId !== null) {
-      PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: idx, fieldUnitId: selectedFieldUnitId });
-      return;
-    }
-
-    if (selectedBenchIdx === idx) {
-      PhaseManager.transition({ type: 'clear_placement_selection' });
-    } else {
-      PhaseManager.transition({ type: 'select_bench_slot', benchIdx: idx });
-    }
-  }
-
-  private buildStartBattleButton(): void {
-    if (this.startBattleBtn) {
-      this.startBattleBtn.destroy();
-      this.startBattleBtn = null;
-    }
-
-    const btnW = Math.round(160 * LAYOUT_SCALE);
-    const btnH = Math.round(100 * LAYOUT_SCALE);
-    const btnX = this.logX + this.logW / 2;
-    const btnY = this.logY + this.logH / 2;
-
-    this.startBattleBtn = new Button({
-      scene: this, x: btnX, y: btnY, w: btnW, h: btnH,
-      label: "⚔\nBattle", style: "primary", fontKey: "xl",
-      onClick: () => this.startBattle(),
-    });
-  }
-
-  private clearPlacementHighlights(): void {
-    for (const [, cell] of this.cellViews) {
-      cell.setHighlight("none");
-    }
-  }
-
-  // ─── Placement Input ───────────────────────────────────────────────────────
-
-  private onPlacementCellClick(coord: CellCoord, phase: BattlePhase): void {
-    if (coord.side !== 'player') return;
-    const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
-    const unitId = phase.occupancy.cellToUnitId.get(cellKey(coord));
-
-    if (selectedBenchIdx !== null) {
-      if (!unitId) {
-        PhaseManager.transition({ type: 'place_bench_unit', benchIdx: selectedBenchIdx, anchor: coord });
-      } else {
-        PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: selectedBenchIdx, fieldUnitId: unitId });
-      }
-      return;
-    }
-
-    if (unitId) {
-      if (selectedFieldUnitId === null) {
-        PhaseManager.transition({ type: 'select_field_unit', unitId });
-      } else if (selectedFieldUnitId === unitId) {
-        PhaseManager.transition({ type: 'clear_placement_selection' });
-      } else {
-        PhaseManager.transition({ type: 'swap_field_units', unitAId: selectedFieldUnitId, unitBId: unitId });
-      }
-    } else if (selectedFieldUnitId !== null) {
-      PhaseManager.transition({ type: 'move_field_unit', unitId: selectedFieldUnitId, anchor: coord });
-    }
-  }
-
-  // ─── Double Click Detection ────────────────────────────────────────────────
-
-  private handlePointerDown(coord: CellCoord): void {
-    const phase = PhaseManager.getPhase();
-    if (phase.type !== 'battle' || phase.battlePhase !== 'placement') return;
-    if (coord.side !== 'player') return;
-
-    const key = cellKey(coord);
-    const now = Date.now();
-
-    if (key === this.lastClickCoordKey && now - this.lastClickTime < 300) {
-      const unitId = phase.occupancy.cellToUnitId.get(key);
-      if (unitId) {
-        PhaseManager.transition({ type: 'return_field_unit_to_bench', unitId });
-      }
-      this.lastClickCoordKey = null;
-      this.lastClickTime = 0;
-    } else {
-      this.lastClickCoordKey = key;
-      this.lastClickTime = now;
-    }
-  }
-
   // ─── Input ─────────────────────────────────────────────────────────────────
 
   private setupInput(): void {
     for (const [, cell] of this.cellViews) {
-      cell.on('pointerdown', () => this.handlePointerDown(cell.coord));
+      cell.on('pointerdown', () =>
+        this.battlePlacement.handlePlacementPointerDown(cell.coord),
+      );
       cell.on('pointerup', () => {
         const phase = PhaseManager.getPhase();
         if (phase.type !== 'battle') return;
         if (phase.battlePhase === 'placement') {
-          this.onPlacementCellClick(cell.coord, phase);
+          this.battlePlacement.handlePlacementCellClick(cell.coord, phase);
         } else {
           this.onCellClick(cell.coord, phase);
         }
@@ -517,13 +358,7 @@ export class Game extends Phaser.Scene {
   // ─── Start Battle ──────────────────────────────────────────────────────────
 
   private startBattle(): void {
-    // Tear down placement UI; keep bench visible as display-only
-    this.buildBenchPanel(false);
-    if (this.startBattleBtn) {
-      this.startBattleBtn.destroy();
-      this.startBattleBtn = null;
-    }
-    this.clearPlacementHighlights();
+    this.battlePlacement.teardownForCombat();
 
     for (const [, cell] of this.cellViews) {
       cell.setMode('battle');
@@ -889,72 +724,11 @@ export class Game extends Phaser.Scene {
     if (phase.type !== 'battle') return;
 
     if (phase.battlePhase === 'placement') {
-      this.onPlacementStateChanged(phase);
+      this.battlePlacement.onPlacementStateChanged(phase);
     } else if (phase.battlePhase !== 'end') {
       this.refreshCells(phase);
       this.refreshUnits(phase);
       this.initiativeBar.update({ roundQueue: phase.roundQueue, unitsById: phase.unitsById });
-    }
-  }
-
-  private onPlacementStateChanged(phase: BattlePhase): void {
-    const sig = this.buildPlacementUnitsSignature(phase);
-
-    if (sig !== this.prevPlacementUnitsSignature) {
-      this.reconcilePlacementUnitViews(phase);
-      this.prevPlacementUnitsSignature = sig;
-    }
-
-    this.buildBenchPanel();
-    this.applyPlacementHighlights(phase);
-  }
-
-  private buildPlacementUnitsSignature(phase: BattlePhase): string {
-    return phase.units
-      .filter(u => u.anchor.side === 'player')
-      .map(u => `${u.id}:${u.anchor.row}:${u.anchor.col}`)
-      .sort()
-      .join(';');
-  }
-
-  private reconcilePlacementUnitViews(phase: BattlePhase): void {
-    const playerUnitIds = new Set(
-      phase.units.filter(u => u.anchor.side === 'player').map(u => u.id),
-    );
-
-    for (const [id] of [...this.unitViews]) {
-      const unit = phase.unitsById.get(id);
-      if (!unit) {
-        this.destroyUnitView(id);
-        continue;
-      }
-      if (unit.anchor.side === 'player' && !playerUnitIds.has(id)) {
-        this.destroyUnitView(id);
-      }
-    }
-
-    for (const unit of phase.units) {
-      if (unit.anchor.side === 'player' && !this.unitViews.has(unit.id)) {
-        this.createUnitView(unit);
-      }
-    }
-
-    for (const unit of phase.units) {
-      if (unit.anchor.side === 'player') {
-        this.unitViews.get(unit.id)?.update(unit);
-      }
-    }
-  }
-
-  private applyPlacementHighlights(phase: BattlePhase): void {
-    this.clearPlacementHighlights();
-    const selectedId = phase.placementSelection.selectedFieldUnitId;
-    if (!selectedId) return;
-    const unit = phase.unitsById.get(selectedId);
-    if (!unit) return;
-    const cells = getOccupiedCells(unit.anchor, unit.shape);
-    for (const coord of cells) {
-      this.cellViews.get(cellKey(coord))?.setHighlight('selected');
     }
   }
 
