@@ -17,6 +17,7 @@ import {
   buildBattleSkillPreviewPresentation,
   type BattleSkillPreviewHeaderColorKind,
 } from '../../objects/battleSkillPreviewPresentation';
+import { buildSkillPreviewModel } from '../../battle/skillPreview';
 import { buildBattleDirectivePresentation } from '../../objects/battleDirectivePresentation';
 
 type BattlePhase = Extract<GamePhase, { type: 'battle' }>;
@@ -125,8 +126,15 @@ export class BattlePresentationController {
   // ─── Skill Preview ────────────────────────────────────────────────────────────
 
   applySkillPreview(phase: BattlePhase, coord: CellCoord): void {
-    const presentation = buildBattleSkillPreviewPresentation({ phase, coord });
-    if (!presentation) return;
+    const model = buildSkillPreviewModel({
+      activeUnit: phase.activeUnit,
+      targetCoord: coord,
+      occupancy: phase.occupancy,
+      unitsById: phase.unitsById,
+    });
+    if (!model) return;
+
+    const presentation = buildBattleSkillPreviewPresentation(model);
 
     this.deps.refreshCells(phase);
 
