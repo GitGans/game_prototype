@@ -17,7 +17,6 @@ import { UnitTooltip } from "../objects/UnitTooltip";
 import { EffectTooltip } from "../objects/EffectTooltip";
 import { UI_THEME } from "../ui/theme";
 import {
-  BattleState,
   CellCoord,
   Side,
   SpriteSheetConfig,
@@ -25,7 +24,6 @@ import {
 import type { BattleUnitSnapshot } from "../shared/battleSnapshots";
 import { buildBattleUnitSnapshot } from "../core/battleSnapshotBuilder";
 import { PhaseManager } from '../core/PhaseManager';
-import { Button } from '../ui/Button';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
 import { BattleEndOverlay, BattleEndOutcome } from '../objects/BattleEndOverlay';
@@ -33,7 +31,6 @@ import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
 import { BATTLE_VISUAL_THEME } from "../objects/battleVisualTheme";
-import { hasChargedThisRound } from '../battle/turnResolver';
 import { BattlePresentationController } from './controllers/BattlePresentationController';
 import { BattlePlacementController } from './controllers/BattlePlacementController';
 import { BattleTurnFlowController } from './controllers/BattleTurnFlowController';
@@ -55,9 +52,6 @@ export class Game extends Phaser.Scene {
   private logW = 0;
   private logH = 0;
 
-  private autoBattleButtons: Button[] = [];
-  private manualTurnButtons: Button[] = [];
-  private chargeBtn: Button | null = null;
   private skillBar!: SkillBar;
 
   private battlePresentation!: BattlePresentationController;
@@ -115,7 +109,6 @@ export class Game extends Phaser.Scene {
       showGameOver: side => this.showGameOver(side),
       setBattleLogVisible: visible => this.battleLog.setVisible(visible),
       cellPixelPos: (side, row, col) => this.cellPixelPos(side, row, col),
-      updateManualButtons: state => this.updateManualButtons(state),
       detachStateChangedListener: () =>
         EventBus.off(Events.STATE_CHANGED, this.onStateChanged, this),
       attachStateChangedListener: () =>
@@ -338,89 +331,7 @@ export class Game extends Phaser.Scene {
       cell.setMode('battle');
     }
 
-    this.buildAutoBattleButtons();
     this.battleTurnFlow.beginCombat();
-  }
-
-  // ─── Battle Control Buttons ────────────────────────────────────────────────
-
-  private buildAutoBattleButtons(): void {
-    const btnW = Math.round(44 * LAYOUT_SCALE);
-    const btnH = Math.round(34 * LAYOUT_SCALE);
-    const gap  = Math.round(8  * LAYOUT_SCALE);
-    const y    = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
-    const x1   = btnW / 2 + Math.round(12 * LAYOUT_SCALE);
-    const x2   = x1 + btnW + gap;
-
-    const autoBtn = new Button({
-      scene: this, x: x1, y, w: btnW, h: btnH,
-      label: "▶▶", style: "navy", fontKey: "lg", idle: true,
-      onClick: () => this.battleTurnFlow.toggleAutoMode(),
-    });
-
-    const quickBtn = new Button({
-      scene: this, x: x2, y, w: btnW, h: btnH,
-      label: "⚡", style: "neutral", fontKey: "lg", idle: true,
-      onClick: () => {
-        PhaseManager.transition({ type: 'battle_set_mode', mode: 'quick' });
-        this.battleTurnFlow.runQuickBattle();
-      },
-    });
-
-    this.autoBattleButtons = [autoBtn, quickBtn];
-    this.buildManualTurnButtons();
-  }
-
-  private destroyAutoBattleButtons(): void {
-    for (const btn of this.autoBattleButtons) btn.destroy();
-    this.autoBattleButtons = [];
-    for (const btn of this.manualTurnButtons) btn.destroy();
-    this.manualTurnButtons = [];
-    this.chargeBtn = null;
-  }
-
-  private updateManualButtons(state: BattleState): void {
-    if (this.manualTurnButtons.length === 0) return;
-    const mode = GameState.getBattleMode();
-    const activeUnit = state.units.get(state.roundQueue[0]);
-    const show = mode === "manual" && activeUnit?.anchor.side === "player";
-    for (const btn of this.manualTurnButtons) btn.setVisible(show);
-    if (show && this.chargeBtn) {
-      const used = hasChargedThisRound(GameState.getBattleTurnContext(), state.roundQueue[0]);
-      this.chargeBtn.setDisabled(used);
-    }
-  }
-
-  private buildManualTurnButtons(): void {
-    const btnW    = Math.round(44 * LAYOUT_SCALE);
-    const btnH    = Math.round(34 * LAYOUT_SCALE);
-    const gap     = Math.round(8  * LAYOUT_SCALE);
-    const y       = this.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
-    const xSkip   = this.scale.width - btnW / 2 - Math.round(12 * LAYOUT_SCALE);
-    const xCharge = xSkip - btnW - gap;
-
-    const skipBtn = new Button({
-      scene: this, x: xSkip, y, w: btnW, h: btnH,
-      label: "🛡️", style: "ghost", fontKey: "lg", idle: true,
-      onClick: () => {
-        if (GameState.getBattleMode() !== "manual") return;
-        this.battleTurnFlow.skipTurn();
-      },
-    });
-
-    const chargeBtn = new Button({
-      scene: this, x: xCharge, y, w: btnW, h: btnH,
-      label: "⏳", style: "primary", fontKey: "lg", idle: true,
-      onClick: () => {
-        if (GameState.getBattleMode() !== "manual") return;
-        this.battleTurnFlow.chargeTurn();
-      },
-    });
-
-    this.chargeBtn = chargeBtn;
-    this.manualTurnButtons = [skipBtn, chargeBtn];
-
-    for (const b of this.manualTurnButtons) b.setVisible(false);
   }
 
   // ─── State Refresh ─────────────────────────────────────────────────────────
@@ -464,10 +375,6 @@ export class Game extends Phaser.Scene {
   // ─── Game Over ─────────────────────────────────────────────────────────────
 
   private showGameOver(eliminatedSide: Side): void {
-    // Battle runtime cleanup — stays in Game.ts, not in the overlay component.
-    this.destroyAutoBattleButtons();
-
-    // checkGameOver returns the side with no surviving units.
     const outcome: BattleEndOutcome = eliminatedSide === 'enemy' ? 'victory' : 'defeat';
 
     const phase         = PhaseManager.getPhase();

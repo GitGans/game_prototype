@@ -13,6 +13,8 @@ import type { UnitView } from "../../objects/UnitView";
 import type { SkillBar } from "../../objects/SkillBar";
 import type { BattlePresentationController } from "./BattlePresentationController";
 import { CELL_SIZE, LAYOUT_SCALE } from "../../core/Constants";
+import { Button } from "../../ui/Button";
+import { hasChargedThisRound } from "../../battle/turnResolver";
 
 type BattlePhase = Extract<import("../../core/phases").GamePhase, { type: "battle" }>;
 
@@ -40,7 +42,6 @@ type BattleTurnFlowControllerDeps = {
   showGameOver: (eliminatedSide: Side) => void;
   setBattleLogVisible: (visible: boolean) => void;
   cellPixelPos: (side: Side, row: number, col: number) => { x: number; y: number };
-  updateManualButtons: (state: BattleState) => void;
   attachStateChangedListener: () => void;
   detachStateChangedListener: () => void;
 };
@@ -60,6 +61,11 @@ export class BattleTurnFlowController {
 
   // Manual-target confirmation state
   private pendingTargetCoord: CellCoord | null = null;
+
+  // Battle control buttons
+  private autoBattleButtons: Button[] = [];
+  private manualTurnButtons: Button[] = [];
+  private chargeBtn: Button | null = null;
 
   constructor(private readonly deps: BattleTurnFlowControllerDeps) {}
 
@@ -81,6 +87,98 @@ export class BattleTurnFlowController {
   destroy(): void {
     this.destroyed = true;
     this.clearTimers();
+    this.destroyControls();
+  }
+
+  // ─── Battle Controls ──────────────────────────────────────────────────────
+
+  private buildAutoBattleButtons(): void {
+    const scene = this.deps.scene;
+    const btnW = Math.round(44 * LAYOUT_SCALE);
+    const btnH = Math.round(34 * LAYOUT_SCALE);
+    const gap  = Math.round(8  * LAYOUT_SCALE);
+    const y    = scene.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
+    const x1   = btnW / 2 + Math.round(12 * LAYOUT_SCALE);
+    const x2   = x1 + btnW + gap;
+
+    const autoBtn = new Button({
+      scene, x: x1, y, w: btnW, h: btnH,
+      label: "▶▶", style: "navy", fontKey: "lg", idle: true,
+      onClick: () => this.toggleAutoMode(),
+    });
+
+    const quickBtn = new Button({
+      scene, x: x2, y, w: btnW, h: btnH,
+      label: "⚡", style: "neutral", fontKey: "lg", idle: true,
+      onClick: () => {
+        PhaseManager.transition({ type: "battle_set_mode", mode: "quick" });
+        this.runQuickBattle();
+      },
+    });
+
+    this.autoBattleButtons = [autoBtn, quickBtn];
+    this.buildManualTurnButtons();
+  }
+
+  private buildManualTurnButtons(): void {
+    const scene   = this.deps.scene;
+    const btnW    = Math.round(44 * LAYOUT_SCALE);
+    const btnH    = Math.round(34 * LAYOUT_SCALE);
+    const gap     = Math.round(8  * LAYOUT_SCALE);
+    const y       = scene.scale.height - btnH / 2 - Math.round(12 * LAYOUT_SCALE);
+    const xSkip   = scene.scale.width - btnW / 2 - Math.round(12 * LAYOUT_SCALE);
+    const xCharge = xSkip - btnW - gap;
+
+    const skipBtn = new Button({
+      scene, x: xSkip, y, w: btnW, h: btnH,
+      label: "🛡️", style: "ghost", fontKey: "lg", idle: true,
+      onClick: () => {
+        if (GameState.getBattleMode() !== "manual") return;
+        this.skipTurn();
+      },
+    });
+
+    const chargeBtn = new Button({
+      scene, x: xCharge, y, w: btnW, h: btnH,
+      label: "⏳", style: "primary", fontKey: "lg", idle: true,
+      onClick: () => {
+        if (GameState.getBattleMode() !== "manual") return;
+        this.chargeTurn();
+      },
+    });
+
+    this.chargeBtn = chargeBtn;
+    this.manualTurnButtons = [skipBtn, chargeBtn];
+
+    for (const b of this.manualTurnButtons) b.setVisible(false);
+  }
+
+  private updateManualButtons(state: BattleState): void {
+    if (this.manualTurnButtons.length === 0) return;
+
+    const mode = GameState.getBattleMode();
+    const activeUnit = state.units.get(state.roundQueue[0]);
+    const show = mode === "manual" && activeUnit?.anchor.side === "player";
+
+    for (const btn of this.manualTurnButtons) btn.setVisible(show);
+
+    if (show && this.chargeBtn) {
+      const used = hasChargedThisRound(
+        GameState.getBattleTurnContext(),
+        state.roundQueue[0],
+      );
+      this.chargeBtn.setDisabled(used);
+    }
+  }
+
+  private destroyControls(): void {
+    for (const btn of this.autoBattleButtons) btn.destroy();
+    this.autoBattleButtons = [];
+
+    for (const btn of this.manualTurnButtons) btn.destroy();
+    this.manualTurnButtons = [];
+
+    this.chargeBtn = null;
   }
 
   // ─── Core Action Helper ───────────────────────────────────────────────────
@@ -105,7 +203,8 @@ export class BattleTurnFlowController {
 
   private handleBattleWinner(result: BattlePhaseActionResult | null): boolean {
     if (!result?.winner) return false;
-    this.clearTimers(); // cancel pending turn callbacks before game-over
+    this.clearTimers();
+    this.destroyControls();
     this.schedule(BattleTurnFlowController.DELAY_GAMEOVER, () => {
       this.deps.showGameOver(result.winner!);
     });
@@ -115,6 +214,9 @@ export class BattleTurnFlowController {
   // ─── Combat Entry Point ───────────────────────────────────────────────────
 
   beginCombat(): void {
+    this.destroyControls();
+    this.buildAutoBattleButtons();
+
     PhaseManager.transition({ type: "battle_begin_combat" });
     this.deps.setStatus("");
     this.deps.setBattleLogVisible(true);
@@ -136,7 +238,7 @@ export class BattleTurnFlowController {
     // activeUnit before turn start — only needed for presentBattleEvents style hint
     const activeUnit = state.units.get(state.roundQueue[0]);
     this.deps.battlePresentation.presentBattleEvents(result.events, activeUnit);
-    this.deps.updateManualButtons(result.state);
+    this.updateManualButtons(result.state);
 
     switch (result.directive.type) {
       case "continue_immediately": {
@@ -317,8 +419,12 @@ export class BattleTurnFlowController {
 
     PhaseManager.transition({ type: "battle_mark_quick_battle_complete" });
 
+    this.destroyControls();
+
     // Existing fallback: if MAX_ITERATIONS hit without a winner, declare player victory.
-    this.schedule(200, () => this.deps.showGameOver(finalWinner ?? "player"));
+    this.schedule(200, () => {
+      this.deps.showGameOver(finalWinner ?? "player");
+    });
   }
 
   // ─── Skip / Charge ────────────────────────────────────────────────────────
@@ -332,7 +438,7 @@ export class BattleTurnFlowController {
     if (!result) return;
 
     this.deps.battlePresentation.presentBattleEvents(result.events, activeUnit);
-    this.deps.updateManualButtons(result.state);
+    this.updateManualButtons(result.state);
 
     if (this.handleBattleWinner(result)) return;
 
@@ -349,7 +455,7 @@ export class BattleTurnFlowController {
     if (!result) return;
 
     this.deps.battlePresentation.presentBattleEvents(result.events, activeUnit);
-    this.deps.updateManualButtons(result.state);
+    this.updateManualButtons(result.state);
 
     // Charge does not deal damage, but withWinner() wraps defensively — respect it.
     if (this.handleBattleWinner(result)) return;
@@ -364,13 +470,13 @@ export class BattleTurnFlowController {
   toggleAutoMode(): void {
     if (GameState.getBattleMode() === "auto") {
       PhaseManager.transition({ type: "battle_set_mode", mode: "manual" });
-      this.deps.updateManualButtons(GameState.get());
+      this.updateManualButtons(GameState.get());
       return;
     }
     if (GameState.getBattleMode() !== "manual") return;
 
     PhaseManager.transition({ type: "battle_set_mode", mode: "auto" });
-    this.deps.updateManualButtons(GameState.get());
+    this.updateManualButtons(GameState.get());
 
     const s = GameState.get();
     if (s.phase === "select_target") {
