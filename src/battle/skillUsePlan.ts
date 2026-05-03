@@ -1,8 +1,4 @@
-// This file is a compatibility adapter contract for the legacy skill migration.
-// It is not the final skill-definition format.
-// Compatibility markers such as legacy_enchantment_heal_power should be removed
-// during the controlled business migration after preview and executor both read
-// SkillUsePlan.
+// Runtime skill plan contract. Produced by compileSkillUsePlan; consumed by executor, preview, targeting, and presentation.
 
 import type {
   DamageModifierBlock,
@@ -40,22 +36,14 @@ export function isEnemyMeleeTargetPolicy(
 
 // ─── Power ────────────────────────────────────────────────────────────────────
 
-// Compatibility marker only.
-// Current enchantment-targeted healing scales from raw magicalDamage even when
-// damageBlock is absent or has a different damageType.
-// Remove this during the controlled business migration when heal actions get
-// explicit physical_strength/magical_strength scaling.
 export type PowerSource =
   | 'physical_strength'
-  | 'magical_strength'
-  | 'legacy_enchantment_heal_power';
+  | 'magical_strength';
 
 export type PowerMode = 'raw' | 'effective';
 
-// Subset of PowerSource valid for combat damage resolution.
-// Use this in action types that map to legacy DamageType; excludes
-// legacy_enchantment_heal_power which is a raw-only heal compatibility marker.
-export type CombatPowerSource = 'physical_strength' | 'magical_strength';
+// Alias for PowerSource. Kept to avoid churn in combat callers.
+export type CombatPowerSource = PowerSource;
 
 // ─── Patterns ─────────────────────────────────────────────────────────────────
 

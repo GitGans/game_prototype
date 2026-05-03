@@ -1,17 +1,17 @@
 import {
   CellCoord,
   OccupancyMap,
-  Skill,
   Unit,
 } from './types';
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { Rng } from '../shared/random';
 import { pickOneOrNull, randomInt } from '../shared/random';
 import { cellKey } from './field';
 
-interface SkillOwner { skills: readonly Skill[]; activeSkillIndex: number; }
+interface SkillOwner { skills: readonly ActionSkillDefinition[]; activeSkillIndex: number; }
 
 /** Returns the active skill for a unit, falling back to the first skill. */
-export function getActiveSkill(unit: SkillOwner): Skill {
+export function getActiveSkill(unit: SkillOwner): ActionSkillDefinition {
   return unit.skills[unit.activeSkillIndex] ?? unit.skills[0];
 }
 

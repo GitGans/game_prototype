@@ -27,8 +27,6 @@ export function getRawUnitPower(
       return unit.physicalDamage;
     case 'magical_strength':
       return unit.magicalDamage;
-    case 'legacy_enchantment_heal_power':
-      return unit.magicalDamage;
     default: {
       const _exhaustive: never = powerSource;
       return _exhaustive;
@@ -36,11 +34,9 @@ export function getRawUnitPower(
   }
 }
 
-// legacy_enchantment_heal_power is intentionally excluded:
-// it is only valid as a raw heal compatibility source.
 export function getEffectiveUnitPower(
   unit: EffectiveUnitPowerOwner,
-  powerSource: Exclude<PowerSource, 'legacy_enchantment_heal_power'>,
+  powerSource: PowerSource,
 ): number {
   const stats = effectiveStats(unit);
   switch (powerSource) {

@@ -1,4 +1,5 @@
-import type { BattleMode, BattleState, CellCoord, Skill, Unit } from './types';
+import type { BattleMode, BattleState, CellCoord, Unit } from './types';
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import { getActiveSkill } from './skillRuntime';
 import { buildRoundQueue, pruneQueue } from './initiative';
 import { tickEffects } from './combat';
@@ -196,7 +197,7 @@ export type TurnStartDirective =
   | {
       type: 'await_manual_target';
       activeUnitId: string;
-      activeSkill: Skill;
+      activeSkill: ActionSkillDefinition;
       validTargets: CellCoord[];
       promptKind: 'attack' | 'heal';
     };
@@ -317,7 +318,7 @@ export function resolveActiveTurnStart(input: {
 export type SwitchActiveSkillResult = {
   state: BattleState;
   activeUnit?: Unit;
-  activeSkill?: Skill;
+  activeSkill?: ActionSkillDefinition;
   validTargets: CellCoord[];
 };
 

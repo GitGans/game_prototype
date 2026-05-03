@@ -1,6 +1,6 @@
 import type { CellCoord } from '../shared/gridTypes';
 import type { ActiveEffect } from '../shared/activeEffect';
-import type { Skill } from '../shared/skillTypes';
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type {
   SkillPreviewCell,
   SkillPreviewHeaderColorKind,
@@ -39,7 +39,7 @@ export type SkillPreviewUnit = {
   block: number;
   initiative: number;
   activeEffects: readonly ActiveEffect[];
-  skills: readonly Skill[];
+  skills: readonly ActionSkillDefinition[];
   activeSkillIndex: number;
 };
 

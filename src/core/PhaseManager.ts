@@ -18,8 +18,8 @@ import {
 } from '../battle/itemOps';
 import {
   UnitTabSnapshot,
-  Skill,
 } from '../battle/types';
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import { buildSkillIconSnapshot, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
@@ -48,7 +48,7 @@ import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
 
-function toSkillIcon(skill: Skill): SkillIconSnapshot {
+function toSkillIcon(skill: ActionSkillDefinition): SkillIconSnapshot {
   return buildSkillIconSnapshot(skill);
 }
 

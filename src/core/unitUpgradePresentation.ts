@@ -1,4 +1,5 @@
-import { Skill, UnitProgressionStatModifiers, UnitUpgradeOption } from '../battle/types';
+import { UnitProgressionStatModifiers, UnitUpgradeOption } from '../battle/types';
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import type { SkillUseAction, SkillUsePlan } from '../battle/skillUsePlan';
 import type {
@@ -64,15 +65,16 @@ function powerColorKindFromAction(action: SkillUseAction): SkillIconColorKind | 
   }
   if (action.type === 'heal') {
     if (action.powerSource === 'physical_strength') return 'physical';
-    return 'magical'; // includes legacy_enchantment_heal_power
+    return 'magical';
   }
   return null;
 }
 
 // ─── Public plan helpers ─────────────────────────────────────────────────────
 
-// First powered action wins. For skills with immediate damage + DoT, compileSkillUsePlan
-// emits damage first, so color matches legacy damageBlock.damageType behavior.
+// First powered action in SkillUsePlan.actions wins.
+// compileSkillUsePlan preserves ActionSkillDefinition action order, so a skill with damage + DoT
+// produces the damage action first — color reflects the leading action's power source.
 export function getSkillPlanColorKind(plan: SkillUsePlan): SkillIconColorKind {
   for (const action of plan.actions) {
     const color = powerColorKindFromAction(action);
@@ -133,11 +135,11 @@ export function buildSkillTagFromPlan(plan: SkillUsePlan): string {
 
 // ─── Public factories ─────────────────────────────────────────────────────────
 
-export function buildSkillDescription(skill: Skill): string {
+export function buildSkillDescription(skill: ActionSkillDefinition): string {
   return buildSkillDescriptionFromPlan(compileSkillUsePlan(skill));
 }
 
-export function buildSkillIconSnapshot(skill: Skill): SkillIconSnapshot {
+export function buildSkillIconSnapshot(skill: ActionSkillDefinition): SkillIconSnapshot {
   const plan = compileSkillUsePlan(skill);
   return {
     id:          skill.id,

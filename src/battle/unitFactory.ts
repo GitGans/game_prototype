@@ -1,5 +1,5 @@
 import type { UnitBlueprint, UnitBattleStats, SpriteSheetConfig } from '../shared/unitTypes';
-import type { Skill }                  from '../shared/skillTypes';
+import type { ActionSkillDefinition }  from '../shared/skillDefinitionTypes';
 import type { UnitActivatableAbility } from '../shared/itemTypes';
 import type { CellCoord }              from '../shared/gridTypes';
 import type { Unit }                   from './types';
@@ -10,7 +10,7 @@ export interface CreateUnitInstanceInput {
   anchor:               CellCoord;
   level:                number;
   stats:                UnitBattleStats;
-  skills:               Skill[];
+  skills:               ActionSkillDefinition[];
   spriteSheet:          SpriteSheetConfig | undefined;
   activatableAbilities: UnitActivatableAbility[];
 }

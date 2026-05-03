@@ -14,8 +14,8 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 ## Key Files
 - `gridTypes.ts` — Grid geometry: `Side`, `Row`, `Col`, `CellCoord`, `UnitShape`
 - `unitTypes.ts` — Unit blueprints: `UnitBlueprint`, `UnitBattleStats`, `UnitClass`, `UnitUpgradeTier`
-- `skillTypes.ts` — Skill contracts: `Skill`, `Effect`, `DamageBlock`, `SkillPattern`, `DamageType`
-- `skillDefinitionTypes.ts` — Future authoring contract: `ActionSkillDefinition`, action types, target policy types, matrix refs, power source types
+- `skillTypes.ts` — Skill runtime bridge types: `Effect`, `SkillEffectBlock`, `SkillPattern`, `DamageType`, `PostDamageBlock`, `DamageModifierBlock`, `InstantEffectBlock`
+- `skillDefinitionTypes.ts` — Active authoring contract: `ActionSkillDefinition`, action types, target policy types, matrix refs, power source types
 - `itemTypes.ts` — Item/equipment: `ItemDefinition`, `ItemInstance`, `ItemContainer`, `EquipSlot`
 - `snapshotTypes.ts` — UI projections: `UnitStatsSnapshot`, `SkillIconSnapshot`, `BackpackSnapshot`, `EquipmentSnapshot`
 - `battleSnapshots.ts` — Battle-phase projections: `BenchUnitSnapshot` (rebuilt dynamically per phase)
@@ -23,19 +23,14 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 
 ## Skill Contract Layers
 
-Two separate contracts govern skills at different stages of processing:
-
-- **`skillTypes.ts`** — legacy `Skill` type (current data input). Still used by all existing `SKILLS`
-  definitions and consumed by `compileLegacySkill` inside the compiler.
-- **`skillDefinitionTypes.ts`** — `ActionSkillDefinition` (future authoring contract). Stores intent
-  and registry refs; does not contain resolved runtime objects. The compiler
-  (`compileSkillUsePlan`) will map it to a `SkillUsePlan` (Stage 17+).
+- **`skillDefinitionTypes.ts`** — `ActionSkillDefinition` is the sole active skill authoring contract.
+  All skills in `data/skillDefinitions.ts` are authored in this format. Stores intent and registry
+  refs (unresolved string names); resolution happens in the compiler.
+- **`skillTypes.ts`** — Runtime bridge types (`SkillEffectBlock`, `PostDamageBlock`, `DamageModifierBlock`,
+  `InstantEffectBlock`, `Effect`, `SkillPattern`, `DamageType`). The legacy `Skill` authoring type
+  and `legacySkillCompiler.ts` have been removed.
 - **`src/battle/skillUsePlan.ts`** — `SkillUsePlan` (runtime contract). Used by executor, preview,
-  targeting, and presentation. This is the contract all consumers already use.
-
-Stage 16 adds `skillDefinitionTypes.ts` only. Existing `SKILLS` and `compileSkillUsePlan` are
-unchanged. Matrix and effect names are unresolved string registry references at the contract layer;
-resolution happens in the compiler.
+  targeting, and presentation. `compileSkillUsePlan` compiles `ActionSkillDefinition` → `SkillUsePlan`.
 
 ## Structural Role
 `shared/` → foundation layer; all other folders depend on it, it depends on nothing
@@ -62,7 +57,8 @@ Domain contracts defined here
 ## Where to Modify
 - change grid coordinates or cell addressing → `gridTypes.ts`
 - change unit stats, class list, or progression structure → `unitTypes.ts`
-- change skill mechanics (damage types, effects, patterns) → `skillTypes.ts`
+- change skill runtime bridge types (damage types, effects, patterns) → `skillTypes.ts`
+- change skill authoring contract → `skillDefinitionTypes.ts`
 - change equipment slots or item effects → `itemTypes.ts`
 - change what data UI receives for unit/item display → `snapshotTypes.ts`
 - change what data is available during battle/placement phase → `battleSnapshots.ts`

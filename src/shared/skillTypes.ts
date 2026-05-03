@@ -1,6 +1,4 @@
 export type DamageType = 'physical' | 'magical';
-/** Current targeting category for a skill. Not the same as the skill's effect semantics. */
-export type SkillActionType = 'melee' | 'ranged' | 'mass_enchantment' | 'self_enchantment';
 
 export interface Effect {
   id: string;
@@ -13,13 +11,6 @@ export interface Effect {
   physicalDamageBonus?: number;
   magicalDamageBonus?: number;
   description?: string;
-}
-
-export interface DamageBlock {
-  matrixName: string;
-  /** Current physical/magical branch for hostile damage: selects both source stat and defense. */
-  damageType: DamageType;
-  level: number;
 }
 
 export interface SkillEffectBlock {
@@ -86,13 +77,3 @@ export interface PostDamageBlock {
   level: number;
 }
 
-export interface Skill {
-  id: string;
-  name: string;
-  actionType: SkillActionType;
-  damageBlock?: DamageBlock;
-  effectBlock?: SkillEffectBlock;
-  instantEffectBlock?: InstantEffectBlock;
-  damageModifierBlocks?: DamageModifierBlock[];
-  postDamageBlock?: PostDamageBlock;
-}

@@ -1,9 +1,9 @@
+import type { ActionSkillDefinition } from "../shared/skillDefinitionTypes";
 import type {
   DamageModifierType,
   Effect,
   LeveledDamageMatrix,
   LeveledEffectDef,
-  Skill,
 } from "../shared/skillTypes";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -480,188 +480,320 @@ export const VAMPIRISM_LEVELS: number[] = [25, 50, 100];
 
 // ─── Skill Definitions ────────────────────────────────────────────────────────
 
-export const SKILLS: Record<string, Skill> = {
+export const SKILLS: Record<string, ActionSkillDefinition> = {
   p_melee_basic: {
+    definitionKind: "action_skill",
     id: "p_melee_basic",
     name: "Strike",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   p_ranged_basic: {
+    definitionKind: "action_skill",
     id: "p_ranged_basic",
     name: "Shot",
-    actionType: "ranged",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   m_ranged_basic: {
+    definitionKind: "action_skill",
     id: "m_ranged_basic",
     name: "Magic Shot",
-    actionType: "ranged",
-    damageBlock: { matrixName: "single", damageType: "magical", level: 1 },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "magical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   p_ranged_slowing: {
+    definitionKind: "action_skill",
     id: "p_ranged_slowing",
     name: "Arrow that breaks legs",
-    actionType: "ranged",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Slow",
-      effectName: "slow",
-      duration: 2,
-      damageType: "physical",
-    },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_stat_effect",
+        effectName: "slow",
+        displayName: "Slow",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   m_heal_basic: {
+    definitionKind: "action_skill",
     id: "m_heal_basic",
     name: "Heal",
-    actionType: "mass_enchantment",
-    damageBlock: { matrixName: "single", damageType: "magical", level: 1 },
+    targetPolicy: { type: "friendly" },
+    actions: [
+      {
+        type: "heal",
+        powerSource: "magical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   heal_with_defence: {
+    definitionKind: "action_skill",
     id: "heal_with_defence",
     name: "Protective Heal",
-    actionType: "mass_enchantment",
-    damageBlock: { matrixName: "single", damageType: "magical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Defence",
-      effectName: "fortify",
-      duration: 2,
-      damageType: "physical",
-    },
+    targetPolicy: { type: "friendly" },
+    actions: [
+      {
+        type: "heal",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_stat_effect",
+        effectName: "fortify",
+        displayName: "Defence",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   self_heal_mass_regeneration: {
+    definitionKind: "action_skill",
     id: "self_heal_mass_regeneration",
     name: "Regenerative Heal",
-    actionType: "self_enchantment",
-    damageBlock: { matrixName: "single", damageType: "magical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "cross",
-      level: 1,
-      effectDisplayName: "Regeneration",
-      effectName: "regeneration",
-      duration: 2,
-      damageType: "magical",
-    },
+    targetPolicy: { type: "self" },
+    actions: [
+      {
+        type: "heal",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_periodic_hp_effect",
+        effectName: "regeneration",
+        displayName: "Regeneration",
+        direction: "heal",
+        powerSource: "physical_strength",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "cross", level: 1 },
+      },
+    ],
   },
 
   arcane_cross: {
+    definitionKind: "action_skill",
     id: "arcane_cross",
     name: "Arcane Cross",
-    actionType: "ranged",
-    damageBlock: { matrixName: "cross", damageType: "magical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "cross",
-      level: 1,
-      effectDisplayName: "Arcane Burn",
-      effectName: "lose_health",
-      duration: 2,
-      damageType: "magical",
-    },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "magical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "cross", level: 1 },
+      },
+      {
+        type: "apply_periodic_hp_effect",
+        effectName: "lose_health",
+        displayName: "Arcane Burn",
+        direction: "damage",
+        powerSource: "magical_strength",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "cross", level: 1 },
+      },
+    ],
   },
 
   row_strike: {
+    definitionKind: "action_skill",
     id: "row_strike",
     name: "Row Strike",
-    actionType: "melee",
-    damageBlock: { matrixName: "row_sweep", damageType: "physical", level: 1 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "row_sweep", level: 1 },
+      },
+    ],
   },
 
   pierce: {
+    definitionKind: "action_skill",
     id: "pierce",
     name: "Pierce",
-    actionType: "melee",
-    damageBlock: { matrixName: "pierce", damageType: "physical", level: 1 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "pierce", level: 1 },
+      },
+    ],
   },
 
   poison_strike: {
+    definitionKind: "action_skill",
     id: "poison_strike",
     name: "Poison Strike",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Poisoned",
-      effectName: "lose_health",
-      duration: 3,
-      damageType: "physical",
-    },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_periodic_hp_effect",
+        effectName: "lose_health",
+        displayName: "Poisoned",
+        direction: "damage",
+        powerSource: "physical_strength",
+        level: 1,
+        duration: 3,
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   weaken_curse: {
+    definitionKind: "action_skill",
     id: "weaken_curse",
     name: "Weaken Curse",
-    actionType: "ranged",
-    effectBlock: {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Weakened",
-      effectName: "weaken",
-      duration: 2,
-      damageType: "physical",
-    },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_stat_effect",
+        effectName: "weaken",
+        displayName: "Weakened",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   provoke_strike: {
+    definitionKind: "action_skill",
     id: "provoke_strike",
     name: "Provoke",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    instantEffectBlock: {
-      instantEffectMatrixName: "single",
-      level: 1,
-      instantEffectType: "provoke",
-      displayName: "Provoke",
-    },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "instant_effect",
+        instantEffectType: "provoke",
+        displayName: "Provoke",
+        matrix: { kind: "instant_effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   distract_shot: {
+    definitionKind: "action_skill",
     id: "distract_shot",
     name: "Distract",
-    actionType: "ranged",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    instantEffectBlock: {
-      instantEffectMatrixName: "single",
-      level: 1,
-      instantEffectType: "distract",
-      displayName: "Distract",
-    },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "instant_effect",
+        instantEffectType: "distract",
+        displayName: "Distract",
+        matrix: { kind: "instant_effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
-  // ── Test skills for damageModifierBlocks + postDamageBlock ──────────────────
-
   armor_pierce: {
+    definitionKind: "action_skill",
     id: "armor_pierce",
     name: "Armor Pierce",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    damageModifierBlocks: [{ type: "ignore_physical_defense", level: 3 }],
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        modifiers: [{ modifierType: "ignore_physical_defense", level: 3 }],
+      },
+    ],
   },
 
   drain_strike: {
+    definitionKind: "action_skill",
     id: "drain_strike",
     name: "Drain Strike",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    postDamageBlock: { type: "mass_vampirism", level: 3 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "post_damage",
+        postDamageType: "mass_vampirism",
+        level: 3,
+      },
+    ],
   },
 
   life_sweep: {
+    definitionKind: "action_skill",
     id: "life_sweep",
     name: "Life Sweep",
-    actionType: "melee",
-    damageBlock: { matrixName: "row_sweep", damageType: "physical", level: 1 },
-    damageModifierBlocks: [{ type: "ignore_block", level: 2 }],
-    postDamageBlock: { type: "mass_vampirism", level: 1 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "damage_matrix", matrixName: "row_sweep", level: 1 },
+        modifiers: [{ modifierType: "ignore_block", level: 2 }],
+      },
+      {
+        type: "post_damage",
+        postDamageType: "mass_vampirism",
+        level: 1,
+      },
+    ],
   },
 };

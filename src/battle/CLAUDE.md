@@ -63,46 +63,38 @@ returned to `src/core` for phase transition or rendering
 
 ## Current Skill Runtime Semantics
 
-`compileSkillUsePlan` in `skillPlanCompiler.ts` is the public entry point for compiling skill semantics into `SkillUsePlan`.
-It delegates to `compileLegacySkill` (`legacySkillCompiler.ts`), which is `@internal` and should not be called directly.
-The executor (`skillExecution.ts`) and counter-attack both run through `SkillUsePlan` exclusively. `Skill.actionType` is read
-only inside `compileLegacySkill`.
+`ActionSkillDefinition` (from `shared/skillDefinitionTypes.ts`) is the active skill authoring contract.
+All skills in `data/skillDefinitions.ts` are authored as `ActionSkillDefinition`.
 
-**Targeting (Stage 11+)**
+`compileSkillUsePlan` in `skillPlanCompiler.ts` accepts `ActionSkillDefinition` and delegates to
+`compileActionSkillDefinition` (`actionSkillDefinitionCompiler.ts`).
+
+The executor (`skillExecution.ts`) and counter-attack both run through `SkillUsePlan` exclusively.
+
+**Targeting**
 - `SkillUsePlan.targetPolicy` is authoritative for target resolution, auto/quick target choice,
   manual prompt kind, and target highlight kind.
-- Legacy `Skill.actionType` maps to target policy inside `compileLegacySkill` (called via `compileSkillUsePlan`):
-  `melee` → `enemy_melee`, `ranged` → `enemy_ranged`,
-  `mass_enchantment` → `friendly`, `self_enchantment` → `self`.
 
-**Targeting vs. effect semantics**
-- `mass_enchantment` and `self_enchantment` are NOT heal semantics. Healing is a current
-  compatibility rule: enchantment-targeted skills produce a `heal` action in `compileLegacySkill` (via `compileSkillUsePlan`).
-
-**Power source coupling**
-- `physicalDamage` / `magicalDamage` are the current legacy scaling field names.
-- `damageBlock.damageType` currently selects both the source stat and the defense branch for
-  hostile damage.
-- `LEVELED_EFFECTS.effectDamageType` selects the scaling source for per-turn HP effects,
-  not `SkillEffectBlock.damageType`.
+**Power source**
+- `PowerSource` values are `physical_strength` and `magical_strength`.
+- `physicalDamage` / `magicalDamage` are the current scaling field names on units.
+- `LEVELED_EFFECTS.effectDamageType` is legacy registry metadata retained for the effect registry.
+  For active `ActionSkillDefinition` skills, per-turn HP scaling is set by `action.powerSource`
+  on the `apply_periodic_hp_effect` action — not by `effectDamageType`.
 
 **effectBlock is shared**
-- `effectBlock` is independent from heal/damage. Both enchantment-targeted and hostile-targeted
+- `effectBlock` is independent from heal/damage. Both friendly-targeted and hostile-targeted
   skills can carry one.
 
-**Hostile fallback**
-- Hostile skills without `damageBlock` still execute a physical single-cell damage step.
-  This is current behavior, not a bug. Any normalization must preserve this fallback explicitly.
+**Hostile damage**
+- Hostile skills must carry an explicit `damage` action in their `ActionSkillDefinition`.
+  There is no implicit fallback damage step. Skills like `weaken_curse` that deal damage
+  must author it as a `damage` action with an explicit `powerSource` and `matrix`.
 
 **Periodic HP direction bridge (Stage 10+)**
 - `ActiveEffect.periodicHp` is authoritative for runtime HP tick direction when present.
 - `computedPerTurn + effect.isBuff` is the legacy fallback for pre-plan active effects.
-- `effect.isBuff` is presentation/classification metadata. After Stage 10 it does NOT determine
-  tick direction for any active effect produced by `executeSkillUsePlan`.
-- `tickEffects` uses `resolveActiveEffectPeriodicHp()` from `shared/activeEffect` for the
-  compatibility resolution.
+- `effect.isBuff` is presentation/classification metadata only.
+- `tickEffects` uses `resolveActiveEffectPeriodicHp()` from `shared/activeEffect` for compatibility resolution.
 - `computedPerTurn` is intentionally retained as a temporary bridge.
   See TODO in `shared/activeEffect.ts`.
-
-Remaining work: migrate skill definitions away from the legacy `Skill` shape so
-`compileLegacySkill` can be removed.

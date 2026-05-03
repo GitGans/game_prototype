@@ -1,6 +1,7 @@
 // src/battle/skillExecution.ts
 
-import type { BattleState, CellCoord, Skill, Unit, InstantEffectEvent } from "./types";
+import type { BattleState, CellCoord, Unit, InstantEffectEvent } from "./types";
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { BattleEvent } from "./battleEvents";
 import type { CombatEvent, EffectEvent } from "./combat";
 import {
@@ -34,7 +35,7 @@ export type SkillExecutionInput = {
   casterId: string;
   target: CellCoord;
   /** Defaults to getActiveSkill(caster) when omitted. */
-  skill?: Skill;
+  skill?: ActionSkillDefinition;
   queueContext: {
     /** Read-only queue context supplied by the turn resolver. */
     chargedThisRound: ReadonlySet<string>;
@@ -79,7 +80,7 @@ type SkillUsePlanExecutionInput = {
 type ResolvedCasterAndSkill = {
   casterId: string;
   caster: Unit;
-  skill: Skill;
+  skill: ActionSkillDefinition;
 };
 
 // ─── Caster/skill resolution ──────────────────────────────────────────────────

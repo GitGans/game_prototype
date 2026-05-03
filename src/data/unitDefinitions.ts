@@ -1,9 +1,9 @@
 import type { UnitBlueprint, UnitRace, UnitUpgradeOption } from "../shared/unitTypes";
-import type { Skill } from "../shared/skillTypes";
+import type { ActionSkillDefinition } from "../shared/skillDefinitionTypes";
 import { SHAPES } from "./shapeDefinitions";
 import { SKILLS } from "./skillDefinitions";
 
-function u(skill: Skill): UnitUpgradeOption {
+function u(skill: ActionSkillDefinition): UnitUpgradeOption {
   return { id: skill.id, name: skill.name, skill };
 }
 

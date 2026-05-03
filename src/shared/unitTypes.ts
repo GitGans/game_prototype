@@ -1,5 +1,5 @@
 import type { UnitShape } from './gridTypes';
-import type { Skill } from './skillTypes';
+import type { ActionSkillDefinition } from './skillDefinitionTypes';
 
 export type SpriteState = 'idle' | 'attack' | 'death';
 
@@ -47,7 +47,7 @@ export interface UnitUpgradeOption {
   id: string;
   name: string;
   description?: string;
-  skill?: Skill;
+  skill?: ActionSkillDefinition;
   statModifiers?: UnitProgressionStatModifiers;
   spriteSheet?: SpriteSheetConfig;
 }
@@ -59,12 +59,12 @@ export interface UnitUpgradeTier {
 
 export interface SkillTier {
   unlocksAtLevel: 0 | 5 | 10 | 15 | 20;
-  options: Skill[];
+  options: ActionSkillDefinition[];
 }
 
 export interface EnemyLevelSkill {
   unlocksAtLevel: 5 | 10 | 15 | 20;
-  skill: Skill;
+  skill: ActionSkillDefinition;
 }
 
 export interface UnitBlueprint {
@@ -80,7 +80,7 @@ export interface UnitBlueprint {
   level: number;
   initiative: number;
   shape: UnitShape;
-  baseSkill?: Skill;                // player units only; auto-learned at level 0
+  baseSkill?: ActionSkillDefinition;                // player units only; auto-learned at level 0
   upgradeTiers?: UnitUpgradeTier[];  // player units only; tiers 5/10/15/20
   skillTiers?: SkillTier[];         // enemy units only; tier 0 base skill
   levelSkills?: EnemyLevelSkill[];  // enemy-only; absent on player blueprints

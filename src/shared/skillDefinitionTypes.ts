@@ -4,11 +4,7 @@ import type { DamageModifierType, PostDamageType, InstantEffectType } from './sk
 // Target policy
 // ---------------------------------------------------------------------------
 
-/**
- * Who this skill targets. Clean replacement for legacy SkillActionType.
- * Legacy values ('melee', 'ranged', 'mass_enchantment', 'self_enchantment') are NOT included here.
- * The compiler maps them inside compileLegacySkill; they must not appear in new authoring.
- */
+/** Who this skill targets. */
 export type SkillDefinitionTargetPolicy =
   | { type: 'friendly' }
   | { type: 'self' }
@@ -23,19 +19,6 @@ export type SkillDefinitionTargetPolicy =
 export type SkillDefinitionPowerSource =
   | 'physical_strength'
   | 'magical_strength';
-
-/**
- * Power source extended for heal actions only.
- * `legacy_enchantment_heal_power` is a migration shim for behavior-preserving legacy heal migration.
- * Do not use it for clean new skills.
- */
-export type SkillDefinitionHealPowerSource =
-  | SkillDefinitionPowerSource
-  /**
-   * @deprecated Migration-only compatibility source for legacy enchantment healing.
-   * Do not use for clean new skills.
-   */
-  | 'legacy_enchantment_heal_power';
 
 // ---------------------------------------------------------------------------
 // Matrix refs
@@ -99,7 +82,7 @@ export interface SkillDefinitionDamageAction {
 
 export interface SkillDefinitionHealAction {
   type: 'heal';
-  powerSource: SkillDefinitionHealPowerSource;
+  powerSource: SkillDefinitionPowerSource;
   // Heal currently uses damage_matrix refs for behavior-preserving migration.
   // This is an authoring-level reference, not a statement that heal is damage.
   matrix: SkillDefinitionDamageMatrixRef;
@@ -154,12 +137,10 @@ export interface SkillDefinitionInstantEffectAction {
 
 /**
  * Future authoring contract for action skills.
- * Replaces legacy Skill in the data layer (migration happens in later stages).
+ * Active skill authoring contract. Sole source format for all skills in data/skillDefinitions.ts.
  *
- * ActionSkillDefinition stores intent and registry refs — it does NOT contain resolved runtime
- * objects. The compiler (compileSkillUsePlan) maps it to a SkillUsePlan.
- *
- * `definitionKind: 'action_skill'` is a discriminant for future source union in Stage 17.
+ * Stores intent and registry refs — does NOT contain resolved runtime objects.
+ * The compiler (compileSkillUsePlan) maps it to a SkillUsePlan.
  */
 export interface ActionSkillDefinition {
   definitionKind: 'action_skill';
