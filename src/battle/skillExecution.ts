@@ -25,6 +25,7 @@ import {
   resolvePlanPattern,
 } from './skillUsePlan';
 import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
+import type { PeriodicHp } from '../shared/activeEffect';
 import { getMeleeTargets, getRangedTargets } from "./targeting";
 import { rebuildRemainingQueue } from "./initiative";
 import { resolvePattern } from "./skillPatterns";
@@ -372,12 +373,17 @@ function executeApplyPeriodicHpEffectAction(input: {
   const pattern = resolvePlanPattern(action.matrix);
 
   // Only the anchor cell's multiplier is used for runtime per-turn scaling.
-  // Stage 10 will normalize periodicHp direction; for now direction flows through
-  // action.displayEffect.isBuff which applyEffectBlock stores as-is.
+  // Plan action direction is stored in ActiveEffect.periodicHp (Stage 10+).
+  // computedPerTurn is passed as a legacy compatibility mirror/fallback.
   const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
   const computedPerTurn = Math.round(
     getRawUnitPower(caster, action.powerSource) * anchorCell.damageMultiplier,
   );
+
+  const periodicHp: PeriodicHp = {
+    direction: action.direction,
+    amountPerTurn: computedPerTurn,
+  };
 
   const { state: withEffect, events: effEvents } = applyEffectBlock(
     action.effectBlock,
@@ -386,6 +392,7 @@ function executeApplyPeriodicHpEffectAction(input: {
     state,
     action.displayEffect,
     computedPerTurn,
+    periodicHp,
   );
 
   const events = mapEffectAppliedEventsToBattleEvents(effEvents);

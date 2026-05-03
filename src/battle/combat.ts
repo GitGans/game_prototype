@@ -23,6 +23,8 @@ import {
 } from "./skillDefinitionRuntime";
 import type { Rng } from '../shared/random';
 import { rollPercent, rollProbability } from '../shared/random';
+import type { PeriodicHp } from '../shared/activeEffect';
+import { resolveActiveEffectPeriodicHp } from '../shared/activeEffect';
 
 export type CombatEvent =
   | { type: "hit"; unitId: string; unitName: string; damage: number }
@@ -329,8 +331,9 @@ export function resolveHeal(
  * No dodge/block/defense — effects always apply 100%.
  * Each unit may carry at most 2 active effects; the oldest is evicted if full.
  *
- * resolvedEffect and computedPerTurn are resolved by the caller from LEVELED_EFFECTS
- * using the skill's current level, so this function stays data-layer independent.
+ * resolvedEffect and computedPerTurn are resolved by the caller from LEVELED_EFFECTS.
+ * periodicHp, when provided, is the authoritative runtime direction bridge (Stage 10+);
+ * computedPerTurn alone is the legacy fallback for pre-plan active effects.
  */
 export function applyEffectBlock(
   block: SkillEffectBlock,
@@ -339,6 +342,7 @@ export function applyEffectBlock(
   state: BattleState,
   resolvedEffect: Effect,
   computedPerTurn: number | undefined,
+  periodicHp?: PeriodicHp,
 ): { state: BattleState; events: EffectEvent[] } {
   const hitCells = resolvePattern(targetAnchor, resolvedPattern);
   const events: EffectEvent[] = [];
@@ -355,6 +359,7 @@ export function applyEffectBlock(
       effect: resolvedEffect,
       remainingRounds: block.duration,
       computedPerTurn,
+      periodicHp,
     };
 
     const effects = unit.activeEffects.filter(
@@ -398,24 +403,25 @@ export function tickEffects(state: BattleState): {
     const nextEffects: ActiveEffect[] = [];
 
     for (const ae of unit.activeEffects) {
-      if (ae.computedPerTurn !== undefined) {
-        if (ae.effect.isBuff) {
-          hp = Math.min(unit.maxHp, hp + ae.computedPerTurn);
+      const periodicHp = resolveActiveEffectPeriodicHp(ae);
+      if (periodicHp) {
+        if (periodicHp.direction === 'heal') {
+          hp = Math.min(unit.maxHp, hp + periodicHp.amountPerTurn);
           events.push({
             type: "effect_tick_heal",
             unitId: unit.id,
             unitName: unit.name,
             effectDisplayName: ae.effectDisplayName,
-            amount: ae.computedPerTurn,
+            amount: periodicHp.amountPerTurn,
           });
         } else {
-          hp = Math.max(0, hp - ae.computedPerTurn);
+          hp = Math.max(0, hp - periodicHp.amountPerTurn);
           events.push({
             type: "effect_tick_damage",
             unitId: unit.id,
             unitName: unit.name,
             effectDisplayName: ae.effectDisplayName,
-            amount: ae.computedPerTurn,
+            amount: periodicHp.amountPerTurn,
           });
         }
       }

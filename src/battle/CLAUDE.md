@@ -82,5 +82,12 @@ The skill executor in `skillExecution.ts` has legacy couplings that will be norm
 - Hostile skills without `damageBlock` still execute a physical single-cell damage step. This is current behavior,
   not a bug. Any normalization must preserve this fallback explicitly.
 
+**Periodic HP direction bridge (Stage 10+)**
+- `ActiveEffect.periodicHp` is authoritative for runtime HP tick direction when present.
+- `computedPerTurn + effect.isBuff` is the legacy fallback for pre-plan active effects.
+- `effect.isBuff` is presentation/classification metadata. After Stage 10 it does NOT determine tick direction for any active effect produced by `executeSkillUsePlan`.
+- `tickEffects` uses `resolveActiveEffectPeriodicHp()` from `shared/activeEffect` for the compatibility resolution.
+- `computedPerTurn` is intentionally retained as a temporary bridge. See TODO in `shared/activeEffect.ts`.
+
 Future work: normalize skills into targeting policy, actions, and power source while preserving current runtime behavior
 until an explicit migration of skill definitions.
