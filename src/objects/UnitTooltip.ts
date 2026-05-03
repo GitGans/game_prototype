@@ -4,6 +4,8 @@ import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 import { UI_THEME, fontSize } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
 import type { BattleUnitSnapshot, BenchUnitSnapshot } from "../shared/battleSnapshots";
+import type { SkillIconColorKind } from "../shared/snapshotTypes";
+import { buildSkillIconSnapshot } from "../core/unitUpgradePresentation";
 import type { UnitStatsSnapshot } from '../core/phases';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 
@@ -38,9 +40,9 @@ interface TooltipData {
   block:           StatValue;
   initiative:      StatValue;
   skills: Array<{
-    name:        string;
-    damageBlock?: { damageType: string };
-    isActive:    boolean;
+    name:      string;
+    colorKind: SkillIconColorKind;
+    isActive:  boolean;
   }>;
   spriteKey?: string | null;
 }
@@ -141,9 +143,9 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       block:           snapshot.stats.block,
       initiative:      snapshot.stats.initiative,
       skills: snapshot.skills.map(s => ({
-        name:        s.name,
-        damageBlock: s.damageType ? { damageType: s.damageType } : undefined,
-        isActive:    false,
+        name:      s.name,
+        colorKind: s.colorKind,
+        isActive:  false,
       })),
       spriteKey: snapshot.spriteKey,
     };
@@ -244,8 +246,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       } else {
         for (const skill of data.skills) {
           const nameCol =
-            skill.damageBlock?.damageType === "magical"  ? BATTLE_VISUAL_THEME.skill.magical  :
-            skill.damageBlock?.damageType === "physical" ? BATTLE_VISUAL_THEME.skill.physical :
+            skill.colorKind === 'magical'  ? BATTLE_VISUAL_THEME.skill.magical  :
+            skill.colorKind === 'physical' ? BATTLE_VISUAL_THEME.skill.physical :
             (skill.isActive ? UI_THEME.color.value.white : UI_THEME.color.value.inactive);
           this.addText(pad, y, skill.name, { fontSize: fontSize("sm"), color: nameCol });
           y += UI_THEME.component.tooltip.lineH;
@@ -274,9 +276,9 @@ function unitToData(unit: BattleUnitSnapshot): TooltipData {
     block:           { value: unit.effectiveBlock,           base: unit.block           },
     initiative:      { value: unit.effectiveInitiative,      base: unit.initiative      },
     skills: unit.skills.map((s, i) => ({
-      name:        s.name,
-      damageBlock: s.damageBlock,
-      isActive:    i === unit.activeSkillIndex,
+      name:      s.name,
+      colorKind: buildSkillIconSnapshot(s).colorKind,
+      isActive:  i === unit.activeSkillIndex,
     })),
     spriteKey: unit.spriteSheet
       ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)

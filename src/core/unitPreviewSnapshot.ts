@@ -6,7 +6,7 @@ import type { SkillIconSnapshot } from '../shared/snapshotTypes';
 import type { BenchUnitRef } from '../battle/types';
 import { resolveUnitProgression } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
-import { buildSkillDescription } from './unitUpgradePresentation';
+import { buildSkillIconSnapshot } from './unitUpgradePresentation';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { PLAYER_UNITS } from '../data/unitDefinitions';
@@ -31,13 +31,7 @@ export function buildPlayerUnitPreviewSnapshot(
     progression.statModifiers,
   );
 
-  const skills: SkillIconSnapshot[] = progression.skills.map(skill => ({
-    id:          skill.id,
-    name:        skill.name,
-    description: buildSkillDescription(skill),
-    damageType:  skill.damageBlock?.damageType ?? null,
-    actionType:  skill.actionType,
-  }));
+  const skills: SkillIconSnapshot[] = progression.skills.map(buildSkillIconSnapshot);
 
   const spriteKey = progression.spriteSheet
     ? getUnitSpriteTextureKey(blueprint.templateId, progression.spriteSheet)

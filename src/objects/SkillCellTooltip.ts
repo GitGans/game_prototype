@@ -14,8 +14,8 @@ export class SkillCellTooltip extends BaseTooltip<SkillIconSnapshot> {
 
   protected buildContent(data: SkillIconSnapshot): number {
     const damageColor =
-      data.damageType === 'physical' ? BATTLE_VISUAL_THEME.skillCellTooltip.physical :
-      data.damageType === 'magical'  ? BATTLE_VISUAL_THEME.skillCellTooltip.magical :
+      data.colorKind === 'physical' ? BATTLE_VISUAL_THEME.skillCellTooltip.physical :
+      data.colorKind === 'magical'  ? BATTLE_VISUAL_THEME.skillCellTooltip.magical :
       UI_THEME.color.value.neutral;
 
     let y = PAD;
@@ -27,7 +27,7 @@ export class SkillCellTooltip extends BaseTooltip<SkillIconSnapshot> {
     });
     y += LINE;
 
-    const tag = `${data.actionType}${data.damageType ? ' · ' + data.damageType : ''}`;
+    const tag = data.tag;
     this.addText(PAD, y, tag, {
       fontSize: fontSize('xs'),
       color:    UI_THEME.color.value.muted,

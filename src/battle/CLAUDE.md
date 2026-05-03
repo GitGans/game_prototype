@@ -65,6 +65,10 @@ returned to `src/core` for phase transition or rendering
 
 The skill executor in `skillExecution.ts` has legacy couplings that will be normalized in a later stage.
 
+**Targeting bridge (Stage 11+)**
+- `SkillUsePlan.targetPolicy` is authoritative for target resolution, auto/quick target choice, manual prompt kind, and target highlight kind.
+- Legacy `Skill.actionType` is interpreted only by `compileLegacySkill` in `skillUsePlan.ts`. Battle and control paths must not use it directly for targeting semantics.
+
 **Targeting vs. effect semantics**
 - `actionType` is a targeting category: `melee`/`ranged` = hostile, `mass_enchantment`/`self_enchantment` = friendly/self.
 - `mass_enchantment` and `self_enchantment` are NOT heal semantics. Healing is a current compatibility rule:

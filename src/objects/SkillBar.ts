@@ -3,6 +3,7 @@ import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 import { UI_THEME } from '../ui/theme';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { SkillTooltip } from './SkillTooltip';
+import { buildSkillIconSnapshot } from '../core/unitUpgradePresentation';
 
 export class SkillBar extends Phaser.GameObjects.Container {
   private icons: Phaser.GameObjects.Container[] = [];
@@ -43,7 +44,7 @@ export class SkillBar extends Phaser.GameObjects.Container {
         .on('pointerover', () => {
           bg.setFillStyle(hoverColor);
           this.tooltip.show(
-            { name: skill.name, damageType: skill.damageBlock?.damageType },
+            { name: skill.name, colorKind: buildSkillIconSnapshot(skill).colorKind },
             iconX + iconSize / 2, iconY, 'right',
           );
         })

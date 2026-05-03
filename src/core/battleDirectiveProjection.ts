@@ -1,5 +1,6 @@
 import type { TurnStartDirective } from '../battle/turnResolver';
-import { getActiveSkill, isEnchantmentSkill } from '../battle/skillRuntime';
+import { getActiveSkill } from '../battle/skillRuntime';
+import { compileLegacySkill, isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 import type {
   BattleDirectivePresentationInput,
@@ -34,5 +35,6 @@ export function resolveManualTargetPromptKindForUnit(
 ): ManualTargetPromptKind | null {
   const skill = getActiveSkill(unit);
   if (!skill) return null;
-  return isEnchantmentSkill(skill) ? 'heal' : 'attack';
+  const plan = compileLegacySkill(skill);
+  return isFriendlyOrSelfTargetPolicy(plan.targetPolicy) ? 'heal' : 'attack';
 }

@@ -20,7 +20,7 @@ import {
   UnitTabSnapshot,
   Skill,
 } from '../battle/types';
-import { buildSkillDescription, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
+import { buildSkillIconSnapshot, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
 import {
@@ -39,21 +39,16 @@ import {
 } from './phaseHandlers/battlePhaseHandler';
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
 import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
-import { getActiveSkill, isEnchantmentSkill } from '../battle/skillRuntime';
+import { getActiveSkill } from '../battle/skillRuntime';
+import { compileLegacySkill, isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
 
-function toSkillIcon(skill: Skill): import('./phases').SkillIconSnapshot {
-  return {
-    id:          skill.id,
-    name:        skill.name,
-    description: buildSkillDescription(skill),
-    damageType:  skill.damageBlock?.damageType ?? null,
-    actionType:  skill.actionType,
-  };
+function toSkillIcon(skill: Skill): SkillIconSnapshot {
+  return buildSkillIconSnapshot(skill);
 }
 
 class PhaseManagerClass {
@@ -349,7 +344,9 @@ class PhaseManagerClass {
 
         let targetHighlightKind: 'target' | 'heal_target' | 'none' = 'none';
         if (activeUnit && battleState.validTargets.length > 0) {
-          targetHighlightKind = isEnchantmentSkill(getActiveSkill(activeUnit))
+          const activeSkill = getActiveSkill(activeUnit);
+          const activePlan  = compileLegacySkill(activeSkill);
+          targetHighlightKind = isFriendlyOrSelfTargetPolicy(activePlan.targetPolicy)
             ? 'heal_target'
             : 'target';
         }

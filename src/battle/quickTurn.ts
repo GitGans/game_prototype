@@ -2,12 +2,15 @@ import type { BattleState } from './types';
 import type { Rng } from '../shared/random';
 import {
   getActiveSkill,
-  isEnchantmentSkill,
   resolveBestHealTarget,
   resolveRandomSkillIndex,
   resolveRandomTarget,
 } from './skillRuntime';
-import { resolveSkillTargets } from './targeting';
+import {
+  compileLegacySkill,
+  isFriendlyOrSelfTargetPolicy,
+} from './skillUsePlan';
+import { resolveSkillTargetsForPolicy } from './targeting';
 import { executeSkillUse } from './skillExecution';
 
 export type ComputeOneTurnOptions = {
@@ -41,10 +44,11 @@ export function computeOneTurn(
   updatedUnits.set(unitId, updatedUnit);
   state = { ...state, units: updatedUnits };
 
-  const skill = getActiveSkill(updatedUnit);
-  const targets = resolveSkillTargets(updatedUnit, skill, state.occupancy);
+  const skill    = getActiveSkill(updatedUnit);
+  const plan     = compileLegacySkill(skill);
+  const targets  = resolveSkillTargetsForPolicy(updatedUnit, plan.targetPolicy, state.occupancy);
 
-  const target = isEnchantmentSkill(skill)
+  const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)
     ? resolveBestHealTarget(state.occupancy, targets)
     : resolveRandomTarget(targets, rng);
   if (!target) return state;

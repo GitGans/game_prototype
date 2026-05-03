@@ -1,9 +1,14 @@
 import type { BattleMode, BattleState, CellCoord, Skill, Unit } from './types';
-import { getActiveSkill, isEnchantmentSkill } from './skillRuntime';
+import { getActiveSkill } from './skillRuntime';
 import { buildRoundQueue, pruneQueue } from './initiative';
 import { tickEffects } from './combat';
 import type { EffectEvent } from './combat';
-import { resolveSkillTargets } from './targeting';
+import {
+  compileLegacySkill,
+  isEnemyMeleeTargetPolicy,
+  isFriendlyOrSelfTargetPolicy,
+} from './skillUsePlan';
+import { resolveSkillTargetsForPolicy } from './targeting';
 
 // ─── Turn Context ────────────────────────────────────────────────────────────
 
@@ -269,10 +274,15 @@ export function resolveActiveTurnStart(input: {
   }
 
   // 8. Player unit in manual mode
-  const currentSkill = getActiveSkill(currentUnit);
-  const validTargets = resolveSkillTargets(currentUnit, currentSkill, state.occupancy);
+  const currentSkill  = getActiveSkill(currentUnit);
+  const currentPlan   = compileLegacySkill(currentSkill);
+  const validTargets  = resolveSkillTargetsForPolicy(
+    currentUnit,
+    currentPlan.targetPolicy,
+    state.occupancy,
+  );
 
-  if (validTargets.length === 0 && currentSkill.actionType === 'melee') {
+  if (validTargets.length === 0 && isEnemyMeleeTargetPolicy(currentPlan.targetPolicy)) {
     const blockedEvent: TurnEvent = {
       type: 'turn_skipped',
       unitId: currentUnit.id,
@@ -297,7 +307,7 @@ export function resolveActiveTurnStart(input: {
       activeUnitId: activeId,
       activeSkill: currentSkill,
       validTargets,
-      promptKind: isEnchantmentSkill(currentSkill) ? 'heal' : 'attack',
+      promptKind: isFriendlyOrSelfTargetPolicy(currentPlan.targetPolicy) ? 'heal' : 'attack',
     },
   };
 }
@@ -327,13 +337,18 @@ export function switchActiveSkillForManualTurn(input: {
   const units = new Map(state.units);
   units.set(unitId, updatedUnit);
 
-  const skill = updatedUnit.skills[skillIndex] ?? updatedUnit.skills[0];
-  const validTargets = resolveSkillTargets(updatedUnit, skill, state.occupancy);
+  const activeSkill  = updatedUnit.skills[skillIndex] ?? updatedUnit.skills[0];
+  const activePlan   = compileLegacySkill(activeSkill);
+  const validTargets = resolveSkillTargetsForPolicy(
+    updatedUnit,
+    activePlan.targetPolicy,
+    state.occupancy,
+  );
 
   return {
     state: { ...state, units, validTargets },
     activeUnit: updatedUnit,
-    activeSkill: skill,
+    activeSkill: activeSkill,
     validTargets,
   };
 }

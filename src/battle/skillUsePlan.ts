@@ -31,6 +31,24 @@ export type SkillTargetPolicy =
   | { type: 'enemy_melee' }
   | { type: 'enemy_ranged' };
 
+export function isFriendlyOrSelfTargetPolicy(
+  policy: SkillTargetPolicy,
+): boolean {
+  return policy.type === 'friendly' || policy.type === 'self';
+}
+
+export function isHostileTargetPolicy(
+  policy: SkillTargetPolicy,
+): boolean {
+  return policy.type === 'enemy_melee' || policy.type === 'enemy_ranged';
+}
+
+export function isEnemyMeleeTargetPolicy(
+  policy: SkillTargetPolicy,
+): boolean {
+  return policy.type === 'enemy_melee';
+}
+
 // ─── Power ────────────────────────────────────────────────────────────────────
 
 // Compatibility marker only.
@@ -271,14 +289,6 @@ function compileTargetPolicy(skill: Skill): SkillTargetPolicy {
   }
 }
 
-function isFriendlyOrSelfPolicy(policy: SkillTargetPolicy): boolean {
-  return policy.type === 'friendly' || policy.type === 'self';
-}
-
-function isHostilePolicy(policy: SkillTargetPolicy): boolean {
-  return policy.type === 'enemy_melee' || policy.type === 'enemy_ranged';
-}
-
 function combatPowerSourceFromDamageType(
   damageType: DamageType,
 ): CombatPowerSource {
@@ -401,7 +411,7 @@ export function compileLegacySkill(skill: Skill): SkillUsePlan {
   const targetPolicy = compileTargetPolicy(skill);
   const actions: SkillUseAction[] = [];
 
-  if (isFriendlyOrSelfPolicy(targetPolicy)) {
+  if (isFriendlyOrSelfTargetPolicy(targetPolicy)) {
     // Current enchantment-targeted runtime always heals and ignores post/instant blocks.
     actions.push({
       type: 'heal',
@@ -411,7 +421,7 @@ export function compileLegacySkill(skill: Skill): SkillUsePlan {
     });
   }
 
-  if (isHostilePolicy(targetPolicy)) {
+  if (isHostileTargetPolicy(targetPolicy)) {
     const damageType = skill.damageBlock?.damageType ?? 'physical';
 
     actions.push({
@@ -433,7 +443,7 @@ export function compileLegacySkill(skill: Skill): SkillUsePlan {
   // Both friendly/self and hostile policies support effects.
   actions.push(...compileLegacyEffectActions(skill));
 
-  if (isHostilePolicy(targetPolicy) && skill.instantEffectBlock) {
+  if (isHostileTargetPolicy(targetPolicy) && skill.instantEffectBlock) {
     actions.push({
       type: 'instant_effect',
       instantEffectBlock: skill.instantEffectBlock,

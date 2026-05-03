@@ -2,12 +2,16 @@ import type { BattleMode, BattleState, CellCoord } from './types';
 import type { Rng } from '../shared/random';
 import {
   getActiveSkill,
-  isEnchantmentSkill,
   resolveBestHealTarget,
   resolveRandomSkillIndex,
   resolveRandomTarget,
 } from './skillRuntime';
-import { resolveSkillTargets } from './targeting';
+import {
+  compileLegacySkill,
+  isEnemyMeleeTargetPolicy,
+  isFriendlyOrSelfTargetPolicy,
+} from './skillUsePlan';
+import { resolveSkillTargetsForPolicy } from './targeting';
 
 export type AutoTurnDecision =
   | { type: 'none';         reason: 'battle_ended' | 'non_auto_mode' }
@@ -49,15 +53,16 @@ export function decideAutoTurn(input: {
   const skillIndex  = resolveRandomSkillIndex(activeUnit, rng);
   const updatedUnit = { ...activeUnit, activeSkillIndex: skillIndex };
   const skill       = getActiveSkill(updatedUnit);
-  const targets     = resolveSkillTargets(updatedUnit, skill, state.occupancy);
+  const plan        = compileLegacySkill(skill);
+  const targets     = resolveSkillTargetsForPolicy(updatedUnit, plan.targetPolicy, state.occupancy);
 
   if (targets.length === 0) {
-    return skill.actionType === 'melee'
+    return isEnemyMeleeTargetPolicy(plan.targetPolicy)
       ? { type: 'skip_turn',    unitId, skillIndex, reason: 'blocked_melee' }
       : { type: 'advance_turn', unitId, skillIndex };
   }
 
-  const target = isEnchantmentSkill(skill)
+  const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)
     ? resolveBestHealTarget(state.occupancy, targets)
     : resolveRandomTarget(targets, rng);
 
