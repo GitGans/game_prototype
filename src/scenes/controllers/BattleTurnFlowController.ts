@@ -5,7 +5,11 @@ import type { BattlePhaseActionResult, AutoTurnIntention } from "../../core/phas
 import type { CellCoord, Col, Side } from "../../battle/types";
 import type { BattleUnitSnapshot } from "../../shared/battleSnapshots";
 import { getOccupiedCells } from "../../battle/shapes";
-import { buildManualTargetStatusTextForUnit } from "../../objects/battleDirectivePresentation";
+import {
+  mapDirectiveToPresentationInput,
+  resolveManualTargetPromptKindForUnit,
+} from "../../core/battleDirectiveProjection";
+import { buildManualTargetStatusText } from "../../objects/battleDirectivePresentation";
 import type { CellView } from "../../objects/CellView";
 import type { UnitView } from "../../objects/UnitView";
 import type { SkillBar } from "../../objects/SkillBar";
@@ -270,10 +274,10 @@ export class BattleTurnFlowController {
 
       case "schedule_auto_turn": {
         const unit = this.getBattlePhase()?.unitsById.get(result.directive.activeUnitId) ?? null;
-        this.deps.battlePresentation.applyDirectivePresentation({
-          directive: result.directive,
-          unitName: unit?.name ?? null,
-        });
+        const unitName = unit?.name ?? null;
+        this.deps.battlePresentation.applyDirectivePresentation(
+          mapDirectiveToPresentationInput(result.directive, unitName),
+        );
 
         const delay = result.directive.delayKind === "auto_player"
           ? BattleTurnFlowController.DELAY_AUTO_THINK
@@ -285,11 +289,9 @@ export class BattleTurnFlowController {
       case "await_manual_target": {
         const phase = PhaseManager.getPhase();
         const activeUnit = phase.type === "battle" ? phase.activeUnit : null;
-
-        const presentation = this.deps.battlePresentation.applyDirectivePresentation({
-          directive: result.directive,
-          unitName: activeUnit?.name ?? null,
-        });
+        const unitName = activeUnit?.name ?? null;
+        const mapped = mapDirectiveToPresentationInput(result.directive, unitName);
+        const presentation = this.deps.battlePresentation.applyDirectivePresentation(mapped);
 
         if (presentation.displaySkillBar && activeUnit) {
           this.showSkillIcons(activeUnit);
@@ -561,8 +563,9 @@ export class BattleTurnFlowController {
     const activeUnit = phase.type === "battle" ? phase.activeUnit : null;
     if (!activeUnit) return;
 
-    const status = buildManualTargetStatusTextForUnit(activeUnit);
-    if (!status) return;
+    const promptKind = resolveManualTargetPromptKindForUnit(activeUnit);
+    if (!promptKind) return;
+    const status = buildManualTargetStatusText(promptKind, activeUnit.name);
 
     this.deps.setStatus(status);
     this.showSkillIcons(activeUnit);

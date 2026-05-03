@@ -32,7 +32,13 @@ export interface BattleUnitSnapshot {
   block:               number;
   level:               number;
   initiative:          number;
-  effectiveInitiative: number; // pre-computed via effectiveStats; used by InitiativeBar
+  effectiveInitiative:      number; // pre-computed via effectiveStats; used by InitiativeBar
+  effectivePhysicalDamage:  number;
+  effectiveMagicalDamage:   number;
+  effectivePhysicalDefense: number;
+  effectiveMagicalDefense:  number;
+  effectiveDodge:           number;
+  effectiveBlock:           number;
 
   shape:  UnitShape;
   anchor: CellCoord;

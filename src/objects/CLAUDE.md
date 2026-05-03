@@ -18,11 +18,13 @@ Game-specific visual components that know game data and render it using primitiv
 
 Current files:
 - `battleEventPresentation.ts` — formats battle events as floating-text and log entries
-- `battleDirectivePresentation.ts` — formats turn-start directives as status text and skill-bar visibility flags; also builds manual-target status text for skill switches
+- `battleDirectivePresentation.ts` — formats `BattleDirectivePresentationInput` (from `shared/`) as status text and skill-bar visibility flags; owns all directive UI wording
 - `battleSkillPreviewPresentation.ts` — formats skill-preview header color and damage/healing estimates
 
 Presentation builders:
-- may import battle formulas when the result is display-only (e.g. damage estimates, prompt text)
+- receive already-computed read models and presentation inputs from `shared/` or `core/`
+- must NOT import battle runtime formulas, skill runtime helpers, turn resolvers, or skill preview resolvers
+- display-only estimates and prompt classifications are produced by `core/` projections and passed in as data
 - must not mutate state
 - must not call `PhaseManager`
 - must not own Phaser scene lifecycle
@@ -76,7 +78,7 @@ Scene receives user interaction via callback — no state mutation here
 
 ## Dependencies
 
-- depends on: `src/ui/` (BaseTooltip, HpBar, theme, primitives), `src/battle/types`, `src/core/Constants`, `src/core/phases`, `src/battle/combat` (effectiveStats), `src/core/unitSpriteKey`
+- depends on: `src/ui/` (BaseTooltip, HpBar, theme, primitives), `src/battle/types`, `src/core/Constants`, `src/core/phases`, `src/core/unitSpriteKey`, `src/shared/`
 - used by: scenes (`src/scenes/`)
 
 ## Invariants
@@ -95,7 +97,7 @@ Scene receives user interaction via callback — no state mutation here
 - Any UI pattern used in ≥2 places must be extracted into a component here or in `src/ui/`
 - Texts are passed as plain strings from phase snapshots — no formatting logic inside components
 - `ui/Panel.ts` is a game-agnostic background rectangle primitive. `objects/panels/*Panel.ts` are game-aware composite panel components that use `Panel` internally. The names share the word "panel" but operate at different abstraction levels.
-- Presentation builders (`objects/*Presentation.ts`) may import battle formulas for display-only computation; they must not dispatch actions or mutate state
+- Presentation builders (`objects/*Presentation.ts`) must not import battle runtime formulas or helpers; they receive structured read models from `shared/` or `core/` and format them into strings and display flags
 
 ## Where to Modify
 

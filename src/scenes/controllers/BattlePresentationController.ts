@@ -17,11 +17,11 @@ import {
   buildBattleSkillPreviewPresentation,
   type BattleSkillPreviewHeaderColorKind,
 } from '../../objects/battleSkillPreviewPresentation';
-import { buildSkillPreviewModel } from '../../battle/skillPreview';
+import { buildBattlePhaseSkillPreviewModel } from '../../core/battleSkillPreviewProjection';
 import { buildBattleDirectivePresentation } from '../../objects/battleDirectivePresentation';
+import type { BattleDirectivePresentationInput } from '../../shared/battleDirectivePresentationModel';
 
 type BattlePhase = Extract<GamePhase, { type: 'battle' }>;
-type BattleDirective = Parameters<typeof buildBattleDirectivePresentation>[0];
 
 export class BattlePresentationController {
   constructor(private readonly deps: {
@@ -126,12 +126,7 @@ export class BattlePresentationController {
   // ─── Skill Preview ────────────────────────────────────────────────────────────
 
   applySkillPreview(phase: BattlePhase, coord: CellCoord): void {
-    const model = buildSkillPreviewModel({
-      activeUnit: phase.activeUnit,
-      targetCoord: coord,
-      occupancy: phase.occupancy,
-      unitsById: phase.unitsById,
-    });
+    const model = buildBattlePhaseSkillPreviewModel({ phase, targetCoord: coord });
     if (!model) return;
 
     const presentation = buildBattleSkillPreviewPresentation(model);
@@ -173,13 +168,10 @@ export class BattlePresentationController {
 
   // ─── Directive Presentation ───────────────────────────────────────────────────
 
-  applyDirectivePresentation(input: {
-    directive: BattleDirective;
-    unitName: string | null;
-  }): { displaySkillBar: boolean } {
-    const presentation = buildBattleDirectivePresentation(input.directive, {
-      unitName: input.unitName,
-    });
+  applyDirectivePresentation(
+    input: BattleDirectivePresentationInput,
+  ): { displaySkillBar: boolean } {
+    const presentation = buildBattleDirectivePresentation(input);
 
     if (presentation.statusText) {
       this.deps.setStatus(presentation.statusText);

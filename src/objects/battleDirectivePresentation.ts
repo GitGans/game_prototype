@@ -1,18 +1,15 @@
-import type { TurnStartDirective } from '../battle/turnResolver';
-import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
-import { getActiveSkill, isEnchantmentSkill } from '../battle/skillRuntime';
+import type {
+  BattleDirectivePresentationInput,
+  ManualTargetPromptKind,
+} from '../shared/battleDirectivePresentationModel';
 
 export type BattleDirectivePresentation = {
   statusText?: string;
   displaySkillBar?: boolean;
 };
 
-export type BattleDirectivePresentationContext = {
-  unitName: string | null;
-};
-
 export function buildManualTargetStatusText(
-  promptKind: 'attack' | 'heal',
+  promptKind: ManualTargetPromptKind,
   unitName: string | null,
 ): string {
   const name = unitName ?? '?';
@@ -22,49 +19,29 @@ export function buildManualTargetStatusText(
 }
 
 export function buildBattleDirectivePresentation(
-  directive: TurnStartDirective,
-  context: BattleDirectivePresentationContext,
+  input: BattleDirectivePresentationInput,
 ): BattleDirectivePresentation {
-  const unitName = context.unitName ?? '?';
-
-  switch (directive.type) {
+  switch (input.type) {
     case 'schedule_auto_turn':
       return {
         statusText:
-          directive.delayKind === 'auto_player'
-            ? `${unitName} turn… (auto)`
-            : `${unitName} turn…`,
+          input.delayKind === 'auto_player'
+            ? `${input.unitName ?? '?'} turn… (auto)`
+            : `${input.unitName ?? '?'} turn…`,
       };
 
     case 'await_manual_target':
       return {
-        statusText: buildManualTargetStatusText(directive.promptKind, unitName),
+        statusText: buildManualTargetStatusText(input.promptKind, input.unitName),
         displaySkillBar: true,
       };
 
     case 'none':
-    case 'continue_immediately':
-    case 'schedule_next_turn':
       return {};
 
-    default:
-      return assertNever(directive);
+    default: {
+      const _exhaustive: never = input;
+      throw new Error(`Unhandled directive input: ${JSON.stringify(_exhaustive)}`);
+    }
   }
-}
-
-function assertNever(value: never): never {
-  throw new Error(
-    `Unexpected battle directive presentation value: ${JSON.stringify(value)}`,
-  );
-}
-
-export function buildManualTargetStatusTextForUnit(
-  unit: BattleUnitSnapshot,
-): string | null {
-  const skill = getActiveSkill(unit);
-  if (!skill) return null;
-  return buildManualTargetStatusText(
-    isEnchantmentSkill(skill) ? 'heal' : 'attack',
-    unit.name,
-  );
 }

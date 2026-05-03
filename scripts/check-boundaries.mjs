@@ -45,8 +45,22 @@ const RULES = [
   {
     layer: 'objects/**',
     dir: join(SRC, 'objects'),
-    // core/Constants, core/phases, core/unitSpriteKey, battle/types, battle/combat are allowed
-    banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'scenes/'],
+    // core/Constants, core/phases, core/unitSpriteKey, battle/types allowed; battle runtime modules banned
+    banned: [
+      'core/GameState', 'core/PhaseManager', 'core/EventBus', 'scenes/',
+      'battle/combat',
+      'battle/skillRuntime',
+      'battle/skillPatterns',
+      'battle/skillDefinitionRuntime',
+      'battle/skillPreview',
+      'battle/turnResolver',
+    ],
+  },
+  {
+    layer: 'scenes/**',
+    dir: join(SRC, 'scenes'),
+    // Only skill preview is banned; broader scenes -> battle dependencies remain allowed in this stage
+    banned: ['battle/skillPreview'],
   },
   {
     layer: 'core/**',
@@ -63,6 +77,8 @@ const RULES = [
 
 // Matches both `import ... from 'x'` and `export ... from 'x'`
 const FROM_RE = /(?:import|export)[^'"]*from\s+['"]([^'"]+)['"]/g;
+// Matches dynamic imports: import('...')
+const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
 // ─── Visual theme isolation ────────────────────────────────────────────────
 // Domain visual theme files must not import from ui/theme.
@@ -71,12 +87,14 @@ for (const [file, content] of walkFiles(join(SRC, 'objects'))) {
   if (!file.endsWith('VisualTheme.ts')) continue;
   const lines = content.split('\n');
   lines.forEach((line, i) => {
-    let m;
-    FROM_RE.lastIndex = 0;
-    while ((m = FROM_RE.exec(line)) !== null) {
-      if (m[1].includes('ui/theme')) {
-        const rel = relative(SRC, file);
-        errors.push(`  ${rel}:${i + 1}  [*VisualTheme.ts] must not import ui/theme  →  "${m[1]}"`);
+    for (const re of [FROM_RE, DYNAMIC_IMPORT_RE]) {
+      let m;
+      re.lastIndex = 0;
+      while ((m = re.exec(line)) !== null) {
+        if (m[1].includes('ui/theme')) {
+          const rel = relative(SRC, file);
+          errors.push(`  ${rel}:${i + 1}  [*VisualTheme.ts] must not import ui/theme  →  "${m[1]}"`);
+        }
       }
     }
   });
@@ -86,14 +104,16 @@ for (const { layer, dir, banned } of RULES) {
   for (const [file, content] of walkFiles(dir)) {
     const lines = content.split('\n');
     lines.forEach((line, i) => {
-      let m;
-      FROM_RE.lastIndex = 0;
-      while ((m = FROM_RE.exec(line)) !== null) {
-        const imp = m[1];
-        for (const b of banned) {
-          if (imp.includes(b)) {
-            const rel = relative(SRC, file);
-            errors.push(`  ${rel}:${i + 1}  [${layer}] imports from ${b}  →  "${imp}"`);
+      for (const re of [FROM_RE, DYNAMIC_IMPORT_RE]) {
+        let m;
+        re.lastIndex = 0;
+        while ((m = re.exec(line)) !== null) {
+          const imp = m[1];
+          for (const b of banned) {
+            if (imp.includes(b)) {
+              const rel = relative(SRC, file);
+              errors.push(`  ${rel}:${i + 1}  [${layer}] imports from ${b}  →  "${imp}"`);
+            }
           }
         }
       }
