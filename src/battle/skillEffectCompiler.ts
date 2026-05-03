@@ -24,8 +24,8 @@ export function resolveLeveledStatEffect(
     'dodgeBonus',
     'blockBonus',
     'initiativeBonus',
-    'physicalDamageBonus',
-    'magicalDamageBonus',
+    'physicalStrengthBonus',
+    'magicalStrengthBonus',
   ] as const;
   for (const field of bonusFields) {
     if (base[field] !== undefined) {

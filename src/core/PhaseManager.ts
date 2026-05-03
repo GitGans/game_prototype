@@ -611,8 +611,8 @@ class PhaseManagerClass {
                 const scale = 1 + 0.1 * (newLevel - 1);
                 liveUnit.level          = newLevel;
                 liveUnit.maxHp          = Math.round(bp.hp * scale);
-                liveUnit.physicalDamage = Math.round(bp.physicalDamage * scale);
-                liveUnit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
+                liveUnit.physicalStrength = Math.round(bp.physicalStrength * scale);
+                liveUnit.magicalStrength  = Math.round(bp.magicalStrength  * scale);
               }
             }
           });

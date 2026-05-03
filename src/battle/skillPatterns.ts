@@ -40,7 +40,7 @@ export function resolvePattern(
 
       result.push({
         coord: { side: target.side, row, col },
-        multiplier: cell.damageMultiplier,
+        multiplier: cell.multiplier,
       });
     }
   }

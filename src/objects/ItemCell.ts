@@ -105,8 +105,8 @@ export class ItemCell extends Phaser.GameObjects.Container {
     const def = item.definition;
     const stats: ItemTooltipData['stats'] = [];
     if (def.battleStatBonuses.hp              !== 0) stats.push({ label: 'HP',         value: def.battleStatBonuses.hp              });
-    if (def.battleStatBonuses.physicalDamage   !== 0) stats.push({ label: 'Phys Dmg',   value: def.battleStatBonuses.physicalDamage   });
-    if (def.battleStatBonuses.magicalDamage    !== 0) stats.push({ label: 'Magic Dmg',  value: def.battleStatBonuses.magicalDamage    });
+    if (def.battleStatBonuses.physicalStrength !== 0) stats.push({ label: 'Phys Str',   value: def.battleStatBonuses.physicalStrength });
+    if (def.battleStatBonuses.magicalStrength  !== 0) stats.push({ label: 'Magic Str',  value: def.battleStatBonuses.magicalStrength  });
     if (def.battleStatBonuses.physicalDefense  !== 0) stats.push({ label: 'Phys Def',   value: def.battleStatBonuses.physicalDefense  });
     if (def.battleStatBonuses.magicalDefense   !== 0) stats.push({ label: 'Magic Def',  value: def.battleStatBonuses.magicalDefense   });
 

@@ -49,11 +49,11 @@ export type CombatPowerSource = PowerSource;
 // ─── Patterns ─────────────────────────────────────────────────────────────────
 
 export type PatternRef =
-  | { kind: 'damage_matrix'; matrixName: string; level: number }
+  | { kind: 'multiplier_matrix'; matrixName: string; level: number }
   | { kind: 'effect_matrix'; matrixName: string; level: number }
   | { kind: 'instant_effect_matrix'; matrixName: string; level: number };
 
-export type DamagePatternRef = Extract<PatternRef, { kind: 'damage_matrix' }>;
+export type MultiplierPatternRef = Extract<PatternRef, { kind: 'multiplier_matrix' }>;
 export type EffectPatternRef = Extract<PatternRef, { kind: 'effect_matrix' }>;
 export type InstantEffectPatternRef = Extract<
   PatternRef,
@@ -78,14 +78,14 @@ export type SkillUseAction =
       type: 'damage';
       powerSource: CombatPowerSource;
       powerMode: 'effective';
-      matrix: DamagePatternRef;
+      matrix: MultiplierPatternRef;
       modifiers?: DamageModifierRef[];
     }
   | {
       type: 'heal';
       powerSource: PowerSource;
       powerMode: 'raw';
-      matrix: DamagePatternRef;
+      matrix: MultiplierPatternRef;
     }
   | {
       type: 'apply_stat_effect';

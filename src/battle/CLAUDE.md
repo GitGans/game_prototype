@@ -77,7 +77,7 @@ The executor (`skillExecution.ts`) and counter-attack both run through `SkillUse
 
 **Power source and damage resolution**
 - `PowerSource` values are `physical_strength` and `magical_strength`.
-- `physicalDamage` / `magicalDamage` are the scaling field names on units.
+- `physicalStrength` / `magicalStrength` are the scaling field names on units.
 - Skill damage resolution derives the defense branch directly from `powerSource`:
   - `physical_strength` → `physicalDefense`
   - `magical_strength` → `magicalDefense`

@@ -269,14 +269,14 @@ export function getEquippedBonuses(
 ): BattleStatBonuses {
   const equipped = getEquippedItems(unitTemplateId, containers, instances);
   const bonuses: BattleStatBonuses = {
-    hp: 0, physicalDamage: 0, magicalDamage: 0, physicalDefense: 0, magicalDefense: 0,
+    hp: 0, physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0,
   };
   for (const inst of equipped) {
     const def = definitions[inst.definitionId];
     if (!def) continue;
-    bonuses.hp              += def.battleStatBonuses.hp;
-    bonuses.physicalDamage  += def.battleStatBonuses.physicalDamage;
-    bonuses.magicalDamage   += def.battleStatBonuses.magicalDamage;
+    bonuses.hp               += def.battleStatBonuses.hp;
+    bonuses.physicalStrength += def.battleStatBonuses.physicalStrength;
+    bonuses.magicalStrength  += def.battleStatBonuses.magicalStrength;
     bonuses.physicalDefense += def.battleStatBonuses.physicalDefense;
     bonuses.magicalDefense  += def.battleStatBonuses.magicalDefense;
   }
@@ -301,8 +301,8 @@ export function computeUnitBattleStats(
   const perm  = permanentBonuses[blueprint.templateId] ?? {};
   return {
     hp:              Math.round(blueprint.hp             * scale) + (upgradeModifiers.hp              ?? 0) + equip.hp              + (perm.hp              ?? 0),
-    physicalDamage:  Math.round(blueprint.physicalDamage * scale) + (upgradeModifiers.physicalDamage  ?? 0) + equip.physicalDamage  + (perm.physicalDamage  ?? 0),
-    magicalDamage:   Math.round(blueprint.magicalDamage  * scale) + (upgradeModifiers.magicalDamage   ?? 0) + equip.magicalDamage   + (perm.magicalDamage   ?? 0),
+    physicalStrength: Math.round(blueprint.physicalStrength * scale) + (upgradeModifiers.physicalStrength ?? 0) + equip.physicalStrength + (perm.physicalStrength ?? 0),
+    magicalStrength:  Math.round(blueprint.magicalStrength  * scale) + (upgradeModifiers.magicalStrength  ?? 0) + equip.magicalStrength  + (perm.magicalStrength  ?? 0),
     physicalDefense: blueprint.physicalDefense                    + (upgradeModifiers.physicalDefense ?? 0) + equip.physicalDefense + (perm.physicalDefense ?? 0),
     magicalDefense:  blueprint.magicalDefense                     + (upgradeModifiers.magicalDefense  ?? 0) + equip.magicalDefense  + (perm.magicalDefense  ?? 0),
     dodge:           blueprint.dodge      + (upgradeModifiers.dodge      ?? 0),

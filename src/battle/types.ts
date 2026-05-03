@@ -2,7 +2,7 @@
 export type { Side, Row, Col, CellCoord, ShapeOffset, UnitShape } from '../shared/gridTypes';
 export type {
   Effect,
-  PatternCell, SkillPattern, LeveledDamageMatrix, LeveledEffectDef,
+  PatternCell, SkillPattern, LeveledMultiplierMatrix, LeveledEffectDef,
   InstantEffectType, InstantEffectEvent,
   DamageModifierType,
   PostDamageType,
@@ -37,8 +37,8 @@ export interface Unit {
   name: string;
   hp: number;
   maxHp: number;
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;
   magicalDefense: number;
   dodge: number;

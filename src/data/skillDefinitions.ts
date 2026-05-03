@@ -2,13 +2,13 @@ import type { ActionSkillDefinition } from "../shared/skillDefinitionTypes";
 import type {
   DamageModifierType,
   Effect,
-  LeveledDamageMatrix,
+  LeveledMultiplierMatrix,
   LeveledEffectDef,
 } from "../shared/skillTypes";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
-const P = (m: number) => ({ damageMultiplier: m });
+const P = (m: number) => ({ multiplier: m });
 
 // ─── Base Effects ─────────────────────────────────────────────────────────────
 
@@ -86,25 +86,25 @@ const EFFECTS: Record<string, Effect> = {
   empower: {
     id: "empower",
     isBuff: true,
-    physicalDamageBonus: 1,
+    physicalStrengthBonus: 1,
     description: "Increases physical attack",
   },
   enfeeble: {
     id: "enfeeble",
     isBuff: false,
-    physicalDamageBonus: -1,
+    physicalStrengthBonus: -1,
     description: "Reduces physical attack",
   },
   arcane_surge: {
     id: "arcane_surge",
     isBuff: true,
-    magicalDamageBonus: 1,
+    magicalStrengthBonus: 1,
     description: "Increases magical attack",
   },
   arcane_drain: {
     id: "arcane_drain",
     isBuff: false,
-    magicalDamageBonus: -1,
+    magicalStrengthBonus: -1,
     description: "Reduces magical attack",
   },
 };
@@ -115,7 +115,7 @@ const EFFECTS: Record<string, Effect> = {
 // levels[0] = level 1, levels[1] = level 2, etc.
 // Multiple skills can share the same matrix name.
 
-export const DAMAGE_MATRICES: Record<string, LeveledDamageMatrix> = {
+export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
   /** Single cell, 100% damage. */
   single: {
     levels: [
@@ -184,11 +184,11 @@ export const DAMAGE_MATRICES: Record<string, LeveledDamageMatrix> = {
 // levels[0] = level 1, levels[1] = level 2, etc.
 //
 // For stat-based per-turn effects (regeneration / lose_health):
-//   amountPerTurn = caster power (selected by powerSource) × anchorCell.damageMultiplier
+//   amountPerTurn = caster power (selected by powerSource) × anchorCell.multiplier
 // For defense-only effects (fortify / weaken / etc.):
-//   only cell presence matters; damageMultiplier is unused
+//   only cell presence matters; multiplier is unused
 
-export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
+export const EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> = {
   /** Single target. Multiplier used for stat-based per-turn scaling. */
   single: {
     levels: [
@@ -315,36 +315,36 @@ export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
   empower: {
     effectKind: 'stat_modifier',
     effect: EFFECTS.empower,
-    bonusByLevel: [10, 20, 30], // physicalDamageBonus sign (+) inherited from EFFECTS.empower
+    bonusByLevel: [10, 20, 30], // physicalStrengthBonus sign (+) inherited from EFFECTS.empower
   },
 
   enfeeble: {
     effectKind: 'stat_modifier',
     effect: EFFECTS.enfeeble,
-    bonusByLevel: [10, 20, 30], // physicalDamageBonus sign (-) inherited from EFFECTS.enfeeble
+    bonusByLevel: [10, 20, 30], // physicalStrengthBonus sign (-) inherited from EFFECTS.enfeeble
   },
 
   arcane_surge: {
     effectKind: 'stat_modifier',
     effect: EFFECTS.arcane_surge,
-    bonusByLevel: [10, 20, 30], // magicalDamageBonus sign (+) inherited from EFFECTS.arcane_surge
+    bonusByLevel: [10, 20, 30], // magicalStrengthBonus sign (+) inherited from EFFECTS.arcane_surge
   },
 
   arcane_drain: {
     effectKind: 'stat_modifier',
     effect: EFFECTS.arcane_drain,
-    bonusByLevel: [10, 20, 30], // magicalDamageBonus sign (-) inherited from EFFECTS.arcane_drain
+    bonusByLevel: [10, 20, 30], // magicalStrengthBonus sign (-) inherited from EFFECTS.arcane_drain
   },
 };
 
 // ─── Named Instant Effect Matrices ───────────────────────────────────────────
 //
-// Cell values are stored in damageMultiplier but represent success PROBABILITY (0–1),
+// Cell values are stored in multiplier but represent success PROBABILITY (0–1),
 // not a damage scaling factor. Instant effects are not damage; they are provoke/distract.
 // Dodge / block / defense do NOT apply to this roll.
 // levels[0] = level 1, levels[1] = level 2, etc.
 
-export const INSTANT_EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
+export const INSTANT_EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> = {
   /** Single target. */
   single: {
     levels: [
@@ -500,7 +500,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -514,7 +514,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -528,7 +528,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "magical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -542,7 +542,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
       {
         type: "apply_stat_effect",
@@ -564,7 +564,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "heal",
         powerSource: "magical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -578,7 +578,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "heal",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
       {
         type: "apply_stat_effect",
@@ -600,7 +600,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "heal",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
       {
         type: "apply_periodic_hp_effect",
@@ -624,7 +624,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "magical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "cross", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "cross", level: 1 },
       },
       {
         type: "apply_periodic_hp_effect",
@@ -648,7 +648,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "row_sweep", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "row_sweep", level: 1 },
       },
     ],
   },
@@ -662,7 +662,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "pierce", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "pierce", level: 1 },
       },
     ],
   },
@@ -676,7 +676,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
       {
         type: "apply_periodic_hp_effect",
@@ -700,7 +700,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
       {
         type: "apply_stat_effect",
@@ -722,7 +722,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
       {
         type: "instant_effect",
@@ -742,7 +742,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
       {
         type: "instant_effect",
@@ -762,7 +762,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
         modifiers: [{ modifierType: "ignore_physical_defense", level: 3 }],
       },
     ],
@@ -777,7 +777,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
       {
         type: "post_damage",
@@ -796,7 +796,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "damage_matrix", matrixName: "row_sweep", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "row_sweep", level: 1 },
         modifiers: [{ modifierType: "ignore_block", level: 2 }],
       },
       {

@@ -35,8 +35,8 @@ export function computeUnitUpgradeStatModifiers(
     const m = upgrade.statModifiers;
     if (!m) continue;
     result.hp              = (result.hp              ?? 0) + (m.hp              ?? 0);
-    result.physicalDamage  = (result.physicalDamage  ?? 0) + (m.physicalDamage  ?? 0);
-    result.magicalDamage   = (result.magicalDamage   ?? 0) + (m.magicalDamage   ?? 0);
+    result.physicalStrength  = (result.physicalStrength  ?? 0) + (m.physicalStrength  ?? 0);
+    result.magicalStrength   = (result.magicalStrength   ?? 0) + (m.magicalStrength   ?? 0);
     result.physicalDefense = (result.physicalDefense ?? 0) + (m.physicalDefense ?? 0);
     result.magicalDefense  = (result.magicalDefense  ?? 0) + (m.magicalDefense  ?? 0);
     result.dodge           = (result.dodge           ?? 0) + (m.dodge           ?? 0);

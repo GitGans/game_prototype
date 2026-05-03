@@ -26,18 +26,18 @@ export type SkillDefinitionPowerSource =
 
 /**
  * An unresolved reference to a named matrix entry in a registry.
- * `matrixName` is a string key into DAMAGE_MATRICES / EFFECT_MATRICES / INSTANT_EFFECT_MATRICES.
+ * `matrixName` is a string key into MULTIPLIER_MATRICES / EFFECT_MATRICES / INSTANT_EFFECT_MATRICES.
  * Names are unresolved string registry references at the contract layer — resolution happens in the compiler.
  * Concrete SkillPattern objects are resolved by the compiler or runtime bridge, not here.
  */
 export type SkillDefinitionMatrixRef =
-  | { kind: 'damage_matrix'; matrixName: string; level: number }
+  | { kind: 'multiplier_matrix'; matrixName: string; level: number }
   | { kind: 'effect_matrix'; matrixName: string; level: number }
   | { kind: 'instant_effect_matrix'; matrixName: string; level: number };
 
-/** Narrowed alias — use when a field must reference a damage matrix. */
-export type SkillDefinitionDamageMatrixRef =
-  Extract<SkillDefinitionMatrixRef, { kind: 'damage_matrix' }>;
+/** Narrowed alias — use when a field must reference a multiplier matrix. */
+export type SkillDefinitionMultiplierMatrixRef =
+  Extract<SkillDefinitionMatrixRef, { kind: 'multiplier_matrix' }>;
 
 /** Narrowed alias — use when a field must reference an effect matrix. */
 export type SkillDefinitionEffectMatrixRef =
@@ -74,7 +74,7 @@ export interface SkillDefinitionDamageModifier {
 export interface SkillDefinitionDamageAction {
   type: 'damage';
   powerSource: SkillDefinitionPowerSource;
-  matrix: SkillDefinitionDamageMatrixRef;
+  matrix: SkillDefinitionMultiplierMatrixRef;
   modifiers?: SkillDefinitionDamageModifier[];
 }
 
@@ -83,9 +83,8 @@ export interface SkillDefinitionDamageAction {
 export interface SkillDefinitionHealAction {
   type: 'heal';
   powerSource: SkillDefinitionPowerSource;
-  // Heal currently uses damage_matrix refs for behavior-preserving migration.
-  // This is an authoring-level reference, not a statement that heal is damage.
-  matrix: SkillDefinitionDamageMatrixRef;
+  // Both damage and heal actions use multiplier_matrix refs.
+  matrix: SkillDefinitionMultiplierMatrixRef;
 }
 
 // --- Stat effect ---

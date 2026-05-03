@@ -1,6 +1,6 @@
 import type { SkillPattern } from '../shared/skillTypes';
 import {
-  DAMAGE_MATRICES,
+  MULTIPLIER_MATRICES,
   EFFECT_MATRICES,
   INSTANT_EFFECT_MATRICES,
 } from '../data/skillDefinitions';
@@ -24,10 +24,10 @@ function resolveMatrixLevel(
 
 export function resolvePlanPattern(patternRef: PatternRef): SkillPattern {
   switch (patternRef.kind) {
-    case 'damage_matrix':
+    case 'multiplier_matrix':
       return resolveMatrixLevel(
-        DAMAGE_MATRICES[patternRef.matrixName],
-        'damage',
+        MULTIPLIER_MATRICES[patternRef.matrixName],
+        'multiplier',
         patternRef.matrixName,
         patternRef.level,
       );

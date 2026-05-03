@@ -329,7 +329,7 @@ function executeApplyPeriodicHpEffectAction(input: {
 
   const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
   const amountPerTurn = Math.round(
-    getRawUnitPower(caster, action.powerSource) * anchorCell.damageMultiplier,
+    getRawUnitPower(caster, action.powerSource) * anchorCell.multiplier,
   );
 
   const periodicHp: PeriodicHp = {

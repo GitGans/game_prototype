@@ -23,8 +23,8 @@ export type UnitClass =
 
 export interface UnitProgressionStatModifiers {
   hp?: number;
-  physicalDamage?: number;
-  magicalDamage?: number;
+  physicalStrength?: number;
+  magicalStrength?: number;
   physicalDefense?: number;
   magicalDefense?: number;
   dodge?: number;
@@ -34,8 +34,8 @@ export interface UnitProgressionStatModifiers {
 
 export interface UnitBattleStats {
   hp: number;
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;
   magicalDefense: number;
   dodge: number;
@@ -71,8 +71,8 @@ export interface UnitBlueprint {
   templateId: string;
   name: string;
   hp: number;
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;  // percentage 0–100, reduces incoming physical damage
   magicalDefense: number;   // percentage 0–100, reduces incoming magical damage
   dodge: number;            // % chance to avoid damage entirely (effective cap: 90)

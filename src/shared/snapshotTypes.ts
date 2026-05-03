@@ -12,8 +12,8 @@ export interface UnitStatsSnapshot {
   level:           number;
   hp:              UnitStatValueSnapshot;
   maxHp:           UnitStatValueSnapshot;
-  physicalDamage:  UnitStatValueSnapshot;
-  magicalDamage:   UnitStatValueSnapshot;
+  physicalStrength:  UnitStatValueSnapshot;
+  magicalStrength:   UnitStatValueSnapshot;
   physicalDefense: UnitStatValueSnapshot;
   magicalDefense:  UnitStatValueSnapshot;
   dodge:           UnitStatValueSnapshot;

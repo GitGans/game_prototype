@@ -482,8 +482,8 @@ export function tickEffects(state: BattleState): {
 }
 
 export interface EffectiveStats {
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;
   magicalDefense: number;
   dodge: number;
@@ -492,7 +492,7 @@ export interface EffectiveStats {
 }
 
 interface StatOwner {
-  physicalDamage: number; magicalDamage: number;
+  physicalStrength: number; magicalStrength: number;
   physicalDefense: number; magicalDefense: number;
   dodge: number; block: number; initiative: number;
   activeEffects: readonly ActiveEffect[];
@@ -502,8 +502,8 @@ interface StatOwner {
 export function effectiveStats(unit: StatOwner): EffectiveStats {
   return unit.activeEffects.reduce<EffectiveStats>(
     (acc, ae) => ({
-      physicalDamage: acc.physicalDamage + (ae.effect.physicalDamageBonus ?? 0),
-      magicalDamage: acc.magicalDamage + (ae.effect.magicalDamageBonus ?? 0),
+      physicalStrength: acc.physicalStrength + (ae.effect.physicalStrengthBonus ?? 0),
+      magicalStrength: acc.magicalStrength + (ae.effect.magicalStrengthBonus ?? 0),
       physicalDefense:
         acc.physicalDefense + (ae.effect.physicalDefenseBonus ?? 0),
       magicalDefense: acc.magicalDefense + (ae.effect.magicalDefenseBonus ?? 0),
@@ -512,8 +512,8 @@ export function effectiveStats(unit: StatOwner): EffectiveStats {
       initiative: acc.initiative + (ae.effect.initiativeBonus ?? 0),
     }),
     {
-      physicalDamage: unit.physicalDamage,
-      magicalDamage: unit.magicalDamage,
+      physicalStrength: unit.physicalStrength,
+      magicalStrength: unit.magicalStrength,
       physicalDefense: unit.physicalDefense,
       magicalDefense: unit.magicalDefense,
       dodge: unit.dodge,

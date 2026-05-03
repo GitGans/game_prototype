@@ -17,8 +17,8 @@ export interface UnitUpgradeStatLineSnapshot {
 
 const STAT_ORDER: ReadonlyArray<keyof UnitProgressionStatModifiers> = [
   'hp',
-  'physicalDamage',
-  'magicalDamage',
+  'physicalStrength',
+  'magicalStrength',
   'physicalDefense',
   'magicalDefense',
   'dodge',
@@ -28,8 +28,8 @@ const STAT_ORDER: ReadonlyArray<keyof UnitProgressionStatModifiers> = [
 
 const STAT_LABELS: Record<keyof UnitProgressionStatModifiers, string> = {
   hp:              'HP',
-  physicalDamage:  'P.Dmg',
-  magicalDamage:   'M.Dmg',
+  physicalStrength:  'Phys Str',
+  magicalStrength:   'Magic Str',
   physicalDefense: 'P.Def',
   magicalDefense:  'M.Def',
   dodge:           'Dodge',

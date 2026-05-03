@@ -24,17 +24,17 @@ export interface BattleUnitSnapshot {
   hp:       number;
   maxHp:    number;
 
-  physicalDamage:      number;
-  magicalDamage:       number;
+  physicalStrength:    number;
+  magicalStrength:     number;
   physicalDefense:     number;
   magicalDefense:      number;
   dodge:               number;
   block:               number;
   level:               number;
   initiative:          number;
-  effectiveInitiative:      number; // pre-computed via effectiveStats; used by InitiativeBar
-  effectivePhysicalDamage:  number;
-  effectiveMagicalDamage:   number;
+  effectiveInitiative:       number; // pre-computed via effectiveStats; used by InitiativeBar
+  effectivePhysicalStrength: number;
+  effectiveMagicalStrength:  number;
   effectivePhysicalDefense: number;
   effectiveMagicalDefense:  number;
   effectiveDodge:           number;

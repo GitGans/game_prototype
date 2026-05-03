@@ -11,7 +11,7 @@ describe("applyBattleTurnAction — battle_use_skill", () => {
   it("ends the battle immediately when skill damage kills the last opposing unit", () => {
     const attacker = makeUnit({
       id: "attacker",
-      physicalDamage: 1000, // guaranteed kill
+      physicalStrength: 1000, // guaranteed kill
       anchor: coord("player", 0, 0),
       skills: [testStrike],
       activeSkillIndex: 0,
@@ -50,7 +50,7 @@ describe("applyBattleTurnAction — battle_use_skill", () => {
   it("advances the turn when the battle does not end after skill application", () => {
     const attacker = makeUnit({
       id: "attacker",
-      physicalDamage: 10, // not a kill
+      physicalStrength: 10, // not a kill
       anchor: coord("player", 0, 0),
       skills: [testStrike],
       activeSkillIndex: 0,

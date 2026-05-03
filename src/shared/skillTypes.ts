@@ -6,13 +6,13 @@ export interface Effect {
   dodgeBonus?: number;
   blockBonus?: number;
   initiativeBonus?: number;
-  physicalDamageBonus?: number;
-  magicalDamageBonus?: number;
+  physicalStrengthBonus?: number;
+  magicalStrengthBonus?: number;
   description?: string;
 }
 
 export interface PatternCell {
-  damageMultiplier: number;
+  multiplier: number;
 }
 
 export interface SkillPattern {
@@ -21,7 +21,7 @@ export interface SkillPattern {
   cells: (PatternCell | null)[][];
 }
 
-export interface LeveledDamageMatrix {
+export interface LeveledMultiplierMatrix {
   levels: SkillPattern[];
 }
 

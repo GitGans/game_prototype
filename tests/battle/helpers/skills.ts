@@ -10,7 +10,7 @@ export const testStrike: ActionSkillDefinition = {
     {
       type: "damage",
       powerSource: "physical_strength",
-      matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
     },
   ],
 };
@@ -25,7 +25,7 @@ export const testMagicBolt: ActionSkillDefinition = {
     {
       type: "damage",
       powerSource: "magical_strength",
-      matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
     },
   ],
 };
@@ -40,7 +40,7 @@ export const testRowStrike: ActionSkillDefinition = {
     {
       type: "damage",
       powerSource: "physical_strength",
-      matrix: { kind: "damage_matrix", matrixName: "row_sweep", level: 1 },
+      matrix: { kind: "multiplier_matrix", matrixName: "row_sweep", level: 1 },
     },
   ],
 };
@@ -55,7 +55,7 @@ export const testVampireStrike: ActionSkillDefinition = {
     {
       type: "damage",
       powerSource: "physical_strength",
-      matrix: { kind: "damage_matrix", matrixName: "single", level: 1 },
+      matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
     },
     {
       type: "post_damage",

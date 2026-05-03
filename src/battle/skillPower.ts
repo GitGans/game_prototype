@@ -1,10 +1,10 @@
 import type { ActiveEffect } from '../shared/activeEffect';
 import { effectiveStats } from './combat';
-import type { CombatPowerSource, PowerSource } from './skillUsePlan';
+import type { PowerSource } from './skillUsePlan';
 
 export interface UnitPowerOwner {
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
 }
 
 // Must structurally match StatOwner in combat.ts, which is intentionally local.
@@ -23,9 +23,9 @@ export function getRawUnitPower(
 ): number {
   switch (powerSource) {
     case 'physical_strength':
-      return unit.physicalDamage;
+      return unit.physicalStrength;
     case 'magical_strength':
-      return unit.magicalDamage;
+      return unit.magicalStrength;
     default: {
       const _exhaustive: never = powerSource;
       return _exhaustive;
@@ -40,9 +40,9 @@ export function getEffectiveUnitPower(
   const stats = effectiveStats(unit);
   switch (powerSource) {
     case 'physical_strength':
-      return stats.physicalDamage;
+      return stats.physicalStrength;
     case 'magical_strength':
-      return stats.magicalDamage;
+      return stats.magicalStrength;
     default: {
       const _exhaustive: never = powerSource;
       return _exhaustive;

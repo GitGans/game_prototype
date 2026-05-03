@@ -127,7 +127,7 @@ describe("applyEffectApplication", () => {
   const singleCellPattern: SkillPattern = {
     anchorRow: 0,
     anchorCol: 0,
-    cells: [[{ damageMultiplier: 1 }]],
+    cells: [[{ multiplier: 1 }]],
   };
 
   it("caps active effects at 2 and evicts the oldest when a third is added", () => {

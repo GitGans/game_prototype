@@ -32,8 +32,8 @@ interface TooltipData {
   side:            "player" | "enemy";
   hp:              StatValue;
   maxHp:           StatValue;
-  physicalDamage:  StatValue;
-  magicalDamage:   StatValue;
+  physicalStrength:  StatValue;
+  magicalStrength:   StatValue;
   physicalDefense: StatValue;
   magicalDefense:  StatValue;
   dodge:           StatValue;
@@ -79,7 +79,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       templateId: unit.templateId, name: unit.name, level,
       side: 'player',
       hp: flat(0), maxHp: flat(0),
-      physicalDamage: flat(0), magicalDamage: flat(0),
+      physicalStrength: flat(0), magicalStrength: flat(0),
       physicalDefense: flat(0), magicalDefense: flat(0),
       dodge: flat(0), block: flat(0), initiative: flat(0),
       skills: [],
@@ -104,8 +104,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       side:            'player',
       hp:              stats.hp,
       maxHp:           stats.maxHp,
-      physicalDamage:  stats.physicalDamage,
-      magicalDamage:   stats.magicalDamage,
+      physicalStrength:  stats.physicalStrength,
+      magicalStrength:   stats.magicalStrength,
       physicalDefense: stats.physicalDefense,
       magicalDefense:  stats.magicalDefense,
       dodge:           stats.dodge,
@@ -135,8 +135,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       // Use maxHp for both — bench shows a healthy unit, not mid-battle HP
       hp:              snapshot.stats.maxHp,
       maxHp:           snapshot.stats.maxHp,
-      physicalDamage:  snapshot.stats.physicalDamage,
-      magicalDamage:   snapshot.stats.magicalDamage,
+      physicalStrength:  snapshot.stats.physicalStrength,
+      magicalStrength:   snapshot.stats.magicalStrength,
       physicalDefense: snapshot.stats.physicalDefense,
       magicalDefense:  snapshot.stats.magicalDefense,
       dodge:           snapshot.stats.dodge,
@@ -215,8 +215,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 
     const statLines: Array<{ label: string; display: string; color: string }> = [
       { label: "HP",         display: `${data.hp.value} / ${data.maxHp.value}`, color: statColor(data.maxHp)           },
-      { label: "Phys Dmg",   display: String(data.physicalDamage.value), color: statColor(data.physicalDamage)       },
-      { label: "Magic Dmg",  display: String(data.magicalDamage.value),  color: statColor(data.magicalDamage)        },
+      { label: "Phys Str",   display: String(data.physicalStrength.value), color: statColor(data.physicalStrength)       },
+      { label: "Magic Str",  display: String(data.magicalStrength.value),  color: statColor(data.magicalStrength)        },
       { label: "Phys Def",   display: `${data.physicalDefense.value}%`,  color: statColor(data.physicalDefense)      },
       { label: "Magic Def",  display: `${data.magicalDefense.value}%`,   color: statColor(data.magicalDefense)       },
       { label: "Dodge",      display: `${data.dodge.value}%`,            color: statColor(data.dodge)                },
@@ -268,8 +268,8 @@ function unitToData(unit: BattleUnitSnapshot): TooltipData {
     side:            unit.anchor.side,
     hp:              flat(unit.hp),
     maxHp:           flat(unit.maxHp),
-    physicalDamage:  { value: unit.effectivePhysicalDamage,  base: unit.physicalDamage  },
-    magicalDamage:   { value: unit.effectiveMagicalDamage,   base: unit.magicalDamage   },
+    physicalStrength:  { value: unit.effectivePhysicalStrength,  base: unit.physicalStrength  },
+    magicalStrength:   { value: unit.effectiveMagicalStrength,   base: unit.magicalStrength   },
     physicalDefense: { value: unit.effectivePhysicalDefense, base: unit.physicalDefense },
     magicalDefense:  { value: unit.effectiveMagicalDefense,  base: unit.magicalDefense  },
     dodge:           { value: unit.effectiveDodge,           base: unit.dodge           },

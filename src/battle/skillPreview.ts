@@ -30,8 +30,8 @@ export type SkillPreviewUnit = {
   name: string;
   hp: number;
   maxHp: number;
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;
   magicalDefense: number;
   dodge: number;
@@ -192,7 +192,7 @@ export function buildSkillPreviewModelFromPlan(
       const pattern = resolvePlanPattern(action.matrix);
       const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
       const basePower = getRawUnitPower(activeUnit, action.powerSource);
-      const amount = Math.round(basePower * anchorCell.damageMultiplier);
+      const amount = Math.round(basePower * anchorCell.multiplier);
 
       const effectCells = resolvePattern(targetCoord, pattern);
       const seenUnits = new Set<string>();

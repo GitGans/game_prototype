@@ -13,7 +13,7 @@ Static data layer for all game entities. Contains only read-only constant defini
 
 ## Key Files
 - `unitDefinitions.ts` — player and enemy unit blueprints; exports `PLAYER_UNITS`, `ENEMY_UNITS`, `PLAYER_STARTING_IDS`
-- `skillDefinitions.ts` — 28 combat skills, damage/effect matrices, level tables; exports `SKILLS`, `DAMAGE_MATRICES`, `EFFECT_MATRICES`, `INSTANT_EFFECT_MATRICES`, `LEVELED_EFFECTS`, `DAMAGE_MODIFIER_LEVELS`, `VAMPIRISM_LEVELS`; runtime helpers live in `src/battle/skillDefinitionRuntime.ts`
+- `skillDefinitions.ts` — 28 combat skills, multiplier/effect matrices, level tables; exports `SKILLS`, `MULTIPLIER_MATRICES`, `EFFECT_MATRICES`, `INSTANT_EFFECT_MATRICES`, `LEVELED_EFFECTS`, `DAMAGE_MODIFIER_LEVELS`, `VAMPIRISM_LEVELS`; runtime helpers live in `src/battle/skillDefinitionRuntime.ts`
 - `itemDefinitions.ts` — item configs with stat bonuses and slot assignments; exports `ITEM_DEFINITIONS`, `getItemDescription()`
 - `mapDefinitions.ts` — grid terrain and mob placement per map; exports `MAP_DEFINITIONS`
 - `enemyGroupDefinitions.ts` — encounter group configs (race + level override); exports `ENEMY_GROUPS`
