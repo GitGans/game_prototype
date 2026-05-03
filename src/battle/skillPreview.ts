@@ -6,16 +6,19 @@ import type {
   SkillPreviewHeaderColorKind,
   SkillPreviewModel,
 } from '../shared/skillPreviewModel';
-import {
-  getActiveSkill,
-  getSkillHitCellsForSkill,
-  isEnchantmentSkill,
-  resolveEffectArgs,
-} from './skillRuntime';
-import { effectiveStats, computeDamageVsUnit } from './combat';
+import { getActiveSkill } from './skillRuntime';
+import { computeDamageVsUnit } from './combat';
 import { resolvePattern } from './skillPatterns';
-import { getDamageModifierPercent, getEffectPattern } from './skillDefinitionRuntime';
+import { getDamageModifierPercent } from './skillDefinitionRuntime';
 import { cellKey } from './field';
+import {
+  compileLegacySkill,
+  resolvePlanPattern,
+  getRawUnitPower,
+  getEffectiveUnitPower,
+  getDamageTypeForPowerSource,
+} from './skillUsePlan';
+import type { SkillUsePlan } from './skillUsePlan';
 
 export type { SkillPreviewModel } from '../shared/skillPreviewModel';
 
@@ -49,135 +52,185 @@ export type SkillPreviewInput = {
   unitsById: ReadonlyMap<string, SkillPreviewUnit>;
 };
 
-// ─── Builder ──────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-export function buildSkillPreviewModel(
+function isHealTargetPolicy(plan: SkillUsePlan): boolean {
+  return plan.targetPolicy.type === 'friendly' || plan.targetPolicy.type === 'self';
+}
+
+function getPreviewHeaderColorKindFromPlan(
+  plan: SkillUsePlan,
+): SkillPreviewHeaderColorKind {
+  for (const action of plan.actions) {
+    if (action.type === 'damage') {
+      return action.powerSource === 'magical_strength' ? 'magical' : 'physical';
+    }
+  }
+  for (const action of plan.actions) {
+    if (action.type === 'heal') {
+      return action.powerSource === 'physical_strength' ? 'physical' : 'magical';
+    }
+  }
+  for (const action of plan.actions) {
+    if (action.type === 'apply_periodic_hp_effect') {
+      return action.powerSource === 'magical_strength' ? 'magical' : 'physical';
+    }
+  }
+  // stat-effect-only or empty plan: no meaningful strength axis
+  return 'neutral';
+}
+
+// ─── Plan-based builder ───────────────────────────────────────────────────────
+
+export function buildSkillPreviewModelFromPlan(
+  plan: SkillUsePlan,
   input: SkillPreviewInput,
 ): SkillPreviewModel | null {
   const { activeUnit, targetCoord, occupancy, unitsById } = input;
   if (!activeUnit) return null;
 
-  const skill = getActiveSkill(activeUnit);
-  const isHeal = isEnchantmentSkill(skill);
-
-  // ── Cells ────────────────────────────────────────────────────────────────
-
+  const highlight = isHealTargetPolicy(plan) ? 'heal' : 'damage';
   const cells: SkillPreviewCell[] = [];
-
-  const hitCells = getSkillHitCellsForSkill(skill, targetCoord);
-  for (const hit of hitCells) {
-    cells.push({
-      coord: hit.coord,
-      kind: 'skill',
-      highlight: isHeal ? 'heal' : 'damage',
-      multiplier: hit.multiplier,
-    });
-  }
-
-  const effectCells = skill.effectBlock
-    ? resolvePattern(targetCoord, getEffectPattern(skill.effectBlock))
-    : [];
-
-  for (const ec of effectCells) {
-    cells.push({
-      coord: ec.coord,
-      kind: 'effect',
-      highlight: isHeal ? 'heal' : 'damage',
-    });
-  }
-
-  // ── Status lines ─────────────────────────────────────────────────────────
-
   const statusLines: string[] = [];
 
-  if (isHeal) {
-    // Preview mirrors current enchantment-targeted executor compatibility:
-    // uses raw magicalDamage (not effectiveStats), matching applyLegacyEnchantmentHealing.
-    // Deduped by highest heal per unit, capped by missing HP, zeros skipped.
-    const healByUnitId = new Map<string, number>();
-    for (const hit of hitCells) {
-      const unitId = occupancy.cellToUnitId.get(cellKey(hit.coord));
-      const unit = unitId ? unitsById.get(unitId) : undefined;
-      if (!unit) continue;
-      const amount = Math.round(activeUnit.magicalDamage * hit.multiplier);
-      const prev = healByUnitId.get(unit.id) ?? 0;
-      if (amount > prev) healByUnitId.set(unit.id, amount);
-    }
-    for (const [unitId, rawAmount] of healByUnitId) {
-      const unit = unitsById.get(unitId)!;
-      const applied = Math.min(rawAmount, unit.maxHp - unit.hp);
-      if (applied === 0) continue;
-      statusLines.push(`${unit.name} +${applied}`);
-    }
-  } else {
-    // Preview mirrors current hostile-targeted executor compatibility:
-    // damageBlock?.damageType ?? "physical" selects both stat branch and defense branch,
-    // matching applyLegacyHostileDamage. effectiveStats used for attacker, deduped per unit.
-    const damageType = skill.damageBlock?.damageType ?? 'physical';
-    const attackerStats = effectiveStats(activeUnit);
-    const baseDamage =
-      damageType === 'physical'
-        ? attackerStats.physicalDamage
-        : attackerStats.magicalDamage;
+  for (const action of plan.actions) {
+    // ── Cells ─────────────────────────────────────────────────────────────
 
-    const ignorePercent: Partial<Record<string, number>> = {};
-    if (skill.damageModifierBlocks) {
-      for (const block of skill.damageModifierBlocks) {
-        ignorePercent[block.type] = getDamageModifierPercent(block);
+    if (action.type === 'damage' || action.type === 'heal') {
+      const pattern = resolvePlanPattern(action.matrix);
+      const hitCells = resolvePattern(targetCoord, pattern);
+      for (const hit of hitCells) {
+        cells.push({
+          coord: hit.coord,
+          kind: 'skill',
+          highlight,
+          multiplier: hit.multiplier,
+        });
       }
     }
-    const defIgnoreKey =
-      damageType === 'physical' ? 'ignore_physical_defense' : 'ignore_magical_defense';
-    const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
 
-    const damageByUnitId = new Map<string, number>();
-    for (const hit of hitCells) {
-      const unitId = occupancy.cellToUnitId.get(cellKey(hit.coord));
-      const unit = unitId ? unitsById.get(unitId) : undefined;
-      if (!unit) continue;
-      const dmg = computeDamageVsUnit(baseDamage, damageType, unit, hit.multiplier, defIgnore);
-      const prev = damageByUnitId.get(unit.id) ?? 0;
-      if (dmg > prev) damageByUnitId.set(unit.id, dmg);
+    if (
+      action.type === 'apply_stat_effect' ||
+      action.type === 'apply_periodic_hp_effect'
+    ) {
+      const pattern = resolvePlanPattern(action.matrix);
+      const effectCells = resolvePattern(targetCoord, pattern);
+      for (const ec of effectCells) {
+        cells.push({ coord: ec.coord, kind: 'effect', highlight });
+      }
     }
-    for (const [unitId, dmg] of damageByUnitId) {
-      const unit = unitsById.get(unitId)!;
-      statusLines.push(`${unit.name} ~${dmg}`);
+
+    // post_damage and instant_effect: no cells in preview.
+
+    // ── Status lines ──────────────────────────────────────────────────────
+
+    if (action.type === 'heal') {
+      // Raw power matches applyLegacyEnchantmentHealing (raw, not effective).
+      // legacy_enchantment_heal_power resolves to unit.magicalDamage — see getRawUnitPower.
+      const baseHeal = getRawUnitPower(activeUnit, action.powerSource);
+      const pattern = resolvePlanPattern(action.matrix);
+      const hitCells = resolvePattern(targetCoord, pattern);
+
+      const healByUnitId = new Map<string, number>();
+      for (const hit of hitCells) {
+        const unitId = occupancy.cellToUnitId.get(cellKey(hit.coord));
+        const unit = unitId ? unitsById.get(unitId) : undefined;
+        if (!unit) continue;
+        const amount = Math.round(baseHeal * hit.multiplier);
+        const prev = healByUnitId.get(unit.id) ?? 0;
+        if (amount > prev) healByUnitId.set(unit.id, amount);
+      }
+
+      for (const [unitId, rawAmount] of healByUnitId) {
+        const unit = unitsById.get(unitId)!;
+        const applied = Math.min(rawAmount, unit.maxHp - unit.hp);
+        if (applied === 0) continue;
+        statusLines.push(`${unit.name} +${applied}`);
+      }
     }
-  }
 
-  // ── Effect text lines ─────────────────────────────────────────────────────
+    if (action.type === 'damage') {
+      const damageType = getDamageTypeForPowerSource(action.powerSource);
+      // getEffectiveUnitPower applies active effects, matching applyLegacyHostileDamage.
+      const baseDamage = getEffectiveUnitPower(activeUnit, action.powerSource);
 
-  if (skill.effectBlock) {
-    statusLines.push(`[${skill.effectBlock.effectDisplayName}]`);
+      const ignorePercent: Partial<Record<string, number>> = {};
+      if (action.modifiers) {
+        for (const block of action.modifiers) {
+          ignorePercent[block.type] = getDamageModifierPercent(block);
+        }
+      }
+      const defIgnoreKey =
+        damageType === 'physical' ? 'ignore_physical_defense' : 'ignore_magical_defense';
+      const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
 
-    // Effect preview uses resolveEffectArgs, so per-turn values match runtime scaling
-    // via LEVELED_EFFECTS.effectDamageType — not SkillEffectBlock.damageType.
-    const [resolvedEffect, computedPerTurn] = resolveEffectArgs(skill, activeUnit);
-    if (computedPerTurn !== undefined) {
-      const sign = resolvedEffect.isBuff ? '+' : '-';
-      const seenEffect = new Set<string>();
+      const pattern = resolvePlanPattern(action.matrix);
+      const hitCells = resolvePattern(targetCoord, pattern);
+
+      const damageByUnitId = new Map<string, number>();
+      for (const hit of hitCells) {
+        const unitId = occupancy.cellToUnitId.get(cellKey(hit.coord));
+        const unit = unitId ? unitsById.get(unitId) : undefined;
+        if (!unit) continue;
+        const dmg = computeDamageVsUnit(baseDamage, damageType, unit, hit.multiplier, defIgnore);
+        const prev = damageByUnitId.get(unit.id) ?? 0;
+        if (dmg > prev) damageByUnitId.set(unit.id, dmg);
+      }
+
+      for (const [unitId, dmg] of damageByUnitId) {
+        const unit = unitsById.get(unitId)!;
+        statusLines.push(`${unit.name} ~${dmg}`);
+      }
+    }
+
+    if (
+      action.type === 'apply_stat_effect' ||
+      action.type === 'apply_periodic_hp_effect'
+    ) {
+      statusLines.push(`[${action.effectBlock.effectDisplayName}]`);
+    }
+
+    if (action.type === 'apply_periodic_hp_effect') {
+      // Anchor-cell multiplier only. The executor uses only the anchor for per-turn
+      // scaling; non-anchor cells define targeting area, not power.
+      const pattern = resolvePlanPattern(action.matrix);
+      const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
+      const basePower = getRawUnitPower(activeUnit, action.powerSource);
+      const amount = Math.round(basePower * anchorCell.damageMultiplier);
+
+      const effectCells = resolvePattern(targetCoord, pattern);
+      const seenUnits = new Set<string>();
       for (const ec of effectCells) {
         const unitId = occupancy.cellToUnitId.get(cellKey(ec.coord));
         const unit = unitId ? unitsById.get(unitId) : undefined;
-        if (!unit || seenEffect.has(unit.id)) continue;
-        seenEffect.add(unit.id);
-        statusLines.push(`${unit.name} ${sign}${computedPerTurn} HP/round`);
+        if (!unit || seenUnits.has(unit.id)) continue;
+        seenUnits.add(unit.id);
+        const sign = action.direction === 'heal' ? '+' : '-';
+        statusLines.push(`${unit.name} ${sign}${amount} HP/round`);
       }
     }
+
+    // post_damage and instant_effect: no status lines in preview.
   }
 
-  // ── Header color ──────────────────────────────────────────────────────────
-
-  const colorKind: SkillPreviewHeaderColorKind =
-    skill.damageBlock?.damageType === 'magical'
-      ? 'magical'
-      : skill.damageBlock?.damageType === 'physical'
-        ? 'physical'
-        : 'neutral';
+  const colorKind = getPreviewHeaderColorKindFromPlan(plan);
 
   return {
     cells,
-    statusHeader: { text: skill.name, colorKind },
+    statusHeader: { text: plan.name, colorKind },
     statusLines,
   };
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+export function buildSkillPreviewModel(
+  input: SkillPreviewInput,
+): SkillPreviewModel | null {
+  const { activeUnit } = input;
+  if (!activeUnit) return null;
+
+  const skill = getActiveSkill(activeUnit);
+  const plan = compileLegacySkill(skill);
+  return buildSkillPreviewModelFromPlan(plan, input);
 }

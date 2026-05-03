@@ -13,15 +13,18 @@ import {
 } from "./combat";
 import {
   getActiveSkill,
-  getSkillHitCellsForSkill,
-  isEnchantmentSkill,
-  resolveEffectArgs,
 } from "./skillRuntime";
 import {
-  getEffectPattern,
-  getInstantEffectPattern,
   getSkillPattern,
 } from "./skillDefinitionRuntime";
+import {
+  compileLegacySkill,
+  getDamageTypeForPowerSource,
+  getEffectiveUnitPower,
+  getRawUnitPower,
+  resolvePlanPattern,
+} from './skillUsePlan';
+import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
 import { getMeleeTargets, getRangedTargets } from "./targeting";
 import { rebuildRemainingQueue } from "./initiative";
 import { resolvePattern } from "./skillPatterns";
@@ -57,6 +60,22 @@ export type SkillExecutionResult = {
 type SkillExecutionStepResult = {
   state: BattleState;
   events: BattleEvent[];
+};
+
+type DamageStepResult = SkillExecutionStepResult & {
+  totalRealDamage: number;
+};
+
+type SkillUsePlanExecutionInput = {
+  plan: SkillUsePlan;
+  state: BattleState;
+  casterId: string;
+  caster: Unit;
+  target: CellCoord;
+  // chargedThisRound is needed when an applied effect changes initiative,
+  // because the remaining queue must be rebuilt from the current threaded state.
+  queueContext: SkillExecutionInput['queueContext'];
+  rng: Rng;
 };
 
 // Does not carry state — the caller owns the current state reference.
@@ -223,90 +242,27 @@ function mapCounterAttackEventsToBattleEvents(
   return result;
 }
 
-// ─── Shared effect step ───────────────────────────────────────────────────────
+// ─── Plan action runners ──────────────────────────────────────────────────────
 
-// Effect step — shared by both enchantment-targeted and hostile-targeted flows.
-//
-// Current rules:
-// - effectBlock is independent from the heal/damage step. Any skill can carry one.
-// - It can represent a buff, debuff, DoT-style effect (lose_health), or HoT-style effect (regeneration).
-// - Per-turn HP scaling (for stat-based effects) is resolved by resolveEffectArgs, which reads
-//   LEVELED_EFFECTS.effectDamageType — not SkillEffectBlock.damageType.
-// - Queue rebuild only happens when the resolved effect has a non-zero initiativeBonus.
-function applyLegacyEffectBlock(input: {
-  state: BattleState;
-  skill: Skill;
-  caster: Unit;
-  target: CellCoord;
-  queueContext: SkillExecutionInput["queueContext"];
-}): SkillExecutionStepResult {
-  const { state, skill, caster, target, queueContext } = input;
-
-  if (!skill.effectBlock) return { state, events: [] };
-
-  const [eff, perTurn] = resolveEffectArgs(skill, caster);
-  const { state: withEffect, events: effEvents } = applyEffectBlock(
-    skill.effectBlock,
-    getEffectPattern(skill.effectBlock),
-    target,
-    state,
-    eff,
-    perTurn,
-  );
-
-  const events = mapEffectAppliedEventsToBattleEvents(effEvents);
-
-  if ((eff.initiativeBonus ?? 0) !== 0) {
-    // Queue rebuild is required when an effect changes initiative order.
-    // roundQueue[0] is the current acting unit; rebuild applies to the remaining queue.
-    const nextState: BattleState = {
-      ...withEffect,
-      roundQueue: rebuildRemainingQueue(
-        withEffect.roundQueue[0],
-        withEffect.roundQueue.slice(1),
-        queueContext.chargedThisRound,
-        withEffect.units,
-      ),
-    };
-    return { state: nextState, events };
-  }
-
-  return { state: withEffect, events };
-}
-
-// ─── Enchantment heal step ────────────────────────────────────────────────────
-
-// Compatibility healing step for enchantment-targeted skills.
-//
-// Current rules (not the future model):
-// - mass_enchantment / self_enchantment are targeting categories, not inherent heal semantics.
-//   The heal is a current compatibility rule: enchantment-targeted skill => healing step runs.
-// - Hit pattern comes from getSkillHitCellsForSkill, which falls back to the single-cell
-//   matrix when damageBlock is absent — so this step always runs, even with no damageBlock.
-// - Heal amount uses caster.magicalDamage directly (not effectiveStats). This is legacy
-//   scaling; the future model should express this as an explicit power source.
-// - DamageBlock.damageType is NOT read for heal amount. The damageType field on damageBlock
-//   is irrelevant to the heal path.
-function applyLegacyEnchantmentHealing(input: {
+function executeHealAction(input: {
   state: BattleState;
   casterId: string;
   caster: Unit;
-  skill: Skill;
   target: CellCoord;
+  action: Extract<SkillUseAction, { type: 'heal' }>;
 }): SkillExecutionStepResult {
-  const { state, casterId, caster, skill, target } = input;
-  const casterName = caster.name;
+  const { state, casterId, caster, target, action } = input;
 
-  const { state: healed, heals } = resolveHealWithEvents(
-    getSkillHitCellsForSkill(skill, target),
-    caster.magicalDamage,
-    state,
-  );
+  const pattern = resolvePlanPattern(action.matrix);
+  const hitCells = resolvePattern(target, pattern);
+  const baseHeal = getRawUnitPower(caster, action.powerSource);
+
+  const { state: healed, heals } = resolveHealWithEvents(hitCells, baseHeal, state);
 
   const events: BattleEvent[] = heals.map((h) => ({
-    type: "skill_heal" as const,
+    type: 'skill_heal' as const,
     casterId,
-    casterName,
+    casterName: caster.name,
     targetId: h.unitId,
     targetName: h.unitName,
     amount: h.amount,
@@ -315,84 +271,141 @@ function applyLegacyEnchantmentHealing(input: {
   return { state: healed, events };
 }
 
-// ─── Hostile damage step ──────────────────────────────────────────────────────
-
-// Damage step for hostile-targeted skills.
-//
-// Current rules (not the future model):
-// - Hostile skills always resolve a damage step, even when damageBlock is absent.
-// - Missing damageBlock falls back to single-cell physical damage (via getSkillHitCellsForSkill).
-//   This fallback must be preserved during normalization — hostile skills without damageBlock
-//   are not pure-effect skills; they silently carry a physical damage action.
-// - damageBlock?.damageType ?? "physical" selects BOTH the source stat branch AND the defense branch:
-//     physical => caster.physicalDamage vs target.physicalDefense
-//     magical  => caster.magicalDamage  vs target.magicalDefense
-// - effectiveStats() is used for attacker stats (unlike enchantment healing which uses raw magicalDamage).
-// - Future model should replace the damageType-selects-both coupling with an explicit power source.
-function applyLegacyHostileDamage(input: {
+function executeDamageAction(input: {
   state: BattleState;
   casterId: string;
   caster: Unit;
-  skill: Skill;
   target: CellCoord;
+  action: Extract<SkillUseAction, { type: 'damage' }>;
   rng: Rng;
-}): { state: BattleState; events: BattleEvent[]; totalRealDamage: number } {
-  const { state, casterId, caster, skill, target, rng } = input;
-  const casterName = caster.name;
+}): DamageStepResult {
+  const { state, casterId, caster, target, action, rng } = input;
 
-  const damageType = skill.damageBlock?.damageType ?? "physical";
-  const casterStats = effectiveStats(caster);
-  const baseDamage =
-    damageType === "physical"
-      ? casterStats.physicalDamage
-      : casterStats.magicalDamage;
+  const pattern = resolvePlanPattern(action.matrix);
+  const hitCells = resolvePattern(target, pattern);
+  const damageType = getDamageTypeForPowerSource(action.powerSource);
+  const baseDamage = getEffectiveUnitPower(caster, action.powerSource);
 
-  const attackResult = resolveAttack(
-    getSkillHitCellsForSkill(skill, target),
-    baseDamage,
-    damageType,
-    state,
-    { damageModifierBlocks: skill.damageModifierBlocks, rng },
-  );
+  const attackResult = resolveAttack(hitCells, baseDamage, damageType, state, {
+    damageModifierBlocks: action.modifiers,
+    rng,
+  });
 
   const events = mapSkillAttackEventsToBattleEvents({
     events: attackResult.events,
     casterId,
-    casterName,
+    casterName: caster.name,
   });
 
-  return {
-    state: attackResult.state,
-    events,
-    totalRealDamage: attackResult.totalRealDamage,
-  };
+  return { state: attackResult.state, events, totalRealDamage: attackResult.totalRealDamage };
 }
 
-// ─── Post-damage step ─────────────────────────────────────────────────────────
-
-function applyLegacyPostDamageBlock(input: {
+function executePostDamageAction(input: {
   state: BattleState;
-  skill: Skill;
   caster: Unit;
+  action: Extract<SkillUseAction, { type: 'post_damage' }>;
   totalRealDamage: number;
 }): SkillExecutionStepResult {
-  const { state, skill, caster, totalRealDamage } = input;
+  const { state, caster, action, totalRealDamage } = input;
 
-  if (!skill.postDamageBlock || totalRealDamage <= 0) {
-    return { state, events: [] };
-  }
+  if (totalRealDamage <= 0) return { state, events: [] };
 
   const { state: afterVamp, events: vampEvents } = applyVampirism(
-    skill.postDamageBlock,
+    action.postDamageBlock,
     caster,
     totalRealDamage,
     state,
   );
 
-  return {
-    state: afterVamp,
-    events: mapVampirismEventsToBattleEvents(vampEvents),
-  };
+  return { state: afterVamp, events: mapVampirismEventsToBattleEvents(vampEvents) };
+}
+
+function executeApplyStatEffectAction(input: {
+  state: BattleState;
+  target: CellCoord;
+  queueContext: SkillExecutionInput['queueContext'];
+  action: Extract<SkillUseAction, { type: 'apply_stat_effect' }>;
+}): SkillExecutionStepResult {
+  const { state, target, queueContext, action } = input;
+
+  const pattern = resolvePlanPattern(action.matrix);
+  const { state: withEffect, events: effEvents } = applyEffectBlock(
+    action.effectBlock,
+    pattern,
+    target,
+    state,
+    action.resolvedEffect,
+    undefined,
+  );
+
+  const events = mapEffectAppliedEventsToBattleEvents(effEvents);
+
+  if ((action.resolvedEffect.initiativeBonus ?? 0) !== 0) {
+    // Queue rebuild is required when an effect changes initiative order.
+    // roundQueue[0] is the current acting unit; rebuild applies to the remaining queue.
+    return {
+      state: {
+        ...withEffect,
+        roundQueue: rebuildRemainingQueue(
+          withEffect.roundQueue[0],
+          withEffect.roundQueue.slice(1),
+          queueContext.chargedThisRound,
+          withEffect.units,
+        ),
+      },
+      events,
+    };
+  }
+
+  return { state: withEffect, events };
+}
+
+function executeApplyPeriodicHpEffectAction(input: {
+  state: BattleState;
+  caster: Unit;
+  target: CellCoord;
+  queueContext: SkillExecutionInput['queueContext'];
+  action: Extract<SkillUseAction, { type: 'apply_periodic_hp_effect' }>;
+}): SkillExecutionStepResult {
+  const { state, caster, target, queueContext, action } = input;
+
+  const pattern = resolvePlanPattern(action.matrix);
+
+  // Only the anchor cell's multiplier is used for runtime per-turn scaling.
+  // Stage 10 will normalize periodicHp direction; for now direction flows through
+  // action.displayEffect.isBuff which applyEffectBlock stores as-is.
+  const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
+  const computedPerTurn = Math.round(
+    getRawUnitPower(caster, action.powerSource) * anchorCell.damageMultiplier,
+  );
+
+  const { state: withEffect, events: effEvents } = applyEffectBlock(
+    action.effectBlock,
+    pattern,
+    target,
+    state,
+    action.displayEffect,
+    computedPerTurn,
+  );
+
+  const events = mapEffectAppliedEventsToBattleEvents(effEvents);
+
+  if ((action.displayEffect.initiativeBonus ?? 0) !== 0) {
+    return {
+      state: {
+        ...withEffect,
+        roundQueue: rebuildRemainingQueue(
+          withEffect.roundQueue[0],
+          withEffect.roundQueue.slice(1),
+          queueContext.chargedThisRound,
+          withEffect.units,
+        ),
+      },
+      events,
+    };
+  }
+
+  return { state: withEffect, events };
 }
 
 // ─── Counter-attack step ──────────────────────────────────────────────────────
@@ -495,45 +508,48 @@ function resolveLegacyProvokeCounterAttack(input: {
   };
 }
 
-// ─── Instant effect step ──────────────────────────────────────────────────────
+// ─── Instant effect action runner ─────────────────────────────────────────────
 
-function applyLegacyInstantEffectBlock(input: {
+function executeInstantEffectAction(input: {
   state: BattleState;
   casterId: string;
   target: CellCoord;
-  skill: Skill;
+  action: Extract<SkillUseAction, { type: 'instant_effect' }>;
   rng: Rng;
 }): SkillExecutionStepResult {
-  const { state, casterId, target, skill, rng } = input;
+  const { casterId, target, action, rng } = input;
 
-  if (!skill.instantEffectBlock) return { state, events: [] };
-
-  const block = skill.instantEffectBlock;
-  const pattern = getInstantEffectPattern(block);
+  const pattern = resolvePlanPattern(action.matrix);
   const {
     events: ieEvents,
     provokedUnitIds,
     distractedUnitIds,
-  } = resolveInstantEffects(block, pattern, target, state, state.roundQueue, rng);
+  } = resolveInstantEffects(
+    action.instantEffectBlock,
+    pattern,
+    target,
+    input.state,
+    input.state.roundQueue,
+    rng,
+  );
 
   const events: BattleEvent[] = mapInstantEffectEventsToBattleEvents(ieEvents);
-  let next = state;
+  let next = input.state;
 
-  // ── Distracted: remove from queue ─────────────────────────────────────────
   for (const unitId of distractedUnitIds) {
     const unit = next.units.get(unitId);
     if (!unit) continue;
-    next = {
-      ...next,
-      roundQueue: next.roundQueue.filter((id) => id !== unitId),
-    };
-    events.push({ type: "unit_distracted", unitId: unit.id, unitName: unit.name });
+    next = { ...next, roundQueue: next.roundQueue.filter((id) => id !== unitId) };
+    events.push({ type: 'unit_distracted', unitId: unit.id, unitName: unit.name });
   }
 
-  // ── Provoked: counter-attack sequence ─────────────────────────────────────
   for (const provokedUnitId of provokedUnitIds) {
-    const { state: afterCounter, events: counterEvents } =
-      resolveLegacyProvokeCounterAttack({ state: next, casterId, provokedUnitId, rng });
+    const { state: afterCounter, events: counterEvents } = resolveLegacyProvokeCounterAttack({
+      state: next,
+      casterId,
+      provokedUnitId,
+      rng,
+    });
     next = afterCounter;
     events.push(...counterEvents);
   }
@@ -541,68 +557,101 @@ function applyLegacyInstantEffectBlock(input: {
   return { state: next, events };
 }
 
-// ─── Flow: enchantment-targeted ───────────────────────────────────────────────
+// ─── Plan executor ────────────────────────────────────────────────────────────
 
-// Enchantment-targeted means friendly/self targeting. It is not synonymous
-// with heal. The healing step exists for current compatibility only.
-function executeEnchantmentTargetedLegacyFlow(input: {
-  state: BattleState;
-  casterId: string;
-  caster: Unit;
-  skill: Skill;
-  target: CellCoord;
-  queueContext: SkillExecutionInput["queueContext"];
-}): SkillExecutionResult {
-  const { state: s1, events: e1 } = applyLegacyEnchantmentHealing(input);
+function executeSkillUsePlan(input: SkillUsePlanExecutionInput): SkillExecutionResult {
+  let state = input.state;
+  const events: BattleEvent[] = [];
+  let lastTotalRealDamage = 0;
 
-  const { state: s2, events: e2 } = applyLegacyEffectBlock({
-    state: s1,
-    skill: input.skill,
-    caster: input.caster,
-    target: input.target,
-    queueContext: input.queueContext,
-  });
+  for (const action of input.plan.actions) {
+    switch (action.type) {
+      case 'heal': {
+        const step = executeHealAction({
+          state,
+          casterId: input.casterId,
+          caster: input.caster,
+          target: input.target,
+          action,
+        });
+        state = step.state;
+        events.push(...step.events);
+        break;
+      }
 
-  return { state: s2, events: [...e1, ...e2] };
-}
+      case 'damage': {
+        const step = executeDamageAction({
+          state,
+          casterId: input.casterId,
+          caster: input.caster,
+          target: input.target,
+          action,
+          rng: input.rng,
+        });
+        state = step.state;
+        events.push(...step.events);
+        lastTotalRealDamage = step.totalRealDamage;
+        break;
+      }
 
-// ─── Flow: hostile-targeted ───────────────────────────────────────────────────
+      case 'post_damage': {
+        const step = executePostDamageAction({
+          state,
+          caster: input.caster,
+          action,
+          totalRealDamage: lastTotalRealDamage,
+        });
+        state = step.state;
+        events.push(...step.events);
+        break;
+      }
 
-function executeHostileTargetedLegacyFlow(input: {
-  state: BattleState;
-  casterId: string;
-  caster: Unit;
-  skill: Skill;
-  target: CellCoord;
-  queueContext: SkillExecutionInput["queueContext"];
-  rng: Rng;
-}): SkillExecutionResult {
-  const { state: s1, events: e1, totalRealDamage } = applyLegacyHostileDamage(input);
+      case 'apply_stat_effect': {
+        const step = executeApplyStatEffectAction({
+          state,
+          target: input.target,
+          queueContext: input.queueContext,
+          action,
+        });
+        state = step.state;
+        events.push(...step.events);
+        break;
+      }
 
-  const { state: s2, events: e2 } = applyLegacyPostDamageBlock({
-    state: s1,
-    skill: input.skill,
-    caster: input.caster,
-    totalRealDamage,
-  });
+      case 'apply_periodic_hp_effect': {
+        const step = executeApplyPeriodicHpEffectAction({
+          state,
+          caster: input.caster,
+          target: input.target,
+          queueContext: input.queueContext,
+          action,
+        });
+        state = step.state;
+        events.push(...step.events);
+        break;
+      }
 
-  const { state: s3, events: e3 } = applyLegacyEffectBlock({
-    state: s2,
-    skill: input.skill,
-    caster: input.caster,
-    target: input.target,
-    queueContext: input.queueContext,
-  });
+      case 'instant_effect': {
+        const step = executeInstantEffectAction({
+          state,
+          casterId: input.casterId,
+          target: input.target,
+          action,
+          rng: input.rng,
+        });
+        state = step.state;
+        events.push(...step.events);
+        break;
+      }
 
-  const { state: s4, events: e4 } = applyLegacyInstantEffectBlock({
-    state: s3,
-    casterId: input.casterId,
-    target: input.target,
-    skill: input.skill,
-    rng: input.rng,
-  });
+      default: {
+        const _exhaustive: never = action;
+        return _exhaustive;
+      }
+    }
+  }
 
-  return { state: s4, events: [...e1, ...e2, ...e3, ...e4] };
+  return { state, events };
 }
 
 // ─── Executor ─────────────────────────────────────────────────────────────────
@@ -611,9 +660,7 @@ function executeHostileTargetedLegacyFlow(input: {
  * Applies a skill use to the given state and returns the resulting state + event log.
  * Battle-layer only — no Phaser, no GameState, no EventBus.
  *
- * Execution order:
- *   enchantment-targeted: healing → effectBlock → initiative rebuild
- *   hostile-targeted:     damage → vampirism → effectBlock → initiative rebuild → instantEffects
+ * Execution order comes from SkillUsePlan.actions, compiled by compileLegacySkill.
  *
  * Does NOT call: advanceTurn, tickEffects, checkGameOver.
  */
@@ -621,22 +668,13 @@ export function executeSkillUse(input: SkillExecutionInput): SkillExecutionResul
   const resolved = resolveCasterAndSkill(input);
   if (!resolved) return { state: input.state, events: [] };
 
-  if (isEnchantmentSkill(resolved.skill)) {
-    return executeEnchantmentTargetedLegacyFlow({
-      state: input.state,
-      casterId: resolved.casterId,
-      caster: resolved.caster,
-      skill: resolved.skill,
-      target: input.target,
-      queueContext: input.queueContext,
-    });
-  }
+  const plan = compileLegacySkill(resolved.skill);
 
-  return executeHostileTargetedLegacyFlow({
+  return executeSkillUsePlan({
+    plan,
     state: input.state,
     casterId: resolved.casterId,
     caster: resolved.caster,
-    skill: resolved.skill,
     target: input.target,
     queueContext: input.queueContext,
     rng: input.rng,
