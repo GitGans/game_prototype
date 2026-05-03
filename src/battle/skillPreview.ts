@@ -91,8 +91,9 @@ export function buildSkillPreviewModel(
   const statusLines: string[] = [];
 
   if (isHeal) {
-    // Matches resolveHealWithEvents: raw magicalDamage (not effectiveStats),
-    // rounded, deduped by highest heal per unit, capped by missing HP, skip zeros.
+    // Preview mirrors current enchantment-targeted executor compatibility:
+    // uses raw magicalDamage (not effectiveStats), matching applyLegacyEnchantmentHealing.
+    // Deduped by highest heal per unit, capped by missing HP, zeros skipped.
     const healByUnitId = new Map<string, number>();
     for (const hit of hitCells) {
       const unitId = occupancy.cellToUnitId.get(cellKey(hit.coord));
@@ -109,8 +110,9 @@ export function buildSkillPreviewModel(
       statusLines.push(`${unit.name} +${applied}`);
     }
   } else {
-    // Matches resolveAttack: effectiveStats for attacker, defense ignore,
-    // computeDamageVsUnit, deduped by highest damage per unit.
+    // Preview mirrors current hostile-targeted executor compatibility:
+    // damageBlock?.damageType ?? "physical" selects both stat branch and defense branch,
+    // matching applyLegacyHostileDamage. effectiveStats used for attacker, deduped per unit.
     const damageType = skill.damageBlock?.damageType ?? 'physical';
     const attackerStats = effectiveStats(activeUnit);
     const baseDamage =
@@ -148,6 +150,8 @@ export function buildSkillPreviewModel(
   if (skill.effectBlock) {
     statusLines.push(`[${skill.effectBlock.effectDisplayName}]`);
 
+    // Effect preview uses resolveEffectArgs, so per-turn values match runtime scaling
+    // via LEVELED_EFFECTS.effectDamageType — not SkillEffectBlock.damageType.
     const [resolvedEffect, computedPerTurn] = resolveEffectArgs(skill, activeUnit);
     if (computedPerTurn !== undefined) {
       const sign = resolvedEffect.isBuff ? '+' : '-';

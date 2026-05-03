@@ -1,4 +1,5 @@
 export type DamageType = 'physical' | 'magical';
+/** Current targeting category for a skill. Not the same as the skill's effect semantics. */
 export type SkillActionType = 'melee' | 'ranged' | 'mass_enchantment' | 'self_enchantment';
 
 export interface Effect {
@@ -16,6 +17,7 @@ export interface Effect {
 
 export interface DamageBlock {
   matrixName: string;
+  /** Current physical/magical branch for hostile damage: selects both source stat and defense. */
   damageType: DamageType;
   level: number;
 }
@@ -26,6 +28,7 @@ export interface SkillEffectBlock {
   effectDisplayName: string;
   effectName: string;
   duration: number;
+  /** Preserved data contract field. Current per-turn scaling is NOT selected from this. See LEVELED_EFFECTS.effectDamageType. */
   damageType: DamageType;
 }
 
@@ -45,6 +48,7 @@ export interface LeveledDamageMatrix {
 
 export interface LeveledEffectDef {
   effect: Effect;
+  /** Current per-turn HP scaling source: "physical" => physicalDamage, "magical" => magicalDamage. Legacy naming. */
   effectDamageType?: DamageType;
   bonusByLevel?: number[];
 }

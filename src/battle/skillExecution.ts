@@ -225,6 +225,14 @@ function mapCounterAttackEventsToBattleEvents(
 
 // ─── Shared effect step ───────────────────────────────────────────────────────
 
+// Effect step — shared by both enchantment-targeted and hostile-targeted flows.
+//
+// Current rules:
+// - effectBlock is independent from the heal/damage step. Any skill can carry one.
+// - It can represent a buff, debuff, DoT-style effect (lose_health), or HoT-style effect (regeneration).
+// - Per-turn HP scaling (for stat-based effects) is resolved by resolveEffectArgs, which reads
+//   LEVELED_EFFECTS.effectDamageType — not SkillEffectBlock.damageType.
+// - Queue rebuild only happens when the resolved effect has a non-zero initiativeBonus.
 function applyLegacyEffectBlock(input: {
   state: BattleState;
   skill: Skill;
@@ -268,9 +276,17 @@ function applyLegacyEffectBlock(input: {
 
 // ─── Enchantment heal step ────────────────────────────────────────────────────
 
-// Compatibility: enchantment-targeted skills currently always attempt healing.
-// getSkillHitCellsForSkill falls back to a single-cell matrix if damageBlock is
-// absent. Healing currently uses caster.magicalDamage. This is not the future skill model.
+// Compatibility healing step for enchantment-targeted skills.
+//
+// Current rules (not the future model):
+// - mass_enchantment / self_enchantment are targeting categories, not inherent heal semantics.
+//   The heal is a current compatibility rule: enchantment-targeted skill => healing step runs.
+// - Hit pattern comes from getSkillHitCellsForSkill, which falls back to the single-cell
+//   matrix when damageBlock is absent — so this step always runs, even with no damageBlock.
+// - Heal amount uses caster.magicalDamage directly (not effectiveStats). This is legacy
+//   scaling; the future model should express this as an explicit power source.
+// - DamageBlock.damageType is NOT read for heal amount. The damageType field on damageBlock
+//   is irrelevant to the heal path.
 function applyLegacyEnchantmentHealing(input: {
   state: BattleState;
   casterId: string;
@@ -301,14 +317,18 @@ function applyLegacyEnchantmentHealing(input: {
 
 // ─── Hostile damage step ──────────────────────────────────────────────────────
 
-// Compatibility: hostile skills always resolve a damage step, even without damageBlock.
-// damageBlock?.damageType ?? "physical" selects both the stat branch and defense branch.
-// getSkillHitCellsForSkill falls back to a single-cell matrix when damageBlock is absent.
-// Future model will express stat selection as powerSource.
+// Damage step for hostile-targeted skills.
 //
-// Forward note for Stage 7: compileLegacySkill must include a compatibility rule:
-// hostile skill without damageBlock → legacy fallback physical single damage action.
-// Omitting this would silently convert "fallback physical attack + debuff" into "pure debuff".
+// Current rules (not the future model):
+// - Hostile skills always resolve a damage step, even when damageBlock is absent.
+// - Missing damageBlock falls back to single-cell physical damage (via getSkillHitCellsForSkill).
+//   This fallback must be preserved during normalization — hostile skills without damageBlock
+//   are not pure-effect skills; they silently carry a physical damage action.
+// - damageBlock?.damageType ?? "physical" selects BOTH the source stat branch AND the defense branch:
+//     physical => caster.physicalDamage vs target.physicalDefense
+//     magical  => caster.magicalDamage  vs target.magicalDefense
+// - effectiveStats() is used for attacker stats (unlike enchantment healing which uses raw magicalDamage).
+// - Future model should replace the damageType-selects-both coupling with an explicit power source.
 function applyLegacyHostileDamage(input: {
   state: BattleState;
   casterId: string;

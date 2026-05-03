@@ -232,11 +232,18 @@ export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
   },
 };
 
-// ─── Named Leveled Effects ────────────────────────────────────────────────────
+// ─── Leveled Effect Definitions ───────────────────────────────────────────────
 //
-// Two modes (mutually exclusive):
-// - effectDamageType → per-turn value = casterStat × effect matrix anchor multiplier
-// - bonusByLevel     → fixed defense bonus magnitude per level; sign from base Effect
+// Defines per-turn HP scaling and stat bonus magnitudes for named effects.
+//
+// effectDamageType — current legacy scaling metadata for stat-based per-turn HP effects:
+//   "physical" => resolveEffectArgs reads caster.physicalDamage
+//   "magical"  => resolveEffectArgs reads caster.magicalDamage
+//   This is current compatibility naming; future skill plans should compile this into
+//   an explicit per-turn scaling action with a power source.
+//
+// bonusByLevel — fixed-magnitude stat modifiers indexed by (level - 1).
+//   No stat scaling. Sign is inherited from the base Effect in EFFECTS.
 
 export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
   regeneration: {
@@ -322,7 +329,8 @@ export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
 
 // ─── Named Instant Effect Matrices ───────────────────────────────────────────
 //
-// Cell values (damageMultiplier) represent success PROBABILITY (0–1).
+// Cell values are stored in damageMultiplier but represent success PROBABILITY (0–1),
+// not a damage scaling factor. Instant effects are not damage; they are provoke/distract.
 // Dodge / block / defense do NOT apply to this roll.
 // levels[0] = level 1, levels[1] = level 2, etc.
 

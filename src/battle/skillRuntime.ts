@@ -52,8 +52,14 @@ export function isEnchantmentSkill(skill: Skill): boolean {
  * Resolves the Effect object and computedPerTurn for a skill's effectBlock.
  * Caller must only invoke this when skill.effectBlock is defined.
  *
- * - Stat-based effects (regeneration / lose_health): computedPerTurn = casterStat × matrix multiplier
- * - Defense-only effects (fortify / weaken / etc.): returns Effect copy with level-specific bonus
+ * Current scaling rules (legacy coupling — not the future model):
+ * - Stat-based effects (e.g. regeneration, lose_health): LEVELED_EFFECTS.effectDamageType selects
+ *   the scaling source — "physical" reads caster.physicalDamage, "magical" reads caster.magicalDamage.
+ *   computedPerTurn = selectedStat × anchorCell.damageMultiplier
+ * - SkillEffectBlock.damageType does NOT select the scaling source today. It is a preserved data
+ *   contract field; the runtime ignores it for scaling.
+ * - Bonus-by-level effects (fortify / weaken / etc.): fixed magnitude per level from bonusByLevel[].
+ *   No stat scaling.
  */
 interface DamageOwner { physicalDamage: number; magicalDamage: number; }
 export function resolveEffectArgs(skill: Skill, caster: DamageOwner): [Effect, number | undefined] {

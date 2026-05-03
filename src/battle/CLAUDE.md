@@ -60,3 +60,27 @@ returned to `src/core` for phase transition or rendering
 - change unit shape/size → [shapes.ts](shapes.ts)
 - change initial field layout at battle start → [autoPlace.ts](autoPlace.ts)
 - add a new battle-time type → [types.ts](types.ts)
+
+## Current Skill Runtime Semantics
+
+The skill executor in `skillExecution.ts` has legacy couplings that will be normalized in a later stage.
+
+**Targeting vs. effect semantics**
+- `actionType` is a targeting category: `melee`/`ranged` = hostile, `mass_enchantment`/`self_enchantment` = friendly/self.
+- `mass_enchantment` and `self_enchantment` are NOT heal semantics. Healing is a current compatibility rule:
+  enchantment-targeted skill => healing step always runs (via `getSkillHitCellsForSkill` including fallback).
+
+**Power source coupling**
+- `physicalDamage` / `magicalDamage` are the current legacy scaling field names.
+- `damageBlock.damageType` currently selects both the source stat and the defense branch for hostile damage.
+- `LEVELED_EFFECTS.effectDamageType` selects the scaling source for per-turn HP effects, not `SkillEffectBlock.damageType`.
+
+**effectBlock is shared**
+- `effectBlock` is independent from heal/damage. Both enchantment-targeted and hostile-targeted skills can carry one.
+
+**Hostile fallback**
+- Hostile skills without `damageBlock` still execute a physical single-cell damage step. This is current behavior,
+  not a bug. Any normalization must preserve this fallback explicitly.
+
+Future work: normalize skills into targeting policy, actions, and power source while preserving current runtime behavior
+until an explicit migration of skill definitions.
