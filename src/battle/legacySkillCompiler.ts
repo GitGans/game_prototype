@@ -140,6 +140,11 @@ function compileLegacyEffectActions(skill: Skill): SkillUseAction[] {
   ];
 }
 
+/**
+ * @internal Use compileSkillUsePlan from skillPlanCompiler.ts instead.
+ * This is the legacy adapter for current Skill definitions.
+ * Only skillPlanCompiler.ts should call this directly.
+ */
 export function compileLegacySkill(skill: Skill): SkillUsePlan {
   const targetPolicy = compileTargetPolicy(skill);
   const actions: SkillUseAction[] = [];

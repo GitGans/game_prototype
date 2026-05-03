@@ -1,5 +1,5 @@
 import { Skill, UnitProgressionStatModifiers, UnitUpgradeOption } from '../battle/types';
-import { compileLegacySkill } from '../battle/legacySkillCompiler';
+import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import type { SkillUseAction, SkillUsePlan } from '../battle/skillUsePlan';
 import type {
   SkillIconColorKind,
@@ -71,7 +71,7 @@ function powerColorKindFromAction(action: SkillUseAction): SkillIconColorKind | 
 
 // ─── Public plan helpers ─────────────────────────────────────────────────────
 
-// First powered action wins. For skills with immediate damage + DoT, compileLegacySkill
+// First powered action wins. For skills with immediate damage + DoT, compileSkillUsePlan
 // emits damage first, so color matches legacy damageBlock.damageType behavior.
 export function getSkillPlanColorKind(plan: SkillUsePlan): SkillIconColorKind {
   for (const action of plan.actions) {
@@ -134,11 +134,11 @@ export function buildSkillTagFromPlan(plan: SkillUsePlan): string {
 // ─── Public factories ─────────────────────────────────────────────────────────
 
 export function buildSkillDescription(skill: Skill): string {
-  return buildSkillDescriptionFromPlan(compileLegacySkill(skill));
+  return buildSkillDescriptionFromPlan(compileSkillUsePlan(skill));
 }
 
 export function buildSkillIconSnapshot(skill: Skill): SkillIconSnapshot {
-  const plan = compileLegacySkill(skill);
+  const plan = compileSkillUsePlan(skill);
   return {
     id:          skill.id,
     name:        skill.name,

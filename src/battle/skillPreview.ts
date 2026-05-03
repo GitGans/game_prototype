@@ -11,7 +11,7 @@ import { computeDamageVsUnit } from './combat';
 import { resolvePattern } from './skillPatterns';
 import { getDamageModifierPercent } from './skillDefinitionRuntime';
 import { cellKey } from './field';
-import { compileLegacySkill } from './legacySkillCompiler';
+import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
 import {
   getRawUnitPower,
@@ -230,6 +230,6 @@ export function buildSkillPreviewModel(
   if (!activeUnit) return null;
 
   const skill = getActiveSkill(activeUnit);
-  const plan = compileLegacySkill(skill);
+  const plan = compileSkillUsePlan(skill);
   return buildSkillPreviewModelFromPlan(plan, input);
 }

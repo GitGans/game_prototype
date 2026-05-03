@@ -3,7 +3,7 @@ import { getActiveSkill } from './skillRuntime';
 import { buildRoundQueue, pruneQueue } from './initiative';
 import { tickEffects } from './combat';
 import type { EffectEvent } from './combat';
-import { compileLegacySkill } from './legacySkillCompiler';
+import { compileSkillUsePlan } from './skillPlanCompiler';
 import {
   isEnemyMeleeTargetPolicy,
   isFriendlyOrSelfTargetPolicy,
@@ -275,7 +275,7 @@ export function resolveActiveTurnStart(input: {
 
   // 8. Player unit in manual mode
   const currentSkill  = getActiveSkill(currentUnit);
-  const currentPlan   = compileLegacySkill(currentSkill);
+  const currentPlan   = compileSkillUsePlan(currentSkill);
   const validTargets  = resolveSkillTargetsForPolicy(
     currentUnit,
     currentPlan.targetPolicy,
@@ -338,7 +338,7 @@ export function switchActiveSkillForManualTurn(input: {
   units.set(unitId, updatedUnit);
 
   const activeSkill  = updatedUnit.skills[skillIndex] ?? updatedUnit.skills[0];
-  const activePlan   = compileLegacySkill(activeSkill);
+  const activePlan   = compileSkillUsePlan(activeSkill);
   const validTargets = resolveSkillTargetsForPolicy(
     updatedUnit,
     activePlan.targetPolicy,

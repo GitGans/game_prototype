@@ -40,7 +40,7 @@ import {
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
 import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
-import { compileLegacySkill } from '../battle/legacySkillCompiler';
+import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
@@ -346,7 +346,7 @@ class PhaseManagerClass {
         let targetHighlightKind: 'target' | 'heal_target' | 'none' = 'none';
         if (activeUnit && battleState.validTargets.length > 0) {
           const activeSkill = getActiveSkill(activeUnit);
-          const activePlan  = compileLegacySkill(activeSkill);
+          const activePlan  = compileSkillUsePlan(activeSkill);
           targetHighlightKind = isFriendlyOrSelfTargetPolicy(activePlan.targetPolicy)
             ? 'heal_target'
             : 'target';

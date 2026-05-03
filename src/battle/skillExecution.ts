@@ -13,7 +13,7 @@ import {
 import {
   getActiveSkill,
 } from "./skillRuntime";
-import { compileLegacySkill } from './legacySkillCompiler';
+import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
 import {
   getDamageTypeForPowerSource,
@@ -428,7 +428,7 @@ function resolveProvokeCounterAttack(input: {
     };
   }
 
-  const plan = compileLegacySkill(counterSkill);
+  const plan = compileSkillUsePlan(counterSkill);
 
   const validTargets = resolveSkillTargetsForPolicy(
     provokedUnit,
@@ -640,7 +640,7 @@ function executeSkillUsePlan(input: SkillUsePlanExecutionInput): SkillExecutionR
  * Applies a skill use to the given state and returns the resulting state + event log.
  * Battle-layer only — no Phaser, no GameState, no EventBus.
  *
- * Execution order comes from SkillUsePlan.actions, compiled by compileLegacySkill.
+ * Execution order comes from SkillUsePlan.actions, compiled by compileSkillUsePlan.
  *
  * Does NOT call: advanceTurn, tickEffects, checkGameOver.
  */
@@ -648,7 +648,7 @@ export function executeSkillUse(input: SkillExecutionInput): SkillExecutionResul
   const resolved = resolveCasterAndSkill(input);
   if (!resolved) return { state: input.state, events: [] };
 
-  const plan = compileLegacySkill(resolved.skill);
+  const plan = compileSkillUsePlan(resolved.skill);
 
   return executeSkillUsePlan({
     plan,

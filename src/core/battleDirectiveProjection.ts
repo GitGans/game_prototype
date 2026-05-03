@@ -1,6 +1,6 @@
 import type { TurnStartDirective } from '../battle/turnResolver';
 import { getActiveSkill } from '../battle/skillRuntime';
-import { compileLegacySkill } from '../battle/legacySkillCompiler';
+import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 import type {
@@ -36,6 +36,6 @@ export function resolveManualTargetPromptKindForUnit(
 ): ManualTargetPromptKind | null {
   const skill = getActiveSkill(unit);
   if (!skill) return null;
-  const plan = compileLegacySkill(skill);
+  const plan = compileSkillUsePlan(skill);
   return isFriendlyOrSelfTargetPolicy(plan.targetPolicy) ? 'heal' : 'attack';
 }

@@ -6,7 +6,7 @@ import {
   resolveRandomSkillIndex,
   resolveRandomTarget,
 } from './skillRuntime';
-import { compileLegacySkill } from './legacySkillCompiler';
+import { compileSkillUsePlan } from './skillPlanCompiler';
 import { isFriendlyOrSelfTargetPolicy } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 import { executeSkillUse } from './skillExecution';
@@ -43,7 +43,7 @@ export function computeOneTurn(
   state = { ...state, units: updatedUnits };
 
   const skill    = getActiveSkill(updatedUnit);
-  const plan     = compileLegacySkill(skill);
+  const plan     = compileSkillUsePlan(skill);
   const targets  = resolveSkillTargetsForPolicy(updatedUnit, plan.targetPolicy, state.occupancy);
 
   const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)

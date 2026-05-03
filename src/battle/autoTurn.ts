@@ -6,7 +6,7 @@ import {
   resolveRandomSkillIndex,
   resolveRandomTarget,
 } from './skillRuntime';
-import { compileLegacySkill } from './legacySkillCompiler';
+import { compileSkillUsePlan } from './skillPlanCompiler';
 import {
   isEnemyMeleeTargetPolicy,
   isFriendlyOrSelfTargetPolicy,
@@ -53,7 +53,7 @@ export function decideAutoTurn(input: {
   const skillIndex  = resolveRandomSkillIndex(activeUnit, rng);
   const updatedUnit = { ...activeUnit, activeSkillIndex: skillIndex };
   const skill       = getActiveSkill(updatedUnit);
-  const plan        = compileLegacySkill(skill);
+  const plan        = compileSkillUsePlan(skill);
   const targets     = resolveSkillTargetsForPolicy(updatedUnit, plan.targetPolicy, state.occupancy);
 
   if (targets.length === 0) {
