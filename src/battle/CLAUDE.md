@@ -63,21 +63,21 @@ returned to `src/core` for phase transition or rendering
 
 ## Current Skill Runtime Semantics
 
-`compileLegacySkill` in `skillUsePlan.ts` is the single remaining legacy coupling point.
-It adapts legacy `Skill` definitions into `SkillUsePlan`. The executor (`skillExecution.ts`)
-and counter-attack both run through `SkillUsePlan` exclusively. `Skill.actionType` is read
+`compileSkillUsePlan` in `skillPlanCompiler.ts` is the public entry point for compiling skill semantics into `SkillUsePlan`.
+It delegates to `compileLegacySkill` (`legacySkillCompiler.ts`), which is `@internal` and should not be called directly.
+The executor (`skillExecution.ts`) and counter-attack both run through `SkillUsePlan` exclusively. `Skill.actionType` is read
 only inside `compileLegacySkill`.
 
 **Targeting (Stage 11+)**
 - `SkillUsePlan.targetPolicy` is authoritative for target resolution, auto/quick target choice,
   manual prompt kind, and target highlight kind.
-- Legacy `Skill.actionType` maps to target policy inside `compileLegacySkill`:
+- Legacy `Skill.actionType` maps to target policy inside `compileLegacySkill` (called via `compileSkillUsePlan`):
   `melee` → `enemy_melee`, `ranged` → `enemy_ranged`,
   `mass_enchantment` → `friendly`, `self_enchantment` → `self`.
 
 **Targeting vs. effect semantics**
 - `mass_enchantment` and `self_enchantment` are NOT heal semantics. Healing is a current
-  compatibility rule: enchantment-targeted skills produce a `heal` action in `compileLegacySkill`.
+  compatibility rule: enchantment-targeted skills produce a `heal` action in `compileLegacySkill` (via `compileSkillUsePlan`).
 
 **Power source coupling**
 - `physicalDamage` / `magicalDamage` are the current legacy scaling field names.

@@ -15,10 +15,27 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 - `gridTypes.ts` — Grid geometry: `Side`, `Row`, `Col`, `CellCoord`, `UnitShape`
 - `unitTypes.ts` — Unit blueprints: `UnitBlueprint`, `UnitBattleStats`, `UnitClass`, `UnitUpgradeTier`
 - `skillTypes.ts` — Skill contracts: `Skill`, `Effect`, `DamageBlock`, `SkillPattern`, `DamageType`
+- `skillDefinitionTypes.ts` — Future authoring contract: `ActionSkillDefinition`, action types, target policy types, matrix refs, power source types
 - `itemTypes.ts` — Item/equipment: `ItemDefinition`, `ItemInstance`, `ItemContainer`, `EquipSlot`
 - `snapshotTypes.ts` — UI projections: `UnitStatsSnapshot`, `SkillIconSnapshot`, `BackpackSnapshot`, `EquipmentSnapshot`
 - `battleSnapshots.ts` — Battle-phase projections: `BenchUnitSnapshot` (rebuilt dynamically per phase)
 - `worldTypes.ts` — Map contracts: `SubMapDefinition`, `SubMapState`, `LayoutCell`, `MapEntityType`
+
+## Skill Contract Layers
+
+Two separate contracts govern skills at different stages of processing:
+
+- **`skillTypes.ts`** — legacy `Skill` type (current data input). Still used by all existing `SKILLS`
+  definitions and consumed by `compileLegacySkill` inside the compiler.
+- **`skillDefinitionTypes.ts`** — `ActionSkillDefinition` (future authoring contract). Stores intent
+  and registry refs; does not contain resolved runtime objects. The compiler
+  (`compileSkillUsePlan`) will map it to a `SkillUsePlan` (Stage 17+).
+- **`src/battle/skillUsePlan.ts`** — `SkillUsePlan` (runtime contract). Used by executor, preview,
+  targeting, and presentation. This is the contract all consumers already use.
+
+Stage 16 adds `skillDefinitionTypes.ts` only. Existing `SKILLS` and `compileSkillUsePlan` are
+unchanged. Matrix and effect names are unresolved string registry references at the contract layer;
+resolution happens in the compiler.
 
 ## Structural Role
 `shared/` → foundation layer; all other folders depend on it, it depends on nothing

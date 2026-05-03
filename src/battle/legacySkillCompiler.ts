@@ -1,10 +1,10 @@
 import type {
   DamageType,
-  Effect,
   Skill,
   SkillEffectBlock,
 } from '../shared/skillTypes';
 import { LEVELED_EFFECTS } from '../data/skillDefinitions';
+import { resolveLeveledStatEffect } from './skillEffectCompiler';
 import {
   isFriendlyOrSelfTargetPolicy,
   isHostileTargetPolicy,
@@ -59,35 +59,6 @@ function compileLegacyDamagePatternRef(skill: Skill): DamagePatternRef {
   return { kind: 'damage_matrix', matrixName: 'single', level: 1 };
 }
 
-// Mirrors resolveEffectArgs legacy bonus resolution.
-function resolveLegacyStatEffect(block: SkillEffectBlock): Effect {
-  const def = LEVELED_EFFECTS[block.effectName];
-  if (!def) {
-    throw new Error(`Unknown leveled effect: ${block.effectName}`);
-  }
-  if (!def.bonusByLevel) {
-    return def.effect;
-  }
-  const bonus = def.bonusByLevel[block.level - 1] ?? def.bonusByLevel[0];
-  const base = def.effect;
-  const resolved: Effect = { ...base };
-  const bonusFields = [
-    'physicalDefenseBonus',
-    'magicalDefenseBonus',
-    'dodgeBonus',
-    'blockBonus',
-    'initiativeBonus',
-    'physicalDamageBonus',
-    'magicalDamageBonus',
-  ] as const;
-  for (const field of bonusFields) {
-    if (base[field] !== undefined) {
-      (resolved as unknown as Record<string, number>)[field] =
-        Math.sign(base[field]!) * bonus;
-    }
-  }
-  return resolved;
-}
 
 function compileLegacyEffectActions(skill: Skill): SkillUseAction[] {
   if (!skill.effectBlock) {
@@ -124,7 +95,7 @@ function compileLegacyEffectActions(skill: Skill): SkillUseAction[] {
       {
         type: 'apply_stat_effect',
         effectBlock: block,
-        resolvedEffect: resolveLegacyStatEffect(block),
+        resolvedEffect: resolveLeveledStatEffect(block.effectName, block.level),
         matrix,
       },
     ];
