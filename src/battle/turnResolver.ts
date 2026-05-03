@@ -3,8 +3,8 @@ import { getActiveSkill } from './skillRuntime';
 import { buildRoundQueue, pruneQueue } from './initiative';
 import { tickEffects } from './combat';
 import type { EffectEvent } from './combat';
+import { compileLegacySkill } from './legacySkillCompiler';
 import {
-  compileLegacySkill,
   isEnemyMeleeTargetPolicy,
   isFriendlyOrSelfTargetPolicy,
 } from './skillUsePlan';

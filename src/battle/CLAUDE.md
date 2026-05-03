@@ -63,35 +63,46 @@ returned to `src/core` for phase transition or rendering
 
 ## Current Skill Runtime Semantics
 
-The skill executor in `skillExecution.ts` has legacy couplings that will be normalized in a later stage.
+`compileLegacySkill` in `skillUsePlan.ts` is the single remaining legacy coupling point.
+It adapts legacy `Skill` definitions into `SkillUsePlan`. The executor (`skillExecution.ts`)
+and counter-attack both run through `SkillUsePlan` exclusively. `Skill.actionType` is read
+only inside `compileLegacySkill`.
 
-**Targeting bridge (Stage 11+)**
-- `SkillUsePlan.targetPolicy` is authoritative for target resolution, auto/quick target choice, manual prompt kind, and target highlight kind.
-- Legacy `Skill.actionType` is interpreted only by `compileLegacySkill` in `skillUsePlan.ts`. Battle and control paths must not use it directly for targeting semantics.
+**Targeting (Stage 11+)**
+- `SkillUsePlan.targetPolicy` is authoritative for target resolution, auto/quick target choice,
+  manual prompt kind, and target highlight kind.
+- Legacy `Skill.actionType` maps to target policy inside `compileLegacySkill`:
+  `melee` → `enemy_melee`, `ranged` → `enemy_ranged`,
+  `mass_enchantment` → `friendly`, `self_enchantment` → `self`.
 
 **Targeting vs. effect semantics**
-- `actionType` is a targeting category: `melee`/`ranged` = hostile, `mass_enchantment`/`self_enchantment` = friendly/self.
-- `mass_enchantment` and `self_enchantment` are NOT heal semantics. Healing is a current compatibility rule:
-  enchantment-targeted skill => healing step always runs (via `getSkillHitCellsForSkill` including fallback).
+- `mass_enchantment` and `self_enchantment` are NOT heal semantics. Healing is a current
+  compatibility rule: enchantment-targeted skills produce a `heal` action in `compileLegacySkill`.
 
 **Power source coupling**
 - `physicalDamage` / `magicalDamage` are the current legacy scaling field names.
-- `damageBlock.damageType` currently selects both the source stat and the defense branch for hostile damage.
-- `LEVELED_EFFECTS.effectDamageType` selects the scaling source for per-turn HP effects, not `SkillEffectBlock.damageType`.
+- `damageBlock.damageType` currently selects both the source stat and the defense branch for
+  hostile damage.
+- `LEVELED_EFFECTS.effectDamageType` selects the scaling source for per-turn HP effects,
+  not `SkillEffectBlock.damageType`.
 
 **effectBlock is shared**
-- `effectBlock` is independent from heal/damage. Both enchantment-targeted and hostile-targeted skills can carry one.
+- `effectBlock` is independent from heal/damage. Both enchantment-targeted and hostile-targeted
+  skills can carry one.
 
 **Hostile fallback**
-- Hostile skills without `damageBlock` still execute a physical single-cell damage step. This is current behavior,
-  not a bug. Any normalization must preserve this fallback explicitly.
+- Hostile skills without `damageBlock` still execute a physical single-cell damage step.
+  This is current behavior, not a bug. Any normalization must preserve this fallback explicitly.
 
 **Periodic HP direction bridge (Stage 10+)**
 - `ActiveEffect.periodicHp` is authoritative for runtime HP tick direction when present.
 - `computedPerTurn + effect.isBuff` is the legacy fallback for pre-plan active effects.
-- `effect.isBuff` is presentation/classification metadata. After Stage 10 it does NOT determine tick direction for any active effect produced by `executeSkillUsePlan`.
-- `tickEffects` uses `resolveActiveEffectPeriodicHp()` from `shared/activeEffect` for the compatibility resolution.
-- `computedPerTurn` is intentionally retained as a temporary bridge. See TODO in `shared/activeEffect.ts`.
+- `effect.isBuff` is presentation/classification metadata. After Stage 10 it does NOT determine
+  tick direction for any active effect produced by `executeSkillUsePlan`.
+- `tickEffects` uses `resolveActiveEffectPeriodicHp()` from `shared/activeEffect` for the
+  compatibility resolution.
+- `computedPerTurn` is intentionally retained as a temporary bridge.
+  See TODO in `shared/activeEffect.ts`.
 
-Future work: normalize skills into targeting policy, actions, and power source while preserving current runtime behavior
-until an explicit migration of skill definitions.
+Remaining work: migrate skill definitions away from the legacy `Skill` shape so
+`compileLegacySkill` can be removed.

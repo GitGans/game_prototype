@@ -6,8 +6,8 @@ import {
   resolveRandomSkillIndex,
   resolveRandomTarget,
 } from './skillRuntime';
+import { compileLegacySkill } from './legacySkillCompiler';
 import {
-  compileLegacySkill,
   isEnemyMeleeTargetPolicy,
   isFriendlyOrSelfTargetPolicy,
 } from './skillUsePlan';

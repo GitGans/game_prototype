@@ -8,25 +8,21 @@ import {
   resolveHealWithEvents,
   applyEffectBlock,
   applyVampirism,
-  effectiveStats,
   resolveInstantEffects,
 } from "./combat";
 import {
   getActiveSkill,
 } from "./skillRuntime";
+import { compileLegacySkill } from './legacySkillCompiler';
+import { resolvePlanPattern } from './skillPlanPatterns';
 import {
-  getSkillPattern,
-} from "./skillDefinitionRuntime";
-import {
-  compileLegacySkill,
   getDamageTypeForPowerSource,
   getEffectiveUnitPower,
   getRawUnitPower,
-  resolvePlanPattern,
-} from './skillUsePlan';
+} from './skillPower';
 import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
 import type { PeriodicHp } from '../shared/activeEffect';
-import { getMeleeTargets, getRangedTargets } from "./targeting";
+import { resolveSkillTargetsForPolicy } from "./targeting";
 import { rebuildRemainingQueue } from "./initiative";
 import { resolvePattern } from "./skillPatterns";
 import type { Rng } from '../shared/random';
@@ -203,45 +199,6 @@ function mapInstantEffectEventsToBattleEvents(events: InstantEffectEvent[]): Bat
   return result;
 }
 
-function mapCounterAttackEventsToBattleEvents(
-  events: CombatEvent[],
-  attackerId: string,
-  attackerName: string,
-): BattleEvent[] {
-  const result: BattleEvent[] = [];
-  for (const e of events) {
-    if (e.type === "hit") {
-      result.push({
-        type: "counter_attack_hit",
-        attackerId,
-        attackerName,
-        targetId: e.unitId,
-        targetName: e.unitName,
-        amount: e.damage,
-        blocked: false,
-      });
-    } else if (e.type === "blocked") {
-      result.push({
-        type: "counter_attack_hit",
-        attackerId,
-        attackerName,
-        targetId: e.unitId,
-        targetName: e.unitName,
-        amount: e.damage,
-        blocked: true,
-      });
-    } else if (e.type === "dodged") {
-      result.push({
-        type: "counter_attack_dodged",
-        attackerId,
-        attackerName,
-        targetId: e.unitId,
-        targetName: e.unitName,
-      });
-    }
-  }
-  return result;
-}
 
 // ─── Plan action runners ──────────────────────────────────────────────────────
 
@@ -417,100 +374,113 @@ function executeApplyPeriodicHpEffectAction(input: {
 
 // ─── Counter-attack step ──────────────────────────────────────────────────────
 
-function resolveLegacyProvokeCounterAttack(input: {
+function resolveProvokeCounterAttack(input: {
   state: BattleState;
   casterId: string;
   provokedUnitId: string;
+  queueContext: SkillExecutionInput['queueContext'];
   rng: Rng;
 }): SkillExecutionStepResult {
-  const { casterId, provokedUnitId, rng } = input;
+  const { casterId, provokedUnitId, queueContext, rng } = input;
   let state = input.state;
-  const events: BattleEvent[] = [];
 
   const provokedUnit = state.units.get(provokedUnitId);
-  if (!provokedUnit) return { state, events };
+  if (!provokedUnit) return { state, events: [] };
 
-  // Remove provoked unit from queue before any checks.
+  // Re-check queue eligibility at dispatch time because nested counter-attacks
+  // can consume units that were eligible when the original instant-effect list
+  // was resolved.
+  const canStillAct = state.roundQueue.slice(1).includes(provokedUnitId);
+  if (!canStillAct) return { state, events: [] };
+
+  // Counter-attack is an interrupt inside the original actor's turn.
+  // Do not promote the counter-attacker to roundQueue[0].
+  // The provoked unit is removed from roundQueue before executing its first skill,
+  // so instant effects can only consume turns from units still in roundQueue.slice(1).
   state = {
     ...state,
     roundQueue: state.roundQueue.filter((id) => id !== provokedUnitId),
   };
 
-  const caster = state.units.get(casterId);
-  if (!caster || caster.hp <= 0) {
-    events.push({
-      type: "counter_attack_unavailable",
-      unitId: provokedUnitId,
-      unitName: provokedUnit.name,
-      reason: "caster_dead",
-    });
-    return { state, events };
+  const originalCaster = state.units.get(casterId);
+  if (!originalCaster || originalCaster.hp <= 0) {
+    return {
+      state,
+      events: [{
+        type: "counter_attack_unavailable",
+        unitId: provokedUnitId,
+        unitName: provokedUnit.name,
+        reason: "caster_dead",
+      }],
+    };
   }
 
-  const basicSkill = provokedUnit.skills.find(
-    (s) => s.actionType === "melee" || s.actionType === "ranged",
+  const counterSkill = provokedUnit.skills[0];
+  if (!counterSkill) {
+    return {
+      state,
+      events: [{
+        type: "counter_attack_unavailable",
+        unitId: provokedUnitId,
+        unitName: provokedUnit.name,
+        reason: "no_basic_attack",
+      }],
+    };
+  }
+
+  const plan = compileLegacySkill(counterSkill);
+
+  const validTargets = resolveSkillTargetsForPolicy(
+    provokedUnit,
+    plan.targetPolicy,
+    state.occupancy,
   );
-  if (!basicSkill?.damageBlock) {
-    events.push({
-      type: "counter_attack_unavailable",
-      unitId: provokedUnitId,
-      unitName: provokedUnit.name,
-      reason: "no_basic_attack",
-    });
-    return { state, events };
-  }
-
-  const validTargets =
-    basicSkill.actionType === "melee"
-      ? getMeleeTargets(provokedUnit, state.occupancy)
-      : getRangedTargets(provokedUnit.anchor.side, state.occupancy);
 
   const casterIsReachable = validTargets.some(
     (c) =>
-      c.side === caster.anchor.side &&
-      c.row === caster.anchor.row &&
-      c.col === caster.anchor.col,
+      c.side === originalCaster.anchor.side &&
+      c.row === originalCaster.anchor.row &&
+      c.col === originalCaster.anchor.col,
   );
+
   if (!casterIsReachable) {
-    events.push({
-      type: "counter_attack_unavailable",
-      unitId: provokedUnitId,
-      unitName: provokedUnit.name,
-      reason: "out_of_range",
-      targetName: caster.name,
-    });
-    return { state, events };
+    const isHostile =
+      plan.targetPolicy.type === "enemy_melee" ||
+      plan.targetPolicy.type === "enemy_ranged";
+
+    return {
+      state,
+      events: [{
+        type: "counter_attack_unavailable",
+        unitId: provokedUnitId,
+        unitName: provokedUnit.name,
+        reason: isHostile ? "out_of_range" : "no_basic_attack",
+        targetName: isHostile ? originalCaster.name : undefined,
+      }],
+    };
   }
 
-  events.push({
-    type: "counter_attack_start",
-    attackerId: provokedUnitId,
-    attackerName: provokedUnit.name,
-    targetId: caster.id,
-    targetName: caster.name,
+  const counterResult = executeSkillUsePlan({
+    plan,
+    state,
+    casterId: provokedUnit.id,
+    caster: provokedUnit,
+    target: originalCaster.anchor,
+    queueContext,
+    rng,
   });
 
-  const hitCells = resolvePattern(caster.anchor, getSkillPattern(basicSkill));
-  const dmgType = basicSkill.damageBlock.damageType;
-  const provokedStats = effectiveStats(provokedUnit);
-  const baseDmg =
-    dmgType === "physical"
-      ? provokedStats.physicalDamage
-      : provokedStats.magicalDamage;
-
-  const { state: afterCounter, events: counterEvents } = resolveAttack(
-    hitCells,
-    baseDmg,
-    dmgType,
-    state,
-    { rng },
-  );
-
   return {
-    state: afterCounter,
+    state: counterResult.state,
     events: [
-      ...events,
-      ...mapCounterAttackEventsToBattleEvents(counterEvents, provokedUnitId, provokedUnit.name),
+      {
+        type: "counter_attack_start",
+        attackerId: provokedUnitId,
+        attackerName: provokedUnit.name,
+        targetId: originalCaster.id,
+        targetName: originalCaster.name,
+      },
+      ...counterResult.events,
     ],
   };
 }
@@ -522,9 +492,10 @@ function executeInstantEffectAction(input: {
   casterId: string;
   target: CellCoord;
   action: Extract<SkillUseAction, { type: 'instant_effect' }>;
+  queueContext: SkillExecutionInput['queueContext'];
   rng: Rng;
 }): SkillExecutionStepResult {
-  const { casterId, target, action, rng } = input;
+  const { casterId, target, action, queueContext, rng } = input;
 
   const pattern = resolvePlanPattern(action.matrix);
   const {
@@ -551,10 +522,11 @@ function executeInstantEffectAction(input: {
   }
 
   for (const provokedUnitId of provokedUnitIds) {
-    const { state: afterCounter, events: counterEvents } = resolveLegacyProvokeCounterAttack({
+    const { state: afterCounter, events: counterEvents } = resolveProvokeCounterAttack({
       state: next,
       casterId,
       provokedUnitId,
+      queueContext,
       rng,
     });
     next = afterCounter;
@@ -644,6 +616,7 @@ function executeSkillUsePlan(input: SkillUsePlanExecutionInput): SkillExecutionR
           casterId: input.casterId,
           target: input.target,
           action,
+          queueContext: input.queueContext,
           rng: input.rng,
         });
         state = step.state;

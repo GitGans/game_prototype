@@ -11,13 +11,13 @@ import { computeDamageVsUnit } from './combat';
 import { resolvePattern } from './skillPatterns';
 import { getDamageModifierPercent } from './skillDefinitionRuntime';
 import { cellKey } from './field';
+import { compileLegacySkill } from './legacySkillCompiler';
+import { resolvePlanPattern } from './skillPlanPatterns';
 import {
-  compileLegacySkill,
-  resolvePlanPattern,
   getRawUnitPower,
   getEffectiveUnitPower,
   getDamageTypeForPowerSource,
-} from './skillUsePlan';
+} from './skillPower';
 import type { SkillUsePlan } from './skillUsePlan';
 
 export type { SkillPreviewModel } from '../shared/skillPreviewModel';
@@ -125,8 +125,7 @@ export function buildSkillPreviewModelFromPlan(
     // ── Status lines ──────────────────────────────────────────────────────
 
     if (action.type === 'heal') {
-      // Raw power matches applyLegacyEnchantmentHealing (raw, not effective).
-      // legacy_enchantment_heal_power resolves to unit.magicalDamage — see getRawUnitPower.
+      // Heal preview uses raw power, matching the executor — see getRawUnitPower.
       const baseHeal = getRawUnitPower(activeUnit, action.powerSource);
       const pattern = resolvePlanPattern(action.matrix);
       const hitCells = resolvePattern(targetCoord, pattern);
@@ -151,7 +150,7 @@ export function buildSkillPreviewModelFromPlan(
 
     if (action.type === 'damage') {
       const damageType = getDamageTypeForPowerSource(action.powerSource);
-      // getEffectiveUnitPower applies active effects, matching applyLegacyHostileDamage.
+      // getEffectiveUnitPower applies active effects, matching the executor.
       const baseDamage = getEffectiveUnitPower(activeUnit, action.powerSource);
 
       const ignorePercent: Partial<Record<string, number>> = {};

@@ -1,6 +1,7 @@
 import type { TurnStartDirective } from '../battle/turnResolver';
 import { getActiveSkill } from '../battle/skillRuntime';
-import { compileLegacySkill, isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
+import { compileLegacySkill } from '../battle/legacySkillCompiler';
+import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 import type {
   BattleDirectivePresentationInput,

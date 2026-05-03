@@ -515,8 +515,11 @@ export function checkGameOver(state: BattleState): Side | null {
  * For each resolved cell with a unit:
  *   - Roll rng against the cell's probability (multiplier field).
  *   - If the roll fails → emit instant_effect_failed event, skip unit.
- *   - If the unit is NOT in roundQueue[1..] (already acted) → skip silently.
- *   - If success and unit is in queue → classify as provoked or distracted.
+ *   - If the roll succeeds → emit instant_effect_applied event.
+ *   - If the unit is NOT in roundQueue[1..] (already acted or current actor) →
+ *     effect lands but produces no forced-turn side effect (unit not added to
+ *     provokedUnitIds / distractedUnitIds).
+ *   - If the unit IS in roundQueue[1..] → classify as provoked or distracted.
  *
  * Does NOT mutate roundQueue — caller handles queue removal and counter-attacks.
  */
@@ -566,15 +569,16 @@ export function resolveInstantEffects(
       continue;
     }
 
-    // Only affects units that still have a turn this round
-    if (!remainingSet.has(unit.id)) continue;
-
+    // Roll succeeded — the effect lands regardless of turn eligibility.
     events.push({
       type: "instant_effect_applied",
       unitId: unit.id,
       unitName: unit.name,
       displayName: block.displayName,
     });
+
+    // Only produces a forced-turn side effect for units that still have a turn this round.
+    if (!remainingSet.has(unit.id)) continue;
 
     if (block.instantEffectType === "provoke") {
       provokedUnitIds.push(unit.id);

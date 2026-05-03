@@ -1,9 +1,6 @@
 import { Skill, UnitProgressionStatModifiers, UnitUpgradeOption } from '../battle/types';
-import {
-  compileLegacySkill,
-  type SkillUseAction,
-  type SkillUsePlan,
-} from '../battle/skillUsePlan';
+import { compileLegacySkill } from '../battle/legacySkillCompiler';
+import type { SkillUseAction, SkillUsePlan } from '../battle/skillUsePlan';
 import type {
   SkillIconColorKind,
   SkillIconSnapshot,

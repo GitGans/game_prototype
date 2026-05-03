@@ -40,7 +40,8 @@ import {
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
 import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
-import { compileLegacySkill, isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
+import { compileLegacySkill } from '../battle/legacySkillCompiler';
+import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';

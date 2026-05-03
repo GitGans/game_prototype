@@ -120,25 +120,6 @@ function presentBattleEvent(
         },
       };
 
-    case 'counter_attack_hit':
-      return {
-        floatingText: { unitId: event.targetId, kind: 'damage', amount: event.amount },
-        logEntry: {
-          text: event.blocked
-            ? `${event.attackerName} counter-attacks ${event.targetName} — blocked! -${event.amount}`
-            : `${event.attackerName} counter-attacks ${event.targetName} -${event.amount}`,
-          type: 'neutral',
-        },
-      };
-
-    case 'counter_attack_dodged':
-      return {
-        logEntry: {
-          text: `${event.targetName} dodged the counter-attack!`,
-          type: 'neutral',
-        },
-      };
-
     case 'counter_attack_unavailable':
       return {
         logEntry: {

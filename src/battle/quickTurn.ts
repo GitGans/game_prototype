@@ -6,10 +6,8 @@ import {
   resolveRandomSkillIndex,
   resolveRandomTarget,
 } from './skillRuntime';
-import {
-  compileLegacySkill,
-  isFriendlyOrSelfTargetPolicy,
-} from './skillUsePlan';
+import { compileLegacySkill } from './legacySkillCompiler';
+import { isFriendlyOrSelfTargetPolicy } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 import { executeSkillUse } from './skillExecution';
 

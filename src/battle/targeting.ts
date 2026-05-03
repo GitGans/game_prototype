@@ -1,7 +1,6 @@
-import { CellCoord, Col, OccupancyMap, Row, Side, Skill, Unit } from './types';
+import { CellCoord, Col, OccupancyMap, Row, Side, Unit } from './types';
 import { cellKey } from './field';
 import type { SkillTargetPolicy } from './skillUsePlan';
-import { compileLegacySkill } from './skillUsePlan';
 
 const ENEMY_SIDE: Record<Side, Side> = {
   player: 'enemy',
@@ -120,13 +119,3 @@ export function resolveSkillTargetsForPolicy(
   }
 }
 
-// Legacy convenience wrapper. New control-flow code should prefer
-// compileLegacySkill(...) + resolveSkillTargetsForPolicy(...).
-export function resolveSkillTargets(
-  unit: Unit,
-  skill: Skill,
-  occupancy: OccupancyMap,
-): CellCoord[] {
-  const plan = compileLegacySkill(skill);
-  return resolveSkillTargetsForPolicy(unit, plan.targetPolicy, occupancy);
-}

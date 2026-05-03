@@ -33,17 +33,8 @@ export type BattleEvent =
   | { type: 'unit_distracted';
       unitId: string; unitName: string }
 
-  // ── Counter-attack flow (one sequence per provoked unit) ────────────
+  // ── Counter-attack flow ──────────────────────────────────────────────
   | { type: 'counter_attack_start';
-      attackerId: string; attackerName: string;
-      targetId: string; targetName: string }
-
-  | { type: 'counter_attack_hit';
-      attackerId: string; attackerName: string;
-      targetId: string; targetName: string;
-      amount: number; blocked: boolean }
-
-  | { type: 'counter_attack_dodged';
       attackerId: string; attackerName: string;
       targetId: string; targetName: string }
 
