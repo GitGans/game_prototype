@@ -31,6 +31,8 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
   but are no longer used at the combat helper boundary. Semantic combat input types
   (`DamageModifierRef`, `PostDamageEffect`, `InstantEffectApplication`, `AppliedEffectMeta`) are
   imported by both `combat.ts` and `skillUsePlan.ts`. Not part of `SkillUsePlan` action fields.
+  `DamageType` is retained temporarily for effect-registry metadata
+  (`LEVELED_EFFECTS.effectDamageType`). It is not used in skill damage resolution.
 - **`src/battle/skillUsePlan.ts`** — `SkillUsePlan` (runtime contract). Used by executor, preview,
   targeting, and presentation. `compileSkillUsePlan` compiles `ActionSkillDefinition` → `SkillUsePlan`.
 

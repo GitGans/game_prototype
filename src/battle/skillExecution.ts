@@ -17,7 +17,6 @@ import {
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
 import {
-  getDamageTypeForPowerSource,
   getEffectiveUnitPower,
   getRawUnitPower,
 } from './skillPower';
@@ -242,10 +241,9 @@ function executeDamageAction(input: {
 
   const pattern = resolvePlanPattern(action.matrix);
   const hitCells = resolvePattern(target, pattern);
-  const damageType = getDamageTypeForPowerSource(action.powerSource);
   const baseDamage = getEffectiveUnitPower(caster, action.powerSource);
 
-  const attackResult = resolveAttack(hitCells, baseDamage, damageType, state, {
+  const attackResult = resolveAttack(hitCells, baseDamage, action.powerSource, state, {
     damageModifiers: action.modifiers,
     rng,
   });

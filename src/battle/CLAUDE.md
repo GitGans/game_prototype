@@ -75,11 +75,19 @@ The executor (`skillExecution.ts`) and counter-attack both run through `SkillUse
 - `SkillUsePlan.targetPolicy` is authoritative for target resolution, auto/quick target choice,
   manual prompt kind, and target highlight kind.
 
-**Power source**
+**Power source and damage resolution**
 - `PowerSource` values are `physical_strength` and `magical_strength`.
-- `physicalDamage` / `magicalDamage` are the current scaling field names on units.
-- `LEVELED_EFFECTS.effectDamageType` is legacy registry metadata retained for the effect registry.
-  For active `ActionSkillDefinition` skills, per-turn HP scaling is set by `action.powerSource`
+- `physicalDamage` / `magicalDamage` are the scaling field names on units.
+- Skill damage resolution derives the defense branch directly from `powerSource`:
+  - `physical_strength` → `physicalDefense`
+  - `magical_strength` → `magicalDefense`
+  There is no intermediate `DamageType` in the executor or combat path.
+- `combat.ts` may import type-only contracts from `skillUsePlan.ts`.
+  `skillUsePlan.ts` is a contract-only file and must never import `combat.ts`.
+- `DamageType` (`'physical' | 'magical'`) still exists in `shared/skillTypes.ts` for
+  `LEVELED_EFFECTS.effectDamageType` registry metadata. It is NOT used in skill damage
+  resolution. Removal is planned for the effect-registry cleanup stage.
+- For active `ActionSkillDefinition` skills, per-turn HP scaling is set by `action.powerSource`
   on the `apply_periodic_hp_effect` action — not by `effectDamageType`.
 
 **SkillUsePlan action fields are semantic**

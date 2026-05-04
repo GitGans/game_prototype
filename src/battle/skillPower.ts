@@ -1,4 +1,3 @@
-import type { DamageType } from '../shared/skillTypes';
 import type { ActiveEffect } from '../shared/activeEffect';
 import { effectiveStats } from './combat';
 import type { CombatPowerSource, PowerSource } from './skillUsePlan';
@@ -51,18 +50,3 @@ export function getEffectiveUnitPower(
   }
 }
 
-// Maps CombatPowerSource to the legacy DamageType used by existing combat APIs.
-export function getDamageTypeForPowerSource(
-  powerSource: CombatPowerSource,
-): DamageType {
-  switch (powerSource) {
-    case 'physical_strength':
-      return 'physical';
-    case 'magical_strength':
-      return 'magical';
-    default: {
-      const _exhaustive: never = powerSource;
-      return _exhaustive;
-    }
-  }
-}

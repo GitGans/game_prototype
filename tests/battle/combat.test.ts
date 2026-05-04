@@ -31,7 +31,7 @@ describe("resolveAttack", () => {
     const { events } = resolveAttack(
       hitCells,
       40,
-      "physical",
+      "physical_strength",
       state,
       { rng: fixedRng(0.99) }, // 0.99*100=99, never < dodge/block threshold (capped at 90)
     );
@@ -56,7 +56,7 @@ describe("resolveAttack", () => {
       { coord: coord("enemy", 0, 0), multiplier: 1.0 },
     ];
 
-    const { state: after } = resolveAttack(hitCells, 100, "physical", state, {
+    const { state: after } = resolveAttack(hitCells, 100, "physical_strength", state, {
       rng: fixedRng(0.99),
     });
 
@@ -78,7 +78,7 @@ describe("resolveAttack", () => {
       { coord: coord("enemy", 0, 0), multiplier: 1.0 },
     ];
 
-    const { events } = resolveAttack(hitCells, 50, "physical", state, {
+    const { events } = resolveAttack(hitCells, 50, "physical_strength", state, {
       rng: fixedRng(0),
     });
 
@@ -101,7 +101,7 @@ describe("resolveAttack", () => {
       { coord: coord("enemy", 0, 0), multiplier: 1.0 },
     ];
 
-    const { events } = resolveAttack(hitCells, 50, "physical", state, {
+    const { events } = resolveAttack(hitCells, 50, "physical_strength", state, {
       rng: sequenceRng([0.99, 0]),
     });
 

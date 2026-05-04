@@ -2,7 +2,6 @@ import {
   ActiveEffect,
   BattleState,
   CellCoord,
-  DamageType,
   Effect,
   InstantEffectEvent,
   ResolvedHitCell,
@@ -13,9 +12,11 @@ import {
 import type {
   AppliedEffectMeta,
   DamageModifierRef,
+  DamageModifierType,
   InstantEffectApplication,
   PostDamageEffect,
 } from '../shared/skillTypes';
+import type { CombatPowerSource } from './skillUsePlan';
 import { cellKey } from "./field";
 import { buildOccupancy, removeUnit } from "./occupancy";
 import { resolvePattern } from "./skillPatterns";
@@ -81,20 +82,50 @@ export type EffectEvent =
  * Min hit chance = 10% (dodge capped at 90). Min unblocked chance = 10% (block capped at 90).
  * Active effect defense bonuses (physicalDefenseBonus / magicalDefenseBonus) are applied.
  */
+function getDefenseForPowerSource(
+  stats: Pick<EffectiveStats, 'physicalDefense' | 'magicalDefense'>,
+  powerSource: CombatPowerSource,
+): number {
+  switch (powerSource) {
+    case 'physical_strength':
+      return stats.physicalDefense;
+    case 'magical_strength':
+      return stats.magicalDefense;
+    default: {
+      const _exhaustive: never = powerSource;
+      return _exhaustive;
+    }
+  }
+}
+
+export function getDefenseIgnoreModifierTypeForPowerSource(
+  powerSource: CombatPowerSource,
+): DamageModifierType {
+  switch (powerSource) {
+    case 'physical_strength':
+      return 'ignore_physical_defense';
+    case 'magical_strength':
+      return 'ignore_magical_defense';
+    default: {
+      const _exhaustive: never = powerSource;
+      return _exhaustive;
+    }
+  }
+}
+
 /**
  * Returns the raw damage a single hit would deal to `target` before dodge/block.
  * Used by both resolveAttack (combat) and showSkillPreview (display) to keep formulas in sync.
  */
 export function computeDamageVsUnit(
   baseDamage: number,
-  damageType: DamageType,
+  powerSource: CombatPowerSource,
   target: StatOwner,
   multiplier: number,
   defIgnorePercent: number,
 ): number {
   const stats = effectiveStats(target);
-  const rawDefense =
-    damageType === "physical" ? stats.physicalDefense : stats.magicalDefense;
+  const rawDefense = getDefenseForPowerSource(stats, powerSource);
   const defense = rawDefense * (1 - defIgnorePercent / 100);
   const minDamage = Math.round(baseDamage * 0.1);
   const effectiveBase = Math.max(
@@ -107,7 +138,7 @@ export function computeDamageVsUnit(
 export function resolveAttack(
   hitCells: ResolvedHitCell[],
   baseDamage: number,
-  damageType: DamageType,
+  powerSource: CombatPowerSource,
   state: BattleState,
   options: {
     damageModifiers?: readonly DamageModifierRef[];
@@ -129,14 +160,11 @@ export function resolveAttack(
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
     if (!unit) continue;
 
-    const defIgnoreKey =
-      damageType === "physical"
-        ? "ignore_physical_defense"
-        : "ignore_magical_defense";
+    const defIgnoreKey = getDefenseIgnoreModifierTypeForPowerSource(powerSource);
     const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
     const dmg = computeDamageVsUnit(
       baseDamage,
-      damageType,
+      powerSource,
       unit,
       multiplier,
       defIgnore,

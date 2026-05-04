@@ -7,7 +7,7 @@ import type {
   SkillPreviewModel,
 } from '../shared/skillPreviewModel';
 import { getActiveSkill } from './skillRuntime';
-import { computeDamageVsUnit } from './combat';
+import { computeDamageVsUnit, getDefenseIgnoreModifierTypeForPowerSource } from './combat';
 import { resolvePattern } from './skillPatterns';
 import { getDamageModifierPercent } from './skillDefinitionRuntime';
 import { cellKey } from './field';
@@ -16,7 +16,6 @@ import { resolvePlanPattern } from './skillPlanPatterns';
 import {
   getRawUnitPower,
   getEffectiveUnitPower,
-  getDamageTypeForPowerSource,
 } from './skillPower';
 import type { SkillUsePlan } from './skillUsePlan';
 
@@ -149,7 +148,6 @@ export function buildSkillPreviewModelFromPlan(
     }
 
     if (action.type === 'damage') {
-      const damageType = getDamageTypeForPowerSource(action.powerSource);
       // getEffectiveUnitPower applies active effects, matching the executor.
       const baseDamage = getEffectiveUnitPower(activeUnit, action.powerSource);
 
@@ -159,8 +157,7 @@ export function buildSkillPreviewModelFromPlan(
           ignorePercent[block.type] = getDamageModifierPercent(block);
         }
       }
-      const defIgnoreKey =
-        damageType === 'physical' ? 'ignore_physical_defense' : 'ignore_magical_defense';
+      const defIgnoreKey = getDefenseIgnoreModifierTypeForPowerSource(action.powerSource);
       const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
 
       const pattern = resolvePlanPattern(action.matrix);
@@ -171,7 +168,7 @@ export function buildSkillPreviewModelFromPlan(
         const unitId = occupancy.cellToUnitId.get(cellKey(hit.coord));
         const unit = unitId ? unitsById.get(unitId) : undefined;
         if (!unit) continue;
-        const dmg = computeDamageVsUnit(baseDamage, damageType, unit, hit.multiplier, defIgnore);
+        const dmg = computeDamageVsUnit(baseDamage, action.powerSource, unit, hit.multiplier, defIgnore);
         const prev = damageByUnitId.get(unit.id) ?? 0;
         if (dmg > prev) damageByUnitId.set(unit.id, dmg);
       }
