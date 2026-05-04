@@ -114,7 +114,7 @@ describe("resolveAttack", () => {
 
 describe("applyEffectApplication", () => {
   function makeEffect(id: string): Effect {
-    return { id, isBuff: false };
+    return { id, effectTone: 'negative' };
   }
 
   function makeAppliedEffectMeta(): AppliedEffectMeta {

@@ -13,7 +13,7 @@ export interface ActiveEffect {
   remainingRounds: number;
 
   // Present only when the skill applies periodic HP. Absent for stat-only effects.
-  // effect.isBuff is presentation/classification metadata only — not a runtime direction source.
+  // effect.effectTone is presentation/classification metadata only — not a runtime direction source.
   periodicHp?: PeriodicHp;
 }
 

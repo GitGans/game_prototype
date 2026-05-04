@@ -158,7 +158,9 @@ export class UnitView extends Phaser.GameObjects.Container {
       :  this.footprintW / 2 - sqSize / 2;  // enemy  → top-right
 
     unit.activeEffects.forEach((ae, i) => {
-      const color = ae.effect.isBuff ? UI_THEME.color.hp.high : UI_THEME.color.hp.low;
+      const color = ae.effect.effectTone === 'positive'
+        ? UI_THEME.color.hp.high
+        : UI_THEME.color.hp.low;
       const x = baseX;
       const y = topY + i * (sqSize + gap);
 

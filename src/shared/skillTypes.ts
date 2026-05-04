@@ -1,6 +1,6 @@
 export interface Effect {
   id: string;
-  isBuff: boolean;
+  effectTone: 'positive' | 'negative';
   physicalDefenseBonus?: number;
   magicalDefenseBonus?: number;
   dodgeBonus?: number;

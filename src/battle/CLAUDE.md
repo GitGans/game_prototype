@@ -103,5 +103,7 @@ The executor (`skillExecution.ts`) and counter-attack both run through `SkillUse
 
 **Periodic HP direction**
 - `ActiveEffect.periodicHp` is the sole runtime source for periodic HP direction and amount.
-- `effect.isBuff` is presentation/classification metadata only — not a direction source.
+- `effect.effectTone` is presentation/classification metadata only — not a direction source.
+  `effectTone` is independent of `UnitUpgradeStatLineSnapshot.tone` (upgrade card display) —
+  they share the same value vocabulary but are separate fields on separate types.
 - `tickEffects` reads periodic HP via `resolveActiveEffectPeriodicHp()` from `shared/activeEffect`.
