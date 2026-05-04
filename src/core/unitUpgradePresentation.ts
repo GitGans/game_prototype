@@ -88,12 +88,12 @@ export function buildSkillDescriptionFromPlan(plan: SkillUsePlan): string {
 
   const effectAction = plan.actions.find(isEffectPresentationAction);
   if (effectAction) {
-    return `${target} · applies ${effectAction.effectBlock.effectDisplayName}`;
+    return `${target} · applies ${effectAction.effect.displayName}`;
   }
 
   const instantAction = plan.actions.find((a) => a.type === 'instant_effect');
   if (instantAction?.type === 'instant_effect') {
-    return `${target} · ${instantAction.instantEffectBlock.displayName}`;
+    return `${target} · ${instantAction.instantEffect.displayName}`;
   }
 
   const damageAction = plan.actions.find((a) => a.type === 'damage');

@@ -186,7 +186,7 @@ export function buildSkillPreviewModelFromPlan(
       action.type === 'apply_stat_effect' ||
       action.type === 'apply_periodic_hp_effect'
     ) {
-      statusLines.push(`[${action.effectBlock.effectDisplayName}]`);
+      statusLines.push(`[${action.effect.displayName}]`);
     }
 
     if (action.type === 'apply_periodic_hp_effect') {

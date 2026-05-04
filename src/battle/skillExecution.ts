@@ -4,6 +4,11 @@ import type { BattleState, CellCoord, Unit, InstantEffectEvent } from "./types";
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { BattleEvent } from "./battleEvents";
 import type { CombatEvent, EffectEvent } from "./combat";
+import type {
+  SkillEffectBlock,
+  PostDamageBlock,
+  InstantEffectBlock,
+} from '../shared/skillTypes';
 import {
   resolveAttack,
   resolveHealWithEvents,
@@ -201,6 +206,52 @@ function mapInstantEffectEventsToBattleEvents(events: InstantEffectEvent[]): Bat
 }
 
 
+// ─── Executor boundary adapters ───────────────────────────────────────────────
+// These convert semantic SkillUseAction fields into legacy block shapes expected
+// by lower-level combat helpers. Must not be used outside skillExecution.ts.
+// damageType in toEffectBlock is a compatibility placeholder only — runtime
+// periodic HP scaling uses action.powerSource, not this field.
+
+function toEffectBlock(
+  action: Extract<
+    SkillUseAction,
+    { type: 'apply_stat_effect' | 'apply_periodic_hp_effect' }
+  >,
+): SkillEffectBlock {
+  return {
+    effectMatrixName: action.matrix.matrixName,
+    level: action.effect.level,
+    effectDisplayName: action.effect.displayName,
+    effectName: action.effect.effectName,
+    duration: action.effect.duration,
+    damageType:
+      action.type === 'apply_periodic_hp_effect' &&
+      action.powerSource === 'magical_strength'
+        ? 'magical'
+        : 'physical',
+  };
+}
+
+function toPostDamageBlock(
+  postDamage: Extract<SkillUseAction, { type: 'post_damage' }>['postDamage'],
+): PostDamageBlock {
+  return {
+    type: postDamage.type,
+    level: postDamage.level,
+  };
+}
+
+function toInstantEffectBlock(
+  action: Extract<SkillUseAction, { type: 'instant_effect' }>,
+): InstantEffectBlock {
+  return {
+    instantEffectMatrixName: action.matrix.matrixName,
+    level: action.matrix.level,
+    instantEffectType: action.instantEffect.type,
+    displayName: action.instantEffect.displayName,
+  };
+}
+
 // ─── Plan action runners ──────────────────────────────────────────────────────
 
 function executeHealAction(input: {
@@ -270,7 +321,7 @@ function executePostDamageAction(input: {
   if (totalRealDamage <= 0) return { state, events: [] };
 
   const { state: afterVamp, events: vampEvents } = applyVampirism(
-    action.postDamageBlock,
+    toPostDamageBlock(action.postDamage),
     caster,
     totalRealDamage,
     state,
@@ -289,12 +340,11 @@ function executeApplyStatEffectAction(input: {
 
   const pattern = resolvePlanPattern(action.matrix);
   const { state: withEffect, events: effEvents } = applyEffectBlock(
-    action.effectBlock,
+    toEffectBlock(action),
     pattern,
     target,
     state,
     action.resolvedEffect,
-    undefined,
   );
 
   const events = mapEffectAppliedEventsToBattleEvents(effEvents);
@@ -330,26 +380,22 @@ function executeApplyPeriodicHpEffectAction(input: {
 
   const pattern = resolvePlanPattern(action.matrix);
 
-  // Only the anchor cell's multiplier is used for runtime per-turn scaling.
-  // Plan action direction is stored in ActiveEffect.periodicHp (Stage 10+).
-  // computedPerTurn is passed as a legacy compatibility mirror/fallback.
   const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
-  const computedPerTurn = Math.round(
+  const amountPerTurn = Math.round(
     getRawUnitPower(caster, action.powerSource) * anchorCell.damageMultiplier,
   );
 
   const periodicHp: PeriodicHp = {
     direction: action.direction,
-    amountPerTurn: computedPerTurn,
+    amountPerTurn,
   };
 
   const { state: withEffect, events: effEvents } = applyEffectBlock(
-    action.effectBlock,
+    toEffectBlock(action),
     pattern,
     target,
     state,
     action.displayEffect,
-    computedPerTurn,
     periodicHp,
   );
 
@@ -504,7 +550,7 @@ function executeInstantEffectAction(input: {
     provokedUnitIds,
     distractedUnitIds,
   } = resolveInstantEffects(
-    action.instantEffectBlock,
+    toInstantEffectBlock(action),
     pattern,
     target,
     input.state,

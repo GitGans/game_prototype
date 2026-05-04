@@ -1,11 +1,10 @@
 // Runtime skill plan contract. Produced by compileSkillUsePlan; consumed by executor, preview, targeting, and presentation.
 
 import type {
-  DamageModifierBlock,
+  DamageModifierType,
   Effect,
-  InstantEffectBlock,
-  PostDamageBlock,
-  SkillEffectBlock,
+  InstantEffectType,
+  PostDamageType,
 } from '../shared/skillTypes';
 
 // ─── Targeting ────────────────────────────────────────────────────────────────
@@ -59,6 +58,31 @@ export type InstantEffectPatternRef = Extract<
   { kind: 'instant_effect_matrix' }
 >;
 
+// ─── Semantic runtime helper types ────────────────────────────────────────────
+
+export type DamageModifierRef = {
+  type: DamageModifierType;
+  level: number;
+};
+
+// Shared meta for both stat effects and periodic HP effects.
+export type EffectApplicationMeta = {
+  effectName: string;
+  displayName: string;
+  level: number;
+  duration: number;
+};
+
+export type PostDamageEffect = {
+  type: PostDamageType;
+  level: number;
+};
+
+export type InstantEffectApplication = {
+  type: InstantEffectType;
+  displayName: string;
+};
+
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
 export type SkillUseAction =
@@ -67,7 +91,7 @@ export type SkillUseAction =
       powerSource: CombatPowerSource;
       powerMode: 'effective';
       matrix: DamagePatternRef;
-      modifiers?: DamageModifierBlock[];
+      modifiers?: DamageModifierRef[];
     }
   | {
       type: 'heal';
@@ -77,27 +101,26 @@ export type SkillUseAction =
     }
   | {
       type: 'apply_stat_effect';
-      effectBlock: SkillEffectBlock;
+      effect: EffectApplicationMeta;
       resolvedEffect: Effect;
       matrix: EffectPatternRef;
     }
   | {
       type: 'apply_periodic_hp_effect';
-      effectBlock: SkillEffectBlock;
+      effect: EffectApplicationMeta;
       displayEffect: Effect;
       direction: 'heal' | 'damage';
       powerSource: CombatPowerSource;
       powerMode: 'raw';
       matrix: EffectPatternRef;
-      duration: number;
     }
   | {
       type: 'post_damage';
-      postDamageBlock: PostDamageBlock;
+      postDamage: PostDamageEffect;
     }
   | {
       type: 'instant_effect';
-      instantEffectBlock: InstantEffectBlock;
+      instantEffect: InstantEffectApplication;
       matrix: InstantEffectPatternRef;
     };
 

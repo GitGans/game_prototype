@@ -184,7 +184,7 @@ export const DAMAGE_MATRICES: Record<string, LeveledDamageMatrix> = {
 // levels[0] = level 1, levels[1] = level 2, etc.
 //
 // For stat-based per-turn effects (regeneration / lose_health):
-//   computedPerTurn = casterStat × anchorCell.damageMultiplier
+//   amountPerTurn = caster power (selected by powerSource) × anchorCell.damageMultiplier
 // For defense-only effects (fortify / weaken / etc.):
 //   only cell presence matters; damageMultiplier is unused
 
@@ -248,12 +248,12 @@ export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
 export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
   regeneration: {
     effect: EFFECTS.regeneration,
-    effectDamageType: "magical", // computedPerTurn = magicalDamage × matrix multiplier
+    effectDamageType: "magical", // amountPerTurn = caster magical power × matrix multiplier
   },
 
   lose_health: {
     effect: EFFECTS.lose_health,
-    effectDamageType: "physical", // computedPerTurn = physicalDamage × matrix multiplier
+    effectDamageType: "physical", // amountPerTurn = caster physical power × matrix multiplier
   },
 
   fortify: {

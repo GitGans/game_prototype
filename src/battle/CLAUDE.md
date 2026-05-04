@@ -82,19 +82,22 @@ The executor (`skillExecution.ts`) and counter-attack both run through `SkillUse
   For active `ActionSkillDefinition` skills, per-turn HP scaling is set by `action.powerSource`
   on the `apply_periodic_hp_effect` action — not by `effectDamageType`.
 
-**effectBlock is shared**
-- `effectBlock` is independent from heal/damage. Both friendly-targeted and hostile-targeted
-  skills can carry one.
+**SkillUsePlan action fields are semantic**
+- `apply_stat_effect` and `apply_periodic_hp_effect` actions expose `effect: EffectApplicationMeta`
+  directly. There is no `effectBlock` on the plan surface.
+- `SkillEffectBlock.damageType` does not appear in `SkillUsePlan`. Periodic HP scaling uses
+  `apply_periodic_hp_effect.powerSource`.
+- Lower-level combat helpers (`applyEffectBlock`, `applyVampirism`, `resolveInstantEffects`)
+  still accept bridge block shapes. `skillExecution.ts` adapts semantic fields to those shapes
+  at the executor boundary using local `toEffectBlock`, `toPostDamageBlock`, `toInstantEffectBlock`
+  helpers. These helpers must not be exported or used outside `skillExecution.ts`.
 
 **Hostile damage**
 - Hostile skills must carry an explicit `damage` action in their `ActionSkillDefinition`.
   There is no implicit fallback damage step. Skills like `weaken_curse` that deal damage
   must author it as a `damage` action with an explicit `powerSource` and `matrix`.
 
-**Periodic HP direction bridge (Stage 10+)**
-- `ActiveEffect.periodicHp` is authoritative for runtime HP tick direction when present.
-- `computedPerTurn + effect.isBuff` is the legacy fallback for pre-plan active effects.
-- `effect.isBuff` is presentation/classification metadata only.
-- `tickEffects` uses `resolveActiveEffectPeriodicHp()` from `shared/activeEffect` for compatibility resolution.
-- `computedPerTurn` is intentionally retained as a temporary bridge.
-  See TODO in `shared/activeEffect.ts`.
+**Periodic HP direction**
+- `ActiveEffect.periodicHp` is the sole runtime source for periodic HP direction and amount.
+- `effect.isBuff` is presentation/classification metadata only — not a direction source.
+- `tickEffects` reads periodic HP via `resolveActiveEffectPeriodicHp()` from `shared/activeEffect`.

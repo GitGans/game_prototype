@@ -331,9 +331,8 @@ export function resolveHeal(
  * No dodge/block/defense — effects always apply 100%.
  * Each unit may carry at most 2 active effects; the oldest is evicted if full.
  *
- * resolvedEffect and computedPerTurn are resolved by the caller from LEVELED_EFFECTS.
- * periodicHp, when provided, is the authoritative runtime direction bridge (Stage 10+);
- * computedPerTurn alone is the legacy fallback for pre-plan active effects.
+ * periodicHp, when provided, carries explicit runtime direction and amountPerTurn.
+ * Absent for stat-only effects.
  */
 export function applyEffectBlock(
   block: SkillEffectBlock,
@@ -341,7 +340,6 @@ export function applyEffectBlock(
   targetAnchor: CellCoord,
   state: BattleState,
   resolvedEffect: Effect,
-  computedPerTurn: number | undefined,
   periodicHp?: PeriodicHp,
 ): { state: BattleState; events: EffectEvent[] } {
   const hitCells = resolvePattern(targetAnchor, resolvedPattern);
@@ -358,7 +356,6 @@ export function applyEffectBlock(
       effectDisplayName: block.effectDisplayName,
       effect: resolvedEffect,
       remainingRounds: block.duration,
-      computedPerTurn,
       periodicHp,
     };
 

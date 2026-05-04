@@ -55,15 +55,11 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
       }
       return {
         type: 'apply_stat_effect',
-        effectBlock: {
-          effectMatrixName: action.matrix.matrixName,
-          level: action.level,
-          effectDisplayName: action.displayName,
+        effect: {
           effectName: action.effectName,
+          displayName: action.displayName,
+          level: action.level,
           duration: action.duration,
-          // damageType is a compatibility placeholder for the legacy SkillEffectBlock shape.
-          // Stat effects do not scale from caster power; this field is not read at runtime.
-          damageType: 'physical',
         },
         matrix: action.matrix,
         resolvedEffect: resolveLeveledStatEffect(action.effectName, action.level),
@@ -90,30 +86,24 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
       }
       return {
         type: 'apply_periodic_hp_effect',
-        effectBlock: {
-          effectMatrixName: action.matrix.matrixName,
-          level: action.level,
-          effectDisplayName: action.displayName,
+        effect: {
           effectName: action.effectName,
+          displayName: action.displayName,
+          level: action.level,
           duration: action.duration,
-          // damageType here is a bridge field required by the legacy SkillEffectBlock shape.
-          // Runtime scaling for new definitions comes from action.powerSource, not this field.
-          // effectDamageType from the registry is NOT used here — it is used for validation only.
-          damageType: action.powerSource === 'magical_strength' ? 'magical' : 'physical',
         },
         displayEffect: def.effect,
         direction: action.direction,
         powerSource: action.powerSource,
         powerMode: 'raw',
         matrix: action.matrix,
-        duration: action.duration,
       };
     }
 
     case 'post_damage':
       return {
         type: 'post_damage',
-        postDamageBlock: {
+        postDamage: {
           type: action.postDamageType,
           level: action.level,
         },
@@ -122,10 +112,8 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
     case 'instant_effect':
       return {
         type: 'instant_effect',
-        instantEffectBlock: {
-          instantEffectMatrixName: action.matrix.matrixName,
-          level: action.matrix.level,
-          instantEffectType: action.instantEffectType,
+        instantEffect: {
+          type: action.instantEffectType,
           displayName: action.displayName,
         },
         matrix: action.matrix,

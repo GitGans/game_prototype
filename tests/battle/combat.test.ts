@@ -153,7 +153,6 @@ describe("applyEffectBlock", () => {
       coord("enemy", 0, 0),
       state,
       effectC,
-      undefined,
     );
 
     const unit = after.units.get("target")!;
@@ -183,7 +182,6 @@ describe("applyEffectBlock", () => {
       coord("enemy", 0, 0),
       state,
       refreshedA,
-      undefined,
     );
 
     const unit = after.units.get("target")!;
