@@ -9,8 +9,9 @@ import type {
 import { getActiveSkill } from './skillRuntime';
 import { computeDamageVsUnit, getDefenseIgnoreModifierTypeForPowerSource, computePeriodicHpAmount } from './combat';
 import { resolvePattern } from './skillPatterns';
-import { getDamageModifierPercent } from './skillDefinitionRuntime';
+import { getDamageModifierPercent, getVampirismPercent } from './skillDefinitionRuntime';
 import { cellKey } from './field';
+import type { ResolvedHitCell } from './types';
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
 import { getEffectiveUnitPower } from './skillPower';
@@ -49,6 +50,12 @@ export type SkillPreviewInput = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatInstantProbability(cells: ResolvedHitCell[]): string {
+  const minPct = Math.round(Math.min(...cells.map(c => c.multiplier)) * 100);
+  const maxPct = Math.round(Math.max(...cells.map(c => c.multiplier)) * 100);
+  return minPct === maxPct ? `${minPct}%` : `${minPct}-${maxPct}%`;
+}
 
 function isHealTargetPolicy(plan: SkillUsePlan): boolean {
   return plan.targetPolicy.type === 'friendly' || plan.targetPolicy.type === 'self';
@@ -107,16 +114,21 @@ export function buildSkillPreviewModelFromPlan(
 
     if (
       action.type === 'apply_stat_effect' ||
-      action.type === 'apply_periodic_hp_effect'
+      action.type === 'apply_periodic_hp_effect' ||
+      action.type === 'instant_effect'
     ) {
       const pattern = resolvePlanPattern(action.matrix);
       const effectCells = resolvePattern(targetCoord, pattern);
       for (const ec of effectCells) {
         cells.push({ coord: ec.coord, kind: 'effect', highlight });
       }
+
+      if (action.type === 'instant_effect') {
+        statusLines.push(`[${action.instantEffect.displayName} ${formatInstantProbability(effectCells)}]`);
+      }
     }
 
-    // post_damage and instant_effect: no cells in preview.
+    // post_damage: no cells in preview (no own matrix; depends on prior real damage).
 
     // ── Status lines ──────────────────────────────────────────────────────
 
@@ -204,7 +216,11 @@ export function buildSkillPreviewModelFromPlan(
       }
     }
 
-    // post_damage and instant_effect: no status lines in preview.
+    if (action.type === 'post_damage') {
+      const pct = getVampirismPercent(action.postDamage);
+      const label = action.postDamage.type === 'self_vampirism' ? 'Self vampirism' : 'Mass vampirism';
+      statusLines.push(`[${label} ${pct}%]`);
+    }
   }
 
   const colorKind = getPreviewHeaderColorKindFromPlan(plan);

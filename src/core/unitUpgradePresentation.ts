@@ -85,29 +85,35 @@ export function getSkillPlanColorKind(plan: SkillUsePlan): SkillIconColorKind {
 
 export function buildSkillDescriptionFromPlan(plan: SkillUsePlan): string {
   const target = targetPolicyLabel(plan);
+  const parts: string[] = [];
 
-  const effectAction = plan.actions.find(isEffectPresentationAction);
-  if (effectAction) {
-    return `${target} · applies ${effectAction.effect.displayName}`;
+  for (const action of plan.actions) {
+    switch (action.type) {
+      case 'damage': {
+        const power = action.powerSource === 'magical_strength' ? 'magical' : 'physical';
+        parts.push(`${power} damage`);
+        break;
+      }
+      case 'heal':
+        parts.push('heal');
+        break;
+      case 'apply_stat_effect':
+        parts.push(`applies ${action.effect.displayName}`);
+        break;
+      case 'apply_periodic_hp_effect':
+        parts.push(action.effect.displayName);
+        break;
+      case 'instant_effect':
+        parts.push(action.instantEffect.displayName);
+        break;
+      case 'post_damage':
+        parts.push(action.postDamage.type === 'self_vampirism' ? 'vampirism' : 'mass vampirism');
+        break;
+    }
   }
 
-  const instantAction = plan.actions.find((a) => a.type === 'instant_effect');
-  if (instantAction?.type === 'instant_effect') {
-    return `${target} · ${instantAction.instantEffect.displayName}`;
-  }
-
-  const damageAction = plan.actions.find((a) => a.type === 'damage');
-  if (damageAction?.type === 'damage') {
-    const power = damageAction.powerSource === 'magical_strength' ? 'magical' : 'physical';
-    return `${target} · ${power} damage`;
-  }
-
-  const healAction = plan.actions.find((a) => a.type === 'heal');
-  if (healAction) {
-    return `${target} · heal`;
-  }
-
-  return target;
+  if (parts.length === 0) return target;
+  return `${target} · ${parts.join(' + ')}`;
 }
 
 export function buildSkillTagFromPlan(plan: SkillUsePlan): string {
