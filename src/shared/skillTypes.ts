@@ -1,5 +1,3 @@
-export type DamageType = 'physical' | 'magical';
-
 export interface Effect {
   id: string;
   isBuff: boolean;
@@ -11,16 +9,6 @@ export interface Effect {
   physicalDamageBonus?: number;
   magicalDamageBonus?: number;
   description?: string;
-}
-
-export interface SkillEffectBlock {
-  effectMatrixName: string;
-  level: number;
-  effectDisplayName: string;
-  effectName: string;
-  duration: number;
-  /** Preserved data contract field. Current per-turn scaling is NOT selected from this. See LEVELED_EFFECTS.effectDamageType. */
-  damageType: DamageType;
 }
 
 export interface PatternCell {
@@ -37,21 +25,18 @@ export interface LeveledDamageMatrix {
   levels: SkillPattern[];
 }
 
-export interface LeveledEffectDef {
-  effect: Effect;
-  /** Current per-turn HP scaling source: "physical" => physicalDamage, "magical" => magicalDamage. Legacy naming. */
-  effectDamageType?: DamageType;
-  bonusByLevel?: number[];
-}
+export type LeveledEffectDef =
+  | {
+      effectKind: 'periodic_hp';
+      effect: Effect;
+    }
+  | {
+      effectKind: 'stat_modifier';
+      effect: Effect;
+      bonusByLevel?: number[];
+    };
 
 export type InstantEffectType = 'provoke' | 'distract';
-
-export interface InstantEffectBlock {
-  instantEffectMatrixName: string;
-  level: number;
-  instantEffectType: InstantEffectType;
-  displayName: string;
-}
 
 export type InstantEffectEvent =
   | { type: 'instant_effect_applied'; unitId: string; unitName: string; displayName: string }
@@ -65,17 +50,7 @@ export type DamageModifierType =
   | 'ignore_physical_defense'
   | 'ignore_magical_defense';
 
-export interface DamageModifierBlock {
-  type: DamageModifierType;
-  level: number;
-}
-
 export type PostDamageType = 'self_vampirism' | 'mass_vampirism';
-
-export interface PostDamageBlock {
-  type: PostDamageType;
-  level: number;
-}
 
 // ─── Semantic combat input types ──────────────────────────────────────────────
 // These replace the legacy block shapes at the combat helper boundary.

@@ -84,17 +84,12 @@ The executor (`skillExecution.ts`) and counter-attack both run through `SkillUse
   There is no intermediate `DamageType` in the executor or combat path.
 - `combat.ts` may import type-only contracts from `skillUsePlan.ts`.
   `skillUsePlan.ts` is a contract-only file and must never import `combat.ts`.
-- `DamageType` (`'physical' | 'magical'`) still exists in `shared/skillTypes.ts` for
-  `LEVELED_EFFECTS.effectDamageType` registry metadata. It is NOT used in skill damage
-  resolution. Removal is planned for the effect-registry cleanup stage.
-- For active `ActionSkillDefinition` skills, per-turn HP scaling is set by `action.powerSource`
-  on the `apply_periodic_hp_effect` action — not by `effectDamageType`.
+- Effect registry classification uses `effectKind: "periodic_hp" | "stat_modifier"`. Periodic HP
+  scaling source is only `apply_periodic_hp_effect.powerSource`.
 
 **SkillUsePlan action fields are semantic**
 - `apply_stat_effect` and `apply_periodic_hp_effect` actions expose `effect: EffectApplicationMeta`
   directly. There is no `effectBlock` on the plan surface.
-- `SkillEffectBlock.damageType` does not appear in `SkillUsePlan`. Periodic HP scaling uses
-  `apply_periodic_hp_effect.powerSource`.
 - Lower-level combat helpers (`applyEffectApplication`, `applyVampirism`, `resolveInstantEffects`)
   accept semantic refs from `shared/skillTypes.ts` directly (`AppliedEffectMeta`, `PostDamageEffect`,
   `InstantEffectApplication`, `DamageModifierRef`). There are no adapter functions at the executor

@@ -19,11 +19,11 @@ export type BattleEvent =
   | { type: 'vampirism_heal';
       unitId: string; unitName: string; amount: number }
 
-  // ── effectBlock application ─────────────────────────────────────────
+  // ── Effect application ──────────────────────────────────────────────
   | { type: 'effect_applied';
       unitId: string; unitName: string; effectDisplayName: string }
 
-  // ── instantEffectBlock probability rolls ────────────────────────────
+  // ── Instant effect probability rolls ────────────────────────────────
   | { type: 'instant_effect_applied';
       unitId: string; unitName: string; displayName: string }
   | { type: 'instant_effect_failed';

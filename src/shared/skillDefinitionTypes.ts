@@ -63,7 +63,7 @@ export type SkillDefinitionAction =
 // --- Damage ---
 
 /**
- * Flat authoring-level modifier. Maps to DamageModifierBlock in the compiler.
+ * Flat authoring-level modifier. Maps to DamageModifierRef in the compiler.
  * Uses `modifierType` (not `type`) to avoid collision with the action discriminant.
  */
 export interface SkillDefinitionDamageModifier {
@@ -107,7 +107,7 @@ export interface SkillDefinitionApplyPeriodicHpEffectAction {
   effectName: string;
   displayName: string;
   direction: 'heal' | 'damage';
-  // Replaces legacy SkillEffectBlock.damageType. Periodic HP scaling is explicit here.
+  // Periodic HP scaling is explicit on the action.
   powerSource: SkillDefinitionPowerSource;
   level: number;
   duration: number;

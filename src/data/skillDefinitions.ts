@@ -234,94 +234,104 @@ export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
 
 // ─── Leveled Effect Definitions ───────────────────────────────────────────────
 //
-// Defines per-turn HP scaling and stat bonus magnitudes for named effects.
-//
-// effectDamageType — current legacy scaling metadata for stat-based per-turn HP effects:
-//   "physical" => resolveEffectArgs reads caster.physicalDamage
-//   "magical"  => resolveEffectArgs reads caster.magicalDamage
-//   This is current compatibility naming; future skill plans should compile this into
-//   an explicit per-turn scaling action with a power source.
+// effectKind classifies which action type may use this effect.
+// It does not choose periodic HP direction or scaling.
+// Periodic HP direction and scaling are authored on apply_periodic_hp_effect.
 //
 // bonusByLevel — fixed-magnitude stat modifiers indexed by (level - 1).
 //   No stat scaling. Sign is inherited from the base Effect in EFFECTS.
 
 export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
   regeneration: {
+    effectKind: 'periodic_hp',
     effect: EFFECTS.regeneration,
-    effectDamageType: "magical", // amountPerTurn = caster magical power × matrix multiplier
   },
 
   lose_health: {
+    effectKind: 'periodic_hp',
     effect: EFFECTS.lose_health,
-    effectDamageType: "physical", // amountPerTurn = caster physical power × matrix multiplier
   },
 
   fortify: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.fortify,
     bonusByLevel: [10, 20, 30], // physicalDefenseBonus sign (+) inherited from EFFECTS.fortify
   },
 
   weaken: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.weaken,
     bonusByLevel: [10, 20, 30], // physicalDefenseBonus sign (-) inherited from EFFECTS.weaken
   },
 
   arcane_shield: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.arcane_shield,
     bonusByLevel: [10, 20, 30], // magicalDefenseBonus sign (+) inherited from EFFECTS.arcane_shield
   },
 
   arcane_vulnerability: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.arcane_vulnerability,
     bonusByLevel: [10, 20, 30], // magicalDefenseBonus sign (-) inherited from EFFECTS.arcane_vulnerability
   },
 
   swift: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.swift,
     bonusByLevel: [10, 20, 30], // dodgeBonus sign (+) inherited from EFFECTS.swift
   },
 
   clumsy: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.clumsy,
     bonusByLevel: [10, 20, 30], // dodgeBonus sign (-) inherited from EFFECTS.clumsy
   },
 
   guard_stance: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.guard_stance,
     bonusByLevel: [10, 20, 30], // blockBonus sign (+) inherited from EFFECTS.guard_stance
   },
 
   off_balance: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.off_balance,
     bonusByLevel: [10, 20, 30], // blockBonus sign (-) inherited from EFFECTS.off_balance
   },
 
   haste: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.haste,
     bonusByLevel: [1, 2, 3], // initiativeBonus sign (+) inherited from EFFECTS.haste
   },
 
   slow: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.slow,
     bonusByLevel: [1, 2, 3], // initiativeBonus sign (-) inherited from EFFECTS.slow
   },
 
   empower: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.empower,
     bonusByLevel: [10, 20, 30], // physicalDamageBonus sign (+) inherited from EFFECTS.empower
   },
 
   enfeeble: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.enfeeble,
     bonusByLevel: [10, 20, 30], // physicalDamageBonus sign (-) inherited from EFFECTS.enfeeble
   },
 
   arcane_surge: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.arcane_surge,
     bonusByLevel: [10, 20, 30], // magicalDamageBonus sign (+) inherited from EFFECTS.arcane_surge
   },
 
   arcane_drain: {
+    effectKind: 'stat_modifier',
     effect: EFFECTS.arcane_drain,
     bonusByLevel: [10, 20, 30], // magicalDamageBonus sign (-) inherited from EFFECTS.arcane_drain
   },

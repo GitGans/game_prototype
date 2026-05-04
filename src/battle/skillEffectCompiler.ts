@@ -9,6 +9,9 @@ export function resolveLeveledStatEffect(
   if (!def) {
     throw new Error(`Unknown leveled effect: ${effectName}`);
   }
+  if (def.effectKind !== 'stat_modifier') {
+    throw new Error(`Effect "${effectName}" is not a stat modifier effect.`);
+  }
   if (!def.bonusByLevel) {
     return def.effect;
   }

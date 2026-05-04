@@ -6,16 +6,6 @@ import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
 import { LEVELED_EFFECTS } from '../data/skillDefinitions';
 import { resolveLeveledStatEffect } from './skillEffectCompiler';
 
-const STAT_BONUS_FIELDS = [
-  'physicalDefenseBonus',
-  'magicalDefenseBonus',
-  'dodgeBonus',
-  'blockBonus',
-  'initiativeBonus',
-  'physicalDamageBonus',
-  'magicalDamageBonus',
-] as const;
-
 function compileAction(action: SkillDefinitionAction): SkillUseAction {
   switch (action.type) {
     case 'damage':
@@ -43,11 +33,7 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
       if (!def) {
         throw new Error(`Unknown leveled effect: ${action.effectName}`);
       }
-      // Reject periodic HP effects used in a stat-effect action.
-      // effectDamageType marks a periodic HP scaling source in the legacy registry.
-      // Using such an effect here would silently produce a stat-effect action with
-      // no periodic HP semantics, making the new authoring format ambiguous.
-      if (def.effectDamageType !== undefined) {
+      if (def.effectKind !== 'stat_modifier') {
         throw new Error(
           `apply_stat_effect cannot use periodic HP effect "${action.effectName}". ` +
             `Use apply_periodic_hp_effect instead.`,
@@ -71,16 +57,9 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
       if (!def) {
         throw new Error(`Unknown leveled effect: ${action.effectName}`);
       }
-      // Reject stat-bonus effects used in a periodic HP action.
-      // An effect with stat bonus fields is a stat effect; placing it here would cause
-      // applyEffectBlock to store those bonuses while also applying periodic HP,
-      // which makes behavior unpredictable.
-      const hasStatBonuses = STAT_BONUS_FIELDS.some(
-        (f) => def.effect[f] !== undefined,
-      );
-      if (hasStatBonuses) {
+      if (def.effectKind !== 'periodic_hp') {
         throw new Error(
-          `apply_periodic_hp_effect cannot use stat-bonus effect "${action.effectName}". ` +
+          `apply_periodic_hp_effect cannot use stat modifier effect "${action.effectName}". ` +
             `Use apply_stat_effect instead.`,
         );
       }

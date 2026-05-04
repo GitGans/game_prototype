@@ -1,12 +1,11 @@
 // ─── Re-exports — TODO(post-refactor): migrate each caller to direct shared/ import and remove these. ───
 export type { Side, Row, Col, CellCoord, ShapeOffset, UnitShape } from '../shared/gridTypes';
 export type {
-  DamageType,
-  Effect, SkillEffectBlock,
+  Effect,
   PatternCell, SkillPattern, LeveledDamageMatrix, LeveledEffectDef,
-  InstantEffectType, InstantEffectBlock, InstantEffectEvent,
-  DamageModifierType, DamageModifierBlock,
-  PostDamageType, PostDamageBlock,
+  InstantEffectType, InstantEffectEvent,
+  DamageModifierType,
+  PostDamageType,
 } from '../shared/skillTypes';
 export type {
   SpriteState, SpriteSheetConfig, RowTrait, UnitRace, UnitClass,

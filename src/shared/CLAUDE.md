@@ -14,7 +14,7 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 ## Key Files
 - `gridTypes.ts` — Grid geometry: `Side`, `Row`, `Col`, `CellCoord`, `UnitShape`
 - `unitTypes.ts` — Unit blueprints: `UnitBlueprint`, `UnitBattleStats`, `UnitClass`, `UnitUpgradeTier`
-- `skillTypes.ts` — Combat primitive and semantic input types: `Effect`, `SkillPattern`, `DamageType`, and semantic refs (`DamageModifierRef`, `PostDamageEffect`, `InstantEffectApplication`, `AppliedEffectMeta`) used by `combat.ts` and `skillUsePlan.ts`. Legacy block interfaces (`SkillEffectBlock`, `PostDamageBlock`, `DamageModifierBlock`, `InstantEffectBlock`) remain but are no longer used at the combat helper boundary.
+- `skillTypes.ts` — Combat primitive and semantic input types: `Effect`, `SkillPattern`, and semantic refs (`DamageModifierRef`, `PostDamageEffect`, `InstantEffectApplication`, `AppliedEffectMeta`) used by `combat.ts` and `skillUsePlan.ts`. Legacy block-shaped skill interfaces have been removed.
 - `skillDefinitionTypes.ts` — Active authoring contract: `ActionSkillDefinition`, action types, target policy types, matrix refs, power source types
 - `itemTypes.ts` — Item/equipment: `ItemDefinition`, `ItemInstance`, `ItemContainer`, `EquipSlot`
 - `snapshotTypes.ts` — UI projections: `UnitStatsSnapshot`, `SkillIconSnapshot`, `BackpackSnapshot`, `EquipmentSnapshot`
@@ -26,13 +26,12 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 - **`skillDefinitionTypes.ts`** — `ActionSkillDefinition` is the sole active skill authoring contract.
   All skills in `data/skillDefinitions.ts` are authored in this format. Stores intent and registry
   refs (unresolved string names); resolution happens in the compiler.
-- **`skillTypes.ts`** — Combat primitive and semantic input types. Legacy block interfaces
-  (`SkillEffectBlock`, `PostDamageBlock`, `DamageModifierBlock`, `InstantEffectBlock`) remain here
-  but are no longer used at the combat helper boundary. Semantic combat input types
-  (`DamageModifierRef`, `PostDamageEffect`, `InstantEffectApplication`, `AppliedEffectMeta`) are
-  imported by both `combat.ts` and `skillUsePlan.ts`. Not part of `SkillUsePlan` action fields.
-  `DamageType` is retained temporarily for effect-registry metadata
-  (`LEVELED_EFFECTS.effectDamageType`). It is not used in skill damage resolution.
+- **`skillTypes.ts`** — Combat primitive and semantic input types. Legacy block-shaped skill
+  interfaces have been removed. Current combat helper inputs are `DamageModifierRef`,
+  `PostDamageEffect`, `InstantEffectApplication`, and `AppliedEffectMeta`; they are imported
+  by both `combat.ts` and `skillUsePlan.ts`. Not part of `SkillUsePlan` action fields.
+  `DamageType` and `SkillEffectBlock` have been removed. Effect registry classification now
+  uses `LeveledEffectDef.effectKind`.
 - **`src/battle/skillUsePlan.ts`** — `SkillUsePlan` (runtime contract). Used by executor, preview,
   targeting, and presentation. `compileSkillUsePlan` compiles `ActionSkillDefinition` → `SkillUsePlan`.
 
