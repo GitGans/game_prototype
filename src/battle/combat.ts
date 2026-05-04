@@ -26,7 +26,6 @@ import {
 } from "./skillDefinitionRuntime";
 import type { Rng } from '../shared/random';
 import { rollPercent, rollProbability } from '../shared/random';
-import type { PeriodicHp } from '../shared/activeEffect';
 import { resolveActiveEffectPeriodicHp } from '../shared/activeEffect';
 
 export type CombatEvent =
@@ -111,6 +110,13 @@ export function getDefenseIgnoreModifierTypeForPowerSource(
       return _exhaustive;
     }
   }
+}
+
+export function computePeriodicHpAmount(
+  basePower: number,
+  multiplier: number,
+): number {
+  return Math.round(basePower * multiplier);
 }
 
 /**
@@ -356,13 +362,25 @@ export function resolveHeal(
   return resolveHealWithEvents(hitCells, baseHeal, state).state;
 }
 
+function withAppliedActiveEffect(
+  unit: Unit,
+  newEffect: ActiveEffect,
+): Unit {
+  const effects = unit.activeEffects.filter(
+    (ae) => ae.effect.id !== newEffect.effect.id,
+  );
+  if (effects.length >= 2) {
+    effects.shift(); // evict oldest (non-duplicate) when at capacity
+  }
+  effects.push(newEffect);
+  return { ...unit, activeEffects: effects };
+}
+
 /**
- * Applies an effect to all units hit by the resolved pattern.
+ * Applies a stat effect to all units hit by the resolved pattern.
  * No dodge/block/defense — effects always apply 100%.
  * Each unit may carry at most 2 active effects; the oldest is evicted if full.
- *
- * periodicHp, when provided, carries explicit runtime direction and amountPerTurn.
- * Absent for stat-only effects.
+ * For periodic HP effects use applyPeriodicHpEffectApplication.
  */
 export function applyEffectApplication(
   effectApplication: AppliedEffectMeta,
@@ -370,7 +388,6 @@ export function applyEffectApplication(
   targetAnchor: CellCoord,
   state: BattleState,
   resolvedEffect: Effect,
-  periodicHp?: PeriodicHp,
 ): { state: BattleState; events: EffectEvent[] } {
   const hitCells = resolvePattern(targetAnchor, resolvedPattern);
   const events: EffectEvent[] = [];
@@ -386,20 +403,71 @@ export function applyEffectApplication(
       effectDisplayName: effectApplication.displayName,
       effect: resolvedEffect,
       remainingRounds: effectApplication.duration,
-      periodicHp,
     };
 
-    const effects = unit.activeEffects.filter(
-      (ae) => ae.effect.id !== resolvedEffect.id,
-    );
-    if (effects.length >= 2) {
-      effects.shift(); // evict oldest (non-duplicate)
-    }
-    effects.push(newEffect);
-
-    newUnits.set(unit.id, { ...unit, activeEffects: effects });
+    newUnits.set(unit.id, withAppliedActiveEffect(unit, newEffect));
     events.push({
       type: "effect_applied",
+      unitId: unit.id,
+      unitName: unit.name,
+      effectDisplayName: effectApplication.displayName,
+    });
+  }
+
+  return {
+    state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) },
+    events,
+  };
+}
+
+/**
+ * Applies a periodic HP effect to all units hit by the resolved pattern.
+ * amountPerTurn is computed per hit cell — each unit receives the amount from
+ * the strongest cell that hit it (mirrors resolveAttack deduplication for damage).
+ * No dodge/block/defense — effects always apply 100%.
+ */
+export function applyPeriodicHpEffectApplication(
+  effectApplication: AppliedEffectMeta,
+  resolvedPattern: SkillPattern,
+  targetAnchor: CellCoord,
+  state: BattleState,
+  resolvedEffect: Effect,
+  periodicInput: {
+    direction: 'heal' | 'damage';
+    basePower: number;
+  },
+): { state: BattleState; events: EffectEvent[] } {
+  const hitCells = resolvePattern(targetAnchor, resolvedPattern);
+
+  // Deduplicate: for large units spanning multiple cells, keep the highest amountPerTurn.
+  const hitUnits = new Map<string, { unit: Unit; amountPerTurn: number }>();
+  for (const hit of hitCells) {
+    const unit = state.occupancy.cellToUnit.get(cellKey(hit.coord));
+    if (!unit) continue;
+    const amountPerTurn = computePeriodicHpAmount(periodicInput.basePower, hit.multiplier);
+    const existing = hitUnits.get(unit.id);
+    if (!existing || amountPerTurn > existing.amountPerTurn) {
+      hitUnits.set(unit.id, { unit, amountPerTurn });
+    }
+  }
+
+  const events: EffectEvent[] = [];
+  const newUnits = new Map(state.units);
+
+  for (const { unit, amountPerTurn } of hitUnits.values()) {
+    const newEffect: ActiveEffect = {
+      effectDisplayName: effectApplication.displayName,
+      effect: resolvedEffect,
+      remainingRounds: effectApplication.duration,
+      periodicHp: {
+        direction: periodicInput.direction,
+        amountPerTurn,
+      },
+    };
+
+    newUnits.set(unit.id, withAppliedActiveEffect(unit, newEffect));
+    events.push({
+      type: 'effect_applied',
       unitId: unit.id,
       unitName: unit.name,
       effectDisplayName: effectApplication.displayName,

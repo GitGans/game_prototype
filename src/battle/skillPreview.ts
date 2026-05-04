@@ -7,7 +7,7 @@ import type {
   SkillPreviewModel,
 } from '../shared/skillPreviewModel';
 import { getActiveSkill } from './skillRuntime';
-import { computeDamageVsUnit, getDefenseIgnoreModifierTypeForPowerSource } from './combat';
+import { computeDamageVsUnit, getDefenseIgnoreModifierTypeForPowerSource, computePeriodicHpAmount } from './combat';
 import { resolvePattern } from './skillPatterns';
 import { getDamageModifierPercent } from './skillDefinitionRuntime';
 import { cellKey } from './field';
@@ -183,20 +183,22 @@ export function buildSkillPreviewModelFromPlan(
     }
 
     if (action.type === 'apply_periodic_hp_effect') {
-      // Anchor-cell multiplier only. The executor uses only the anchor for per-turn
-      // scaling; non-anchor cells define targeting area, not power.
       const pattern = resolvePlanPattern(action.matrix);
-      const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
       const basePower = getEffectiveUnitPower(activeUnit, action.powerSource);
-      const amount = Math.round(basePower * anchorCell.multiplier);
+      const hitCells = resolvePattern(targetCoord, pattern);
 
-      const effectCells = resolvePattern(targetCoord, pattern);
-      const seenUnits = new Set<string>();
-      for (const ec of effectCells) {
-        const unitId = occupancy.cellToUnitId.get(cellKey(ec.coord));
-        const unit = unitId ? unitsById.get(unitId) : undefined;
-        if (!unit || seenUnits.has(unit.id)) continue;
-        seenUnits.add(unit.id);
+      const amountByUnitId = new Map<string, number>();
+      for (const hit of hitCells) {
+        const unitId = occupancy.cellToUnitId.get(cellKey(hit.coord));
+        if (!unitId) continue;
+        const amount = computePeriodicHpAmount(basePower, hit.multiplier);
+        const prev = amountByUnitId.get(unitId);
+        if (prev === undefined || amount > prev) amountByUnitId.set(unitId, amount);
+      }
+
+      for (const [unitId, amount] of amountByUnitId) {
+        const unit = unitsById.get(unitId);
+        if (!unit) continue;
         const sign = action.direction === 'heal' ? '+' : '-';
         statusLines.push(`${unit.name} ${sign}${amount} HP/round`);
       }

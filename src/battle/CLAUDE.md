@@ -90,24 +90,29 @@ The executor (`skillExecution.ts`) and counter-attack both run through `SkillUse
 - `combat.ts` may import type-only contracts from `skillUsePlan.ts`.
   `skillUsePlan.ts` is a contract-only file and must never import `combat.ts`.
 - Effect registry classification uses `effectKind: "periodic_hp" | "stat_modifier"`. Periodic HP
-  scaling source is only `apply_periodic_hp_effect.powerSource`.
+  scaling: `amountPerTurn = getEffectiveUnitPower(caster, powerSource) × hit cell multiplier`.
+  If a unit is hit by multiple cells, the highest resulting amount is used.
 
 **SkillUsePlan action fields are semantic**
 - `apply_stat_effect` and `apply_periodic_hp_effect` actions expose `effect: EffectApplicationMeta`
   directly. There is no `effectBlock` on the plan surface.
-- Lower-level combat helpers (`applyEffectApplication`, `applyVampirism`, `resolveInstantEffects`)
-  accept semantic refs from `shared/skillTypes.ts` directly (`AppliedEffectMeta`, `PostDamageEffect`,
-  `InstantEffectApplication`, `DamageModifierRef`). There are no adapter functions at the executor
-  boundary — `skillExecution.ts` passes `action.effect`, `action.postDamage`, and
-  `action.instantEffect` directly.
+- Lower-level combat helpers (`applyEffectApplication`, `applyPeriodicHpEffectApplication`,
+  `applyVampirism`, `resolveInstantEffects`) accept semantic refs from `shared/skillTypes.ts`
+  directly (`AppliedEffectMeta`, `PostDamageEffect`, `InstantEffectApplication`, `DamageModifierRef`).
+  There are no adapter functions at the executor boundary — `skillExecution.ts` passes
+  `action.effect`, `action.postDamage`, and `action.instantEffect` directly.
+- `applyEffectApplication` handles stat modifier effects only. `applyPeriodicHpEffectApplication`
+  handles periodic HP effects and computes per-cell `amountPerTurn` from the matrix multiplier.
 
 **Hostile damage**
 - Hostile skills must carry an explicit `damage` action in their `ActionSkillDefinition`.
   There is no implicit fallback damage step. Skills like `weaken_curse` that deal damage
   must author it as a `damage` action with an explicit `powerSource` and `matrix`.
 
-**Periodic HP direction**
+**Periodic HP direction and amount**
 - `ActiveEffect.periodicHp` is the sole runtime source for periodic HP direction and amount.
+  `amountPerTurn` is set at effect application time from the matrix cell that hit the unit
+  (via `applyPeriodicHpEffectApplication`). Each affected unit may receive a different amount.
 - `effect.effectTone` is presentation/classification metadata only — not a direction source.
   `effectTone` is independent of `UnitUpgradeStatLineSnapshot.tone` (upgrade card display) —
   they share the same value vocabulary but are separate fields on separate types.

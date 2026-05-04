@@ -8,6 +8,7 @@ import {
   resolveAttack,
   resolveHealWithEvents,
   applyEffectApplication,
+  applyPeriodicHpEffectApplication,
   applyVampirism,
   resolveInstantEffects,
 } from "./combat";
@@ -18,7 +19,6 @@ import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
 import { getEffectiveUnitPower } from './skillPower';
 import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
-import type { PeriodicHp } from '../shared/activeEffect';
 import { resolveSkillTargetsForPolicy } from "./targeting";
 import { rebuildRemainingQueue } from "./initiative";
 import { resolvePattern } from "./skillPatterns";
@@ -323,24 +323,18 @@ function executeApplyPeriodicHpEffectAction(input: {
   const { state, caster, target, queueContext, action } = input;
 
   const pattern = resolvePlanPattern(action.matrix);
+  const basePower = getEffectiveUnitPower(caster, action.powerSource);
 
-  const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
-  const amountPerTurn = Math.round(
-    getEffectiveUnitPower(caster, action.powerSource) * anchorCell.multiplier,
-  );
-
-  const periodicHp: PeriodicHp = {
-    direction: action.direction,
-    amountPerTurn,
-  };
-
-  const { state: withEffect, events: effEvents } = applyEffectApplication(
+  const { state: withEffect, events: effEvents } = applyPeriodicHpEffectApplication(
     action.effect,
     pattern,
     target,
     state,
     action.displayEffect,
-    periodicHp,
+    {
+      direction: action.direction,
+      basePower,
+    },
   );
 
   const events = mapEffectAppliedEventsToBattleEvents(effEvents);
