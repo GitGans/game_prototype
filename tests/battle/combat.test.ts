@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { resolveAttack, applyEffectBlock, applyVampirism } from "../../src/battle/combat";
+import { resolveAttack, applyEffectApplication, applyVampirism } from "../../src/battle/combat";
 import { cellKey } from "../../src/battle/field";
+import type { AppliedEffectMeta } from "../../src/shared/skillTypes";
 import type { Effect, ResolvedHitCell, SkillPattern } from "../../src/battle/types";
 import { coord } from "./helpers/coords";
 import { makeUnit } from "./helpers/units";
@@ -109,21 +110,17 @@ describe("resolveAttack", () => {
   });
 });
 
-// ─── applyEffectBlock ─────────────────────────────────────────────────────────
+// ─── applyEffectApplication ───────────────────────────────────────────────────
 
-describe("applyEffectBlock", () => {
+describe("applyEffectApplication", () => {
   function makeEffect(id: string): Effect {
     return { id, isBuff: false };
   }
 
-  function makeEffectBlock(effectId: string) {
+  function makeAppliedEffectMeta(): AppliedEffectMeta {
     return {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Test Effect",
-      effectName: effectId,
+      displayName: "Test Effect",
       duration: 3,
-      damageType: "physical" as const,
     };
   }
 
@@ -147,8 +144,8 @@ describe("applyEffectBlock", () => {
     const state = makeBattleStateFromUnits([target]);
     const effectC = makeEffect("effect-c");
 
-    const { state: after } = applyEffectBlock(
-      makeEffectBlock("effect-c"),
+    const { state: after } = applyEffectApplication(
+      makeAppliedEffectMeta(),
       singleCellPattern,
       coord("enemy", 0, 0),
       state,
@@ -176,8 +173,8 @@ describe("applyEffectBlock", () => {
     const state = makeBattleStateFromUnits([target]);
     const refreshedA: Effect = { ...effectA }; // same id
 
-    const { state: after } = applyEffectBlock(
-      makeEffectBlock("effect-a"),
+    const { state: after } = applyEffectApplication(
+      makeAppliedEffectMeta(),
       singleCellPattern,
       coord("enemy", 0, 0),
       state,

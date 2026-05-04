@@ -2,18 +2,20 @@ import {
   ActiveEffect,
   BattleState,
   CellCoord,
-  DamageModifierBlock,
   DamageType,
   Effect,
-  InstantEffectBlock,
   InstantEffectEvent,
-  PostDamageBlock,
   ResolvedHitCell,
   Side,
-  SkillEffectBlock,
   SkillPattern,
   Unit,
 } from "./types";
+import type {
+  AppliedEffectMeta,
+  DamageModifierRef,
+  InstantEffectApplication,
+  PostDamageEffect,
+} from '../shared/skillTypes';
 import { cellKey } from "./field";
 import { buildOccupancy, removeUnit } from "./occupancy";
 import { resolvePattern } from "./skillPatterns";
@@ -108,16 +110,16 @@ export function resolveAttack(
   damageType: DamageType,
   state: BattleState,
   options: {
-    damageModifierBlocks?: DamageModifierBlock[];
+    damageModifiers?: readonly DamageModifierRef[];
     rng: Rng;
   },
 ): AttackResult {
-  const { damageModifierBlocks, rng } = options;
+  const { damageModifiers, rng } = options;
   // Build a quick lookup: modifier type → ignore percent
   const ignorePercent: Partial<Record<string, number>> = {};
-  if (damageModifierBlocks) {
-    for (const block of damageModifierBlocks) {
-      ignorePercent[block.type] = getDamageModifierPercent(block);
+  if (damageModifiers) {
+    for (const modifier of damageModifiers) {
+      ignorePercent[modifier.type] = getDamageModifierPercent(modifier);
     }
   }
 
@@ -217,12 +219,12 @@ export function resolveAttack(
  * Healing never exceeds maxHp.
  */
 export function applyVampirism(
-  postDamageBlock: PostDamageBlock,
+  postDamage: PostDamageEffect,
   caster: Unit,
   totalRealDamage: number,
   state: BattleState,
 ): { state: BattleState; events: CombatEvent[] } {
-  const percent = getVampirismPercent(postDamageBlock);
+  const percent = getVampirismPercent(postDamage);
   const healPool = Math.floor((totalRealDamage * percent) / 100);
 
   if (healPool <= 0) return { state, events: [] };
@@ -230,7 +232,7 @@ export function applyVampirism(
   const events: CombatEvent[] = [];
   const newUnits = new Map(state.units);
 
-  if (postDamageBlock.type === "self_vampirism") {
+  if (postDamage.type === "self_vampirism") {
     const currentCaster = newUnits.get(caster.id);
     if (currentCaster && currentCaster.hp > 0) {
       const healed = Math.min(healPool, currentCaster.maxHp - currentCaster.hp);
@@ -327,15 +329,15 @@ export function resolveHeal(
 }
 
 /**
- * Applies a SkillEffectBlock to all units hit by its pattern.
+ * Applies an effect to all units hit by the resolved pattern.
  * No dodge/block/defense — effects always apply 100%.
  * Each unit may carry at most 2 active effects; the oldest is evicted if full.
  *
  * periodicHp, when provided, carries explicit runtime direction and amountPerTurn.
  * Absent for stat-only effects.
  */
-export function applyEffectBlock(
-  block: SkillEffectBlock,
+export function applyEffectApplication(
+  effectApplication: AppliedEffectMeta,
   resolvedPattern: SkillPattern,
   targetAnchor: CellCoord,
   state: BattleState,
@@ -353,9 +355,9 @@ export function applyEffectBlock(
     seen.add(unit.id);
 
     const newEffect: ActiveEffect = {
-      effectDisplayName: block.effectDisplayName,
+      effectDisplayName: effectApplication.displayName,
       effect: resolvedEffect,
-      remainingRounds: block.duration,
+      remainingRounds: effectApplication.duration,
       periodicHp,
     };
 
@@ -372,7 +374,7 @@ export function applyEffectBlock(
       type: "effect_applied",
       unitId: unit.id,
       unitName: unit.name,
-      effectDisplayName: block.effectDisplayName,
+      effectDisplayName: effectApplication.displayName,
     });
   }
 
@@ -521,7 +523,7 @@ export function checkGameOver(state: BattleState): Side | null {
  * Does NOT mutate roundQueue — caller handles queue removal and counter-attacks.
  */
 export function resolveInstantEffects(
-  block: InstantEffectBlock,
+  instantEffect: InstantEffectApplication,
   pattern: SkillPattern,
   targetAnchor: CellCoord,
   state: BattleState,
@@ -561,7 +563,7 @@ export function resolveInstantEffects(
         type: "instant_effect_failed",
         unitId: unit.id,
         unitName: unit.name,
-        displayName: block.displayName,
+        displayName: instantEffect.displayName,
       });
       continue;
     }
@@ -571,13 +573,13 @@ export function resolveInstantEffects(
       type: "instant_effect_applied",
       unitId: unit.id,
       unitName: unit.name,
-      displayName: block.displayName,
+      displayName: instantEffect.displayName,
     });
 
     // Only produces a forced-turn side effect for units that still have a turn this round.
     if (!remainingSet.has(unit.id)) continue;
 
-    if (block.instantEffectType === "provoke") {
+    if (instantEffect.type === "provoke") {
       provokedUnitIds.push(unit.id);
     } else {
       distractedUnitIds.push(unit.id);

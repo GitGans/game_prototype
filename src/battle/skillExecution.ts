@@ -4,15 +4,10 @@ import type { BattleState, CellCoord, Unit, InstantEffectEvent } from "./types";
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { BattleEvent } from "./battleEvents";
 import type { CombatEvent, EffectEvent } from "./combat";
-import type {
-  SkillEffectBlock,
-  PostDamageBlock,
-  InstantEffectBlock,
-} from '../shared/skillTypes';
 import {
   resolveAttack,
   resolveHealWithEvents,
-  applyEffectBlock,
+  applyEffectApplication,
   applyVampirism,
   resolveInstantEffects,
 } from "./combat";
@@ -206,52 +201,6 @@ function mapInstantEffectEventsToBattleEvents(events: InstantEffectEvent[]): Bat
 }
 
 
-// ─── Executor boundary adapters ───────────────────────────────────────────────
-// These convert semantic SkillUseAction fields into legacy block shapes expected
-// by lower-level combat helpers. Must not be used outside skillExecution.ts.
-// damageType in toEffectBlock is a compatibility placeholder only — runtime
-// periodic HP scaling uses action.powerSource, not this field.
-
-function toEffectBlock(
-  action: Extract<
-    SkillUseAction,
-    { type: 'apply_stat_effect' | 'apply_periodic_hp_effect' }
-  >,
-): SkillEffectBlock {
-  return {
-    effectMatrixName: action.matrix.matrixName,
-    level: action.effect.level,
-    effectDisplayName: action.effect.displayName,
-    effectName: action.effect.effectName,
-    duration: action.effect.duration,
-    damageType:
-      action.type === 'apply_periodic_hp_effect' &&
-      action.powerSource === 'magical_strength'
-        ? 'magical'
-        : 'physical',
-  };
-}
-
-function toPostDamageBlock(
-  postDamage: Extract<SkillUseAction, { type: 'post_damage' }>['postDamage'],
-): PostDamageBlock {
-  return {
-    type: postDamage.type,
-    level: postDamage.level,
-  };
-}
-
-function toInstantEffectBlock(
-  action: Extract<SkillUseAction, { type: 'instant_effect' }>,
-): InstantEffectBlock {
-  return {
-    instantEffectMatrixName: action.matrix.matrixName,
-    level: action.matrix.level,
-    instantEffectType: action.instantEffect.type,
-    displayName: action.instantEffect.displayName,
-  };
-}
-
 // ─── Plan action runners ──────────────────────────────────────────────────────
 
 function executeHealAction(input: {
@@ -297,7 +246,7 @@ function executeDamageAction(input: {
   const baseDamage = getEffectiveUnitPower(caster, action.powerSource);
 
   const attackResult = resolveAttack(hitCells, baseDamage, damageType, state, {
-    damageModifierBlocks: action.modifiers,
+    damageModifiers: action.modifiers,
     rng,
   });
 
@@ -321,7 +270,7 @@ function executePostDamageAction(input: {
   if (totalRealDamage <= 0) return { state, events: [] };
 
   const { state: afterVamp, events: vampEvents } = applyVampirism(
-    toPostDamageBlock(action.postDamage),
+    action.postDamage,
     caster,
     totalRealDamage,
     state,
@@ -339,8 +288,8 @@ function executeApplyStatEffectAction(input: {
   const { state, target, queueContext, action } = input;
 
   const pattern = resolvePlanPattern(action.matrix);
-  const { state: withEffect, events: effEvents } = applyEffectBlock(
-    toEffectBlock(action),
+  const { state: withEffect, events: effEvents } = applyEffectApplication(
+    action.effect,
     pattern,
     target,
     state,
@@ -390,8 +339,8 @@ function executeApplyPeriodicHpEffectAction(input: {
     amountPerTurn,
   };
 
-  const { state: withEffect, events: effEvents } = applyEffectBlock(
-    toEffectBlock(action),
+  const { state: withEffect, events: effEvents } = applyEffectApplication(
+    action.effect,
     pattern,
     target,
     state,
@@ -550,7 +499,7 @@ function executeInstantEffectAction(input: {
     provokedUnitIds,
     distractedUnitIds,
   } = resolveInstantEffects(
-    toInstantEffectBlock(action),
+    action.instantEffect,
     pattern,
     target,
     input.state,

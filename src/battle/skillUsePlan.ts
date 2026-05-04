@@ -1,11 +1,13 @@
 // Runtime skill plan contract. Produced by compileSkillUsePlan; consumed by executor, preview, targeting, and presentation.
 
 import type {
-  DamageModifierType,
   Effect,
-  InstantEffectType,
-  PostDamageType,
+  DamageModifierRef,
+  PostDamageEffect,
+  InstantEffectApplication,
 } from '../shared/skillTypes';
+
+export type { DamageModifierRef, PostDamageEffect, InstantEffectApplication };
 
 // ─── Targeting ────────────────────────────────────────────────────────────────
 
@@ -60,27 +62,13 @@ export type InstantEffectPatternRef = Extract<
 
 // ─── Semantic runtime helper types ────────────────────────────────────────────
 
-export type DamageModifierRef = {
-  type: DamageModifierType;
-  level: number;
-};
-
 // Shared meta for both stat effects and periodic HP effects.
+// Superset of AppliedEffectMeta from shared/skillTypes.ts — assignable without cast.
 export type EffectApplicationMeta = {
   effectName: string;
   displayName: string;
   level: number;
   duration: number;
-};
-
-export type PostDamageEffect = {
-  type: PostDamageType;
-  level: number;
-};
-
-export type InstantEffectApplication = {
-  type: InstantEffectType;
-  displayName: string;
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────

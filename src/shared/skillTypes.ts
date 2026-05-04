@@ -77,3 +77,27 @@ export interface PostDamageBlock {
   level: number;
 }
 
+// ─── Semantic combat input types ──────────────────────────────────────────────
+// These replace the legacy block shapes at the combat helper boundary.
+// Both skillUsePlan.ts and combat.ts import from here — no upward dependency needed.
+
+export type DamageModifierRef = {
+  type: DamageModifierType;
+  level: number;
+};
+
+export type PostDamageEffect = {
+  type: PostDamageType;
+  level: number;
+};
+
+export type InstantEffectApplication = {
+  type: InstantEffectType;
+  displayName: string;
+};
+
+export type AppliedEffectMeta = {
+  displayName: string;
+  duration: number;
+};
+

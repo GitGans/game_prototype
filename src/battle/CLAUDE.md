@@ -87,10 +87,11 @@ The executor (`skillExecution.ts`) and counter-attack both run through `SkillUse
   directly. There is no `effectBlock` on the plan surface.
 - `SkillEffectBlock.damageType` does not appear in `SkillUsePlan`. Periodic HP scaling uses
   `apply_periodic_hp_effect.powerSource`.
-- Lower-level combat helpers (`applyEffectBlock`, `applyVampirism`, `resolveInstantEffects`)
-  still accept bridge block shapes. `skillExecution.ts` adapts semantic fields to those shapes
-  at the executor boundary using local `toEffectBlock`, `toPostDamageBlock`, `toInstantEffectBlock`
-  helpers. These helpers must not be exported or used outside `skillExecution.ts`.
+- Lower-level combat helpers (`applyEffectApplication`, `applyVampirism`, `resolveInstantEffects`)
+  accept semantic refs from `shared/skillTypes.ts` directly (`AppliedEffectMeta`, `PostDamageEffect`,
+  `InstantEffectApplication`, `DamageModifierRef`). There are no adapter functions at the executor
+  boundary — `skillExecution.ts` passes `action.effect`, `action.postDamage`, and
+  `action.instantEffect` directly.
 
 **Hostile damage**
 - Hostile skills must carry an explicit `damage` action in their `ActionSkillDefinition`.
