@@ -5,6 +5,7 @@ import type {
   DamageModifierRef,
   PostDamageEffect,
   InstantEffectApplication,
+  SkillLevel,
 } from '../shared/skillTypes';
 
 export type { DamageModifierRef, PostDamageEffect, InstantEffectApplication };
@@ -47,9 +48,9 @@ export type CombatPowerSource = PowerSource;
 // ─── Patterns ─────────────────────────────────────────────────────────────────
 
 export type PatternRef =
-  | { kind: 'multiplier_matrix'; matrixName: string; level: number }
-  | { kind: 'effect_matrix'; matrixName: string; level: number }
-  | { kind: 'instant_effect_matrix'; matrixName: string; level: number };
+  | { kind: 'multiplier_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'effect_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'instant_effect_matrix'; matrixName: string; level: SkillLevel };
 
 export type MultiplierPatternRef = Extract<PatternRef, { kind: 'multiplier_matrix' }>;
 export type EffectPatternRef = Extract<PatternRef, { kind: 'effect_matrix' }>;
@@ -65,7 +66,7 @@ export type InstantEffectPatternRef = Extract<
 export type EffectApplicationMeta = {
   effectName: string;
   displayName: string;
-  level: number;
+  level: SkillLevel;
   duration: number;
 };
 

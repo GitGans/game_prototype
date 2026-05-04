@@ -1,9 +1,10 @@
-import type { Effect } from '../shared/skillTypes';
+import type { Effect, SkillLevel } from '../shared/skillTypes';
 import { LEVELED_EFFECTS } from '../data/skillDefinitions';
+import { requireSkillLevel } from './skillLevels';
 
 export function resolveLeveledStatEffect(
   effectName: string,
-  level: number,
+  level: SkillLevel,
 ): Effect {
   const def = LEVELED_EFFECTS[effectName];
   if (!def) {
@@ -12,10 +13,11 @@ export function resolveLeveledStatEffect(
   if (def.effectKind !== 'stat_modifier') {
     throw new Error(`Effect "${effectName}" is not a stat modifier effect.`);
   }
-  if (!def.bonusByLevel) {
-    return def.effect;
-  }
-  const bonus = def.bonusByLevel[level - 1] ?? def.bonusByLevel[0];
+  const bonus = requireSkillLevel(
+    def.bonusByLevel,
+    level,
+    `stat modifier effect "${effectName}"`,
+  );
   const base = def.effect;
   const resolved: Effect = { ...base };
   const bonusFields = [

@@ -1,4 +1,4 @@
-import type { DamageModifierType, PostDamageType, InstantEffectType } from './skillTypes';
+import type { DamageModifierType, PostDamageType, InstantEffectType, SkillLevel } from './skillTypes';
 
 // ---------------------------------------------------------------------------
 // Target policy
@@ -31,9 +31,9 @@ export type SkillDefinitionPowerSource =
  * Concrete SkillPattern objects are resolved by the compiler or runtime bridge, not here.
  */
 export type SkillDefinitionMatrixRef =
-  | { kind: 'multiplier_matrix'; matrixName: string; level: number }
-  | { kind: 'effect_matrix'; matrixName: string; level: number }
-  | { kind: 'instant_effect_matrix'; matrixName: string; level: number };
+  | { kind: 'multiplier_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'effect_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'instant_effect_matrix'; matrixName: string; level: SkillLevel };
 
 /** Narrowed alias — use when a field must reference a multiplier matrix. */
 export type SkillDefinitionMultiplierMatrixRef =
@@ -68,7 +68,7 @@ export type SkillDefinitionAction =
  */
 export interface SkillDefinitionDamageModifier {
   modifierType: DamageModifierType;
-  level: number;
+  level: SkillLevel;
 }
 
 export interface SkillDefinitionDamageAction {
@@ -94,7 +94,7 @@ export interface SkillDefinitionApplyStatEffectAction {
   // Flat stat effects do not scale from caster power; magnitude is resolved by effectName + level.
   effectName: string;
   displayName: string;
-  level: number;
+  level: SkillLevel;
   duration: number;
   matrix: SkillDefinitionEffectMatrixRef;
 }
@@ -108,7 +108,7 @@ export interface SkillDefinitionApplyPeriodicHpEffectAction {
   direction: 'heal' | 'damage';
   // Periodic HP scaling is explicit on the action.
   powerSource: SkillDefinitionPowerSource;
-  level: number;
+  level: SkillLevel;
   duration: number;
   matrix: SkillDefinitionEffectMatrixRef;
 }
@@ -118,7 +118,7 @@ export interface SkillDefinitionApplyPeriodicHpEffectAction {
 export interface SkillDefinitionPostDamageAction {
   type: 'post_damage';
   postDamageType: PostDamageType;
-  level: number;
+  level: SkillLevel;
 }
 
 // --- Instant effect ---

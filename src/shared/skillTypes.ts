@@ -1,3 +1,6 @@
+export type SkillLevel = number;
+export type SkillLevelTable<T> = Record<SkillLevel, T>;
+
 export interface Effect {
   id: string;
   effectTone: 'positive' | 'negative';
@@ -22,7 +25,7 @@ export interface SkillPattern {
 }
 
 export interface LeveledMultiplierMatrix {
-  levels: SkillPattern[];
+  levels: SkillLevelTable<SkillPattern>;
 }
 
 export type LeveledEffectDef =
@@ -33,7 +36,7 @@ export type LeveledEffectDef =
   | {
       effectKind: 'stat_modifier';
       effect: Effect;
-      bonusByLevel?: number[];
+      bonusByLevel: SkillLevelTable<number>;
     };
 
 export type InstantEffectType = 'provoke' | 'distract';

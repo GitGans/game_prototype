@@ -2,15 +2,16 @@ import type { DamageModifierRef, PostDamageEffect } from '../shared/skillTypes';
 import {
   DAMAGE_MODIFIER_LEVELS,
   VAMPIRISM_LEVELS,
-} from "../data/skillDefinitions";
+} from '../data/skillDefinitions';
+import { requireSkillLevel } from './skillLevels';
 
-/** Returns the ignore-% for a DamageModifierRef (1-based level, clamped). */
+/** Returns the ignore-% for a DamageModifierRef. Missing levels throw. */
 export function getDamageModifierPercent(modifier: DamageModifierRef): number {
   const levels = DAMAGE_MODIFIER_LEVELS[modifier.type];
-  return levels[Math.min(modifier.level, levels.length) - 1];
+  return requireSkillLevel(levels, modifier.level, `damage modifier "${modifier.type}"`);
 }
 
-/** Returns the vampirism-% for a PostDamageEffect (1-based level, clamped). */
+/** Returns the vampirism-% for a PostDamageEffect. Missing levels throw. */
 export function getVampirismPercent(postDamage: PostDamageEffect): number {
-  return VAMPIRISM_LEVELS[Math.min(postDamage.level, VAMPIRISM_LEVELS.length) - 1];
+  return requireSkillLevel(VAMPIRISM_LEVELS, postDamage.level, 'vampirism');
 }
