@@ -2,25 +2,31 @@ import {
   ActiveEffect,
   BattleState,
   CellCoord,
-  DamageModifierBlock,
-  DamageType,
   Effect,
-  InstantEffectBlock,
   InstantEffectEvent,
-  PostDamageBlock,
   ResolvedHitCell,
   Side,
-  SkillEffectBlock,
   SkillPattern,
   Unit,
 } from "./types";
+import type {
+  AppliedEffectMeta,
+  DamageModifierRef,
+  DamageModifierType,
+  InstantEffectApplication,
+  PostDamageEffect,
+} from '../shared/skillTypes';
+import type { CombatPowerSource } from './skillUsePlan';
 import { cellKey } from "./field";
 import { buildOccupancy, removeUnit } from "./occupancy";
 import { resolvePattern } from "./skillPatterns";
 import {
   getDamageModifierPercent,
   getVampirismPercent,
-} from "../data/skillDefinitions";
+} from "./skillDefinitionRuntime";
+import type { Rng } from '../shared/random';
+import { rollPercent, rollProbability } from '../shared/random';
+import { resolveActiveEffectPeriodicHp } from '../shared/activeEffect';
 
 export type CombatEvent =
   | { type: "hit"; unitId: string; unitName: string; damage: number }
@@ -75,20 +81,57 @@ export type EffectEvent =
  * Min hit chance = 10% (dodge capped at 90). Min unblocked chance = 10% (block capped at 90).
  * Active effect defense bonuses (physicalDefenseBonus / magicalDefenseBonus) are applied.
  */
+function getDefenseForPowerSource(
+  stats: Pick<EffectiveStats, 'physicalDefense' | 'magicalDefense'>,
+  powerSource: CombatPowerSource,
+): number {
+  switch (powerSource) {
+    case 'physical_strength':
+      return stats.physicalDefense;
+    case 'magical_strength':
+      return stats.magicalDefense;
+    default: {
+      const _exhaustive: never = powerSource;
+      return _exhaustive;
+    }
+  }
+}
+
+export function getDefenseIgnoreModifierTypeForPowerSource(
+  powerSource: CombatPowerSource,
+): DamageModifierType {
+  switch (powerSource) {
+    case 'physical_strength':
+      return 'ignore_physical_defense';
+    case 'magical_strength':
+      return 'ignore_magical_defense';
+    default: {
+      const _exhaustive: never = powerSource;
+      return _exhaustive;
+    }
+  }
+}
+
+export function computePeriodicHpAmount(
+  basePower: number,
+  multiplier: number,
+): number {
+  return Math.round(basePower * multiplier);
+}
+
 /**
  * Returns the raw damage a single hit would deal to `target` before dodge/block.
  * Used by both resolveAttack (combat) and showSkillPreview (display) to keep formulas in sync.
  */
 export function computeDamageVsUnit(
   baseDamage: number,
-  damageType: DamageType,
+  powerSource: CombatPowerSource,
   target: StatOwner,
   multiplier: number,
   defIgnorePercent: number,
 ): number {
   const stats = effectiveStats(target);
-  const rawDefense =
-    damageType === "physical" ? stats.physicalDefense : stats.magicalDefense;
+  const rawDefense = getDefenseForPowerSource(stats, powerSource);
   const defense = rawDefense * (1 - defIgnorePercent / 100);
   const minDamage = Math.round(baseDamage * 0.1);
   const effectiveBase = Math.max(
@@ -101,19 +144,19 @@ export function computeDamageVsUnit(
 export function resolveAttack(
   hitCells: ResolvedHitCell[],
   baseDamage: number,
-  damageType: DamageType,
+  powerSource: CombatPowerSource,
   state: BattleState,
   options: {
-    damageModifierBlocks?: DamageModifierBlock[];
-    rng?: () => number;
-  } = {},
+    damageModifiers?: readonly DamageModifierRef[];
+    rng: Rng;
+  },
 ): AttackResult {
-  const { damageModifierBlocks, rng = Math.random } = options;
+  const { damageModifiers, rng } = options;
   // Build a quick lookup: modifier type → ignore percent
   const ignorePercent: Partial<Record<string, number>> = {};
-  if (damageModifierBlocks) {
-    for (const block of damageModifierBlocks) {
-      ignorePercent[block.type] = getDamageModifierPercent(block);
+  if (damageModifiers) {
+    for (const modifier of damageModifiers) {
+      ignorePercent[modifier.type] = getDamageModifierPercent(modifier);
     }
   }
 
@@ -123,14 +166,11 @@ export function resolveAttack(
     const unit = state.occupancy.cellToUnit.get(cellKey(coord));
     if (!unit) continue;
 
-    const defIgnoreKey =
-      damageType === "physical"
-        ? "ignore_physical_defense"
-        : "ignore_magical_defense";
+    const defIgnoreKey = getDefenseIgnoreModifierTypeForPowerSource(powerSource);
     const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
     const dmg = computeDamageVsUnit(
       baseDamage,
-      damageType,
+      powerSource,
       unit,
       multiplier,
       defIgnore,
@@ -162,13 +202,13 @@ export function resolveAttack(
       90,
     );
 
-    if (rng() * 100 < effectiveDodge) {
+    if (rollPercent(rng, effectiveDodge)) {
       events.push({ type: "dodged", unitId: unit.id, unitName: unit.name });
       continue;
     }
 
     let finalDmg = rawDmg;
-    if (rng() * 100 < effectiveBlock) {
+    if (rollPercent(rng, effectiveBlock)) {
       finalDmg = Math.round(rawDmg / 2);
       events.push({
         type: "blocked",
@@ -213,12 +253,12 @@ export function resolveAttack(
  * Healing never exceeds maxHp.
  */
 export function applyVampirism(
-  postDamageBlock: PostDamageBlock,
+  postDamage: PostDamageEffect,
   caster: Unit,
   totalRealDamage: number,
   state: BattleState,
 ): { state: BattleState; events: CombatEvent[] } {
-  const percent = getVampirismPercent(postDamageBlock);
+  const percent = getVampirismPercent(postDamage);
   const healPool = Math.floor((totalRealDamage * percent) / 100);
 
   if (healPool <= 0) return { state, events: [] };
@@ -226,7 +266,7 @@ export function applyVampirism(
   const events: CombatEvent[] = [];
   const newUnits = new Map(state.units);
 
-  if (postDamageBlock.type === "self_vampirism") {
+  if (postDamage.type === "self_vampirism") {
     const currentCaster = newUnits.get(caster.id);
     if (currentCaster && currentCaster.hp > 0) {
       const healed = Math.min(healPool, currentCaster.maxHp - currentCaster.hp);
@@ -322,21 +362,32 @@ export function resolveHeal(
   return resolveHealWithEvents(hitCells, baseHeal, state).state;
 }
 
+function withAppliedActiveEffect(
+  unit: Unit,
+  newEffect: ActiveEffect,
+): Unit {
+  const effects = unit.activeEffects.filter(
+    (ae) => ae.effect.id !== newEffect.effect.id,
+  );
+  if (effects.length >= 2) {
+    effects.shift(); // evict oldest (non-duplicate) when at capacity
+  }
+  effects.push(newEffect);
+  return { ...unit, activeEffects: effects };
+}
+
 /**
- * Applies a SkillEffectBlock to all units hit by its pattern.
+ * Applies a stat effect to all units hit by the resolved pattern.
  * No dodge/block/defense — effects always apply 100%.
  * Each unit may carry at most 2 active effects; the oldest is evicted if full.
- *
- * resolvedEffect and computedPerTurn are resolved by the caller from LEVELED_EFFECTS
- * using the skill's current level, so this function stays data-layer independent.
+ * For periodic HP effects use applyPeriodicHpEffectApplication.
  */
-export function applyEffectBlock(
-  block: SkillEffectBlock,
+export function applyEffectApplication(
+  effectApplication: AppliedEffectMeta,
   resolvedPattern: SkillPattern,
   targetAnchor: CellCoord,
   state: BattleState,
   resolvedEffect: Effect,
-  computedPerTurn: number | undefined,
 ): { state: BattleState; events: EffectEvent[] } {
   const hitCells = resolvePattern(targetAnchor, resolvedPattern);
   const events: EffectEvent[] = [];
@@ -349,26 +400,77 @@ export function applyEffectBlock(
     seen.add(unit.id);
 
     const newEffect: ActiveEffect = {
-      effectDisplayName: block.effectDisplayName,
+      effectDisplayName: effectApplication.displayName,
       effect: resolvedEffect,
-      remainingRounds: block.duration,
-      computedPerTurn,
+      remainingRounds: effectApplication.duration,
     };
 
-    const effects = unit.activeEffects.filter(
-      (ae) => ae.effect.id !== resolvedEffect.id,
-    );
-    if (effects.length >= 2) {
-      effects.shift(); // evict oldest (non-duplicate)
-    }
-    effects.push(newEffect);
-
-    newUnits.set(unit.id, { ...unit, activeEffects: effects });
+    newUnits.set(unit.id, withAppliedActiveEffect(unit, newEffect));
     events.push({
       type: "effect_applied",
       unitId: unit.id,
       unitName: unit.name,
-      effectDisplayName: block.effectDisplayName,
+      effectDisplayName: effectApplication.displayName,
+    });
+  }
+
+  return {
+    state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) },
+    events,
+  };
+}
+
+/**
+ * Applies a periodic HP effect to all units hit by the resolved pattern.
+ * amountPerTurn is computed per hit cell — each unit receives the amount from
+ * the strongest cell that hit it (mirrors resolveAttack deduplication for damage).
+ * No dodge/block/defense — effects always apply 100%.
+ */
+export function applyPeriodicHpEffectApplication(
+  effectApplication: AppliedEffectMeta,
+  resolvedPattern: SkillPattern,
+  targetAnchor: CellCoord,
+  state: BattleState,
+  resolvedEffect: Effect,
+  periodicInput: {
+    direction: 'heal' | 'damage';
+    basePower: number;
+  },
+): { state: BattleState; events: EffectEvent[] } {
+  const hitCells = resolvePattern(targetAnchor, resolvedPattern);
+
+  // Deduplicate: for large units spanning multiple cells, keep the highest amountPerTurn.
+  const hitUnits = new Map<string, { unit: Unit; amountPerTurn: number }>();
+  for (const hit of hitCells) {
+    const unit = state.occupancy.cellToUnit.get(cellKey(hit.coord));
+    if (!unit) continue;
+    const amountPerTurn = computePeriodicHpAmount(periodicInput.basePower, hit.multiplier);
+    const existing = hitUnits.get(unit.id);
+    if (!existing || amountPerTurn > existing.amountPerTurn) {
+      hitUnits.set(unit.id, { unit, amountPerTurn });
+    }
+  }
+
+  const events: EffectEvent[] = [];
+  const newUnits = new Map(state.units);
+
+  for (const { unit, amountPerTurn } of hitUnits.values()) {
+    const newEffect: ActiveEffect = {
+      effectDisplayName: effectApplication.displayName,
+      effect: resolvedEffect,
+      remainingRounds: effectApplication.duration,
+      periodicHp: {
+        direction: periodicInput.direction,
+        amountPerTurn,
+      },
+    };
+
+    newUnits.set(unit.id, withAppliedActiveEffect(unit, newEffect));
+    events.push({
+      type: 'effect_applied',
+      unitId: unit.id,
+      unitName: unit.name,
+      effectDisplayName: effectApplication.displayName,
     });
   }
 
@@ -396,24 +498,25 @@ export function tickEffects(state: BattleState): {
     const nextEffects: ActiveEffect[] = [];
 
     for (const ae of unit.activeEffects) {
-      if (ae.computedPerTurn !== undefined) {
-        if (ae.effect.isBuff) {
-          hp = Math.min(unit.maxHp, hp + ae.computedPerTurn);
+      const periodicHp = resolveActiveEffectPeriodicHp(ae);
+      if (periodicHp) {
+        if (periodicHp.direction === 'heal') {
+          hp = Math.min(unit.maxHp, hp + periodicHp.amountPerTurn);
           events.push({
             type: "effect_tick_heal",
             unitId: unit.id,
             unitName: unit.name,
             effectDisplayName: ae.effectDisplayName,
-            amount: ae.computedPerTurn,
+            amount: periodicHp.amountPerTurn,
           });
         } else {
-          hp = Math.max(0, hp - ae.computedPerTurn);
+          hp = Math.max(0, hp - periodicHp.amountPerTurn);
           events.push({
             type: "effect_tick_damage",
             unitId: unit.id,
             unitName: unit.name,
             effectDisplayName: ae.effectDisplayName,
-            amount: ae.computedPerTurn,
+            amount: periodicHp.amountPerTurn,
           });
         }
       }
@@ -447,8 +550,8 @@ export function tickEffects(state: BattleState): {
 }
 
 export interface EffectiveStats {
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;
   magicalDefense: number;
   dodge: number;
@@ -457,7 +560,7 @@ export interface EffectiveStats {
 }
 
 interface StatOwner {
-  physicalDamage: number; magicalDamage: number;
+  physicalStrength: number; magicalStrength: number;
   physicalDefense: number; magicalDefense: number;
   dodge: number; block: number; initiative: number;
   activeEffects: readonly ActiveEffect[];
@@ -467,8 +570,8 @@ interface StatOwner {
 export function effectiveStats(unit: StatOwner): EffectiveStats {
   return unit.activeEffects.reduce<EffectiveStats>(
     (acc, ae) => ({
-      physicalDamage: acc.physicalDamage + (ae.effect.physicalDamageBonus ?? 0),
-      magicalDamage: acc.magicalDamage + (ae.effect.magicalDamageBonus ?? 0),
+      physicalStrength: acc.physicalStrength + (ae.effect.physicalStrengthBonus ?? 0),
+      magicalStrength: acc.magicalStrength + (ae.effect.magicalStrengthBonus ?? 0),
       physicalDefense:
         acc.physicalDefense + (ae.effect.physicalDefenseBonus ?? 0),
       magicalDefense: acc.magicalDefense + (ae.effect.magicalDefenseBonus ?? 0),
@@ -477,8 +580,8 @@ export function effectiveStats(unit: StatOwner): EffectiveStats {
       initiative: acc.initiative + (ae.effect.initiativeBonus ?? 0),
     }),
     {
-      physicalDamage: unit.physicalDamage,
-      magicalDamage: unit.magicalDamage,
+      physicalStrength: unit.physicalStrength,
+      magicalStrength: unit.magicalStrength,
       physicalDefense: unit.physicalDefense,
       magicalDefense: unit.magicalDefense,
       dodge: unit.dodge,
@@ -505,20 +608,23 @@ export function checkGameOver(state: BattleState): Side | null {
  * Resolves instant effects (provoke / distract) for all units in the pattern.
  *
  * For each resolved cell with a unit:
- *   - Roll Math.random() against the cell's probability (multiplier field).
+ *   - Roll rng against the cell's probability (multiplier field).
  *   - If the roll fails → emit instant_effect_failed event, skip unit.
- *   - If the unit is NOT in roundQueue[1..] (already acted) → skip silently.
- *   - If success and unit is in queue → classify as provoked or distracted.
+ *   - If the roll succeeds → emit instant_effect_applied event.
+ *   - If the unit is NOT in roundQueue[1..] (already acted or current actor) →
+ *     effect lands but produces no forced-turn side effect (unit not added to
+ *     provokedUnitIds / distractedUnitIds).
+ *   - If the unit IS in roundQueue[1..] → classify as provoked or distracted.
  *
  * Does NOT mutate roundQueue — caller handles queue removal and counter-attacks.
  */
 export function resolveInstantEffects(
-  block: InstantEffectBlock,
+  instantEffect: InstantEffectApplication,
   pattern: SkillPattern,
   targetAnchor: CellCoord,
   state: BattleState,
   roundQueue: string[],
-  rng: () => number = Math.random,
+  rng: Rng,
 ): {
   events: InstantEffectEvent[];
   provokedUnitIds: string[];
@@ -548,27 +654,28 @@ export function resolveInstantEffects(
     if (!unit) continue;
 
     // Probability roll — no dodge/block/defense
-    if (rng() >= probability) {
+    if (!rollProbability(rng, probability)) {
       events.push({
         type: "instant_effect_failed",
         unitId: unit.id,
         unitName: unit.name,
-        displayName: block.displayName,
+        displayName: instantEffect.displayName,
       });
       continue;
     }
 
-    // Only affects units that still have a turn this round
-    if (!remainingSet.has(unit.id)) continue;
-
+    // Roll succeeded — the effect lands regardless of turn eligibility.
     events.push({
       type: "instant_effect_applied",
       unitId: unit.id,
       unitName: unit.name,
-      displayName: block.displayName,
+      displayName: instantEffect.displayName,
     });
 
-    if (block.instantEffectType === "provoke") {
+    // Only produces a forced-turn side effect for units that still have a turn this round.
+    if (!remainingSet.has(unit.id)) continue;
+
+    if (instantEffect.type === "provoke") {
       provokedUnitIds.push(unit.id);
     } else {
       distractedUnitIds.push(unit.id);

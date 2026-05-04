@@ -8,8 +8,8 @@ function computeBaseStats(blueprint: UnitBlueprint, level: number): UnitBattleSt
   const scale = 1 + 0.1 * (level - 1);
   return {
     hp:              Math.round(blueprint.hp             * scale),
-    physicalDamage:  Math.round(blueprint.physicalDamage * scale),
-    magicalDamage:   Math.round(blueprint.magicalDamage  * scale),
+    physicalStrength:  Math.round(blueprint.physicalStrength * scale),
+    magicalStrength:   Math.round(blueprint.magicalStrength  * scale),
     physicalDefense: blueprint.physicalDefense,
     magicalDefense:  blueprint.magicalDefense,
     dodge:           blueprint.dodge,
@@ -42,8 +42,8 @@ export function buildUnitStatsSnapshot(
     level,
     hp:              { base: base.hp,              value: final.hp              },
     maxHp:           { base: base.hp,              value: final.hp              },
-    physicalDamage:  { base: base.physicalDamage,  value: final.physicalDamage  },
-    magicalDamage:   { base: base.magicalDamage,   value: final.magicalDamage   },
+    physicalStrength:  { base: base.physicalStrength,  value: final.physicalStrength  },
+    magicalStrength:   { base: base.magicalStrength,   value: final.magicalStrength   },
     physicalDefense: { base: base.physicalDefense, value: final.physicalDefense },
     magicalDefense:  { base: base.magicalDefense,  value: final.magicalDefense  },
     dodge:           { base: base.dodge,           value: final.dodge           },

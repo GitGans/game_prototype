@@ -12,9 +12,9 @@ describe("resolvePattern", () => {
       anchorRow: 1,
       anchorCol: 1,
       cells: [
-        [{ damageMultiplier: 1 }, { damageMultiplier: 1 }, { damageMultiplier: 1 }],
-        [{ damageMultiplier: 1 }, { damageMultiplier: 1 }, { damageMultiplier: 1 }],
-        [{ damageMultiplier: 1 }, { damageMultiplier: 1 }, { damageMultiplier: 1 }],
+        [{ multiplier: 1 }, { multiplier: 1 }, { multiplier: 1 }],
+        [{ multiplier: 1 }, { multiplier: 1 }, { multiplier: 1 }],
+        [{ multiplier: 1 }, { multiplier: 1 }, { multiplier: 1 }],
       ],
     };
     const target = coord("player", 0, 0);

@@ -1,12 +1,11 @@
 // ─── Re-exports — TODO(post-refactor): migrate each caller to direct shared/ import and remove these. ───
 export type { Side, Row, Col, CellCoord, ShapeOffset, UnitShape } from '../shared/gridTypes';
 export type {
-  DamageType, SkillActionType,
-  Effect, DamageBlock, SkillEffectBlock,
-  PatternCell, SkillPattern, LeveledDamageMatrix, LeveledEffectDef,
-  InstantEffectType, InstantEffectBlock, InstantEffectEvent,
-  DamageModifierType, DamageModifierBlock,
-  PostDamageType, PostDamageBlock, Skill,
+  Effect,
+  PatternCell, SkillPattern, LeveledMultiplierMatrix, LeveledEffectDef,
+  InstantEffectType, InstantEffectEvent,
+  DamageModifierType,
+  PostDamageType,
 } from '../shared/skillTypes';
 export type {
   SpriteState, SpriteSheetConfig, RowTrait, UnitRace, UnitClass,
@@ -26,7 +25,7 @@ export type {
 // ─── Runtime battle contracts (only types that exist during an active battle) ──
 
 import type { CellCoord, UnitShape } from '../shared/gridTypes';
-import type { Skill } from '../shared/skillTypes';
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { SpriteSheetConfig, RowTrait, UnitRace } from '../shared/unitTypes';
 import type { UnitActivatableAbility } from '../shared/itemTypes';
 
@@ -38,8 +37,8 @@ export interface Unit {
   name: string;
   hp: number;
   maxHp: number;
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;
   magicalDefense: number;
   dodge: number;
@@ -48,7 +47,7 @@ export interface Unit {
   initiative: number;
   shape: UnitShape;
   anchor: CellCoord;
-  skills: Skill[];
+  skills: ActionSkillDefinition[];
   activeSkillIndex: number;
   rowTrait: RowTrait;
   race?: UnitRace;

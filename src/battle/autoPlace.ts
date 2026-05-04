@@ -1,4 +1,6 @@
 import type { BattleState, Unit }             from './types';
+import type { Rng }                            from '../shared/random';
+import { pickOne }                             from '../shared/random';
 import type { BenchUnitRef }                   from './types';
 import type { CellCoord, Col, Row, UnitShape } from '../shared/gridTypes';
 import type { RowTrait }                       from '../shared/unitTypes';
@@ -74,6 +76,7 @@ export function autoPlacePlayer(
 export function autoPlaceEnemies(
   state:      BattleState,
   candidates: EnemyPlacementCandidates,
+  rng:        Rng,
 ): BattleState {
   let counter = 1;
   const cols: Col[] = [0, 1, 2];
@@ -82,7 +85,7 @@ export function autoPlaceEnemies(
     const anchor: CellCoord = { side: 'enemy', row: 0, col };
     if (state.occupancy.cellToUnit.has(cellKey(anchor))) continue;
     if (candidates.frontPool.length === 0) continue;
-    const c = candidates.frontPool[Math.floor(Math.random() * candidates.frontPool.length)];
+    const c = pickOne(rng, candidates.frontPool);
     const unit = c.createUnit(anchor, `e${counter++}`);
     if (canPlace(anchor, c.shape, state, 'enemy')) state = placeUnit(unit, state);
   }
@@ -91,7 +94,7 @@ export function autoPlaceEnemies(
     const anchor: CellCoord = { side: 'enemy', row: 1, col };
     if (state.occupancy.cellToUnit.has(cellKey(anchor))) continue;
     if (candidates.backPool.length === 0) continue;
-    const c = candidates.backPool[Math.floor(Math.random() * candidates.backPool.length)];
+    const c = pickOne(rng, candidates.backPool);
     const unit = c.createUnit(anchor, `e${counter++}`);
     if (canPlace(anchor, c.shape, state, 'enemy')) state = placeUnit(unit, state);
   }

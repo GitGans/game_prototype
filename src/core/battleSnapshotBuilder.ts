@@ -3,21 +3,28 @@ import type { BattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/batt
 import { effectiveStats } from '../battle/combat';
 
 export function buildBattleUnitSnapshot(unit: Unit): BattleUnitSnapshot {
+  const eff = effectiveStats(unit);
   return {
     id:       unit.id,
     name:     unit.name,
     hp:       unit.hp,
     maxHp:    unit.maxHp,
 
-    physicalDamage:      unit.physicalDamage,
-    magicalDamage:       unit.magicalDamage,
+    physicalStrength:    unit.physicalStrength,
+    magicalStrength:     unit.magicalStrength,
     physicalDefense:     unit.physicalDefense,
     magicalDefense:      unit.magicalDefense,
     dodge:               unit.dodge,
     block:               unit.block,
     level:               unit.level,
     initiative:          unit.initiative,
-    effectiveInitiative: effectiveStats(unit).initiative,
+    effectiveInitiative:       eff.initiative,
+    effectivePhysicalStrength: eff.physicalStrength,
+    effectiveMagicalStrength:  eff.magicalStrength,
+    effectivePhysicalDefense: eff.physicalDefense,
+    effectiveMagicalDefense:  eff.magicalDefense,
+    effectiveDodge:           eff.dodge,
+    effectiveBlock:           eff.block,
 
     shape:  unit.shape,
     anchor: { ...unit.anchor },

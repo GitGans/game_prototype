@@ -18,9 +18,9 @@ import {
 } from '../battle/itemOps';
 import {
   UnitTabSnapshot,
-  Skill,
 } from '../battle/types';
-import { buildSkillDescription, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
+import { buildSkillIconSnapshot, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
 import {
@@ -39,20 +39,17 @@ import {
 } from './phaseHandlers/battlePhaseHandler';
 import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
 import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
-import { getActiveSkill, isEnchantmentSkill } from '../battle/skillRuntime';
+import { getActiveSkill } from '../battle/skillRuntime';
+import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
+import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
+import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
 
-function toSkillIcon(skill: Skill): import('./phases').SkillIconSnapshot {
-  return {
-    id:          skill.id,
-    name:        skill.name,
-    description: buildSkillDescription(skill),
-    damageType:  skill.damageBlock?.damageType ?? null,
-    actionType:  skill.actionType,
-  };
+function toSkillIcon(skill: ActionSkillDefinition): SkillIconSnapshot {
+  return buildSkillIconSnapshot(skill);
 }
 
 class PhaseManagerClass {
@@ -61,6 +58,17 @@ class PhaseManagerClass {
   private debugState: DebugBattleState | null = null;
   private lastBattleTransition:     BattlePhaseActionResult | null = null;
   private pendingAutoTurnIntention: AutoTurnIntention | null       = null;
+  private rngStreams: GameplayRngStreams = createDefaultGameplayRngStreams();
+
+  /** For tests only — inject deterministic RNG streams. */
+  setRngStreamsForTest(streams: GameplayRngStreams): void {
+    this.rngStreams = streams;
+  }
+
+  /** Resets streams to default MathRng — call after a test that injected scripted streams. */
+  resetRngStreams(): void {
+    this.rngStreams = createDefaultGameplayRngStreams();
+  }
 
   init(game: Phaser.Game): void {
     this.game = game;
@@ -337,7 +345,9 @@ class PhaseManagerClass {
 
         let targetHighlightKind: 'target' | 'heal_target' | 'none' = 'none';
         if (activeUnit && battleState.validTargets.length > 0) {
-          targetHighlightKind = isEnchantmentSkill(getActiveSkill(activeUnit))
+          const activeSkill = getActiveSkill(activeUnit);
+          const activePlan  = compileSkillUsePlan(activeSkill);
+          targetHighlightKind = isFriendlyOrSelfTargetPolicy(activePlan.targetPolicy)
             ? 'heal_target'
             : 'target';
         }
@@ -424,6 +434,7 @@ class PhaseManagerClass {
         context:                  GameState.getBattleTurnContext(),
         action,
         mode:                     GameState.getBattleMode(),
+        rng:                      this.rngStreams.battleResolution,
         pendingAutoTurnIntention: this.pendingAutoTurnIntention,
       });
 
@@ -455,6 +466,7 @@ class PhaseManagerClass {
 
     // ── Campaign init ──
     if (action.type === 'new_game') {
+      this.rngStreams = createDefaultGameplayRngStreams();
       const mapId = 'test_01';
       if (!GameState.subMapStates[mapId]) {
         GameState.subMapStates[mapId] = initSubMapState(MAP_DEFINITIONS[mapId]);
@@ -501,7 +513,7 @@ class PhaseManagerClass {
       GameState.reset();
       const setup = this.getActiveBattleSetup();
       const { state, race, enemyPlacements } = buildNewBattleState(
-        GameState.get(), setup, action.enemyGroupId,
+        GameState.get(), setup, action.enemyGroupId, this.rngStreams.battleSetup,
       );
       GameState.set(state);
       GameState.lastEnemyRace       = race;
@@ -529,7 +541,7 @@ class PhaseManagerClass {
 
       // Build BattleState — no race/placement persistence for debug
       GameState.reset();
-      const { state } = buildNewBattleState(GameState.get(), setup, action.enemyGroupId);
+      const { state } = buildNewBattleState(GameState.get(), setup, action.enemyGroupId, this.rngStreams.battleSetup);
       GameState.set(state);
 
       // Snapshot debug participants (all non-camp units; bench not tracked for debug)
@@ -551,7 +563,7 @@ class PhaseManagerClass {
           // Debug replay = fresh battle. Intentional: debug battles have no saved placements.
           GameState.reset();
           const setup = this.buildDebugBattleSetup();
-          const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId);
+          const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId, this.rngStreams.battleSetup);
           GameState.set(state);
         } else {
           const saved = GameState.lastEnemyPlacements;
@@ -565,7 +577,7 @@ class PhaseManagerClass {
             // Fallback: no saved placements, generate fresh
             GameState.reset();
             const setup = this.getActiveBattleSetup();
-            const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId);
+            const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId, this.rngStreams.battleSetup);
             GameState.set(state);
           }
         }
@@ -599,8 +611,8 @@ class PhaseManagerClass {
                 const scale = 1 + 0.1 * (newLevel - 1);
                 liveUnit.level          = newLevel;
                 liveUnit.maxHp          = Math.round(bp.hp * scale);
-                liveUnit.physicalDamage = Math.round(bp.physicalDamage * scale);
-                liveUnit.magicalDamage  = Math.round(bp.magicalDamage  * scale);
+                liveUnit.physicalStrength = Math.round(bp.physicalStrength * scale);
+                liveUnit.magicalStrength  = Math.round(bp.magicalStrength  * scale);
               }
             }
           });
@@ -706,6 +718,7 @@ class PhaseManagerClass {
     // ── Debug mode ──
     if (action.type === 'init_debug') {
       this.debugState = createDebugBattleState(action.level);
+      this.rngStreams = createDefaultGameplayRngStreams();
     }
 
     if (action.type === 'toggle_debug_camp') {

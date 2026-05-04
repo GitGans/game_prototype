@@ -1,36 +1,18 @@
-export type DamageType = 'physical' | 'magical';
-export type SkillActionType = 'melee' | 'ranged' | 'mass_enchantment' | 'self_enchantment';
-
 export interface Effect {
   id: string;
-  isBuff: boolean;
+  effectTone: 'positive' | 'negative';
   physicalDefenseBonus?: number;
   magicalDefenseBonus?: number;
   dodgeBonus?: number;
   blockBonus?: number;
   initiativeBonus?: number;
-  physicalDamageBonus?: number;
-  magicalDamageBonus?: number;
+  physicalStrengthBonus?: number;
+  magicalStrengthBonus?: number;
   description?: string;
 }
 
-export interface DamageBlock {
-  matrixName: string;
-  damageType: DamageType;
-  level: number;
-}
-
-export interface SkillEffectBlock {
-  effectMatrixName: string;
-  level: number;
-  effectDisplayName: string;
-  effectName: string;
-  duration: number;
-  damageType: DamageType;
-}
-
 export interface PatternCell {
-  damageMultiplier: number;
+  multiplier: number;
 }
 
 export interface SkillPattern {
@@ -39,24 +21,22 @@ export interface SkillPattern {
   cells: (PatternCell | null)[][];
 }
 
-export interface LeveledDamageMatrix {
+export interface LeveledMultiplierMatrix {
   levels: SkillPattern[];
 }
 
-export interface LeveledEffectDef {
-  effect: Effect;
-  effectDamageType?: DamageType;
-  bonusByLevel?: number[];
-}
+export type LeveledEffectDef =
+  | {
+      effectKind: 'periodic_hp';
+      effect: Effect;
+    }
+  | {
+      effectKind: 'stat_modifier';
+      effect: Effect;
+      bonusByLevel?: number[];
+    };
 
 export type InstantEffectType = 'provoke' | 'distract';
-
-export interface InstantEffectBlock {
-  instantEffectMatrixName: string;
-  level: number;
-  instantEffectType: InstantEffectType;
-  displayName: string;
-}
 
 export type InstantEffectEvent =
   | { type: 'instant_effect_applied'; unitId: string; unitName: string; displayName: string }
@@ -70,25 +50,29 @@ export type DamageModifierType =
   | 'ignore_physical_defense'
   | 'ignore_magical_defense';
 
-export interface DamageModifierBlock {
-  type: DamageModifierType;
-  level: number;
-}
-
 export type PostDamageType = 'self_vampirism' | 'mass_vampirism';
 
-export interface PostDamageBlock {
+// ─── Semantic combat input types ──────────────────────────────────────────────
+// These replace the legacy block shapes at the combat helper boundary.
+// Both skillUsePlan.ts and combat.ts import from here — no upward dependency needed.
+
+export type DamageModifierRef = {
+  type: DamageModifierType;
+  level: number;
+};
+
+export type PostDamageEffect = {
   type: PostDamageType;
   level: number;
-}
+};
 
-export interface Skill {
-  id: string;
-  name: string;
-  actionType: SkillActionType;
-  damageBlock?: DamageBlock;
-  effectBlock?: SkillEffectBlock;
-  instantEffectBlock?: InstantEffectBlock;
-  damageModifierBlocks?: DamageModifierBlock[];
-  postDamageBlock?: PostDamageBlock;
-}
+export type InstantEffectApplication = {
+  type: InstantEffectType;
+  displayName: string;
+};
+
+export type AppliedEffectMeta = {
+  displayName: string;
+  duration: number;
+};
+

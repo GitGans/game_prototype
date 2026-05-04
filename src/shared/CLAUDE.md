@@ -14,11 +14,26 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 ## Key Files
 - `gridTypes.ts` — Grid geometry: `Side`, `Row`, `Col`, `CellCoord`, `UnitShape`
 - `unitTypes.ts` — Unit blueprints: `UnitBlueprint`, `UnitBattleStats`, `UnitClass`, `UnitUpgradeTier`
-- `skillTypes.ts` — Skill contracts: `Skill`, `Effect`, `DamageBlock`, `SkillPattern`, `DamageType`
+- `skillTypes.ts` — Combat primitive and semantic input types: `Effect`, `SkillPattern`, and semantic refs (`DamageModifierRef`, `PostDamageEffect`, `InstantEffectApplication`, `AppliedEffectMeta`) used by `combat.ts` and `skillUsePlan.ts`. Legacy block-shaped skill interfaces have been removed.
+- `skillDefinitionTypes.ts` — Active authoring contract: `ActionSkillDefinition`, action types, target policy types, matrix refs, power source types
 - `itemTypes.ts` — Item/equipment: `ItemDefinition`, `ItemInstance`, `ItemContainer`, `EquipSlot`
 - `snapshotTypes.ts` — UI projections: `UnitStatsSnapshot`, `SkillIconSnapshot`, `BackpackSnapshot`, `EquipmentSnapshot`
 - `battleSnapshots.ts` — Battle-phase projections: `BenchUnitSnapshot` (rebuilt dynamically per phase)
 - `worldTypes.ts` — Map contracts: `SubMapDefinition`, `SubMapState`, `LayoutCell`, `MapEntityType`
+
+## Skill Contract Layers
+
+- **`skillDefinitionTypes.ts`** — `ActionSkillDefinition` is the sole active skill authoring contract.
+  All skills in `data/skillDefinitions.ts` are authored in this format. Stores intent and registry
+  refs (unresolved string names); resolution happens in the compiler.
+- **`skillTypes.ts`** — Combat primitive and semantic input types. Legacy block-shaped skill
+  interfaces have been removed. Current combat helper inputs are `DamageModifierRef`,
+  `PostDamageEffect`, `InstantEffectApplication`, and `AppliedEffectMeta`; they are imported
+  by both `combat.ts` and `skillUsePlan.ts`. Not part of `SkillUsePlan` action fields.
+  `DamageType` and `SkillEffectBlock` have been removed. Effect registry classification now
+  uses `LeveledEffectDef.effectKind`.
+- **`src/battle/skillUsePlan.ts`** — `SkillUsePlan` (runtime contract). Used by executor, preview,
+  targeting, and presentation. `compileSkillUsePlan` compiles `ActionSkillDefinition` → `SkillUsePlan`.
 
 ## Structural Role
 `shared/` → foundation layer; all other folders depend on it, it depends on nothing
@@ -45,7 +60,8 @@ Domain contracts defined here
 ## Where to Modify
 - change grid coordinates or cell addressing → `gridTypes.ts`
 - change unit stats, class list, or progression structure → `unitTypes.ts`
-- change skill mechanics (damage types, effects, patterns) → `skillTypes.ts`
+- change skill runtime bridge types (damage types, effects, patterns) → `skillTypes.ts`
+- change skill authoring contract → `skillDefinitionTypes.ts`
 - change equipment slots or item effects → `itemTypes.ts`
 - change what data UI receives for unit/item display → `snapshotTypes.ts`
 - change what data is available during battle/placement phase → `battleSnapshots.ts`

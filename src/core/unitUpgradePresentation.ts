@@ -1,4 +1,11 @@
-import { Skill, UnitProgressionStatModifiers, UnitUpgradeOption } from '../battle/types';
+import { UnitProgressionStatModifiers, UnitUpgradeOption } from '../battle/types';
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
+import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
+import type { SkillUseAction, SkillUsePlan } from '../battle/skillUsePlan';
+import type {
+  SkillIconColorKind,
+  SkillIconSnapshot,
+} from '../shared/snapshotTypes';
 
 export interface UnitUpgradeStatLineSnapshot {
   stat:  keyof UnitProgressionStatModifiers;
@@ -10,8 +17,8 @@ export interface UnitUpgradeStatLineSnapshot {
 
 const STAT_ORDER: ReadonlyArray<keyof UnitProgressionStatModifiers> = [
   'hp',
-  'physicalDamage',
-  'magicalDamage',
+  'physicalStrength',
+  'magicalStrength',
   'physicalDefense',
   'magicalDefense',
   'dodge',
@@ -21,8 +28,8 @@ const STAT_ORDER: ReadonlyArray<keyof UnitProgressionStatModifiers> = [
 
 const STAT_LABELS: Record<keyof UnitProgressionStatModifiers, string> = {
   hp:              'HP',
-  physicalDamage:  'P.Dmg',
-  magicalDamage:   'M.Dmg',
+  physicalStrength:  'Phys Str',
+  magicalStrength:   'Magic Str',
   physicalDefense: 'P.Def',
   magicalDefense:  'M.Def',
   dodge:           'Dodge',
@@ -30,16 +37,128 @@ const STAT_LABELS: Record<keyof UnitProgressionStatModifiers, string> = {
   initiative:      'Init',
 };
 
-// Moved from PhaseManager.ts — behavior unchanged.
-// Used by toSkillIcon() for all skill snapshots, not only the upgrade tree.
-export function buildSkillDescription(skill: Skill): string {
-  if (skill.effectBlock)        return `${skill.actionType} · applies ${skill.effectBlock.effectDisplayName}`;
-  if (skill.instantEffectBlock) return `${skill.actionType} · ${skill.instantEffectBlock.displayName}`;
-  if (skill.damageBlock)        return `${skill.actionType} · ${skill.damageBlock.damageType} damage`;
-  return skill.actionType;
+// ─── Private plan helpers ────────────────────────────────────────────────────
+
+function targetPolicyLabel(plan: SkillUsePlan): string {
+  switch (plan.targetPolicy.type) {
+    case 'friendly':     return 'friendly';
+    case 'self':         return 'self';
+    case 'enemy_melee':  return 'melee';
+    case 'enemy_ranged': return 'ranged';
+  }
 }
 
-// Priority: option.description → skill.description → ''
+type EffectPresentationAction = Extract<
+  SkillUseAction,
+  { type: 'apply_stat_effect' | 'apply_periodic_hp_effect' }
+>;
+
+function isEffectPresentationAction(
+  action: SkillUseAction,
+): action is EffectPresentationAction {
+  return action.type === 'apply_stat_effect' || action.type === 'apply_periodic_hp_effect';
+}
+
+function powerColorKindFromAction(action: SkillUseAction): SkillIconColorKind | null {
+  if (action.type === 'damage' || action.type === 'apply_periodic_hp_effect') {
+    return action.powerSource === 'magical_strength' ? 'magical' : 'physical';
+  }
+  if (action.type === 'heal') {
+    if (action.powerSource === 'physical_strength') return 'physical';
+    return 'magical';
+  }
+  return null;
+}
+
+// ─── Public plan helpers ─────────────────────────────────────────────────────
+
+// First powered action in SkillUsePlan.actions wins.
+// compileSkillUsePlan preserves ActionSkillDefinition action order, so a skill with damage + DoT
+// produces the damage action first — color reflects the leading action's power source.
+export function getSkillPlanColorKind(plan: SkillUsePlan): SkillIconColorKind {
+  for (const action of plan.actions) {
+    const color = powerColorKindFromAction(action);
+    if (color) return color;
+  }
+  return 'neutral';
+}
+
+export function buildSkillDescriptionFromPlan(plan: SkillUsePlan): string {
+  const target = targetPolicyLabel(plan);
+  const parts: string[] = [];
+
+  for (const action of plan.actions) {
+    switch (action.type) {
+      case 'damage': {
+        const power = action.powerSource === 'magical_strength' ? 'magical' : 'physical';
+        parts.push(`${power} damage`);
+        break;
+      }
+      case 'heal':
+        parts.push('heal');
+        break;
+      case 'apply_stat_effect':
+        parts.push(`applies ${action.effect.displayName}`);
+        break;
+      case 'apply_periodic_hp_effect':
+        parts.push(action.effect.displayName);
+        break;
+      case 'instant_effect':
+        parts.push(action.instantEffect.displayName);
+        break;
+      case 'post_damage':
+        parts.push(action.postDamage.type === 'self_vampirism' ? 'vampirism' : 'mass vampirism');
+        break;
+    }
+  }
+
+  if (parts.length === 0) return target;
+  return `${target} · ${parts.join(' + ')}`;
+}
+
+export function buildSkillTagFromPlan(plan: SkillUsePlan): string {
+  const target = targetPolicyLabel(plan);
+  const color  = getSkillPlanColorKind(plan);
+
+  if (color !== 'neutral') {
+    return `${target} · ${color}`;
+  }
+
+  if (plan.actions.some(isEffectPresentationAction)) {
+    return `${target} · effect`;
+  }
+
+  if (plan.actions.some((a) => a.type === 'instant_effect')) {
+    return `${target} · instant`;
+  }
+
+  if (plan.actions.some((a) => a.type === 'post_damage')) {
+    return `${target} · post-damage`;
+  }
+
+  return target;
+}
+
+// ─── Public factories ─────────────────────────────────────────────────────────
+
+export function buildSkillDescription(skill: ActionSkillDefinition): string {
+  return buildSkillDescriptionFromPlan(compileSkillUsePlan(skill));
+}
+
+export function buildSkillIconSnapshot(skill: ActionSkillDefinition): SkillIconSnapshot {
+  const plan = compileSkillUsePlan(skill);
+  return {
+    id:          skill.id,
+    name:        skill.name,
+    description: buildSkillDescriptionFromPlan(plan),
+    tag:         buildSkillTagFromPlan(plan),
+    colorKind:   getSkillPlanColorKind(plan),
+  };
+}
+
+// ─── Upgrade presentation ─────────────────────────────────────────────────────
+
+// Priority: option.description → skill description → ''
 export function buildUnitUpgradeDescription(option: UnitUpgradeOption): string {
   const explicit = option.description?.trim();
   if (explicit) return explicit;

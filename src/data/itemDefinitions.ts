@@ -2,8 +2,8 @@ import type { BattleStatBonuses, ItemDefinition } from '../shared/itemTypes';
 
 const STAT_LABELS: Record<keyof BattleStatBonuses, string> = {
   hp: 'HP',
-  physicalDamage: 'Physical Damage',
-  magicalDamage: 'Magical Damage',
+  physicalStrength: 'Physical Damage',
+  magicalStrength: 'Magical Damage',
   physicalDefense: 'Physical Defense',
   magicalDefense: 'Magical Defense',
 };
@@ -22,7 +22,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     usage: 'equip',
     equipSlot: 'ring',
     buyPrice: 40,
-    battleStatBonuses: { hp: 5, physicalDamage: 0, magicalDamage: 0, physicalDefense: 0, magicalDefense: 0 },
+    battleStatBonuses: { hp: 5, physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0 },
     sprite: 'assets/sprites/items/bronze_ring.png',
   },
   iron_ring: {
@@ -31,7 +31,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     usage: 'equip',
     equipSlot: 'ring',
     buyPrice: 60,
-    battleStatBonuses: { hp: 0, physicalDamage: 3, magicalDamage: 0, physicalDefense: 0, magicalDefense: 0 },
+    battleStatBonuses: { hp: 0, physicalStrength: 3, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0 },
   },
   bronze_necklace: {
     id: 'bronze_necklace',
@@ -40,7 +40,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     equipSlot: 'necklace',
     buyPrice: 50,
     allowedClasses: ['warrior', 'pikeman', 'halberdist', 'crusher'],
-    battleStatBonuses: { hp: 0, physicalDamage: 0, magicalDamage: 3, physicalDefense: 0, magicalDefense: 0 },
+    battleStatBonuses: { hp: 0, physicalStrength: 0, magicalStrength: 3, physicalDefense: 0, magicalDefense: 0 },
     sprite: 'assets/sprites/items/bronze_necklace.png',
   },
   health_tonic: {
@@ -49,7 +49,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     usage: 'consume',
     equipSlot: null,
     buyPrice: 20,
-    battleStatBonuses: { hp: 0, physicalDamage: 0, magicalDamage: 0, physicalDefense: 0, magicalDefense: 0 },
+    battleStatBonuses: { hp: 0, physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0 },
     useEffect: { type: 'heal', amount: 30 },
   },
   healing_belt: {
@@ -58,7 +58,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     usage: 'equip_and_activate',
     equipSlot: 'activatable',
     buyPrice: 120,
-    battleStatBonuses: { hp: 10, physicalDamage: 0, magicalDamage: 0, physicalDefense: 0, magicalDefense: 0 },
+    battleStatBonuses: { hp: 10, physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0 },
     useEffect: { type: 'heal', amount: 50 },
   },
 };

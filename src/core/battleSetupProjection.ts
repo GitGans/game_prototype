@@ -6,10 +6,10 @@ import { createUnitInstance, type CreateUnitInstanceInput } from '../battle/unit
 import type { PlayerBattleSetup }         from './battleSetup';
 import type { PlayerPlacementCandidate, EnemyPlacementCandidates } from '../battle/autoPlace';
 import type { UnitBlueprint, UnitRace }   from '../shared/unitTypes';
-import type { Skill }                     from '../shared/skillTypes';
+import type { ActionSkillDefinition }      from '../shared/skillDefinitionTypes';
 import type { CellCoord }                 from '../shared/gridTypes';
 
-function resolveEnemySkills(blueprint: UnitBlueprint, level: number): Skill[] {
+function resolveEnemySkills(blueprint: UnitBlueprint, level: number): ActionSkillDefinition[] {
   const base = (blueprint.skillTiers ?? [])
     .filter(t => t.unlocksAtLevel === 0)
     .flatMap(t => t.options.slice(0, 1));

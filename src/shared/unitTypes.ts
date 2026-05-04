@@ -1,5 +1,5 @@
 import type { UnitShape } from './gridTypes';
-import type { Skill } from './skillTypes';
+import type { ActionSkillDefinition } from './skillDefinitionTypes';
 
 export type SpriteState = 'idle' | 'attack' | 'death';
 
@@ -23,8 +23,8 @@ export type UnitClass =
 
 export interface UnitProgressionStatModifiers {
   hp?: number;
-  physicalDamage?: number;
-  magicalDamage?: number;
+  physicalStrength?: number;
+  magicalStrength?: number;
   physicalDefense?: number;
   magicalDefense?: number;
   dodge?: number;
@@ -34,8 +34,8 @@ export interface UnitProgressionStatModifiers {
 
 export interface UnitBattleStats {
   hp: number;
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;
   magicalDefense: number;
   dodge: number;
@@ -47,7 +47,7 @@ export interface UnitUpgradeOption {
   id: string;
   name: string;
   description?: string;
-  skill?: Skill;
+  skill?: ActionSkillDefinition;
   statModifiers?: UnitProgressionStatModifiers;
   spriteSheet?: SpriteSheetConfig;
 }
@@ -59,20 +59,20 @@ export interface UnitUpgradeTier {
 
 export interface SkillTier {
   unlocksAtLevel: 0 | 5 | 10 | 15 | 20;
-  options: Skill[];
+  options: ActionSkillDefinition[];
 }
 
 export interface EnemyLevelSkill {
   unlocksAtLevel: 5 | 10 | 15 | 20;
-  skill: Skill;
+  skill: ActionSkillDefinition;
 }
 
 export interface UnitBlueprint {
   templateId: string;
   name: string;
   hp: number;
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;  // percentage 0–100, reduces incoming physical damage
   magicalDefense: number;   // percentage 0–100, reduces incoming magical damage
   dodge: number;            // % chance to avoid damage entirely (effective cap: 90)
@@ -80,7 +80,7 @@ export interface UnitBlueprint {
   level: number;
   initiative: number;
   shape: UnitShape;
-  baseSkill?: Skill;                // player units only; auto-learned at level 0
+  baseSkill?: ActionSkillDefinition;                // player units only; auto-learned at level 0
   upgradeTiers?: UnitUpgradeTier[];  // player units only; tiers 5/10/15/20
   skillTiers?: SkillTier[];         // enemy units only; tier 0 base skill
   levelSkills?: EnemyLevelSkill[];  // enemy-only; absent on player blueprints

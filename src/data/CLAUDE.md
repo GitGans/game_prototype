@@ -13,7 +13,7 @@ Static data layer for all game entities. Contains only read-only constant defini
 
 ## Key Files
 - `unitDefinitions.ts` — player and enemy unit blueprints; exports `PLAYER_UNITS`, `ENEMY_UNITS`, `PLAYER_STARTING_IDS`
-- `skillDefinitions.ts` — 28 combat skills, damage/effect matrices, and runtime lookup helpers; exports `SKILLS`, `DAMAGE_MATRICES`, `LEVELED_EFFECTS`, `getSkillPattern()`, `getDamageModifierPercent()`, `getVampirismPercent()`
+- `skillDefinitions.ts` — 28 combat skills, multiplier/effect matrices, level tables; exports `SKILLS`, `MULTIPLIER_MATRICES`, `EFFECT_MATRICES`, `INSTANT_EFFECT_MATRICES`, `LEVELED_EFFECTS`, `DAMAGE_MODIFIER_LEVELS`, `VAMPIRISM_LEVELS`; runtime helpers live in `src/battle/skillDefinitionRuntime.ts`
 - `itemDefinitions.ts` — item configs with stat bonuses and slot assignments; exports `ITEM_DEFINITIONS`, `getItemDescription()`
 - `mapDefinitions.ts` — grid terrain and mob placement per map; exports `MAP_DEFINITIONS`
 - `enemyGroupDefinitions.ts` — encounter group configs (race + level override); exports `ENEMY_GROUPS`
@@ -39,7 +39,7 @@ Live game state in `BattleState` / `CampaignState`
 - All exports are `const` — no mutable state
 - No imports from `src/core`, `src/scenes`, or `src/battle` — data flows one way
 - `unitDefinitions.ts` may only import from within `src/data` (shapes, skills)
-- Helper functions in this folder are pure lookups — no side effects
+- No runtime helper functions — all skill runtime lookups live in `src/battle/skillDefinitionRuntime.ts`
 - Adding a new entity requires only adding to the relevant constant; no registration elsewhere
 
 ## Where to Modify

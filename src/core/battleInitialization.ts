@@ -1,4 +1,6 @@
 import { BENCH_SLOTS }                          from './Constants';
+import type { Rng }                             from '../shared/random';
+import { pickOne }                              from '../shared/random';
 import { ENEMY_GROUPS }                         from '../data/enemyGroupDefinitions';
 import {
   buildPlayerAutoPlacementCandidates,
@@ -32,12 +34,13 @@ const FALLBACK_RACES: UnitRace[] = ['orc', 'demon', 'undead'];
 /**
  * Builds a fresh BattleState for a new battle (campaign or debug).
  * Places player units from setup, generates enemy units from enemyGroupId.
- * Uses Math.random() for race selection when group has no forceRace.
+ * Uses rng for race selection when group has no forceRace.
  */
 export function buildNewBattleState(
   emptyState:   BattleState,
   setup:        PlayerBattleSetup,
   enemyGroupId: string,
+  rng:          Rng,
 ): BattleInitResult {
   // 1. Place player units
   const playerCandidates = buildPlayerAutoPlacementCandidates(setup);
@@ -54,12 +57,12 @@ export function buildNewBattleState(
   const playerMaxLv = [...state.units.values()]
     .filter(u => u.anchor.side === 'player' && u.hp > 0)
     .reduce((max, u) => Math.max(max, u.level), 1);
-  const race  = group?.race          ?? FALLBACK_RACES[Math.floor(Math.random() * FALLBACK_RACES.length)];
+  const race  = group?.race          ?? pickOne(rng, FALLBACK_RACES);
   const level = group?.levelOverride ?? playerMaxLv;
 
   // 3. Place enemy units
   const enemyCandidates = buildEnemyPlacementCandidates(race, level);
-  state = autoPlaceEnemies(state, enemyCandidates);
+  state = autoPlaceEnemies(state, enemyCandidates, rng);
 
   // 4. Capture placement records for replay
   const enemyPlacements: EnemyPlacementRecord[] = [...state.units.values()]

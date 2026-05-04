@@ -17,8 +17,8 @@ export type EquipSlot =
 
 export interface BattleStatBonuses {
   hp: number;
-  physicalDamage: number;
-  magicalDamage: number;
+  physicalStrength: number;
+  magicalStrength: number;
   physicalDefense: number;
   magicalDefense: number;
 }

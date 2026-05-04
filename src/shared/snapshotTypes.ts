@@ -1,4 +1,3 @@
-import type { DamageType, SkillActionType } from './skillTypes';
 import type { UnitClass } from './unitTypes';
 import type { ItemDefinition } from './itemTypes';
 
@@ -13,8 +12,8 @@ export interface UnitStatsSnapshot {
   level:           number;
   hp:              UnitStatValueSnapshot;
   maxHp:           UnitStatValueSnapshot;
-  physicalDamage:  UnitStatValueSnapshot;
-  magicalDamage:   UnitStatValueSnapshot;
+  physicalStrength:  UnitStatValueSnapshot;
+  magicalStrength:   UnitStatValueSnapshot;
   physicalDefense: UnitStatValueSnapshot;
   magicalDefense:  UnitStatValueSnapshot;
   dodge:           UnitStatValueSnapshot;
@@ -22,12 +21,14 @@ export interface UnitStatsSnapshot {
   initiative:      UnitStatValueSnapshot;
 }
 
+export type SkillIconColorKind = 'physical' | 'magical' | 'neutral';
+
 export interface SkillIconSnapshot {
   id:          string;
   name:        string;
   description: string;
-  damageType:  DamageType | null;
-  actionType:  SkillActionType;
+  tag:         string;
+  colorKind:   SkillIconColorKind;
 }
 
 // ─── Item Snapshots ───────────────────────────────────────────────────────────

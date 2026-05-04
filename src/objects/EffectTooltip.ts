@@ -2,7 +2,8 @@ import Phaser from "phaser";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { UI_THEME, fontSize } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
-import { ActiveEffect } from "../battle/types";
+import type { ActiveEffect } from "../shared/activeEffect";
+import { resolveActiveEffectPeriodicHp } from "../shared/activeEffect";
 
 const TW = Math.round(160 * LAYOUT_SCALE);
 
@@ -18,9 +19,10 @@ export class EffectTooltip extends BaseTooltip<ActiveEffect> {
     const pad = UI_THEME.component.tooltip.pad;
 
     let desc = ae.effect.description ?? "";
-    if (ae.computedPerTurn !== undefined) {
-      const sign = ae.effect.isBuff ? "+" : "-";
-      desc += ` (${sign}${Math.abs(ae.computedPerTurn)} HP/round)`;
+    const periodicHp = resolveActiveEffectPeriodicHp(ae);
+    if (periodicHp) {
+      const sign = periodicHp.direction === 'heal' ? '+' : '-';
+      desc += ` (${sign}${Math.abs(periodicHp.amountPerTurn)} HP/round)`;
     }
 
     this.addText(pad, pad, ae.effectDisplayName, {

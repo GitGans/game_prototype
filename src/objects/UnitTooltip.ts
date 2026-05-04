@@ -3,9 +3,9 @@ import { LAYOUT_SCALE } from "../core/Constants";
 import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 import { UI_THEME, fontSize } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
-import { Unit } from "../battle/types";
 import type { BattleUnitSnapshot, BenchUnitSnapshot } from "../shared/battleSnapshots";
-import { effectiveStats } from "../battle/combat";
+import type { SkillIconColorKind } from "../shared/snapshotTypes";
+import { buildSkillIconSnapshot } from "../core/unitUpgradePresentation";
 import type { UnitStatsSnapshot } from '../core/phases';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 
@@ -32,17 +32,17 @@ interface TooltipData {
   side:            "player" | "enemy";
   hp:              StatValue;
   maxHp:           StatValue;
-  physicalDamage:  StatValue;
-  magicalDamage:   StatValue;
+  physicalStrength:  StatValue;
+  magicalStrength:   StatValue;
   physicalDefense: StatValue;
   magicalDefense:  StatValue;
   dodge:           StatValue;
   block:           StatValue;
   initiative:      StatValue;
   skills: Array<{
-    name:        string;
-    damageBlock?: { damageType: string };
-    isActive:    boolean;
+    name:      string;
+    colorKind: SkillIconColorKind;
+    isActive:  boolean;
   }>;
   spriteKey?: string | null;
 }
@@ -65,11 +65,6 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     super.show(data, anchorX, anchorY, side);
   }
 
-  showUnit(unit: Unit, anchorX: number, anchorY: number): void {
-    const side = unit.anchor.side === "player" ? "right" : "left";
-    super.show(unitToData(unit), anchorX, anchorY, side);
-  }
-
   showFixed(unit: BattleUnitSnapshot, x: number, y: number, w: number): void {
     const data = unitToData(unit);
     this.clearContent();
@@ -84,7 +79,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       templateId: unit.templateId, name: unit.name, level,
       side: 'player',
       hp: flat(0), maxHp: flat(0),
-      physicalDamage: flat(0), magicalDamage: flat(0),
+      physicalStrength: flat(0), magicalStrength: flat(0),
       physicalDefense: flat(0), magicalDefense: flat(0),
       dodge: flat(0), block: flat(0), initiative: flat(0),
       skills: [],
@@ -109,8 +104,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       side:            'player',
       hp:              stats.hp,
       maxHp:           stats.maxHp,
-      physicalDamage:  stats.physicalDamage,
-      magicalDamage:   stats.magicalDamage,
+      physicalStrength:  stats.physicalStrength,
+      magicalStrength:   stats.magicalStrength,
       physicalDefense: stats.physicalDefense,
       magicalDefense:  stats.magicalDefense,
       dodge:           stats.dodge,
@@ -140,17 +135,17 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       // Use maxHp for both — bench shows a healthy unit, not mid-battle HP
       hp:              snapshot.stats.maxHp,
       maxHp:           snapshot.stats.maxHp,
-      physicalDamage:  snapshot.stats.physicalDamage,
-      magicalDamage:   snapshot.stats.magicalDamage,
+      physicalStrength:  snapshot.stats.physicalStrength,
+      magicalStrength:   snapshot.stats.magicalStrength,
       physicalDefense: snapshot.stats.physicalDefense,
       magicalDefense:  snapshot.stats.magicalDefense,
       dodge:           snapshot.stats.dodge,
       block:           snapshot.stats.block,
       initiative:      snapshot.stats.initiative,
       skills: snapshot.skills.map(s => ({
-        name:        s.name,
-        damageBlock: s.damageType ? { damageType: s.damageType } : undefined,
-        isActive:    false,
+        name:      s.name,
+        colorKind: s.colorKind,
+        isActive:  false,
       })),
       spriteKey: snapshot.spriteKey,
     };
@@ -220,8 +215,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 
     const statLines: Array<{ label: string; display: string; color: string }> = [
       { label: "HP",         display: `${data.hp.value} / ${data.maxHp.value}`, color: statColor(data.maxHp)           },
-      { label: "Phys Dmg",   display: String(data.physicalDamage.value), color: statColor(data.physicalDamage)       },
-      { label: "Magic Dmg",  display: String(data.magicalDamage.value),  color: statColor(data.magicalDamage)        },
+      { label: "Phys Str",   display: String(data.physicalStrength.value), color: statColor(data.physicalStrength)       },
+      { label: "Magic Str",  display: String(data.magicalStrength.value),  color: statColor(data.magicalStrength)        },
       { label: "Phys Def",   display: `${data.physicalDefense.value}%`,  color: statColor(data.physicalDefense)      },
       { label: "Magic Def",  display: `${data.magicalDefense.value}%`,   color: statColor(data.magicalDefense)       },
       { label: "Dodge",      display: `${data.dodge.value}%`,            color: statColor(data.dodge)                },
@@ -251,8 +246,8 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       } else {
         for (const skill of data.skills) {
           const nameCol =
-            skill.damageBlock?.damageType === "magical"  ? BATTLE_VISUAL_THEME.skill.magical  :
-            skill.damageBlock?.damageType === "physical" ? BATTLE_VISUAL_THEME.skill.physical :
+            skill.colorKind === 'magical'  ? BATTLE_VISUAL_THEME.skill.magical  :
+            skill.colorKind === 'physical' ? BATTLE_VISUAL_THEME.skill.physical :
             (skill.isActive ? UI_THEME.color.value.white : UI_THEME.color.value.inactive);
           this.addText(pad, y, skill.name, { fontSize: fontSize("sm"), color: nameCol });
           y += UI_THEME.component.tooltip.lineH;
@@ -266,44 +261,24 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-interface UnitDisplayData {
-  templateId: string;
-  name: string;
-  anchor: { side: import('../shared/gridTypes').Side };
-  hp: number;
-  maxHp: number;
-  physicalDamage: number;
-  magicalDamage: number;
-  physicalDefense: number;
-  magicalDefense: number;
-  dodge: number;
-  block: number;
-  initiative: number;
-  activeEffects: readonly import('../shared/activeEffect').ActiveEffect[];
-  skills: readonly { name: string; damageBlock?: import('../shared/skillTypes').DamageBlock }[];
-  activeSkillIndex: number;
-  spriteSheet?: import('../shared/unitTypes').SpriteSheetConfig;
-}
-
-function unitToData(unit: UnitDisplayData): TooltipData {
-  const stats = effectiveStats(unit);
+function unitToData(unit: BattleUnitSnapshot): TooltipData {
   return {
     templateId:      unit.templateId,
     name:            unit.name,
     side:            unit.anchor.side,
     hp:              flat(unit.hp),
     maxHp:           flat(unit.maxHp),
-    physicalDamage:  { value: stats.physicalDamage,  base: unit.physicalDamage  },
-    magicalDamage:   { value: stats.magicalDamage,   base: unit.magicalDamage   },
-    physicalDefense: { value: stats.physicalDefense, base: unit.physicalDefense },
-    magicalDefense:  { value: stats.magicalDefense,  base: unit.magicalDefense  },
-    dodge:           { value: stats.dodge,           base: unit.dodge           },
-    block:           { value: stats.block,           base: unit.block           },
-    initiative:      { value: stats.initiative,      base: unit.initiative      },
+    physicalStrength:  { value: unit.effectivePhysicalStrength,  base: unit.physicalStrength  },
+    magicalStrength:   { value: unit.effectiveMagicalStrength,   base: unit.magicalStrength   },
+    physicalDefense: { value: unit.effectivePhysicalDefense, base: unit.physicalDefense },
+    magicalDefense:  { value: unit.effectiveMagicalDefense,  base: unit.magicalDefense  },
+    dodge:           { value: unit.effectiveDodge,           base: unit.dodge           },
+    block:           { value: unit.effectiveBlock,           base: unit.block           },
+    initiative:      { value: unit.effectiveInitiative,      base: unit.initiative      },
     skills: unit.skills.map((s, i) => ({
-      name:        s.name,
-      damageBlock: s.damageBlock,
-      isActive:    i === unit.activeSkillIndex,
+      name:      s.name,
+      colorKind: buildSkillIconSnapshot(s).colorKind,
+      isActive:  i === unit.activeSkillIndex,
     })),
     spriteKey: unit.spriteSheet
       ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)

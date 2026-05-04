@@ -1,115 +1,110 @@
+import type { ActionSkillDefinition } from "../shared/skillDefinitionTypes";
 import type {
-  DamageModifierBlock,
   DamageModifierType,
   Effect,
-  InstantEffectBlock,
-  LeveledDamageMatrix,
+  LeveledMultiplierMatrix,
   LeveledEffectDef,
-  PostDamageBlock,
-  Skill,
-  SkillEffectBlock,
-  SkillPattern,
 } from "../shared/skillTypes";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
-const P = (m: number) => ({ damageMultiplier: m });
+const P = (m: number) => ({ multiplier: m });
 
 // ─── Base Effects ─────────────────────────────────────────────────────────────
 
 const EFFECTS: Record<string, Effect> = {
   regeneration: {
     id: "regeneration",
-    isBuff: true,
+    effectTone: "positive",
     description: "Restores HP each round",
   },
   lose_health: {
     id: "lose_health",
-    isBuff: false,
+    effectTone: "negative",
     description: "Deals damage each round",
   },
   fortify: {
     id: "fortify",
-    isBuff: true,
+    effectTone: "positive",
     physicalDefenseBonus: 1,
     description: "Increases physical defense",
   },
   weaken: {
     id: "weaken",
-    isBuff: false,
+    effectTone: "negative",
     physicalDefenseBonus: -1,
     description: "Reduces physical defense",
   },
   arcane_shield: {
     id: "arcane_shield",
-    isBuff: true,
+    effectTone: "positive",
     magicalDefenseBonus: 1,
     description: "Increases magical defense",
   },
   arcane_vulnerability: {
     id: "arcane_vulnerability",
-    isBuff: false,
+    effectTone: "negative",
     magicalDefenseBonus: -1,
     description: "Reduces magical defense",
   },
   swift: {
     id: "swift",
-    isBuff: true,
+    effectTone: "positive",
     dodgeBonus: 1,
     description: "Increases dodge chance",
   },
   clumsy: {
     id: "clumsy",
-    isBuff: false,
+    effectTone: "negative",
     dodgeBonus: -1,
     description: "Reduces dodge chance",
   },
   guard_stance: {
     id: "guard_stance",
-    isBuff: true,
+    effectTone: "positive",
     blockBonus: 1,
     description: "Increases block chance",
   },
   off_balance: {
     id: "off_balance",
-    isBuff: false,
+    effectTone: "negative",
     blockBonus: -1,
     description: "Reduces block chance",
   },
   haste: {
     id: "haste",
-    isBuff: true,
+    effectTone: "positive",
     initiativeBonus: 1,
     description: "Increases initiative",
   },
   slow: {
     id: "slow",
-    isBuff: false,
+    effectTone: "negative",
     initiativeBonus: -1,
     description: "Reduces initiative",
   },
   empower: {
     id: "empower",
-    isBuff: true,
-    physicalDamageBonus: 1,
+    effectTone: "positive",
+    physicalStrengthBonus: 1,
     description: "Increases physical attack",
   },
   enfeeble: {
     id: "enfeeble",
-    isBuff: false,
-    physicalDamageBonus: -1,
+    effectTone: "negative",
+    physicalStrengthBonus: -1,
     description: "Reduces physical attack",
   },
   arcane_surge: {
     id: "arcane_surge",
-    isBuff: true,
-    magicalDamageBonus: 1,
+    effectTone: "positive",
+    magicalStrengthBonus: 1,
     description: "Increases magical attack",
   },
   arcane_drain: {
     id: "arcane_drain",
-    isBuff: false,
-    magicalDamageBonus: -1,
+    effectTone: "negative",
+    magicalStrengthBonus: -1,
     description: "Reduces magical attack",
   },
 };
@@ -120,7 +115,7 @@ const EFFECTS: Record<string, Effect> = {
 // levels[0] = level 1, levels[1] = level 2, etc.
 // Multiple skills can share the same matrix name.
 
-export const DAMAGE_MATRICES: Record<string, LeveledDamageMatrix> = {
+export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
   /** Single cell, 100% damage. */
   single: {
     levels: [
@@ -188,12 +183,13 @@ export const DAMAGE_MATRICES: Record<string, LeveledDamageMatrix> = {
 // Defines WHERE an effect lands (which cells) and with what multiplier.
 // levels[0] = level 1, levels[1] = level 2, etc.
 //
-// For stat-based per-turn effects (regeneration / lose_health):
-//   computedPerTurn = casterStat × anchorCell.damageMultiplier
-// For defense-only effects (fortify / weaken / etc.):
-//   only cell presence matters; damageMultiplier is unused
+// For periodic HP effects (regeneration / lose_health):
+//   amountPerTurn = caster power (selected by powerSource) × hit cell multiplier
+//   If one unit is hit by multiple cells, the highest resulting amount is used.
+// For stat modifier effects (fortify / weaken / etc.):
+//   only cell presence matters; multiplier is currently unused for stat modifier magnitude.
 
-export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
+export const EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> = {
   /** Single target. Multiplier used for stat-based per-turn scaling. */
   single: {
     levels: [
@@ -205,8 +201,8 @@ export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
 
   /**
    * Cross: center + 4 orthogonal neighbours.
-   * For defense-only effects: all neighbours share the same multiplier (unused).
-   * For stat-based effects: anchor cell multiplier drives per-turn value.
+   * For stat modifier effects: all cells share the same multiplier (unused for magnitude).
+   * For periodic HP effects: each cell multiplier drives its cell's per-turn value.
    *   [ ]  [X]  [ ]
    *   [X]  [X]  [X]
    *   [ ]  [X]  [ ]
@@ -219,7 +215,7 @@ export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
         anchorCol: 1,
         cells: [
           [null, P(0.2), null],
-          [P(0.2), P(0.2), P(0.2)],
+          [P(0.2), P(0.4), P(0.2)],
           [null, P(0.2), null],
         ],
       },
@@ -237,258 +233,245 @@ export const EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
   },
 };
 
-// ─── Named Leveled Effects ────────────────────────────────────────────────────
+// ─── Leveled Effect Definitions ───────────────────────────────────────────────
 //
-// Two modes (mutually exclusive):
-// - effectDamageType → per-turn value = casterStat × effect matrix anchor multiplier
-// - bonusByLevel     → fixed defense bonus magnitude per level; sign from base Effect
+// effectKind classifies which action type may use this effect.
+// It does not choose periodic HP direction or scaling.
+// Periodic HP direction and scaling are authored on apply_periodic_hp_effect.
+//
+// bonusByLevel — fixed-magnitude stat modifiers indexed by (level - 1).
+//   No stat scaling. Sign is inherited from the base Effect in EFFECTS.
 
 export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
   regeneration: {
+    effectKind: "periodic_hp",
     effect: EFFECTS.regeneration,
-    effectDamageType: "magical", // computedPerTurn = magicalDamage × matrix multiplier
   },
 
   lose_health: {
+    effectKind: "periodic_hp",
     effect: EFFECTS.lose_health,
-    effectDamageType: "physical", // computedPerTurn = physicalDamage × matrix multiplier
   },
 
   fortify: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.fortify,
     bonusByLevel: [10, 20, 30], // physicalDefenseBonus sign (+) inherited from EFFECTS.fortify
   },
 
   weaken: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.weaken,
     bonusByLevel: [10, 20, 30], // physicalDefenseBonus sign (-) inherited from EFFECTS.weaken
   },
 
   arcane_shield: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.arcane_shield,
     bonusByLevel: [10, 20, 30], // magicalDefenseBonus sign (+) inherited from EFFECTS.arcane_shield
   },
 
   arcane_vulnerability: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.arcane_vulnerability,
     bonusByLevel: [10, 20, 30], // magicalDefenseBonus sign (-) inherited from EFFECTS.arcane_vulnerability
   },
 
   swift: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.swift,
     bonusByLevel: [10, 20, 30], // dodgeBonus sign (+) inherited from EFFECTS.swift
   },
 
   clumsy: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.clumsy,
     bonusByLevel: [10, 20, 30], // dodgeBonus sign (-) inherited from EFFECTS.clumsy
   },
 
   guard_stance: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.guard_stance,
     bonusByLevel: [10, 20, 30], // blockBonus sign (+) inherited from EFFECTS.guard_stance
   },
 
   off_balance: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.off_balance,
     bonusByLevel: [10, 20, 30], // blockBonus sign (-) inherited from EFFECTS.off_balance
   },
 
   haste: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.haste,
     bonusByLevel: [1, 2, 3], // initiativeBonus sign (+) inherited from EFFECTS.haste
   },
 
   slow: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.slow,
     bonusByLevel: [1, 2, 3], // initiativeBonus sign (-) inherited from EFFECTS.slow
   },
 
   empower: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.empower,
-    bonusByLevel: [10, 20, 30], // physicalDamageBonus sign (+) inherited from EFFECTS.empower
+    bonusByLevel: [10, 20, 30], // physicalStrengthBonus sign (+) inherited from EFFECTS.empower
   },
 
   enfeeble: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.enfeeble,
-    bonusByLevel: [10, 20, 30], // physicalDamageBonus sign (-) inherited from EFFECTS.enfeeble
+    bonusByLevel: [10, 20, 30], // physicalStrengthBonus sign (-) inherited from EFFECTS.enfeeble
   },
 
   arcane_surge: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.arcane_surge,
-    bonusByLevel: [10, 20, 30], // magicalDamageBonus sign (+) inherited from EFFECTS.arcane_surge
+    bonusByLevel: [10, 20, 30], // magicalStrengthBonus sign (+) inherited from EFFECTS.arcane_surge
   },
 
   arcane_drain: {
+    effectKind: "stat_modifier",
     effect: EFFECTS.arcane_drain,
-    bonusByLevel: [10, 20, 30], // magicalDamageBonus sign (-) inherited from EFFECTS.arcane_drain
+    bonusByLevel: [10, 20, 30], // magicalStrengthBonus sign (-) inherited from EFFECTS.arcane_drain
   },
 };
 
 // ─── Named Instant Effect Matrices ───────────────────────────────────────────
 //
-// Cell values (damageMultiplier) represent success PROBABILITY (0–1).
+// Cell values are stored in multiplier but represent success PROBABILITY (0–1),
+// not a damage scaling factor. Instant effects are not damage; they are provoke/distract.
 // Dodge / block / defense do NOT apply to this roll.
 // levels[0] = level 1, levels[1] = level 2, etc.
 
-export const INSTANT_EFFECT_MATRICES: Record<string, LeveledDamageMatrix> = {
-  /** Single target. */
-  single: {
-    levels: [
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
-      { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-      { anchorRow: 0, anchorCol: 0, cells: [[P(1.25)]] },
-      { anchorRow: 0, anchorCol: 0, cells: [[P(1.5)]] },
-    ],
-  },
+export const INSTANT_EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> =
+  {
+    /** Single target. */
+    single: {
+      levels: [
+        { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
+        { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+        { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+        { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+      ],
+    },
 
-  /** 3 cells in one row. */
-  row_sweep: {
-    levels: [
-      {
-        anchorRow: 0,
-        anchorCol: 1,
-        cells: [[P(0.6), P(0.6), P(0.6)]],
-      },
-    ],
-  },
+    /** 3 cells in one row. */
+    row_sweep: {
+      levels: [
+        {
+          anchorRow: 0,
+          anchorCol: 1,
+          cells: [[P(0.6), P(0.6), P(0.6)]],
+        },
+      ],
+    },
 
-  /** 2 cells in one row. */
-  shot_sweep: {
-    levels: [
-      {
-        anchorRow: 0,
-        anchorCol: 0,
-        cells: [[P(0.5), P(0.5)]],
-      },
-      {
-        anchorRow: 0,
-        anchorCol: 0,
-        cells: [[P(0.8), P(0.8)]],
-      },
-    ],
-  },
+    /** 2 cells in one row. */
+    shot_sweep: {
+      levels: [
+        {
+          anchorRow: 0,
+          anchorCol: 0,
+          cells: [[P(0.5), P(0.5)]],
+        },
+        {
+          anchorRow: 0,
+          anchorCol: 0,
+          cells: [[P(0.8), P(0.8)]],
+        },
+      ],
+    },
 
-  /** 3x3 area. */
-  all: {
-    levels: [
-      {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(0.3), P(0.3), P(0.3)],
-          [P(0.3), P(0.3), P(0.3)],
-          [P(0.3), P(0.3), P(0.3)],
-        ],
-      },
-      {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(0.4), P(0.4), P(0.4)],
-          [P(0.4), P(0.4), P(0.4)],
-          [P(0.4), P(0.4), P(0.4)],
-        ],
-      },
-      {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(0.5), P(0.5), P(0.5)],
-          [P(0.5), P(0.5), P(0.5)],
-          [P(0.5), P(0.5), P(0.5)],
-        ],
-      },
-      {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(1), P(1), P(1)],
-          [P(1), P(1), P(1)],
-          [P(1), P(1), P(1)],
-        ],
-      },
-    ],
-  },
+    /** 3x3 area. */
+    all: {
+      levels: [
+        {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [P(0.3), P(0.3), P(0.3)],
+            [P(0.3), P(0.3), P(0.3)],
+            [P(0.3), P(0.3), P(0.3)],
+          ],
+        },
+        {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [P(0.4), P(0.4), P(0.4)],
+            [P(0.4), P(0.4), P(0.4)],
+            [P(0.4), P(0.4), P(0.4)],
+          ],
+        },
+        {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [P(0.5), P(0.5), P(0.5)],
+            [P(0.5), P(0.5), P(0.5)],
+            [P(0.5), P(0.5), P(0.5)],
+          ],
+        },
+        {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [P(1), P(1), P(1)],
+            [P(1), P(1), P(1)],
+            [P(1), P(1), P(1)],
+          ],
+        },
+      ],
+    },
 
-  /**
-   * Cross: center + 4 orthogonal neighbours.
-   */
-  cross: {
-    levels: [
-      {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.5), null],
-          [P(0.5), P(0.1), P(0.5)],
-          [null, P(0.5), null],
-        ],
-      },
-      {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.4), null],
-          [P(0.4), P(0.7), P(0.4)],
-          [null, P(0.4), null],
-        ],
-      },
-      {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.3), null],
-          [P(0.3), P(1), P(0.3)],
-          [null, P(0.3), null],
-        ],
-      },
-    ],
-  },
+    /**
+     * Cross: center + 4 orthogonal neighbours.
+     */
+    cross: {
+      levels: [
+        {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [null, P(0.5), null],
+            [P(0.5), P(0.1), P(0.5)],
+            [null, P(0.5), null],
+          ],
+        },
+        {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [null, P(0.4), null],
+            [P(0.4), P(0.7), P(0.4)],
+            [null, P(0.4), null],
+          ],
+        },
+        {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [null, P(0.3), null],
+            [P(0.3), P(1), P(0.3)],
+            [null, P(0.3), null],
+          ],
+        },
+      ],
+    },
 
-  /** Main target + one additional target. */
-  pierce: {
-    levels: [
-      {
-        anchorRow: 0,
-        anchorCol: 0,
-        cells: [[P(0.75), P(1)]],
-      },
-    ],
-  },
-};
-
-// ─── Runtime Resolution Helpers ───────────────────────────────────────────────
-
-/**
- * Returns the SkillPattern for the skill's damageBlock level from DAMAGE_MATRICES.
- * Falls back to level 1 if level exceeds the matrix's defined levels.
- */
-export function getSkillPattern(skill: Skill): SkillPattern {
-  const db = skill.damageBlock!;
-  const matrix = DAMAGE_MATRICES[db.matrixName];
-  return matrix.levels[db.level - 1] ?? matrix.levels[0];
-}
-
-/**
- * Returns the SkillPattern for an effectBlock's level from EFFECT_MATRICES.
- * Falls back to level 1 if level exceeds the matrix's defined levels.
- */
-export function getEffectPattern(block: SkillEffectBlock): SkillPattern {
-  const matrix = EFFECT_MATRICES[block.effectMatrixName];
-  return matrix.levels[block.level - 1] ?? matrix.levels[0];
-}
-
-/**
- * Returns the SkillPattern for an instantEffectBlock's level from INSTANT_EFFECT_MATRICES.
- * Falls back to level 1 if level exceeds the matrix's defined levels.
- */
-export function getInstantEffectPattern(
-  block: InstantEffectBlock,
-): SkillPattern {
-  const matrix = INSTANT_EFFECT_MATRICES[block.instantEffectMatrixName];
-  return matrix.levels[block.level - 1] ?? matrix.levels[0];
-}
+    /** Main target + one additional target. */
+    pierce: {
+      levels: [
+        {
+          anchorRow: 0,
+          anchorCol: 0,
+          cells: [[P(0.75), P(1)]],
+        },
+      ],
+    },
+  };
 
 // ─── Damage Modifier Levels ───────────────────────────────────────────────────
 // Values are percentages (0–100) of the stat that is IGNORED.
@@ -507,201 +490,338 @@ export const DAMAGE_MODIFIER_LEVELS: Record<DamageModifierType, number[]> = {
 
 export const VAMPIRISM_LEVELS: number[] = [25, 50, 100];
 
-/** Returns the ignore-% for a DamageModifierBlock (1-based level, clamped). */
-export function getDamageModifierPercent(block: DamageModifierBlock): number {
-  const levels = DAMAGE_MODIFIER_LEVELS[block.type];
-  return levels[Math.min(block.level, levels.length) - 1];
-}
-
-/** Returns the vampirism-% for a PostDamageBlock (1-based level, clamped). */
-export function getVampirismPercent(block: PostDamageBlock): number {
-  return VAMPIRISM_LEVELS[Math.min(block.level, VAMPIRISM_LEVELS.length) - 1];
-}
-
 // ─── Skill Definitions ────────────────────────────────────────────────────────
 
-export const SKILLS: Record<string, Skill> = {
+export const SKILLS: Record<string, ActionSkillDefinition> = {
   p_melee_basic: {
+    definitionKind: "action_skill",
     id: "p_melee_basic",
     name: "Strike",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   p_ranged_basic: {
+    definitionKind: "action_skill",
     id: "p_ranged_basic",
     name: "Shot",
-    actionType: "ranged",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   m_ranged_basic: {
+    definitionKind: "action_skill",
     id: "m_ranged_basic",
     name: "Magic Shot",
-    actionType: "ranged",
-    damageBlock: { matrixName: "single", damageType: "magical", level: 1 },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "magical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   p_ranged_slowing: {
+    definitionKind: "action_skill",
     id: "p_ranged_slowing",
     name: "Arrow that breaks legs",
-    actionType: "ranged",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Slow",
-      effectName: "slow",
-      duration: 2,
-      damageType: "physical",
-    },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_stat_effect",
+        effectName: "slow",
+        displayName: "Slow",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   m_heal_basic: {
+    definitionKind: "action_skill",
     id: "m_heal_basic",
     name: "Heal",
-    actionType: "mass_enchantment",
-    damageBlock: { matrixName: "single", damageType: "magical", level: 1 },
+    targetPolicy: { type: "friendly" },
+    actions: [
+      {
+        type: "heal",
+        powerSource: "magical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   heal_with_defence: {
+    definitionKind: "action_skill",
     id: "heal_with_defence",
     name: "Protective Heal",
-    actionType: "mass_enchantment",
-    damageBlock: { matrixName: "single", damageType: "magical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Defence",
-      effectName: "fortify",
-      duration: 2,
-      damageType: "physical",
-    },
+    targetPolicy: { type: "friendly" },
+    actions: [
+      {
+        type: "heal",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_stat_effect",
+        effectName: "fortify",
+        displayName: "Defence",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   self_heal_mass_regeneration: {
+    definitionKind: "action_skill",
     id: "self_heal_mass_regeneration",
     name: "Regenerative Heal",
-    actionType: "self_enchantment",
-    damageBlock: { matrixName: "single", damageType: "magical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "cross",
-      level: 1,
-      effectDisplayName: "Regeneration",
-      effectName: "regeneration",
-      duration: 2,
-      damageType: "magical",
-    },
+    targetPolicy: { type: "self" },
+    actions: [
+      {
+        type: "heal",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_periodic_hp_effect",
+        effectName: "regeneration",
+        displayName: "Regeneration",
+        direction: "heal",
+        powerSource: "physical_strength",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "cross", level: 1 },
+      },
+    ],
   },
 
   arcane_cross: {
+    definitionKind: "action_skill",
     id: "arcane_cross",
     name: "Arcane Cross",
-    actionType: "ranged",
-    damageBlock: { matrixName: "cross", damageType: "magical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "cross",
-      level: 1,
-      effectDisplayName: "Arcane Burn",
-      effectName: "lose_health",
-      duration: 2,
-      damageType: "magical",
-    },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "magical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "cross", level: 1 },
+      },
+      {
+        type: "apply_periodic_hp_effect",
+        effectName: "lose_health",
+        displayName: "Arcane Burn",
+        direction: "damage",
+        powerSource: "magical_strength",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "cross", level: 1 },
+      },
+    ],
   },
 
   row_strike: {
+    definitionKind: "action_skill",
     id: "row_strike",
     name: "Row Strike",
-    actionType: "melee",
-    damageBlock: { matrixName: "row_sweep", damageType: "physical", level: 1 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: {
+          kind: "multiplier_matrix",
+          matrixName: "row_sweep",
+          level: 1,
+        },
+      },
+    ],
   },
 
   pierce: {
+    definitionKind: "action_skill",
     id: "pierce",
     name: "Pierce",
-    actionType: "melee",
-    damageBlock: { matrixName: "pierce", damageType: "physical", level: 1 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "pierce", level: 1 },
+      },
+    ],
   },
 
   poison_strike: {
+    definitionKind: "action_skill",
     id: "poison_strike",
     name: "Poison Strike",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    effectBlock: {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Poisoned",
-      effectName: "lose_health",
-      duration: 3,
-      damageType: "physical",
-    },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_periodic_hp_effect",
+        effectName: "lose_health",
+        displayName: "Poisoned",
+        direction: "damage",
+        powerSource: "physical_strength",
+        level: 1,
+        duration: 3,
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   weaken_curse: {
+    definitionKind: "action_skill",
     id: "weaken_curse",
     name: "Weaken Curse",
-    actionType: "ranged",
-    effectBlock: {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Weakened",
-      effectName: "weaken",
-      duration: 2,
-      damageType: "physical",
-    },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "apply_stat_effect",
+        effectName: "weaken",
+        displayName: "Weakened",
+        level: 1,
+        duration: 2,
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+      },
+    ],
   },
 
   provoke_strike: {
+    definitionKind: "action_skill",
     id: "provoke_strike",
     name: "Provoke",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    instantEffectBlock: {
-      instantEffectMatrixName: "single",
-      level: 1,
-      instantEffectType: "provoke",
-      displayName: "Provoke",
-    },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "instant_effect",
+        instantEffectType: "provoke",
+        displayName: "Provoke",
+        matrix: {
+          kind: "instant_effect_matrix",
+          matrixName: "single",
+          level: 1,
+        },
+      },
+    ],
   },
 
   distract_shot: {
+    definitionKind: "action_skill",
     id: "distract_shot",
     name: "Distract",
-    actionType: "ranged",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    instantEffectBlock: {
-      instantEffectMatrixName: "single",
-      level: 1,
-      instantEffectType: "distract",
-      displayName: "Distract",
-    },
+    targetPolicy: { type: "enemy_ranged" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "instant_effect",
+        instantEffectType: "distract",
+        displayName: "Distract",
+        matrix: {
+          kind: "instant_effect_matrix",
+          matrixName: "single",
+          level: 1,
+        },
+      },
+    ],
   },
 
-  // ── Test skills for damageModifierBlocks + postDamageBlock ──────────────────
-
   armor_pierce: {
+    definitionKind: "action_skill",
     id: "armor_pierce",
     name: "Armor Pierce",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    damageModifierBlocks: [{ type: "ignore_physical_defense", level: 3 }],
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        modifiers: [{ modifierType: "ignore_physical_defense", level: 3 }],
+      },
+    ],
   },
 
   drain_strike: {
+    definitionKind: "action_skill",
     id: "drain_strike",
     name: "Drain Strike",
-    actionType: "melee",
-    damageBlock: { matrixName: "single", damageType: "physical", level: 1 },
-    postDamageBlock: { type: "mass_vampirism", level: 3 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+      },
+      {
+        type: "post_damage",
+        postDamageType: "mass_vampirism",
+        level: 3,
+      },
+    ],
   },
 
   life_sweep: {
+    definitionKind: "action_skill",
     id: "life_sweep",
     name: "Life Sweep",
-    actionType: "melee",
-    damageBlock: { matrixName: "row_sweep", damageType: "physical", level: 1 },
-    damageModifierBlocks: [{ type: "ignore_block", level: 2 }],
-    postDamageBlock: { type: "mass_vampirism", level: 1 },
+    targetPolicy: { type: "enemy_melee" },
+    actions: [
+      {
+        type: "damage",
+        powerSource: "physical_strength",
+        matrix: {
+          kind: "multiplier_matrix",
+          matrixName: "row_sweep",
+          level: 1,
+        },
+        modifiers: [{ modifierType: "ignore_block", level: 2 }],
+      },
+      {
+        type: "post_damage",
+        postDamageType: "mass_vampirism",
+        level: 1,
+      },
+    ],
   },
 };

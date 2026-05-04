@@ -1,9 +1,15 @@
-import type { BattleMode, BattleState, CellCoord, Skill, Unit } from './types';
-import { getActiveSkill, isEnchantmentSkill } from './skillRuntime';
+import type { BattleMode, BattleState, CellCoord, Unit } from './types';
+import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
+import { getActiveSkill } from './skillRuntime';
 import { buildRoundQueue, pruneQueue } from './initiative';
 import { tickEffects } from './combat';
 import type { EffectEvent } from './combat';
-import { resolveSkillTargets } from './targeting';
+import { compileSkillUsePlan } from './skillPlanCompiler';
+import {
+  isEnemyMeleeTargetPolicy,
+  isFriendlyOrSelfTargetPolicy,
+} from './skillUsePlan';
+import { resolveSkillTargetsForPolicy } from './targeting';
 
 // ─── Turn Context ────────────────────────────────────────────────────────────
 
@@ -191,7 +197,7 @@ export type TurnStartDirective =
   | {
       type: 'await_manual_target';
       activeUnitId: string;
-      activeSkill: Skill;
+      activeSkill: ActionSkillDefinition;
       validTargets: CellCoord[];
       promptKind: 'attack' | 'heal';
     };
@@ -269,10 +275,15 @@ export function resolveActiveTurnStart(input: {
   }
 
   // 8. Player unit in manual mode
-  const currentSkill = getActiveSkill(currentUnit);
-  const validTargets = resolveSkillTargets(currentUnit, currentSkill, state.occupancy);
+  const currentSkill  = getActiveSkill(currentUnit);
+  const currentPlan   = compileSkillUsePlan(currentSkill);
+  const validTargets  = resolveSkillTargetsForPolicy(
+    currentUnit,
+    currentPlan.targetPolicy,
+    state.occupancy,
+  );
 
-  if (validTargets.length === 0 && currentSkill.actionType === 'melee') {
+  if (validTargets.length === 0 && isEnemyMeleeTargetPolicy(currentPlan.targetPolicy)) {
     const blockedEvent: TurnEvent = {
       type: 'turn_skipped',
       unitId: currentUnit.id,
@@ -297,7 +308,7 @@ export function resolveActiveTurnStart(input: {
       activeUnitId: activeId,
       activeSkill: currentSkill,
       validTargets,
-      promptKind: isEnchantmentSkill(currentSkill) ? 'heal' : 'attack',
+      promptKind: isFriendlyOrSelfTargetPolicy(currentPlan.targetPolicy) ? 'heal' : 'attack',
     },
   };
 }
@@ -307,7 +318,7 @@ export function resolveActiveTurnStart(input: {
 export type SwitchActiveSkillResult = {
   state: BattleState;
   activeUnit?: Unit;
-  activeSkill?: Skill;
+  activeSkill?: ActionSkillDefinition;
   validTargets: CellCoord[];
 };
 
@@ -327,13 +338,18 @@ export function switchActiveSkillForManualTurn(input: {
   const units = new Map(state.units);
   units.set(unitId, updatedUnit);
 
-  const skill = updatedUnit.skills[skillIndex] ?? updatedUnit.skills[0];
-  const validTargets = resolveSkillTargets(updatedUnit, skill, state.occupancy);
+  const activeSkill  = updatedUnit.skills[skillIndex] ?? updatedUnit.skills[0];
+  const activePlan   = compileSkillUsePlan(activeSkill);
+  const validTargets = resolveSkillTargetsForPolicy(
+    updatedUnit,
+    activePlan.targetPolicy,
+    state.occupancy,
+  );
 
   return {
     state: { ...state, units, validTargets },
     activeUnit: updatedUnit,
-    activeSkill: skill,
+    activeSkill: activeSkill,
     validTargets,
   };
 }

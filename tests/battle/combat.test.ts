@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { resolveAttack, applyEffectBlock, applyVampirism } from "../../src/battle/combat";
+import { resolveAttack, applyEffectApplication, applyVampirism } from "../../src/battle/combat";
 import { cellKey } from "../../src/battle/field";
+import type { AppliedEffectMeta } from "../../src/shared/skillTypes";
 import type { Effect, ResolvedHitCell, SkillPattern } from "../../src/battle/types";
 import { coord } from "./helpers/coords";
 import { makeUnit } from "./helpers/units";
@@ -30,9 +31,9 @@ describe("resolveAttack", () => {
     const { events } = resolveAttack(
       hitCells,
       40,
-      "physical",
+      "physical_strength",
       state,
-      { rng: fixedRng(1) }, // rng()=1 → rng()*100=100, never < dodge/block threshold
+      { rng: fixedRng(0.99) }, // 0.99*100=99, never < dodge/block threshold (capped at 90)
     );
 
     const hitEvents = events.filter((e) => e.type === "hit");
@@ -55,8 +56,8 @@ describe("resolveAttack", () => {
       { coord: coord("enemy", 0, 0), multiplier: 1.0 },
     ];
 
-    const { state: after } = resolveAttack(hitCells, 100, "physical", state, {
-      rng: fixedRng(1),
+    const { state: after } = resolveAttack(hitCells, 100, "physical_strength", state, {
+      rng: fixedRng(0.99),
     });
 
     expect(after.units.has("dead-unit")).toBe(false);
@@ -77,7 +78,7 @@ describe("resolveAttack", () => {
       { coord: coord("enemy", 0, 0), multiplier: 1.0 },
     ];
 
-    const { events } = resolveAttack(hitCells, 50, "physical", state, {
+    const { events } = resolveAttack(hitCells, 50, "physical_strength", state, {
       rng: fixedRng(0),
     });
 
@@ -87,7 +88,7 @@ describe("resolveAttack", () => {
 
   it("blocks when RNG is below the block threshold after a dodge miss", () => {
     // dodge=0, block=50.
-    // sequenceRng([1, 0]): first call (dodge roll) → 1 → no dodge;
+    // sequenceRng([0.99, 0]): first call (dodge roll) → 0.99 → no dodge;
     //                       second call (block roll) → 0 → 0*100=0 < 50 → block.
     const target = makeUnit({
       id: "blocker",
@@ -100,8 +101,8 @@ describe("resolveAttack", () => {
       { coord: coord("enemy", 0, 0), multiplier: 1.0 },
     ];
 
-    const { events } = resolveAttack(hitCells, 50, "physical", state, {
-      rng: sequenceRng([1, 0]),
+    const { events } = resolveAttack(hitCells, 50, "physical_strength", state, {
+      rng: sequenceRng([0.99, 0]),
     });
 
     expect(events.find((e) => e.type === "blocked")).toBeTruthy();
@@ -109,28 +110,24 @@ describe("resolveAttack", () => {
   });
 });
 
-// ─── applyEffectBlock ─────────────────────────────────────────────────────────
+// ─── applyEffectApplication ───────────────────────────────────────────────────
 
-describe("applyEffectBlock", () => {
+describe("applyEffectApplication", () => {
   function makeEffect(id: string): Effect {
-    return { id, isBuff: false };
+    return { id, effectTone: 'negative' };
   }
 
-  function makeEffectBlock(effectId: string) {
+  function makeAppliedEffectMeta(): AppliedEffectMeta {
     return {
-      effectMatrixName: "single",
-      level: 1,
-      effectDisplayName: "Test Effect",
-      effectName: effectId,
+      displayName: "Test Effect",
       duration: 3,
-      damageType: "physical" as const,
     };
   }
 
   const singleCellPattern: SkillPattern = {
     anchorRow: 0,
     anchorCol: 0,
-    cells: [[{ damageMultiplier: 1 }]],
+    cells: [[{ multiplier: 1 }]],
   };
 
   it("caps active effects at 2 and evicts the oldest when a third is added", () => {
@@ -147,13 +144,12 @@ describe("applyEffectBlock", () => {
     const state = makeBattleStateFromUnits([target]);
     const effectC = makeEffect("effect-c");
 
-    const { state: after } = applyEffectBlock(
-      makeEffectBlock("effect-c"),
+    const { state: after } = applyEffectApplication(
+      makeAppliedEffectMeta(),
       singleCellPattern,
       coord("enemy", 0, 0),
       state,
       effectC,
-      undefined,
     );
 
     const unit = after.units.get("target")!;
@@ -177,13 +173,12 @@ describe("applyEffectBlock", () => {
     const state = makeBattleStateFromUnits([target]);
     const refreshedA: Effect = { ...effectA }; // same id
 
-    const { state: after } = applyEffectBlock(
-      makeEffectBlock("effect-a"),
+    const { state: after } = applyEffectApplication(
+      makeAppliedEffectMeta(),
       singleCellPattern,
       coord("enemy", 0, 0),
       state,
       refreshedA,
-      undefined,
     );
 
     const unit = after.units.get("target")!;

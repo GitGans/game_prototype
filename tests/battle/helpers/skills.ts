@@ -1,53 +1,66 @@
-import type { Skill } from "../../../src/battle/types";
+import type { ActionSkillDefinition } from "../../../src/shared/skillDefinitionTypes";
 
 /** Single-cell physical melee attack. */
-export const testStrike: Skill = {
+export const testStrike: ActionSkillDefinition = {
+  definitionKind: "action_skill",
   id: "test_strike",
   name: "Test Strike",
-  actionType: "melee",
-  damageBlock: {
-    matrixName: "single",
-    damageType: "physical",
-    level: 1,
-  },
+  targetPolicy: { type: "enemy_melee" },
+  actions: [
+    {
+      type: "damage",
+      powerSource: "physical_strength",
+      matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+    },
+  ],
 };
 
 /** Single-cell magical ranged attack. */
-export const testMagicBolt: Skill = {
+export const testMagicBolt: ActionSkillDefinition = {
+  definitionKind: "action_skill",
   id: "test_magic_bolt",
   name: "Test Magic Bolt",
-  actionType: "ranged",
-  damageBlock: {
-    matrixName: "single",
-    damageType: "magical",
-    level: 1,
-  },
+  targetPolicy: { type: "enemy_ranged" },
+  actions: [
+    {
+      type: "damage",
+      powerSource: "magical_strength",
+      matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+    },
+  ],
 };
 
 /** Full-row physical attack (for AOE / dedup tests). Uses the production "row_sweep" matrix. */
-export const testRowStrike: Skill = {
+export const testRowStrike: ActionSkillDefinition = {
+  definitionKind: "action_skill",
   id: "test_row_strike",
   name: "Test Row Strike",
-  actionType: "melee",
-  damageBlock: {
-    matrixName: "row_sweep",
-    damageType: "physical",
-    level: 1,
-  },
+  targetPolicy: { type: "enemy_melee" },
+  actions: [
+    {
+      type: "damage",
+      powerSource: "physical_strength",
+      matrix: { kind: "multiplier_matrix", matrixName: "row_sweep", level: 1 },
+    },
+  ],
 };
 
 /** Single-target vampirism attack (for vampirism cap tests). */
-export const testVampireStrike: Skill = {
+export const testVampireStrike: ActionSkillDefinition = {
+  definitionKind: "action_skill",
   id: "test_vampire_strike",
   name: "Test Vampire Strike",
-  actionType: "melee",
-  damageBlock: {
-    matrixName: "single",
-    damageType: "physical",
-    level: 1,
-  },
-  postDamageBlock: {
-    type: "mass_vampirism",
-    level: 1,
-  },
+  targetPolicy: { type: "enemy_melee" },
+  actions: [
+    {
+      type: "damage",
+      powerSource: "physical_strength",
+      matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+    },
+    {
+      type: "post_damage",
+      postDamageType: "mass_vampirism",
+      level: 1,
+    },
+  ],
 };

@@ -1,5 +1,5 @@
 import type { CellCoord, UnitShape }                from './gridTypes';
-import type { Skill }                                from './skillTypes';
+import type { ActionSkillDefinition }                from './skillDefinitionTypes';
 import type { SpriteSheetConfig, RowTrait, UnitRace } from './unitTypes';
 import type { UnitActivatableAbility }               from './itemTypes';
 import type { UnitStatsSnapshot, SkillIconSnapshot } from './snapshotTypes';
@@ -24,20 +24,26 @@ export interface BattleUnitSnapshot {
   hp:       number;
   maxHp:    number;
 
-  physicalDamage:      number;
-  magicalDamage:       number;
+  physicalStrength:    number;
+  magicalStrength:     number;
   physicalDefense:     number;
   magicalDefense:      number;
   dodge:               number;
   block:               number;
   level:               number;
   initiative:          number;
-  effectiveInitiative: number; // pre-computed via effectiveStats; used by InitiativeBar
+  effectiveInitiative:       number; // pre-computed via effectiveStats; used by InitiativeBar
+  effectivePhysicalStrength: number;
+  effectiveMagicalStrength:  number;
+  effectivePhysicalDefense: number;
+  effectiveMagicalDefense:  number;
+  effectiveDodge:           number;
+  effectiveBlock:           number;
 
   shape:  UnitShape;
   anchor: CellCoord;
 
-  skills:           readonly Skill[];
+  skills:           readonly ActionSkillDefinition[];
   activeSkillIndex: number;
   activeEffects:    readonly ActiveEffect[];
 
