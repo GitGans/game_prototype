@@ -75,13 +75,18 @@ The executor (`skillExecution.ts`) and counter-attack both run through `SkillUse
 - `SkillUsePlan.targetPolicy` is authoritative for target resolution, auto/quick target choice,
   manual prompt kind, and target highlight kind.
 
-**Power source and damage resolution**
+**Power source and power calculation**
 - `PowerSource` values are `physical_strength` and `magical_strength`.
 - `physicalStrength` / `magicalStrength` are the scaling field names on units.
-- Skill damage resolution derives the defense branch directly from `powerSource`:
+- All caster-scaled skill actions (`damage`, `heal`, `apply_periodic_hp_effect`) use
+  `getEffectiveUnitPower()` from `skillPower.ts`. Active effects on the caster always
+  affect output. There is no raw/effective switch — `PowerMode` does not exist.
+- Effective power is clamped to zero: a debuff can reduce output to zero but cannot
+  produce a negative value that would invert the direction of a heal or periodic HP effect.
+- Skill damage resolution derives the defense branch from `powerSource`:
   - `physical_strength` → `physicalDefense`
   - `magical_strength` → `magicalDefense`
-  There is no intermediate `DamageType` in the executor or combat path.
+  Target defense/dodge/block apply to `damage` only — not to `heal` or `apply_periodic_hp_effect`.
 - `combat.ts` may import type-only contracts from `skillUsePlan.ts`.
   `skillUsePlan.ts` is a contract-only file and must never import `combat.ts`.
 - Effect registry classification uses `effectKind: "periodic_hp" | "stat_modifier"`. Periodic HP

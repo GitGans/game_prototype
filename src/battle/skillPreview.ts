@@ -13,10 +13,7 @@ import { getDamageModifierPercent } from './skillDefinitionRuntime';
 import { cellKey } from './field';
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
-import {
-  getRawUnitPower,
-  getEffectiveUnitPower,
-} from './skillPower';
+import { getEffectiveUnitPower } from './skillPower';
 import type { SkillUsePlan } from './skillUsePlan';
 
 export type { SkillPreviewModel } from '../shared/skillPreviewModel';
@@ -124,8 +121,7 @@ export function buildSkillPreviewModelFromPlan(
     // ── Status lines ──────────────────────────────────────────────────────
 
     if (action.type === 'heal') {
-      // Heal preview uses raw power, matching the executor — see getRawUnitPower.
-      const baseHeal = getRawUnitPower(activeUnit, action.powerSource);
+      const baseHeal = getEffectiveUnitPower(activeUnit, action.powerSource);
       const pattern = resolvePlanPattern(action.matrix);
       const hitCells = resolvePattern(targetCoord, pattern);
 
@@ -191,7 +187,7 @@ export function buildSkillPreviewModelFromPlan(
       // scaling; non-anchor cells define targeting area, not power.
       const pattern = resolvePlanPattern(action.matrix);
       const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
-      const basePower = getRawUnitPower(activeUnit, action.powerSource);
+      const basePower = getEffectiveUnitPower(activeUnit, action.powerSource);
       const amount = Math.round(basePower * anchorCell.multiplier);
 
       const effectCells = resolvePattern(targetCoord, pattern);

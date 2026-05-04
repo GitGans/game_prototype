@@ -16,10 +16,7 @@ import {
 } from "./skillRuntime";
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
-import {
-  getEffectiveUnitPower,
-  getRawUnitPower,
-} from './skillPower';
+import { getEffectiveUnitPower } from './skillPower';
 import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
 import type { PeriodicHp } from '../shared/activeEffect';
 import { resolveSkillTargetsForPolicy } from "./targeting";
@@ -213,7 +210,7 @@ function executeHealAction(input: {
 
   const pattern = resolvePlanPattern(action.matrix);
   const hitCells = resolvePattern(target, pattern);
-  const baseHeal = getRawUnitPower(caster, action.powerSource);
+  const baseHeal = getEffectiveUnitPower(caster, action.powerSource);
 
   const { state: healed, heals } = resolveHealWithEvents(hitCells, baseHeal, state);
 
@@ -329,7 +326,7 @@ function executeApplyPeriodicHpEffectAction(input: {
 
   const anchorCell = pattern.cells[pattern.anchorRow][pattern.anchorCol]!;
   const amountPerTurn = Math.round(
-    getRawUnitPower(caster, action.powerSource) * anchorCell.multiplier,
+    getEffectiveUnitPower(caster, action.powerSource) * anchorCell.multiplier,
   );
 
   const periodicHp: PeriodicHp = {

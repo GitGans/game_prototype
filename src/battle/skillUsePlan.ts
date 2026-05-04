@@ -41,8 +41,6 @@ export type PowerSource =
   | 'physical_strength'
   | 'magical_strength';
 
-export type PowerMode = 'raw' | 'effective';
-
 // Alias for PowerSource. Kept to avoid churn in combat callers.
 export type CombatPowerSource = PowerSource;
 
@@ -77,14 +75,12 @@ export type SkillUseAction =
   | {
       type: 'damage';
       powerSource: CombatPowerSource;
-      powerMode: 'effective';
       matrix: MultiplierPatternRef;
       modifiers?: DamageModifierRef[];
     }
   | {
       type: 'heal';
       powerSource: PowerSource;
-      powerMode: 'raw';
       matrix: MultiplierPatternRef;
     }
   | {
@@ -99,7 +95,6 @@ export type SkillUseAction =
       displayEffect: Effect;
       direction: 'heal' | 'damage';
       powerSource: CombatPowerSource;
-      powerMode: 'raw';
       matrix: EffectPatternRef;
     }
   | {

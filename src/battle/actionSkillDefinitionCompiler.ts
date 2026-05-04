@@ -12,7 +12,6 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
       return {
         type: 'damage',
         powerSource: action.powerSource,
-        powerMode: 'effective',
         matrix: action.matrix,
         modifiers: action.modifiers?.map((m) => ({
           type: m.modifierType,
@@ -24,7 +23,6 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
       return {
         type: 'heal',
         powerSource: action.powerSource,
-        powerMode: 'raw',
         matrix: action.matrix,
       };
 
@@ -74,7 +72,6 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
         displayEffect: def.effect,
         direction: action.direction,
         powerSource: action.powerSource,
-        powerMode: 'raw',
         matrix: action.matrix,
       };
     }
