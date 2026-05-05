@@ -96,7 +96,7 @@ export type SkillUseAction =
       displayEffect: Effect;
       direction: 'heal' | 'damage';
       powerSource: CombatPowerSource;
-      matrix: EffectPatternRef;
+      matrix: MultiplierPatternRef;
     }
   | {
       type: 'post_damage';

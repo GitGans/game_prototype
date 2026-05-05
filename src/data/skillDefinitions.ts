@@ -120,8 +120,31 @@ export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
   /** Single cell, 100% damage. */
   single: {
     levels: {
-      1: { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)]] },
-      2: { anchorRow: 0, anchorCol: 0, cells: [[P(1.25)]] },
+      1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.1)]] },
+      10: { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)]] },
+      12: { anchorRow: 0, anchorCol: 0, cells: [[P(1.25)]] },
+    },
+  },
+  cross_flat: {
+    levels: {
+      1: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.1), null],
+          [P(0.1), P(0.1), P(0.1)],
+          [null, P(0.1), null],
+        ],
+      },
+      2: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.2), null],
+          [P(0.2), P(0.2), P(0.2)],
+          [null, P(0.2), null],
+        ],
+      },
     },
   },
 
@@ -176,14 +199,11 @@ export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
 // Defines WHERE an effect lands (which cells) and with what multiplier.
 // Level keys are authored explicitly. Runtime resolves exact levels only.
 //
-// For periodic HP effects (regeneration / lose_health):
-//   amountPerTurn = caster power (selected by powerSource) × hit cell multiplier
-//   If one unit is hit by multiple cells, the highest resulting amount is used.
 // For stat modifier effects (fortify / weaken / etc.):
-//   only cell presence matters; multiplier is currently unused for stat modifier magnitude.
+//   only cell presence (shape) matters; multiplier is not used for stat modifier magnitude.
 
 export const EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> = {
-  /** Single target. Multiplier used for stat-based per-turn scaling. */
+  /** Single target. Shape-only; multiplier is not used by apply_stat_effect. */
   single: {
     levels: {
       1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.25)]] },
@@ -193,9 +213,7 @@ export const EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> = {
   },
 
   /**
-   * Cross: center + 4 orthogonal neighbours.
-   * For stat modifier effects: all cells share the same multiplier (unused for magnitude).
-   * For periodic HP effects: each cell multiplier drives its cell's per-turn value.
+   * Cross: center + 4 orthogonal neighbours. Shape-only; multiplier is not used by apply_stat_effect.
    *   [ ]  [X]  [ ]
    *   [X]  [X]  [X]
    *   [ ]  [X]  [ ]
@@ -337,149 +355,157 @@ export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
 // Dodge / block / defense do NOT apply to this roll.
 // Level keys are authored explicitly. Runtime resolves exact levels only.
 
-export const INSTANT_EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> = {
-  /** Single target. */
-  single: {
-    levels: {
-      1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
-      2: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-      3: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-      4: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+export const INSTANT_EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> =
+  {
+    /** Single target. */
+    single: {
+      levels: {
+        1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
+        2: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+        3: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+        4: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+      },
     },
-  },
 
-  /** 3 cells in one row. */
-  row_sweep: {
-    levels: {
-      1: {
-        anchorRow: 0,
-        anchorCol: 1,
-        cells: [[P(0.6), P(0.6), P(0.6)]],
+    /** 3 cells in one row. */
+    row_sweep: {
+      levels: {
+        1: {
+          anchorRow: 0,
+          anchorCol: 1,
+          cells: [[P(0.6), P(0.6), P(0.6)]],
+        },
       },
     },
-  },
 
-  /** 2 cells in one row. */
-  shot_sweep: {
-    levels: {
-      1: {
-        anchorRow: 0,
-        anchorCol: 0,
-        cells: [[P(0.5), P(0.5)]],
-      },
-      2: {
-        anchorRow: 0,
-        anchorCol: 0,
-        cells: [[P(0.8), P(0.8)]],
+    /** 2 cells in one row. */
+    shot_sweep: {
+      levels: {
+        1: {
+          anchorRow: 0,
+          anchorCol: 0,
+          cells: [[P(0.5), P(0.5)]],
+        },
+        2: {
+          anchorRow: 0,
+          anchorCol: 0,
+          cells: [[P(0.8), P(0.8)]],
+        },
       },
     },
-  },
 
-  /** 3x3 area. */
-  all: {
-    levels: {
-      1: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(0.3), P(0.3), P(0.3)],
-          [P(0.3), P(0.3), P(0.3)],
-          [P(0.3), P(0.3), P(0.3)],
-        ],
-      },
-      2: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(0.4), P(0.4), P(0.4)],
-          [P(0.4), P(0.4), P(0.4)],
-          [P(0.4), P(0.4), P(0.4)],
-        ],
-      },
-      3: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(0.5), P(0.5), P(0.5)],
-          [P(0.5), P(0.5), P(0.5)],
-          [P(0.5), P(0.5), P(0.5)],
-        ],
-      },
-      4: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(1), P(1), P(1)],
-          [P(1), P(1), P(1)],
-          [P(1), P(1), P(1)],
-        ],
+    /** 3x3 area. */
+    all: {
+      levels: {
+        1: {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [P(0.3), P(0.3), P(0.3)],
+            [P(0.3), P(0.3), P(0.3)],
+            [P(0.3), P(0.3), P(0.3)],
+          ],
+        },
+        2: {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [P(0.4), P(0.4), P(0.4)],
+            [P(0.4), P(0.4), P(0.4)],
+            [P(0.4), P(0.4), P(0.4)],
+          ],
+        },
+        3: {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [P(0.5), P(0.5), P(0.5)],
+            [P(0.5), P(0.5), P(0.5)],
+            [P(0.5), P(0.5), P(0.5)],
+          ],
+        },
+        4: {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [P(1), P(1), P(1)],
+            [P(1), P(1), P(1)],
+            [P(1), P(1), P(1)],
+          ],
+        },
       },
     },
-  },
 
-  /**
-   * Cross: center + 4 orthogonal neighbours.
-   */
-  cross: {
-    levels: {
-      1: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.5), null],
-          [P(0.5), P(0.1), P(0.5)],
-          [null, P(0.5), null],
-        ],
-      },
-      2: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.4), null],
-          [P(0.4), P(0.7), P(0.4)],
-          [null, P(0.4), null],
-        ],
-      },
-      3: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.3), null],
-          [P(0.3), P(1), P(0.3)],
-          [null, P(0.3), null],
-        ],
+    /**
+     * Cross: center + 4 orthogonal neighbours.
+     */
+    cross: {
+      levels: {
+        1: {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [null, P(0.5), null],
+            [P(0.5), P(0.1), P(0.5)],
+            [null, P(0.5), null],
+          ],
+        },
+        2: {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [null, P(0.4), null],
+            [P(0.4), P(0.7), P(0.4)],
+            [null, P(0.4), null],
+          ],
+        },
+        3: {
+          anchorRow: 1,
+          anchorCol: 1,
+          cells: [
+            [null, P(0.3), null],
+            [P(0.3), P(1), P(0.3)],
+            [null, P(0.3), null],
+          ],
+        },
       },
     },
-  },
 
-  /** Main target + one additional target. */
-  pierce: {
-    levels: {
-      1: {
-        anchorRow: 0,
-        anchorCol: 0,
-        cells: [[P(0.75), P(1)]],
+    /** Main target + one additional target. */
+    pierce: {
+      levels: {
+        1: {
+          anchorRow: 0,
+          anchorCol: 0,
+          cells: [[P(0.75), P(1)]],
+        },
       },
     },
-  },
-};
+  };
 
 // ─── Damage Modifier Levels ───────────────────────────────────────────────────
 // Values are percentages (0–100) of the stat that is IGNORED.
 // Level keys are authored explicitly. Runtime resolves exact levels only.
 
-export const DAMAGE_MODIFIER_LEVELS: Record<DamageModifierType, SkillLevelTable<number>> = {
-  ignore_block:            { 1: 25, 2: 50, 3: 75, 4: 100 },
-  ignore_dodge:            { 1: 25, 2: 50, 3: 75, 4: 100 },
+export const DAMAGE_MODIFIER_LEVELS: Record<
+  DamageModifierType,
+  SkillLevelTable<number>
+> = {
+  ignore_block: { 1: 25, 2: 50, 3: 75, 4: 100 },
+  ignore_dodge: { 1: 25, 2: 50, 3: 75, 4: 100 },
   ignore_physical_defense: { 1: 25, 2: 50, 3: 75, 4: 100 },
-  ignore_magical_defense:  { 1: 25, 2: 50, 3: 75, 4: 100 },
+  ignore_magical_defense: { 1: 25, 2: 50, 3: 75, 4: 100 },
 };
 
 // ─── Vampirism Levels ─────────────────────────────────────────────────────────
 // Values are % of total real damage converted to HP.
 // Level keys are authored explicitly. Runtime resolves exact levels only.
 
-export const VAMPIRISM_LEVELS: SkillLevelTable<number> = { 1: 25, 2: 50, 3: 100 };
+export const VAMPIRISM_LEVELS: SkillLevelTable<number> = {
+  1: 25,
+  2: 50,
+  3: 100,
+};
 
 // ─── Skill Definitions ────────────────────────────────────────────────────────
 
@@ -493,7 +519,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -507,7 +533,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -521,7 +547,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "magical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -535,7 +561,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_stat_effect",
@@ -543,7 +569,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         displayName: "Slow",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -557,7 +583,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "heal",
         powerSource: "magical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -571,7 +597,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "heal",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_stat_effect",
@@ -579,7 +605,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         displayName: "Defence",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "effect_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -593,7 +619,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "heal",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_periodic_hp_effect",
@@ -603,7 +629,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         powerSource: "physical_strength",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "cross", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "cross_flat", level: 1 },
       },
     ],
   },
@@ -627,7 +653,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         powerSource: "magical_strength",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "cross", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "cross_flat", level: 1 },
       },
     ],
   },
@@ -673,7 +699,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_periodic_hp_effect",
@@ -683,7 +709,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         powerSource: "physical_strength",
         level: 1,
         duration: 3,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -697,7 +723,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_stat_effect",
@@ -719,7 +745,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "instant_effect",
@@ -743,7 +769,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "instant_effect",

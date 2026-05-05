@@ -110,7 +110,7 @@ export interface SkillDefinitionApplyPeriodicHpEffectAction {
   powerSource: SkillDefinitionPowerSource;
   level: SkillLevel;
   duration: number;
-  matrix: SkillDefinitionEffectMatrixRef;
+  matrix: SkillDefinitionMultiplierMatrixRef;
 }
 
 // --- Post-damage ---
