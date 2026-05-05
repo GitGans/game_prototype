@@ -5,11 +5,14 @@ import type {
   LeveledMultiplierMatrix,
   LeveledEffectDef,
   SkillLevelTable,
+  EffectAreaMatrix,
+  AreaPatternCell,
 } from "../shared/skillTypes";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 const P = (m: number) => ({ multiplier: m });
+const A = (): AreaPatternCell => ({ multiplier: 1 as const });
 
 // ─── Base Effects ─────────────────────────────────────────────────────────────
 
@@ -194,26 +197,23 @@ export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
   },
 };
 
-// ─── Named Effect Matrices ────────────────────────────────────────────────────
+// ─── Named Effect Area Matrices ───────────────────────────────────────────────
 //
-// Defines WHERE an effect lands (which cells) and with what multiplier.
+// Shape-only area matrices for apply_stat_effect.
+// Cell presence (A()) means "this cell is in the area". Multiplier is always 1 and is not used for magnitude.
+// Effect magnitude comes from LEVELED_EFFECTS[effectName].bonusByLevel.
 // Level keys are authored explicitly. Runtime resolves exact levels only.
-//
-// For stat modifier effects (fortify / weaken / etc.):
-//   only cell presence (shape) matters; multiplier is not used for stat modifier magnitude.
 
-export const EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> = {
-  /** Single target. Shape-only; multiplier is not used by apply_stat_effect. */
+export const EFFECT_AREA_MATRICES: Record<string, EffectAreaMatrix> = {
+  /** Single target. */
   single: {
     levels: {
-      1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.25)]] },
-      2: { anchorRow: 0, anchorCol: 0, cells: [[P(0.4)]] },
-      3: { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
+      1: { anchorRow: 0, anchorCol: 0, cells: [[A()]] },
     },
   },
 
   /**
-   * Cross: center + 4 orthogonal neighbours. Shape-only; multiplier is not used by apply_stat_effect.
+   * Cross: center + 4 orthogonal neighbours.
    *   [ ]  [X]  [ ]
    *   [X]  [X]  [X]
    *   [ ]  [X]  [ ]
@@ -224,18 +224,9 @@ export const EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> = {
         anchorRow: 1,
         anchorCol: 1,
         cells: [
-          [null, P(0.2), null],
-          [P(0.2), P(0.4), P(0.2)],
-          [null, P(0.2), null],
-        ],
-      },
-      2: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.3), null],
-          [P(0.3), P(0.3), P(0.3)],
-          [null, P(0.3), null],
+          [null, A(), null],
+          [A(),  A(), A() ],
+          [null, A(), null],
         ],
       },
     },
@@ -569,7 +560,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         displayName: "Slow",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 10 },
+        matrix: { kind: "effect_area_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -605,7 +596,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         displayName: "Defence",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 10 },
+        matrix: { kind: "effect_area_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -731,7 +722,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         displayName: "Weakened",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "effect_area_matrix", matrixName: "single", level: 1 },
       },
     ],
   },

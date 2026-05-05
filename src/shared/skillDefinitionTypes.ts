@@ -26,22 +26,22 @@ export type SkillDefinitionPowerSource =
 
 /**
  * An unresolved reference to a named matrix entry in a registry.
- * `matrixName` is a string key into MULTIPLIER_MATRICES / EFFECT_MATRICES / INSTANT_EFFECT_MATRICES.
+ * `matrixName` is a string key into MULTIPLIER_MATRICES / EFFECT_AREA_MATRICES / INSTANT_EFFECT_MATRICES.
  * Names are unresolved string registry references at the contract layer — resolution happens in the compiler.
  * Concrete SkillPattern objects are resolved by the compiler or runtime bridge, not here.
  */
 export type SkillDefinitionMatrixRef =
   | { kind: 'multiplier_matrix'; matrixName: string; level: SkillLevel }
-  | { kind: 'effect_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'effect_area_matrix'; matrixName: string; level: SkillLevel }
   | { kind: 'instant_effect_matrix'; matrixName: string; level: SkillLevel };
 
 /** Narrowed alias — use when a field must reference a multiplier matrix. */
 export type SkillDefinitionMultiplierMatrixRef =
   Extract<SkillDefinitionMatrixRef, { kind: 'multiplier_matrix' }>;
 
-/** Narrowed alias — use when a field must reference an effect matrix. */
-export type SkillDefinitionEffectMatrixRef =
-  Extract<SkillDefinitionMatrixRef, { kind: 'effect_matrix' }>;
+/** Narrowed alias — use when a field must reference an effect area matrix. */
+export type SkillDefinitionEffectAreaMatrixRef =
+  Extract<SkillDefinitionMatrixRef, { kind: 'effect_area_matrix' }>;
 
 /** Narrowed alias — use when a field must reference an instant-effect matrix. */
 export type SkillDefinitionInstantEffectMatrixRef =
@@ -96,7 +96,7 @@ export interface SkillDefinitionApplyStatEffectAction {
   displayName: string;
   level: SkillLevel;
   duration: number;
-  matrix: SkillDefinitionEffectMatrixRef;
+  matrix: SkillDefinitionEffectAreaMatrixRef;
 }
 
 // --- Periodic HP effect ---

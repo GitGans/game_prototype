@@ -49,11 +49,11 @@ export type CombatPowerSource = PowerSource;
 
 export type PatternRef =
   | { kind: 'multiplier_matrix'; matrixName: string; level: SkillLevel }
-  | { kind: 'effect_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'effect_area_matrix'; matrixName: string; level: SkillLevel }
   | { kind: 'instant_effect_matrix'; matrixName: string; level: SkillLevel };
 
 export type MultiplierPatternRef = Extract<PatternRef, { kind: 'multiplier_matrix' }>;
-export type EffectPatternRef = Extract<PatternRef, { kind: 'effect_matrix' }>;
+export type EffectAreaPatternRef = Extract<PatternRef, { kind: 'effect_area_matrix' }>;
 export type InstantEffectPatternRef = Extract<
   PatternRef,
   { kind: 'instant_effect_matrix' }
@@ -88,7 +88,7 @@ export type SkillUseAction =
       type: 'apply_stat_effect';
       effect: EffectApplicationMeta;
       resolvedEffect: Effect;
-      matrix: EffectPatternRef;
+      matrix: EffectAreaPatternRef;
     }
   | {
       type: 'apply_periodic_hp_effect';

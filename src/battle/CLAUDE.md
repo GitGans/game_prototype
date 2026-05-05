@@ -92,7 +92,7 @@ The executor (`skillExecution.ts`) and counter-attack both run through `SkillUse
 - Effect registry classification uses `effectKind: "periodic_hp" | "stat_modifier"`. Periodic HP
   scaling: `amountPerTurn = getEffectiveUnitPower(caster, powerSource) × hit cell multiplier`.
   The matrix for `apply_periodic_hp_effect` must be a `multiplier_matrix` (from `MULTIPLIER_MATRICES`);
-  `effect_matrix` is reserved for `apply_stat_effect` (shape-only, multiplier ignored).
+  `effect_area_matrix` is reserved for `apply_stat_effect` (shape-only, multiplier always 1, ignored at runtime).
   If a unit is hit by multiple cells, the highest resulting amount is used.
 
 **SkillUsePlan action fields are semantic**

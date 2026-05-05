@@ -28,6 +28,18 @@ export interface LeveledMultiplierMatrix {
   levels: SkillLevelTable<SkillPattern>;
 }
 
+export type AreaPatternCell = { multiplier: 1 };
+
+export interface EffectAreaPattern {
+  anchorRow: number;
+  anchorCol: number;
+  cells: (AreaPatternCell | null)[][];
+}
+
+export interface EffectAreaMatrix {
+  levels: SkillLevelTable<EffectAreaPattern>;
+}
+
 export type LeveledEffectDef =
   | {
       effectKind: 'periodic_hp';
