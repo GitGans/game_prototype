@@ -14,10 +14,9 @@ import type {
 const P = (m: number) => ({ multiplier: m });
 const A = (): AreaPatternCell => ({ multiplier: 1 as const });
 
-
-// ─── Named Damage Matrices ────────────────────────────────────────────────────
+// ─── Named Multiplier Matrices ────────────────────────────────────────────────────
 //
-// Each entry is a named, reusable damage matrix.
+// Each entry is a named, reusable multiplier matrix.
 // Level keys are authored explicitly. Runtime resolves exact levels only.
 // Multiple skills can share the same matrix name.
 
@@ -127,7 +126,7 @@ export const EFFECT_AREA_MATRICES: Record<string, EffectAreaMatrix> = {
         anchorCol: 1,
         cells: [
           [null, A(), null],
-          [A(),  A(), A() ],
+          [A(), A(), A()],
           [null, A(), null],
         ],
       },
@@ -267,133 +266,132 @@ export const STAT_EFFECTS: Record<string, StatEffectDef> = {
 // Dodge / block / defense do NOT apply to this roll.
 // Level keys are authored explicitly. Runtime resolves exact levels only.
 
-export const PROBABILITY_MATRICES: Record<string, LeveledMultiplierMatrix> =
-  {
-    /** Single target. */
-    single: {
-      levels: {
-        1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
-        2: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-        3: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-        4: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-      },
+export const PROBABILITY_MATRICES: Record<string, LeveledMultiplierMatrix> = {
+  /** Single target. */
+  single: {
+    levels: {
+      1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
+      2: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+      3: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+      4: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
     },
+  },
 
-    /** 3 cells in one row. */
-    row_sweep: {
-      levels: {
-        1: {
-          anchorRow: 0,
-          anchorCol: 1,
-          cells: [[P(0.6), P(0.6), P(0.6)]],
-        },
+  /** 3 cells in one row. */
+  row_sweep: {
+    levels: {
+      1: {
+        anchorRow: 0,
+        anchorCol: 1,
+        cells: [[P(0.6), P(0.6), P(0.6)]],
       },
     },
+  },
 
-    /** 2 cells in one row. */
-    shot_sweep: {
-      levels: {
-        1: {
-          anchorRow: 0,
-          anchorCol: 0,
-          cells: [[P(0.5), P(0.5)]],
-        },
-        2: {
-          anchorRow: 0,
-          anchorCol: 0,
-          cells: [[P(0.8), P(0.8)]],
-        },
+  /** 2 cells in one row. */
+  shot_sweep: {
+    levels: {
+      1: {
+        anchorRow: 0,
+        anchorCol: 0,
+        cells: [[P(0.5), P(0.5)]],
+      },
+      2: {
+        anchorRow: 0,
+        anchorCol: 0,
+        cells: [[P(0.8), P(0.8)]],
       },
     },
+  },
 
-    /** 3x3 area. */
-    all: {
-      levels: {
-        1: {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [P(0.3), P(0.3), P(0.3)],
-            [P(0.3), P(0.3), P(0.3)],
-            [P(0.3), P(0.3), P(0.3)],
-          ],
-        },
-        2: {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [P(0.4), P(0.4), P(0.4)],
-            [P(0.4), P(0.4), P(0.4)],
-            [P(0.4), P(0.4), P(0.4)],
-          ],
-        },
-        3: {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [P(0.5), P(0.5), P(0.5)],
-            [P(0.5), P(0.5), P(0.5)],
-            [P(0.5), P(0.5), P(0.5)],
-          ],
-        },
-        4: {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [P(1), P(1), P(1)],
-            [P(1), P(1), P(1)],
-            [P(1), P(1), P(1)],
-          ],
-        },
+  /** 3x3 area. */
+  all: {
+    levels: {
+      1: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(0.3), P(0.3), P(0.3)],
+          [P(0.3), P(0.3), P(0.3)],
+          [P(0.3), P(0.3), P(0.3)],
+        ],
+      },
+      2: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(0.4), P(0.4), P(0.4)],
+          [P(0.4), P(0.4), P(0.4)],
+          [P(0.4), P(0.4), P(0.4)],
+        ],
+      },
+      3: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(0.5), P(0.5), P(0.5)],
+          [P(0.5), P(0.5), P(0.5)],
+          [P(0.5), P(0.5), P(0.5)],
+        ],
+      },
+      4: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(1), P(1), P(1)],
+          [P(1), P(1), P(1)],
+          [P(1), P(1), P(1)],
+        ],
       },
     },
+  },
 
-    /**
-     * Cross: center + 4 orthogonal neighbours.
-     */
-    cross: {
-      levels: {
-        1: {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [null, P(0.5), null],
-            [P(0.5), P(0.1), P(0.5)],
-            [null, P(0.5), null],
-          ],
-        },
-        2: {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [null, P(0.4), null],
-            [P(0.4), P(0.7), P(0.4)],
-            [null, P(0.4), null],
-          ],
-        },
-        3: {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [null, P(0.3), null],
-            [P(0.3), P(1), P(0.3)],
-            [null, P(0.3), null],
-          ],
-        },
+  /**
+   * Cross: center + 4 orthogonal neighbours.
+   */
+  cross: {
+    levels: {
+      1: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.5), null],
+          [P(0.5), P(0.1), P(0.5)],
+          [null, P(0.5), null],
+        ],
+      },
+      2: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.4), null],
+          [P(0.4), P(0.7), P(0.4)],
+          [null, P(0.4), null],
+        ],
+      },
+      3: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.3), null],
+          [P(0.3), P(1), P(0.3)],
+          [null, P(0.3), null],
+        ],
       },
     },
+  },
 
-    /** Main target + one additional target. */
-    pierce: {
-      levels: {
-        1: {
-          anchorRow: 0,
-          anchorCol: 0,
-          cells: [[P(0.75), P(1)]],
-        },
+  /** Main target + one additional target. */
+  pierce: {
+    levels: {
+      1: {
+        anchorRow: 0,
+        anchorCol: 0,
+        cells: [[P(0.75), P(1)]],
       },
     },
-  };
+  },
+};
 
 // ─── Damage Modifier Levels ───────────────────────────────────────────────────
 // Values are percentages (0–100) of the stat that is IGNORED.
@@ -541,7 +539,11 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         powerSource: "physical_strength",
         level: 1,
         duration: 2,
-        matrix: { kind: "multiplier_matrix", matrixName: "cross_flat", level: 1 },
+        matrix: {
+          kind: "multiplier_matrix",
+          matrixName: "cross_flat",
+          level: 1,
+        },
       },
     ],
   },
@@ -565,7 +567,11 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         powerSource: "magical_strength",
         level: 1,
         duration: 2,
-        matrix: { kind: "multiplier_matrix", matrixName: "cross_flat", level: 1 },
+        matrix: {
+          kind: "multiplier_matrix",
+          matrixName: "cross_flat",
+          level: 1,
+        },
       },
     ],
   },
