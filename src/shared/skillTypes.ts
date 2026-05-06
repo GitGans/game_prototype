@@ -40,24 +40,36 @@ export interface EffectAreaMatrix {
   levels: SkillLevelTable<EffectAreaPattern>;
 }
 
-export type LeveledEffectDef =
-  | {
-      effectKind: 'periodic_hp';
-      effect: Effect;
-    }
-  | {
-      effectKind: 'stat_modifier';
-      effect: Effect;
-      bonusByLevel: SkillLevelTable<number>;
-    };
+export type EffectDirection = 'buff' | 'debuff';
 
-export type InstantEffectType = 'provoke' | 'distract';
+export type StatEffectBonusField =
+  | 'physicalDefenseBonus'
+  | 'magicalDefenseBonus'
+  | 'dodgeBonus'
+  | 'blockBonus'
+  | 'initiativeBonus'
+  | 'physicalStrengthBonus'
+  | 'magicalStrengthBonus';
 
-export type InstantEffectEvent =
-  | { type: 'instant_effect_applied'; unitId: string; unitName: string; displayName: string }
-  | { type: 'instant_effect_failed';  unitId: string; unitName: string; displayName: string }
-  | { type: 'provoke_skip';           unitId: string; unitName: string }
-  | { type: 'distract_skip';          unitId: string; unitName: string };
+export interface StatEffectDef {
+  direction: EffectDirection;
+  bonusField: StatEffectBonusField;
+  description?: string;
+  bonusByLevel: SkillLevelTable<number>;
+}
+
+export interface PeriodicHpEffectDef {
+  direction: EffectDirection;
+  description?: string;
+}
+
+export type ProbabilityEffectType = 'provoke' | 'distract';
+
+export type ProbabilityEffectEvent =
+  | { type: 'probability_effect_applied'; unitId: string; unitName: string; displayName: string }
+  | { type: 'probability_effect_failed';  unitId: string; unitName: string; displayName: string }
+  | { type: 'provoke_skip';              unitId: string; unitName: string }
+  | { type: 'distract_skip';             unitId: string; unitName: string };
 
 export type DamageModifierType =
   | 'ignore_block'
@@ -81,8 +93,8 @@ export type PostDamageEffect = {
   level: number;
 };
 
-export type InstantEffectApplication = {
-  type: InstantEffectType;
+export type ProbabilityEffectApplication = {
+  type: ProbabilityEffectType;
   displayName: string;
 };
 

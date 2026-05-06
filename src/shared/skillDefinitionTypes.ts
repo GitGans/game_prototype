@@ -1,4 +1,4 @@
-import type { DamageModifierType, PostDamageType, InstantEffectType, SkillLevel } from './skillTypes';
+import type { DamageModifierType, PostDamageType, ProbabilityEffectType, SkillLevel } from './skillTypes';
 
 // ---------------------------------------------------------------------------
 // Target policy
@@ -26,14 +26,14 @@ export type SkillDefinitionPowerSource =
 
 /**
  * An unresolved reference to a named matrix entry in a registry.
- * `matrixName` is a string key into MULTIPLIER_MATRICES / EFFECT_AREA_MATRICES / INSTANT_EFFECT_MATRICES.
+ * `matrixName` is a string key into MULTIPLIER_MATRICES / EFFECT_AREA_MATRICES / PROBABILITY_MATRICES.
  * Names are unresolved string registry references at the contract layer — resolution happens in the compiler.
  * Concrete SkillPattern objects are resolved by the compiler or runtime bridge, not here.
  */
 export type SkillDefinitionMatrixRef =
   | { kind: 'multiplier_matrix'; matrixName: string; level: SkillLevel }
   | { kind: 'effect_area_matrix'; matrixName: string; level: SkillLevel }
-  | { kind: 'instant_effect_matrix'; matrixName: string; level: SkillLevel };
+  | { kind: 'probability_matrix'; matrixName: string; level: SkillLevel };
 
 /** Narrowed alias — use when a field must reference a multiplier matrix. */
 export type SkillDefinitionMultiplierMatrixRef =
@@ -43,9 +43,9 @@ export type SkillDefinitionMultiplierMatrixRef =
 export type SkillDefinitionEffectAreaMatrixRef =
   Extract<SkillDefinitionMatrixRef, { kind: 'effect_area_matrix' }>;
 
-/** Narrowed alias — use when a field must reference an instant-effect matrix. */
-export type SkillDefinitionInstantEffectMatrixRef =
-  Extract<SkillDefinitionMatrixRef, { kind: 'instant_effect_matrix' }>;
+/** Narrowed alias — use when a field must reference a probability matrix. */
+export type SkillDefinitionProbabilityMatrixRef =
+  Extract<SkillDefinitionMatrixRef, { kind: 'probability_matrix' }>;
 
 // ---------------------------------------------------------------------------
 // Actions
@@ -58,7 +58,7 @@ export type SkillDefinitionAction =
   | SkillDefinitionApplyStatEffectAction
   | SkillDefinitionApplyPeriodicHpEffectAction
   | SkillDefinitionPostDamageAction
-  | SkillDefinitionInstantEffectAction;
+  | SkillDefinitionProbabilityAction;
 
 // --- Damage ---
 
@@ -121,13 +121,13 @@ export interface SkillDefinitionPostDamageAction {
   level: SkillLevel;
 }
 
-// --- Instant effect ---
+// --- Probability effect ---
 
-export interface SkillDefinitionInstantEffectAction {
-  type: 'instant_effect';
-  instantEffectType: InstantEffectType;
+export interface SkillDefinitionProbabilityAction {
+  type: 'probability_effect';
+  probabilityEffectType: ProbabilityEffectType;
   displayName: string;
-  matrix: SkillDefinitionInstantEffectMatrixRef;
+  matrix: SkillDefinitionProbabilityMatrixRef;
 }
 
 // ---------------------------------------------------------------------------

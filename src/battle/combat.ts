@@ -3,7 +3,7 @@ import {
   BattleState,
   CellCoord,
   Effect,
-  InstantEffectEvent,
+  ProbabilityEffectEvent,
   ResolvedHitCell,
   Side,
   SkillPattern,
@@ -13,7 +13,7 @@ import type {
   AppliedEffectMeta,
   DamageModifierRef,
   DamageModifierType,
-  InstantEffectApplication,
+  ProbabilityEffectApplication,
   PostDamageEffect,
 } from '../shared/skillTypes';
 import type { CombatPowerSource } from './skillUsePlan';
@@ -605,12 +605,12 @@ export function checkGameOver(state: BattleState): Side | null {
 }
 
 /**
- * Resolves instant effects (provoke / distract) for all units in the pattern.
+ * Resolves probability effects (provoke / distract) for all units in the pattern.
  *
  * For each resolved cell with a unit:
  *   - Roll rng against the cell's probability (multiplier field).
- *   - If the roll fails → emit instant_effect_failed event, skip unit.
- *   - If the roll succeeds → emit instant_effect_applied event.
+ *   - If the roll fails → emit probability_effect_failed event, skip unit.
+ *   - If the roll succeeds → emit probability_effect_applied event.
  *   - If the unit is NOT in roundQueue[1..] (already acted or current actor) →
  *     effect lands but produces no forced-turn side effect (unit not added to
  *     provokedUnitIds / distractedUnitIds).
@@ -618,15 +618,15 @@ export function checkGameOver(state: BattleState): Side | null {
  *
  * Does NOT mutate roundQueue — caller handles queue removal and counter-attacks.
  */
-export function resolveInstantEffects(
-  instantEffect: InstantEffectApplication,
+export function resolveProbabilityEffects(
+  probabilityEffect: ProbabilityEffectApplication,
   pattern: SkillPattern,
   targetAnchor: CellCoord,
   state: BattleState,
   roundQueue: string[],
   rng: Rng,
 ): {
-  events: InstantEffectEvent[];
+  events: ProbabilityEffectEvent[];
   provokedUnitIds: string[];
   distractedUnitIds: string[];
 } {
@@ -645,7 +645,7 @@ export function resolveInstantEffects(
   // Units that have NOT yet acted = roundQueue[1..] (index 0 is the caster)
   const remainingSet = new Set(roundQueue.slice(1));
 
-  const events: InstantEffectEvent[] = [];
+  const events: ProbabilityEffectEvent[] = [];
   const provokedUnitIds: string[] = [];
   const distractedUnitIds: string[] = [];
 
@@ -656,26 +656,26 @@ export function resolveInstantEffects(
     // Probability roll — no dodge/block/defense
     if (!rollProbability(rng, probability)) {
       events.push({
-        type: "instant_effect_failed",
+        type: "probability_effect_failed",
         unitId: unit.id,
         unitName: unit.name,
-        displayName: instantEffect.displayName,
+        displayName: probabilityEffect.displayName,
       });
       continue;
     }
 
     // Roll succeeded — the effect lands regardless of turn eligibility.
     events.push({
-      type: "instant_effect_applied",
+      type: "probability_effect_applied",
       unitId: unit.id,
       unitName: unit.name,
-      displayName: instantEffect.displayName,
+      displayName: probabilityEffect.displayName,
     });
 
     // Only produces a forced-turn side effect for units that still have a turn this round.
     if (!remainingSet.has(unit.id)) continue;
 
-    if (instantEffect.type === "provoke") {
+    if (probabilityEffect.type === "provoke") {
       provokedUnitIds.push(unit.id);
     } else {
       distractedUnitIds.push(unit.id);

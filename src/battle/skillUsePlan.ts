@@ -4,11 +4,11 @@ import type {
   Effect,
   DamageModifierRef,
   PostDamageEffect,
-  InstantEffectApplication,
+  ProbabilityEffectApplication,
   SkillLevel,
 } from '../shared/skillTypes';
 
-export type { DamageModifierRef, PostDamageEffect, InstantEffectApplication };
+export type { DamageModifierRef, PostDamageEffect, ProbabilityEffectApplication };
 
 // ─── Targeting ────────────────────────────────────────────────────────────────
 
@@ -50,13 +50,13 @@ export type CombatPowerSource = PowerSource;
 export type PatternRef =
   | { kind: 'multiplier_matrix'; matrixName: string; level: SkillLevel }
   | { kind: 'effect_area_matrix'; matrixName: string; level: SkillLevel }
-  | { kind: 'instant_effect_matrix'; matrixName: string; level: SkillLevel };
+  | { kind: 'probability_matrix'; matrixName: string; level: SkillLevel };
 
 export type MultiplierPatternRef = Extract<PatternRef, { kind: 'multiplier_matrix' }>;
 export type EffectAreaPatternRef = Extract<PatternRef, { kind: 'effect_area_matrix' }>;
-export type InstantEffectPatternRef = Extract<
+export type ProbabilityPatternRef = Extract<
   PatternRef,
-  { kind: 'instant_effect_matrix' }
+  { kind: 'probability_matrix' }
 >;
 
 // ─── Semantic runtime helper types ────────────────────────────────────────────
@@ -103,9 +103,9 @@ export type SkillUseAction =
       postDamage: PostDamageEffect;
     }
   | {
-      type: 'instant_effect';
-      instantEffect: InstantEffectApplication;
-      matrix: InstantEffectPatternRef;
+      type: 'probability_effect';
+      probabilityEffect: ProbabilityEffectApplication;
+      matrix: ProbabilityPatternRef;
     };
 
 // ─── Plan ─────────────────────────────────────────────────────────────────────

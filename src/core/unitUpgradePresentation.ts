@@ -103,8 +103,8 @@ export function buildSkillDescriptionFromPlan(plan: SkillUsePlan): string {
       case 'apply_periodic_hp_effect':
         parts.push(action.effect.displayName);
         break;
-      case 'instant_effect':
-        parts.push(action.instantEffect.displayName);
+      case 'probability_effect':
+        parts.push(action.probabilityEffect.displayName);
         break;
       case 'post_damage':
         parts.push(action.postDamage.type === 'self_vampirism' ? 'vampirism' : 'mass vampirism');
@@ -128,8 +128,8 @@ export function buildSkillTagFromPlan(plan: SkillUsePlan): string {
     return `${target} · effect`;
   }
 
-  if (plan.actions.some((a) => a.type === 'instant_effect')) {
-    return `${target} · instant`;
+  if (plan.actions.some((a) => a.type === 'probability_effect')) {
+    return `${target} · effect`;
   }
 
   if (plan.actions.some((a) => a.type === 'post_damage')) {

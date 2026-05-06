@@ -51,7 +51,7 @@ export type SkillPreviewInput = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatInstantProbability(cells: ResolvedHitCell[]): string {
+function formatProbability(cells: ResolvedHitCell[]): string {
   const minPct = Math.round(Math.min(...cells.map(c => c.multiplier)) * 100);
   const maxPct = Math.round(Math.max(...cells.map(c => c.multiplier)) * 100);
   return minPct === maxPct ? `${minPct}%` : `${minPct}-${maxPct}%`;
@@ -115,7 +115,7 @@ export function buildSkillPreviewModelFromPlan(
     if (
       action.type === 'apply_stat_effect' ||
       action.type === 'apply_periodic_hp_effect' ||
-      action.type === 'instant_effect'
+      action.type === 'probability_effect'
     ) {
       const pattern = resolvePlanPattern(action.matrix);
       const effectCells = resolvePattern(targetCoord, pattern);
@@ -123,8 +123,8 @@ export function buildSkillPreviewModelFromPlan(
         cells.push({ coord: ec.coord, kind: 'effect', highlight });
       }
 
-      if (action.type === 'instant_effect') {
-        statusLines.push(`[${action.instantEffect.displayName} ${formatInstantProbability(effectCells)}]`);
+      if (action.type === 'probability_effect') {
+        statusLines.push(`[${action.probabilityEffect.displayName} ${formatProbability(effectCells)}]`);
       }
     }
 

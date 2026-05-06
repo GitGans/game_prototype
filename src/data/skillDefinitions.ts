@@ -1,12 +1,12 @@
 import type { ActionSkillDefinition } from "../shared/skillDefinitionTypes";
 import type {
   DamageModifierType,
-  Effect,
   LeveledMultiplierMatrix,
-  LeveledEffectDef,
   SkillLevelTable,
   EffectAreaMatrix,
   AreaPatternCell,
+  StatEffectDef,
+  PeriodicHpEffectDef,
 } from "../shared/skillTypes";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -14,104 +14,6 @@ import type {
 const P = (m: number) => ({ multiplier: m });
 const A = (): AreaPatternCell => ({ multiplier: 1 as const });
 
-// ─── Base Effects ─────────────────────────────────────────────────────────────
-
-const EFFECTS: Record<string, Effect> = {
-  regeneration: {
-    id: "regeneration",
-    effectTone: "positive",
-    description: "Restores HP each round",
-  },
-  lose_health: {
-    id: "lose_health",
-    effectTone: "negative",
-    description: "Deals damage each round",
-  },
-  fortify: {
-    id: "fortify",
-    effectTone: "positive",
-    physicalDefenseBonus: 1,
-    description: "Increases physical defense",
-  },
-  weaken: {
-    id: "weaken",
-    effectTone: "negative",
-    physicalDefenseBonus: -1,
-    description: "Reduces physical defense",
-  },
-  arcane_shield: {
-    id: "arcane_shield",
-    effectTone: "positive",
-    magicalDefenseBonus: 1,
-    description: "Increases magical defense",
-  },
-  arcane_vulnerability: {
-    id: "arcane_vulnerability",
-    effectTone: "negative",
-    magicalDefenseBonus: -1,
-    description: "Reduces magical defense",
-  },
-  swift: {
-    id: "swift",
-    effectTone: "positive",
-    dodgeBonus: 1,
-    description: "Increases dodge chance",
-  },
-  clumsy: {
-    id: "clumsy",
-    effectTone: "negative",
-    dodgeBonus: -1,
-    description: "Reduces dodge chance",
-  },
-  guard_stance: {
-    id: "guard_stance",
-    effectTone: "positive",
-    blockBonus: 1,
-    description: "Increases block chance",
-  },
-  off_balance: {
-    id: "off_balance",
-    effectTone: "negative",
-    blockBonus: -1,
-    description: "Reduces block chance",
-  },
-  haste: {
-    id: "haste",
-    effectTone: "positive",
-    initiativeBonus: 1,
-    description: "Increases initiative",
-  },
-  slow: {
-    id: "slow",
-    effectTone: "negative",
-    initiativeBonus: -1,
-    description: "Reduces initiative",
-  },
-  empower: {
-    id: "empower",
-    effectTone: "positive",
-    physicalStrengthBonus: 1,
-    description: "Increases physical attack",
-  },
-  enfeeble: {
-    id: "enfeeble",
-    effectTone: "negative",
-    physicalStrengthBonus: -1,
-    description: "Reduces physical attack",
-  },
-  arcane_surge: {
-    id: "arcane_surge",
-    effectTone: "positive",
-    magicalStrengthBonus: 1,
-    description: "Increases magical attack",
-  },
-  arcane_drain: {
-    id: "arcane_drain",
-    effectTone: "negative",
-    magicalStrengthBonus: -1,
-    description: "Reduces magical attack",
-  },
-};
 
 // ─── Named Damage Matrices ────────────────────────────────────────────────────
 //
@@ -201,7 +103,7 @@ export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
 //
 // Shape-only area matrices for apply_stat_effect.
 // Cell presence (A()) means "this cell is in the area". Multiplier is always 1 and is not used for magnitude.
-// Effect magnitude comes from LEVELED_EFFECTS[effectName].bonusByLevel.
+// Effect magnitude comes from STAT_EFFECTS[effectName].bonusByLevel.
 // Level keys are authored explicitly. Runtime resolves exact levels only.
 
 export const EFFECT_AREA_MATRICES: Record<string, EffectAreaMatrix> = {
@@ -233,120 +135,139 @@ export const EFFECT_AREA_MATRICES: Record<string, EffectAreaMatrix> = {
   },
 };
 
-// ─── Leveled Effect Definitions ───────────────────────────────────────────────
+// ─── Periodic HP Effect Definitions ──────────────────────────────────────────
 //
-// effectKind classifies which action type may use this effect.
-// It does not choose periodic HP direction or scaling.
-// Periodic HP direction and scaling are authored on apply_periodic_hp_effect.
-//
-// bonusByLevel — fixed-magnitude stat modifiers keyed by level (1-based).
-//   Level keys are authored explicitly. Runtime resolves exact levels only.
-//   No stat scaling. Sign is inherited from the base Effect in EFFECTS.
+// direction: "buff" | "debuff" — used only for display classification (effectTone).
+// Runtime tick direction (heal/damage) and power come from the action's `direction`
+// and `powerSource` fields, not from here.
 
-export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
+export const PERIODIC_HP_EFFECTS: Record<string, PeriodicHpEffectDef> = {
   regeneration: {
-    effectKind: "periodic_hp",
-    effect: EFFECTS.regeneration,
+    direction: "buff",
+    description: "Restores HP each round",
   },
 
   lose_health: {
-    effectKind: "periodic_hp",
-    effect: EFFECTS.lose_health,
-  },
-
-  fortify: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.fortify,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // physicalDefenseBonus sign (+) inherited from EFFECTS.fortify
-  },
-
-  weaken: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.weaken,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // physicalDefenseBonus sign (-) inherited from EFFECTS.weaken
-  },
-
-  arcane_shield: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.arcane_shield,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // magicalDefenseBonus sign (+) inherited from EFFECTS.arcane_shield
-  },
-
-  arcane_vulnerability: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.arcane_vulnerability,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // magicalDefenseBonus sign (-) inherited from EFFECTS.arcane_vulnerability
-  },
-
-  swift: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.swift,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // dodgeBonus sign (+) inherited from EFFECTS.swift
-  },
-
-  clumsy: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.clumsy,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // dodgeBonus sign (-) inherited from EFFECTS.clumsy
-  },
-
-  guard_stance: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.guard_stance,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // blockBonus sign (+) inherited from EFFECTS.guard_stance
-  },
-
-  off_balance: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.off_balance,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // blockBonus sign (-) inherited from EFFECTS.off_balance
-  },
-
-  haste: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.haste,
-    bonusByLevel: { 1: 1, 2: 2, 3: 3 }, // initiativeBonus sign (+) inherited from EFFECTS.haste
-  },
-
-  slow: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.slow,
-    bonusByLevel: { 1: 1, 2: 2, 3: 3 }, // initiativeBonus sign (-) inherited from EFFECTS.slow
-  },
-
-  empower: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.empower,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // physicalStrengthBonus sign (+) inherited from EFFECTS.empower
-  },
-
-  enfeeble: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.enfeeble,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // physicalStrengthBonus sign (-) inherited from EFFECTS.enfeeble
-  },
-
-  arcane_surge: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.arcane_surge,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // magicalStrengthBonus sign (+) inherited from EFFECTS.arcane_surge
-  },
-
-  arcane_drain: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.arcane_drain,
-    bonusByLevel: { 1: 10, 2: 20, 3: 30 }, // magicalStrengthBonus sign (-) inherited from EFFECTS.arcane_drain
+    direction: "debuff",
+    description: "Deals damage each round",
   },
 };
 
-// ─── Named Instant Effect Matrices ───────────────────────────────────────────
+// ─── Stat Effect Definitions ──────────────────────────────────────────────────
 //
-// Cell values are stored in multiplier but represent success PROBABILITY (0–1),
-// not a damage scaling factor. Instant effects are not damage; they are provoke/distract.
+// direction: "buff"   → effectTone "positive", bonus applied as +bonusByLevel[level]
+// direction: "debuff" → effectTone "negative", bonus applied as -bonusByLevel[level]
+// bonusByLevel — unsigned magnitude. Sign is derived from direction at resolution time.
+// Level keys are authored explicitly. Runtime resolves exact levels only.
+
+export const STAT_EFFECTS: Record<string, StatEffectDef> = {
+  fortify: {
+    direction: "buff",
+    bonusField: "physicalDefenseBonus",
+    description: "Increases physical defense",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  weaken: {
+    direction: "debuff",
+    bonusField: "physicalDefenseBonus",
+    description: "Reduces physical defense",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  arcane_shield: {
+    direction: "buff",
+    bonusField: "magicalDefenseBonus",
+    description: "Increases magical defense",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  arcane_vulnerability: {
+    direction: "debuff",
+    bonusField: "magicalDefenseBonus",
+    description: "Reduces magical defense",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  swift: {
+    direction: "buff",
+    bonusField: "dodgeBonus",
+    description: "Increases dodge chance",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  clumsy: {
+    direction: "debuff",
+    bonusField: "dodgeBonus",
+    description: "Reduces dodge chance",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  guard_stance: {
+    direction: "buff",
+    bonusField: "blockBonus",
+    description: "Increases block chance",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  off_balance: {
+    direction: "debuff",
+    bonusField: "blockBonus",
+    description: "Reduces block chance",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  haste: {
+    direction: "buff",
+    bonusField: "initiativeBonus",
+    description: "Increases initiative",
+    bonusByLevel: { 1: 1, 2: 2, 3: 3 },
+  },
+
+  slow: {
+    direction: "debuff",
+    bonusField: "initiativeBonus",
+    description: "Reduces initiative",
+    bonusByLevel: { 1: 1, 2: 2, 3: 3 },
+  },
+
+  empower: {
+    direction: "buff",
+    bonusField: "physicalStrengthBonus",
+    description: "Increases physical attack",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  enfeeble: {
+    direction: "debuff",
+    bonusField: "physicalStrengthBonus",
+    description: "Reduces physical attack",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  arcane_surge: {
+    direction: "buff",
+    bonusField: "magicalStrengthBonus",
+    description: "Increases magical attack",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  arcane_drain: {
+    direction: "debuff",
+    bonusField: "magicalStrengthBonus",
+    description: "Reduces magical attack",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+};
+
+// ─── Named Probability Matrices ──────────────────────────────────────────────
+//
+// Cell multiplier values represent success PROBABILITY (0–1), not a damage
+// scaling factor. These matrices drive provoke/distract probability rolls.
 // Dodge / block / defense do NOT apply to this roll.
 // Level keys are authored explicitly. Runtime resolves exact levels only.
 
-export const INSTANT_EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> =
+export const PROBABILITY_MATRICES: Record<string, LeveledMultiplierMatrix> =
   {
     /** Single target. */
     single: {
@@ -739,11 +660,11 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
-        type: "instant_effect",
-        instantEffectType: "provoke",
+        type: "probability_effect",
+        probabilityEffectType: "provoke",
         displayName: "Provoke",
         matrix: {
-          kind: "instant_effect_matrix",
+          kind: "probability_matrix",
           matrixName: "single",
           level: 1,
         },
@@ -763,11 +684,11 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
-        type: "instant_effect",
-        instantEffectType: "distract",
+        type: "probability_effect",
+        probabilityEffectType: "distract",
         displayName: "Distract",
         matrix: {
-          kind: "instant_effect_matrix",
+          kind: "probability_matrix",
           matrixName: "single",
           level: 1,
         },

@@ -2,7 +2,7 @@ import type { SkillPattern } from '../shared/skillTypes';
 import {
   MULTIPLIER_MATRICES,
   EFFECT_AREA_MATRICES,
-  INSTANT_EFFECT_MATRICES,
+  PROBABILITY_MATRICES,
 } from '../data/skillDefinitions';
 import type { PatternRef } from './skillUsePlan';
 import { requireSkillLevel } from './skillLevels';
@@ -27,13 +27,13 @@ export function resolvePlanPattern(patternRef: PatternRef): SkillPattern {
         `effect area matrix "${patternRef.matrixName}"`,
       );
     }
-    case 'instant_effect_matrix': {
-      const matrix = INSTANT_EFFECT_MATRICES[patternRef.matrixName];
-      if (!matrix) throw new Error(`Unknown instant effect matrix: ${patternRef.matrixName}`);
+    case 'probability_matrix': {
+      const matrix = PROBABILITY_MATRICES[patternRef.matrixName];
+      if (!matrix) throw new Error(`Unknown probability matrix: ${patternRef.matrixName}`);
       return requireSkillLevel(
         matrix.levels,
         patternRef.level,
-        `instant effect matrix "${patternRef.matrixName}"`,
+        `probability matrix "${patternRef.matrixName}"`,
       );
     }
     default: {
