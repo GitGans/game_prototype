@@ -3,8 +3,8 @@ import type {
   SkillDefinitionAction,
 } from '../shared/skillDefinitionTypes';
 import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
-import { LEVELED_EFFECTS } from '../data/skillDefinitions';
-import { resolveLeveledStatEffect } from './skillEffectCompiler';
+import { STAT_EFFECTS, PERIODIC_HP_EFFECTS } from '../data/skillDefinitions';
+import { resolveStatEffect } from './skillEffectCompiler';
 
 function compileAction(action: SkillDefinitionAction): SkillUseAction {
   switch (action.type) {
@@ -27,15 +27,9 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
       };
 
     case 'apply_stat_effect': {
-      const def = LEVELED_EFFECTS[action.effectName];
+      const def = STAT_EFFECTS[action.effectName];
       if (!def) {
-        throw new Error(`Unknown leveled effect: ${action.effectName}`);
-      }
-      if (def.effectKind !== 'stat_modifier') {
-        throw new Error(
-          `apply_stat_effect cannot use periodic HP effect "${action.effectName}". ` +
-            `Use apply_periodic_hp_effect instead.`,
-        );
+        throw new Error(`Unknown stat effect: ${action.effectName}`);
       }
       return {
         type: 'apply_stat_effect',
@@ -46,20 +40,14 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
           duration: action.duration,
         },
         matrix: action.matrix,
-        resolvedEffect: resolveLeveledStatEffect(action.effectName, action.level),
+        resolvedEffect: resolveStatEffect(action.effectName, action.level),
       };
     }
 
     case 'apply_periodic_hp_effect': {
-      const def = LEVELED_EFFECTS[action.effectName];
+      const def = PERIODIC_HP_EFFECTS[action.effectName];
       if (!def) {
-        throw new Error(`Unknown leveled effect: ${action.effectName}`);
-      }
-      if (def.effectKind !== 'periodic_hp') {
-        throw new Error(
-          `apply_periodic_hp_effect cannot use stat modifier effect "${action.effectName}". ` +
-            `Use apply_stat_effect instead.`,
-        );
+        throw new Error(`Unknown periodic HP effect: ${action.effectName}`);
       }
       return {
         type: 'apply_periodic_hp_effect',
@@ -69,7 +57,11 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
           level: action.level,
           duration: action.duration,
         },
-        displayEffect: def.effect,
+        displayEffect: {
+          id: action.effectName,
+          effectTone: def.direction === 'buff' ? 'positive' : 'negative',
+          description: def.description,
+        },
         direction: action.direction,
         powerSource: action.powerSource,
         matrix: action.matrix,
@@ -85,11 +77,11 @@ function compileAction(action: SkillDefinitionAction): SkillUseAction {
         },
       };
 
-    case 'instant_effect':
+    case 'probability_effect':
       return {
-        type: 'instant_effect',
-        instantEffect: {
-          type: action.instantEffectType,
+        type: 'probability_effect',
+        probabilityEffect: {
+          type: action.probabilityEffectType,
           displayName: action.displayName,
         },
         matrix: action.matrix,

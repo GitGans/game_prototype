@@ -23,13 +23,13 @@ export type BattleEvent =
   | { type: 'effect_applied';
       unitId: string; unitName: string; effectDisplayName: string }
 
-  // ── Instant effect probability rolls ────────────────────────────────
-  | { type: 'instant_effect_applied';
+  // ── Probability effect rolls ─────────────────────────────────────────
+  | { type: 'probability_effect_applied';
       unitId: string; unitName: string; displayName: string }
-  | { type: 'instant_effect_failed';
+  | { type: 'probability_effect_failed';
       unitId: string; unitName: string; displayName: string }
 
-  // ── Queue changes from instant effects ─────────────────────────────
+  // ── Queue changes from probability effects ──────────────────────────
   | { type: 'unit_distracted';
       unitId: string; unitName: string }
 

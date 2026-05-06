@@ -13,7 +13,7 @@ Static data layer for all game entities. Contains only read-only constant defini
 
 ## Key Files
 - `unitDefinitions.ts` — player and enemy unit blueprints; exports `PLAYER_UNITS`, `ENEMY_UNITS`, `PLAYER_STARTING_IDS`
-- `skillDefinitions.ts` — 28 combat skills, multiplier/effect matrices, level tables; exports `SKILLS`, `MULTIPLIER_MATRICES`, `EFFECT_MATRICES`, `INSTANT_EFFECT_MATRICES`, `LEVELED_EFFECTS`, `DAMAGE_MODIFIER_LEVELS`, `VAMPIRISM_LEVELS`; runtime helpers live in `src/battle/skillDefinitionRuntime.ts`
+- `skillDefinitions.ts` — 28 combat skills, multiplier/effect matrices, level tables; exports `SKILLS`, `MULTIPLIER_MATRICES`, `EFFECT_AREA_MATRICES`, `INSTANT_EFFECT_MATRICES`, `LEVELED_EFFECTS`, `DAMAGE_MODIFIER_LEVELS`, `VAMPIRISM_LEVELS`; runtime helpers live in `src/battle/skillDefinitionRuntime.ts`. `MULTIPLIER_MATRICES` are used by `damage`, `heal`, and `apply_periodic_hp_effect`. `EFFECT_AREA_MATRICES` are shape-only area matrices for `apply_stat_effect`; cells are always `A()` = `{ multiplier: 1 }` and are not used for magnitude — effect magnitude comes from `LEVELED_EFFECTS[effectName].bonusByLevel`.
 - `itemDefinitions.ts` — item configs with stat bonuses and slot assignments; exports `ITEM_DEFINITIONS`, `getItemDescription()`
 - `mapDefinitions.ts` — grid terrain and mob placement per map; exports `MAP_DEFINITIONS`
 - `enemyGroupDefinitions.ts` — encounter group configs (race + level override); exports `ENEMY_GROUPS`

@@ -4,10 +4,11 @@ import type {
   Effect,
   DamageModifierRef,
   PostDamageEffect,
-  InstantEffectApplication,
+  ProbabilityEffectApplication,
+  SkillLevel,
 } from '../shared/skillTypes';
 
-export type { DamageModifierRef, PostDamageEffect, InstantEffectApplication };
+export type { DamageModifierRef, PostDamageEffect, ProbabilityEffectApplication };
 
 // ─── Targeting ────────────────────────────────────────────────────────────────
 
@@ -47,15 +48,15 @@ export type CombatPowerSource = PowerSource;
 // ─── Patterns ─────────────────────────────────────────────────────────────────
 
 export type PatternRef =
-  | { kind: 'multiplier_matrix'; matrixName: string; level: number }
-  | { kind: 'effect_matrix'; matrixName: string; level: number }
-  | { kind: 'instant_effect_matrix'; matrixName: string; level: number };
+  | { kind: 'multiplier_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'effect_area_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'probability_matrix'; matrixName: string; level: SkillLevel };
 
 export type MultiplierPatternRef = Extract<PatternRef, { kind: 'multiplier_matrix' }>;
-export type EffectPatternRef = Extract<PatternRef, { kind: 'effect_matrix' }>;
-export type InstantEffectPatternRef = Extract<
+export type EffectAreaPatternRef = Extract<PatternRef, { kind: 'effect_area_matrix' }>;
+export type ProbabilityPatternRef = Extract<
   PatternRef,
-  { kind: 'instant_effect_matrix' }
+  { kind: 'probability_matrix' }
 >;
 
 // ─── Semantic runtime helper types ────────────────────────────────────────────
@@ -65,7 +66,7 @@ export type InstantEffectPatternRef = Extract<
 export type EffectApplicationMeta = {
   effectName: string;
   displayName: string;
-  level: number;
+  level: SkillLevel;
   duration: number;
 };
 
@@ -87,7 +88,7 @@ export type SkillUseAction =
       type: 'apply_stat_effect';
       effect: EffectApplicationMeta;
       resolvedEffect: Effect;
-      matrix: EffectPatternRef;
+      matrix: EffectAreaPatternRef;
     }
   | {
       type: 'apply_periodic_hp_effect';
@@ -95,16 +96,16 @@ export type SkillUseAction =
       displayEffect: Effect;
       direction: 'heal' | 'damage';
       powerSource: CombatPowerSource;
-      matrix: EffectPatternRef;
+      matrix: MultiplierPatternRef;
     }
   | {
       type: 'post_damage';
       postDamage: PostDamageEffect;
     }
   | {
-      type: 'instant_effect';
-      instantEffect: InstantEffectApplication;
-      matrix: InstantEffectPatternRef;
+      type: 'probability_effect';
+      probabilityEffect: ProbabilityEffectApplication;
+      matrix: ProbabilityPatternRef;
     };
 
 // ─── Plan ─────────────────────────────────────────────────────────────────────

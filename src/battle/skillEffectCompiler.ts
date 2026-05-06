@@ -1,37 +1,25 @@
-import type { Effect } from '../shared/skillTypes';
-import { LEVELED_EFFECTS } from '../data/skillDefinitions';
+import type { Effect, SkillLevel } from '../shared/skillTypes';
+import { STAT_EFFECTS } from '../data/skillDefinitions';
+import { requireSkillLevel } from './skillLevels';
 
-export function resolveLeveledStatEffect(
+export function resolveStatEffect(
   effectName: string,
-  level: number,
+  level: SkillLevel,
 ): Effect {
-  const def = LEVELED_EFFECTS[effectName];
+  const def = STAT_EFFECTS[effectName];
   if (!def) {
-    throw new Error(`Unknown leveled effect: ${effectName}`);
+    throw new Error(`Unknown stat effect: ${effectName}`);
   }
-  if (def.effectKind !== 'stat_modifier') {
-    throw new Error(`Effect "${effectName}" is not a stat modifier effect.`);
-  }
-  if (!def.bonusByLevel) {
-    return def.effect;
-  }
-  const bonus = def.bonusByLevel[level - 1] ?? def.bonusByLevel[0];
-  const base = def.effect;
-  const resolved: Effect = { ...base };
-  const bonusFields = [
-    'physicalDefenseBonus',
-    'magicalDefenseBonus',
-    'dodgeBonus',
-    'blockBonus',
-    'initiativeBonus',
-    'physicalStrengthBonus',
-    'magicalStrengthBonus',
-  ] as const;
-  for (const field of bonusFields) {
-    if (base[field] !== undefined) {
-      (resolved as unknown as Record<string, number>)[field] =
-        Math.sign(base[field]!) * bonus;
-    }
-  }
-  return resolved;
+  const bonus = requireSkillLevel(
+    def.bonusByLevel,
+    level,
+    `stat effect "${effectName}"`,
+  );
+  const signedBonus = def.direction === 'buff' ? bonus : -bonus;
+  return {
+    id: effectName,
+    effectTone: def.direction === 'buff' ? 'positive' : 'negative',
+    description: def.description,
+    [def.bonusField]: signedBonus,
+  };
 }

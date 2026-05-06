@@ -1,6 +1,6 @@
 // src/battle/skillExecution.ts
 
-import type { BattleState, CellCoord, Unit, InstantEffectEvent } from "./types";
+import type { BattleState, CellCoord, Unit, ProbabilityEffectEvent } from "./types";
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { BattleEvent } from "./battleEvents";
 import type { CombatEvent, EffectEvent } from "./combat";
@@ -10,7 +10,7 @@ import {
   applyEffectApplication,
   applyPeriodicHpEffectApplication,
   applyVampirism,
-  resolveInstantEffects,
+  resolveProbabilityEffects,
 } from "./combat";
 import {
   getActiveSkill,
@@ -174,19 +174,19 @@ function mapEffectAppliedEventsToBattleEvents(events: EffectEvent[]): BattleEven
   return result;
 }
 
-function mapInstantEffectEventsToBattleEvents(events: InstantEffectEvent[]): BattleEvent[] {
+function mapProbabilityEffectEventsToBattleEvents(events: ProbabilityEffectEvent[]): BattleEvent[] {
   const result: BattleEvent[] = [];
   for (const e of events) {
-    if (e.type === "instant_effect_applied") {
+    if (e.type === "probability_effect_applied") {
       result.push({
-        type: "instant_effect_applied",
+        type: "probability_effect_applied",
         unitId: e.unitId,
         unitName: e.unitName,
         displayName: e.displayName,
       });
-    } else if (e.type === "instant_effect_failed") {
+    } else if (e.type === "probability_effect_failed") {
       result.push({
-        type: "instant_effect_failed",
+        type: "probability_effect_failed",
         unitId: e.unitId,
         unitName: e.unitName,
         displayName: e.displayName,
@@ -373,7 +373,7 @@ function resolveProvokeCounterAttack(input: {
   if (!provokedUnit) return { state, events: [] };
 
   // Re-check queue eligibility at dispatch time because nested counter-attacks
-  // can consume units that were eligible when the original instant-effect list
+  // can consume units that were eligible when the original probability-effect list
   // was resolved.
   const canStillAct = state.roundQueue.slice(1).includes(provokedUnitId);
   if (!canStillAct) return { state, events: [] };
@@ -381,7 +381,7 @@ function resolveProvokeCounterAttack(input: {
   // Counter-attack is an interrupt inside the original actor's turn.
   // Do not promote the counter-attacker to roundQueue[0].
   // The provoked unit is removed from roundQueue before executing its first skill,
-  // so instant effects can only consume turns from units still in roundQueue.slice(1).
+  // so probability effects can only consume turns from units still in roundQueue.slice(1).
   state = {
     ...state,
     roundQueue: state.roundQueue.filter((id) => id !== provokedUnitId),
@@ -470,13 +470,13 @@ function resolveProvokeCounterAttack(input: {
   };
 }
 
-// ─── Instant effect action runner ─────────────────────────────────────────────
+// ─── Probability effect action runner ────────────────────────────────────────
 
-function executeInstantEffectAction(input: {
+function executeProbabilityEffectAction(input: {
   state: BattleState;
   casterId: string;
   target: CellCoord;
-  action: Extract<SkillUseAction, { type: 'instant_effect' }>;
+  action: Extract<SkillUseAction, { type: 'probability_effect' }>;
   queueContext: SkillExecutionInput['queueContext'];
   rng: Rng;
 }): SkillExecutionStepResult {
@@ -484,11 +484,11 @@ function executeInstantEffectAction(input: {
 
   const pattern = resolvePlanPattern(action.matrix);
   const {
-    events: ieEvents,
+    events: probabilityEvents,
     provokedUnitIds,
     distractedUnitIds,
-  } = resolveInstantEffects(
-    action.instantEffect,
+  } = resolveProbabilityEffects(
+    action.probabilityEffect,
     pattern,
     target,
     input.state,
@@ -496,7 +496,7 @@ function executeInstantEffectAction(input: {
     rng,
   );
 
-  const events: BattleEvent[] = mapInstantEffectEventsToBattleEvents(ieEvents);
+  const events: BattleEvent[] = mapProbabilityEffectEventsToBattleEvents(probabilityEvents);
   let next = input.state;
 
   for (const unitId of distractedUnitIds) {
@@ -595,8 +595,8 @@ function executeSkillUsePlan(input: SkillUsePlanExecutionInput): SkillExecutionR
         break;
       }
 
-      case 'instant_effect': {
-        const step = executeInstantEffectAction({
+      case 'probability_effect': {
+        const step = executeProbabilityEffectAction({
           state,
           casterId: input.casterId,
           target: input.target,

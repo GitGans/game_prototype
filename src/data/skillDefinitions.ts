@@ -1,129 +1,55 @@
 import type { ActionSkillDefinition } from "../shared/skillDefinitionTypes";
 import type {
   DamageModifierType,
-  Effect,
   LeveledMultiplierMatrix,
-  LeveledEffectDef,
+  SkillLevelTable,
+  EffectAreaMatrix,
+  AreaPatternCell,
+  StatEffectDef,
+  PeriodicHpEffectDef,
 } from "../shared/skillTypes";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 const P = (m: number) => ({ multiplier: m });
+const A = (): AreaPatternCell => ({ multiplier: 1 as const });
 
-// ─── Base Effects ─────────────────────────────────────────────────────────────
-
-const EFFECTS: Record<string, Effect> = {
-  regeneration: {
-    id: "regeneration",
-    effectTone: "positive",
-    description: "Restores HP each round",
-  },
-  lose_health: {
-    id: "lose_health",
-    effectTone: "negative",
-    description: "Deals damage each round",
-  },
-  fortify: {
-    id: "fortify",
-    effectTone: "positive",
-    physicalDefenseBonus: 1,
-    description: "Increases physical defense",
-  },
-  weaken: {
-    id: "weaken",
-    effectTone: "negative",
-    physicalDefenseBonus: -1,
-    description: "Reduces physical defense",
-  },
-  arcane_shield: {
-    id: "arcane_shield",
-    effectTone: "positive",
-    magicalDefenseBonus: 1,
-    description: "Increases magical defense",
-  },
-  arcane_vulnerability: {
-    id: "arcane_vulnerability",
-    effectTone: "negative",
-    magicalDefenseBonus: -1,
-    description: "Reduces magical defense",
-  },
-  swift: {
-    id: "swift",
-    effectTone: "positive",
-    dodgeBonus: 1,
-    description: "Increases dodge chance",
-  },
-  clumsy: {
-    id: "clumsy",
-    effectTone: "negative",
-    dodgeBonus: -1,
-    description: "Reduces dodge chance",
-  },
-  guard_stance: {
-    id: "guard_stance",
-    effectTone: "positive",
-    blockBonus: 1,
-    description: "Increases block chance",
-  },
-  off_balance: {
-    id: "off_balance",
-    effectTone: "negative",
-    blockBonus: -1,
-    description: "Reduces block chance",
-  },
-  haste: {
-    id: "haste",
-    effectTone: "positive",
-    initiativeBonus: 1,
-    description: "Increases initiative",
-  },
-  slow: {
-    id: "slow",
-    effectTone: "negative",
-    initiativeBonus: -1,
-    description: "Reduces initiative",
-  },
-  empower: {
-    id: "empower",
-    effectTone: "positive",
-    physicalStrengthBonus: 1,
-    description: "Increases physical attack",
-  },
-  enfeeble: {
-    id: "enfeeble",
-    effectTone: "negative",
-    physicalStrengthBonus: -1,
-    description: "Reduces physical attack",
-  },
-  arcane_surge: {
-    id: "arcane_surge",
-    effectTone: "positive",
-    magicalStrengthBonus: 1,
-    description: "Increases magical attack",
-  },
-  arcane_drain: {
-    id: "arcane_drain",
-    effectTone: "negative",
-    magicalStrengthBonus: -1,
-    description: "Reduces magical attack",
-  },
-};
-
-// ─── Named Damage Matrices ────────────────────────────────────────────────────
+// ─── Named Multiplier Matrices ────────────────────────────────────────────────────
 //
-// Each entry is a named, reusable damage matrix.
-// levels[0] = level 1, levels[1] = level 2, etc.
+// Each entry is a named, reusable multiplier matrix.
+// Level keys are authored explicitly. Runtime resolves exact levels only.
 // Multiple skills can share the same matrix name.
 
 export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
   /** Single cell, 100% damage. */
   single: {
-    levels: [
-      // level 1
-      { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)]] },
-      // level 2
-      { anchorRow: 0, anchorCol: 0, cells: [[P(1.25)]] },
-    ],
+    levels: {
+      1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.1)]] },
+      10: { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)]] },
+      12: { anchorRow: 0, anchorCol: 0, cells: [[P(1.25)]] },
+    },
+  },
+  cross_flat: {
+    levels: {
+      1: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.1), null],
+          [P(0.1), P(0.1), P(0.1)],
+          [null, P(0.1), null],
+        ],
+      },
+      2: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.2), null],
+          [P(0.2), P(0.2), P(0.2)],
+          [null, P(0.2), null],
+        ],
+      },
+    },
   },
 
   /**
@@ -133,9 +59,8 @@ export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
    *   [ ]  [X]  [ ]
    */
   cross: {
-    levels: [
-      // level 1
-      {
+    levels: {
+      1: {
         anchorRow: 1,
         anchorCol: 1,
         cells: [
@@ -144,8 +69,7 @@ export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
           [null, P(0.2), null],
         ],
       },
-      // level 2
-      {
+      2: {
         anchorRow: 1,
         anchorCol: 1,
         cells: [
@@ -154,341 +78,344 @@ export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
           [null, P(0.4), null],
         ],
       },
-    ],
+    },
   },
 
   /** All 3 cells in target row at 100%. */
   row_sweep: {
-    levels: [
-      // level 1
-      { anchorRow: 0, anchorCol: 1, cells: [[P(1.0), P(1.0), P(1.0)]] },
-      // level 2
-      { anchorRow: 0, anchorCol: 1, cells: [[P(1.3), P(1.3), P(1.3)]] },
-    ],
+    levels: {
+      1: { anchorRow: 0, anchorCol: 1, cells: [[P(1.0), P(1.0), P(1.0)]] },
+      2: { anchorRow: 0, anchorCol: 1, cells: [[P(1.3), P(1.3), P(1.3)]] },
+    },
   },
 
   /** Target cell 100%, same column next row 50%. */
   pierce: {
-    levels: [
-      // level 1
-      { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)], [P(0.5)]] },
-      // level 2
-      { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)], [P(0.75)]] },
-    ],
+    levels: {
+      1: { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)], [P(0.5)]] },
+      2: { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)], [P(0.75)]] },
+    },
   },
 };
 
-// ─── Named Effect Matrices ────────────────────────────────────────────────────
+// ─── Named Effect Area Matrices ───────────────────────────────────────────────
 //
-// Defines WHERE an effect lands (which cells) and with what multiplier.
-// levels[0] = level 1, levels[1] = level 2, etc.
-//
-// For periodic HP effects (regeneration / lose_health):
-//   amountPerTurn = caster power (selected by powerSource) × hit cell multiplier
-//   If one unit is hit by multiple cells, the highest resulting amount is used.
-// For stat modifier effects (fortify / weaken / etc.):
-//   only cell presence matters; multiplier is currently unused for stat modifier magnitude.
+// Shape-only area matrices for apply_stat_effect.
+// Cell presence (A()) means "this cell is in the area". Multiplier is always 1 and is not used for magnitude.
+// Effect magnitude comes from STAT_EFFECTS[effectName].bonusByLevel.
+// Level keys are authored explicitly. Runtime resolves exact levels only.
 
-export const EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> = {
-  /** Single target. Multiplier used for stat-based per-turn scaling. */
+export const EFFECT_AREA_MATRICES: Record<string, EffectAreaMatrix> = {
+  /** Single target. */
   single: {
-    levels: [
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.25)]] }, // level 1
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.4)]] }, // level 2
-      { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] }, // level 3
-    ],
+    levels: {
+      1: { anchorRow: 0, anchorCol: 0, cells: [[A()]] },
+    },
   },
 
   /**
    * Cross: center + 4 orthogonal neighbours.
-   * For stat modifier effects: all cells share the same multiplier (unused for magnitude).
-   * For periodic HP effects: each cell multiplier drives its cell's per-turn value.
    *   [ ]  [X]  [ ]
    *   [X]  [X]  [X]
    *   [ ]  [X]  [ ]
    */
   cross: {
-    levels: [
-      // level 1
-      {
+    levels: {
+      1: {
         anchorRow: 1,
         anchorCol: 1,
         cells: [
-          [null, P(0.2), null],
-          [P(0.2), P(0.4), P(0.2)],
-          [null, P(0.2), null],
+          [null, A(), null],
+          [A(), A(), A()],
+          [null, A(), null],
         ],
       },
-      // level 2 — TODO: set values
-      {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.3), null],
-          [P(0.3), P(0.3), P(0.3)],
-          [null, P(0.3), null],
-        ],
-      },
-    ],
+    },
   },
 };
 
-// ─── Leveled Effect Definitions ───────────────────────────────────────────────
+// ─── Periodic HP Effect Definitions ──────────────────────────────────────────
 //
-// effectKind classifies which action type may use this effect.
-// It does not choose periodic HP direction or scaling.
-// Periodic HP direction and scaling are authored on apply_periodic_hp_effect.
-//
-// bonusByLevel — fixed-magnitude stat modifiers indexed by (level - 1).
-//   No stat scaling. Sign is inherited from the base Effect in EFFECTS.
+// direction: "buff" | "debuff" — used only for display classification (effectTone).
+// Runtime tick direction (heal/damage) and power come from the action's `direction`
+// and `powerSource` fields, not from here.
 
-export const LEVELED_EFFECTS: Record<string, LeveledEffectDef> = {
+export const PERIODIC_HP_EFFECTS: Record<string, PeriodicHpEffectDef> = {
   regeneration: {
-    effectKind: "periodic_hp",
-    effect: EFFECTS.regeneration,
+    direction: "buff",
+    description: "Restores HP each round",
   },
 
   lose_health: {
-    effectKind: "periodic_hp",
-    effect: EFFECTS.lose_health,
-  },
-
-  fortify: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.fortify,
-    bonusByLevel: [10, 20, 30], // physicalDefenseBonus sign (+) inherited from EFFECTS.fortify
-  },
-
-  weaken: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.weaken,
-    bonusByLevel: [10, 20, 30], // physicalDefenseBonus sign (-) inherited from EFFECTS.weaken
-  },
-
-  arcane_shield: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.arcane_shield,
-    bonusByLevel: [10, 20, 30], // magicalDefenseBonus sign (+) inherited from EFFECTS.arcane_shield
-  },
-
-  arcane_vulnerability: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.arcane_vulnerability,
-    bonusByLevel: [10, 20, 30], // magicalDefenseBonus sign (-) inherited from EFFECTS.arcane_vulnerability
-  },
-
-  swift: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.swift,
-    bonusByLevel: [10, 20, 30], // dodgeBonus sign (+) inherited from EFFECTS.swift
-  },
-
-  clumsy: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.clumsy,
-    bonusByLevel: [10, 20, 30], // dodgeBonus sign (-) inherited from EFFECTS.clumsy
-  },
-
-  guard_stance: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.guard_stance,
-    bonusByLevel: [10, 20, 30], // blockBonus sign (+) inherited from EFFECTS.guard_stance
-  },
-
-  off_balance: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.off_balance,
-    bonusByLevel: [10, 20, 30], // blockBonus sign (-) inherited from EFFECTS.off_balance
-  },
-
-  haste: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.haste,
-    bonusByLevel: [1, 2, 3], // initiativeBonus sign (+) inherited from EFFECTS.haste
-  },
-
-  slow: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.slow,
-    bonusByLevel: [1, 2, 3], // initiativeBonus sign (-) inherited from EFFECTS.slow
-  },
-
-  empower: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.empower,
-    bonusByLevel: [10, 20, 30], // physicalStrengthBonus sign (+) inherited from EFFECTS.empower
-  },
-
-  enfeeble: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.enfeeble,
-    bonusByLevel: [10, 20, 30], // physicalStrengthBonus sign (-) inherited from EFFECTS.enfeeble
-  },
-
-  arcane_surge: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.arcane_surge,
-    bonusByLevel: [10, 20, 30], // magicalStrengthBonus sign (+) inherited from EFFECTS.arcane_surge
-  },
-
-  arcane_drain: {
-    effectKind: "stat_modifier",
-    effect: EFFECTS.arcane_drain,
-    bonusByLevel: [10, 20, 30], // magicalStrengthBonus sign (-) inherited from EFFECTS.arcane_drain
+    direction: "debuff",
+    description: "Deals damage each round",
   },
 };
 
-// ─── Named Instant Effect Matrices ───────────────────────────────────────────
+// ─── Stat Effect Definitions ──────────────────────────────────────────────────
 //
-// Cell values are stored in multiplier but represent success PROBABILITY (0–1),
-// not a damage scaling factor. Instant effects are not damage; they are provoke/distract.
+// direction: "buff"   → effectTone "positive", bonus applied as +bonusByLevel[level]
+// direction: "debuff" → effectTone "negative", bonus applied as -bonusByLevel[level]
+// bonusByLevel — unsigned magnitude. Sign is derived from direction at resolution time.
+// Level keys are authored explicitly. Runtime resolves exact levels only.
+
+export const STAT_EFFECTS: Record<string, StatEffectDef> = {
+  fortify: {
+    direction: "buff",
+    bonusField: "physicalDefenseBonus",
+    description: "Increases physical defense",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  weaken: {
+    direction: "debuff",
+    bonusField: "physicalDefenseBonus",
+    description: "Reduces physical defense",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  arcane_shield: {
+    direction: "buff",
+    bonusField: "magicalDefenseBonus",
+    description: "Increases magical defense",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  arcane_vulnerability: {
+    direction: "debuff",
+    bonusField: "magicalDefenseBonus",
+    description: "Reduces magical defense",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  swift: {
+    direction: "buff",
+    bonusField: "dodgeBonus",
+    description: "Increases dodge chance",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  clumsy: {
+    direction: "debuff",
+    bonusField: "dodgeBonus",
+    description: "Reduces dodge chance",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  guard_stance: {
+    direction: "buff",
+    bonusField: "blockBonus",
+    description: "Increases block chance",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  off_balance: {
+    direction: "debuff",
+    bonusField: "blockBonus",
+    description: "Reduces block chance",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  haste: {
+    direction: "buff",
+    bonusField: "initiativeBonus",
+    description: "Increases initiative",
+    bonusByLevel: { 1: 1, 2: 2, 3: 3 },
+  },
+
+  slow: {
+    direction: "debuff",
+    bonusField: "initiativeBonus",
+    description: "Reduces initiative",
+    bonusByLevel: { 1: 1, 2: 2, 3: 3 },
+  },
+
+  empower: {
+    direction: "buff",
+    bonusField: "physicalStrengthBonus",
+    description: "Increases physical attack",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  enfeeble: {
+    direction: "debuff",
+    bonusField: "physicalStrengthBonus",
+    description: "Reduces physical attack",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  arcane_surge: {
+    direction: "buff",
+    bonusField: "magicalStrengthBonus",
+    description: "Increases magical attack",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+
+  arcane_drain: {
+    direction: "debuff",
+    bonusField: "magicalStrengthBonus",
+    description: "Reduces magical attack",
+    bonusByLevel: { 1: 10, 2: 20, 3: 30 },
+  },
+};
+
+// ─── Named Probability Matrices ──────────────────────────────────────────────
+//
+// Cell multiplier values represent success PROBABILITY (0–1), not a damage
+// scaling factor. These matrices drive provoke/distract probability rolls.
 // Dodge / block / defense do NOT apply to this roll.
-// levels[0] = level 1, levels[1] = level 2, etc.
+// Level keys are authored explicitly. Runtime resolves exact levels only.
 
-export const INSTANT_EFFECT_MATRICES: Record<string, LeveledMultiplierMatrix> =
-  {
-    /** Single target. */
-    single: {
-      levels: [
-        { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
-        { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-        { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-        { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-      ],
+export const PROBABILITY_MATRICES: Record<string, LeveledMultiplierMatrix> = {
+  /** Single target. */
+  single: {
+    levels: {
+      1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
+      2: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+      3: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
+      4: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
     },
+  },
 
-    /** 3 cells in one row. */
-    row_sweep: {
-      levels: [
-        {
-          anchorRow: 0,
-          anchorCol: 1,
-          cells: [[P(0.6), P(0.6), P(0.6)]],
-        },
-      ],
+  /** 3 cells in one row. */
+  row_sweep: {
+    levels: {
+      1: {
+        anchorRow: 0,
+        anchorCol: 1,
+        cells: [[P(0.6), P(0.6), P(0.6)]],
+      },
     },
+  },
 
-    /** 2 cells in one row. */
-    shot_sweep: {
-      levels: [
-        {
-          anchorRow: 0,
-          anchorCol: 0,
-          cells: [[P(0.5), P(0.5)]],
-        },
-        {
-          anchorRow: 0,
-          anchorCol: 0,
-          cells: [[P(0.8), P(0.8)]],
-        },
-      ],
+  /** 2 cells in one row. */
+  shot_sweep: {
+    levels: {
+      1: {
+        anchorRow: 0,
+        anchorCol: 0,
+        cells: [[P(0.5), P(0.5)]],
+      },
+      2: {
+        anchorRow: 0,
+        anchorCol: 0,
+        cells: [[P(0.8), P(0.8)]],
+      },
     },
+  },
 
-    /** 3x3 area. */
-    all: {
-      levels: [
-        {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [P(0.3), P(0.3), P(0.3)],
-            [P(0.3), P(0.3), P(0.3)],
-            [P(0.3), P(0.3), P(0.3)],
-          ],
-        },
-        {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [P(0.4), P(0.4), P(0.4)],
-            [P(0.4), P(0.4), P(0.4)],
-            [P(0.4), P(0.4), P(0.4)],
-          ],
-        },
-        {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [P(0.5), P(0.5), P(0.5)],
-            [P(0.5), P(0.5), P(0.5)],
-            [P(0.5), P(0.5), P(0.5)],
-          ],
-        },
-        {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [P(1), P(1), P(1)],
-            [P(1), P(1), P(1)],
-            [P(1), P(1), P(1)],
-          ],
-        },
-      ],
+  /** 3x3 area. */
+  all: {
+    levels: {
+      1: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(0.3), P(0.3), P(0.3)],
+          [P(0.3), P(0.3), P(0.3)],
+          [P(0.3), P(0.3), P(0.3)],
+        ],
+      },
+      2: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(0.4), P(0.4), P(0.4)],
+          [P(0.4), P(0.4), P(0.4)],
+          [P(0.4), P(0.4), P(0.4)],
+        ],
+      },
+      3: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(0.5), P(0.5), P(0.5)],
+          [P(0.5), P(0.5), P(0.5)],
+          [P(0.5), P(0.5), P(0.5)],
+        ],
+      },
+      4: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [P(1), P(1), P(1)],
+          [P(1), P(1), P(1)],
+          [P(1), P(1), P(1)],
+        ],
+      },
     },
+  },
 
-    /**
-     * Cross: center + 4 orthogonal neighbours.
-     */
-    cross: {
-      levels: [
-        {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [null, P(0.5), null],
-            [P(0.5), P(0.1), P(0.5)],
-            [null, P(0.5), null],
-          ],
-        },
-        {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [null, P(0.4), null],
-            [P(0.4), P(0.7), P(0.4)],
-            [null, P(0.4), null],
-          ],
-        },
-        {
-          anchorRow: 1,
-          anchorCol: 1,
-          cells: [
-            [null, P(0.3), null],
-            [P(0.3), P(1), P(0.3)],
-            [null, P(0.3), null],
-          ],
-        },
-      ],
+  /**
+   * Cross: center + 4 orthogonal neighbours.
+   */
+  cross: {
+    levels: {
+      1: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.5), null],
+          [P(0.5), P(0.1), P(0.5)],
+          [null, P(0.5), null],
+        ],
+      },
+      2: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.4), null],
+          [P(0.4), P(0.7), P(0.4)],
+          [null, P(0.4), null],
+        ],
+      },
+      3: {
+        anchorRow: 1,
+        anchorCol: 1,
+        cells: [
+          [null, P(0.3), null],
+          [P(0.3), P(1), P(0.3)],
+          [null, P(0.3), null],
+        ],
+      },
     },
+  },
 
-    /** Main target + one additional target. */
-    pierce: {
-      levels: [
-        {
-          anchorRow: 0,
-          anchorCol: 0,
-          cells: [[P(0.75), P(1)]],
-        },
-      ],
+  /** Main target + one additional target. */
+  pierce: {
+    levels: {
+      1: {
+        anchorRow: 0,
+        anchorCol: 0,
+        cells: [[P(0.75), P(1)]],
+      },
     },
-  };
+  },
+};
 
 // ─── Damage Modifier Levels ───────────────────────────────────────────────────
 // Values are percentages (0–100) of the stat that is IGNORED.
-// Index 0 = level 1, index 1 = level 2, etc.
+// Level keys are authored explicitly. Runtime resolves exact levels only.
 
-export const DAMAGE_MODIFIER_LEVELS: Record<DamageModifierType, number[]> = {
-  ignore_block: [25, 50, 75, 100],
-  ignore_dodge: [25, 50, 75, 100],
-  ignore_physical_defense: [25, 50, 75, 100],
-  ignore_magical_defense: [25, 50, 75, 100],
+export const DAMAGE_MODIFIER_LEVELS: Record<
+  DamageModifierType,
+  SkillLevelTable<number>
+> = {
+  ignore_block: { 1: 25, 2: 50, 3: 75, 4: 100 },
+  ignore_dodge: { 1: 25, 2: 50, 3: 75, 4: 100 },
+  ignore_physical_defense: { 1: 25, 2: 50, 3: 75, 4: 100 },
+  ignore_magical_defense: { 1: 25, 2: 50, 3: 75, 4: 100 },
 };
 
 // ─── Vampirism Levels ─────────────────────────────────────────────────────────
 // Values are % of total real damage converted to HP.
-// Index 0 = level 1, index 1 = level 2, etc.
+// Level keys are authored explicitly. Runtime resolves exact levels only.
 
-export const VAMPIRISM_LEVELS: number[] = [25, 50, 100];
+export const VAMPIRISM_LEVELS: SkillLevelTable<number> = {
+  1: 25,
+  2: 50,
+  3: 100,
+};
 
 // ─── Skill Definitions ────────────────────────────────────────────────────────
 
@@ -502,7 +429,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -516,7 +443,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -530,7 +457,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "magical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -544,7 +471,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_stat_effect",
@@ -552,7 +479,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         displayName: "Slow",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "effect_area_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -566,7 +493,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "heal",
         powerSource: "magical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
     ],
   },
@@ -580,7 +507,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "heal",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_stat_effect",
@@ -588,7 +515,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         displayName: "Defence",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "effect_area_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -602,7 +529,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "heal",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_periodic_hp_effect",
@@ -612,7 +539,11 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         powerSource: "physical_strength",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "cross", level: 1 },
+        matrix: {
+          kind: "multiplier_matrix",
+          matrixName: "cross_flat",
+          level: 1,
+        },
       },
     ],
   },
@@ -636,7 +567,11 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         powerSource: "magical_strength",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "cross", level: 1 },
+        matrix: {
+          kind: "multiplier_matrix",
+          matrixName: "cross_flat",
+          level: 1,
+        },
       },
     ],
   },
@@ -682,7 +617,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_periodic_hp_effect",
@@ -692,7 +627,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         powerSource: "physical_strength",
         level: 1,
         duration: 3,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -706,7 +641,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
         type: "apply_stat_effect",
@@ -714,7 +649,7 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
         displayName: "Weakened",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "effect_area_matrix", matrixName: "single", level: 1 },
       },
     ],
   },
@@ -728,14 +663,14 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
-        type: "instant_effect",
-        instantEffectType: "provoke",
+        type: "probability_effect",
+        probabilityEffectType: "provoke",
         displayName: "Provoke",
         matrix: {
-          kind: "instant_effect_matrix",
+          kind: "probability_matrix",
           matrixName: "single",
           level: 1,
         },
@@ -752,14 +687,14 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       {
         type: "damage",
         powerSource: "physical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "single", level: 10 },
       },
       {
-        type: "instant_effect",
-        instantEffectType: "distract",
+        type: "probability_effect",
+        probabilityEffectType: "distract",
         displayName: "Distract",
         matrix: {
-          kind: "instant_effect_matrix",
+          kind: "probability_matrix",
           matrixName: "single",
           level: 1,
         },

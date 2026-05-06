@@ -88,7 +88,7 @@ function presentBattleEvent(
         },
       };
 
-    case 'instant_effect_applied':
+    case 'probability_effect_applied':
       return {
         logEntry: {
           text: `${event.unitName} is affected by ${event.displayName}!`,
@@ -96,7 +96,7 @@ function presentBattleEvent(
         },
       };
 
-    case 'instant_effect_failed':
+    case 'probability_effect_failed':
       return {
         logEntry: {
           text: `${event.displayName} failed on ${event.unitName}`,
