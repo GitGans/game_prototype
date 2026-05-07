@@ -1,4 +1,4 @@
-import { SKILLS } from '../data/skillDefinitions';
+import { SKILLS } from '../data/skills';
 import type { ActionSkillDefinition, SkillId } from '../shared/skillDefinitionTypes';
 
 export function resolveSkillDefinition(skillId: SkillId): ActionSkillDefinition {

@@ -1,5 +1,5 @@
 import { PLAYER_UNITS, ENEMY_UNITS } from '../data/units';
-import { SKILLS } from '../data/skillDefinitions';
+import { SKILLS } from '../data/skills';
 import type { UnitBlueprint, UnitRace } from '../shared/unitTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 

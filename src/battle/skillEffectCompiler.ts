@@ -1,5 +1,5 @@
 import type { Effect, SkillLevel } from '../shared/skillTypes';
-import { STAT_EFFECTS } from '../data/skillDefinitions';
+import { STAT_EFFECTS } from '../data/skills';
 import { requireSkillLevel } from './skillLevels';
 
 export function resolveStatEffect(

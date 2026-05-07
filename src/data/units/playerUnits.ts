@@ -1,6 +1,6 @@
 import type { UnitBlueprint } from "../../shared/unitTypes";
 import { SHAPES } from "../shapeDefinitions";
-import { sid } from "../skillDefinitions";
+import { sid } from "../skills";
 import { opt } from "./upgradeOptionHelpers";
 
 export const PLAYER_UNITS: UnitBlueprint[] = [

@@ -24,7 +24,7 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 ## Skill Contract Layers
 
 - **`skillDefinitionTypes.ts`** — `ActionSkillDefinition` is the sole active skill authoring contract.
-  All skills in `data/skillDefinitions.ts` are authored in this format. Stores intent and registry
+  All skills in `data/skills/skillDefinitions.ts` are authored in this format. Stores intent and registry
   refs (unresolved string names); resolution happens in the compiler.
 - **`skillTypes.ts`** — Combat primitive and semantic input types. Legacy block-shaped skill
   interfaces have been removed. Current combat helper inputs are `DamageModifierRef`,

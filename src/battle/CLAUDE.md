@@ -64,7 +64,7 @@ returned to `src/core` for phase transition or rendering
 ## Current Skill Runtime Semantics
 
 `ActionSkillDefinition` (from `shared/skillDefinitionTypes.ts`) is the active skill authoring contract.
-All skills in `data/skillDefinitions.ts` are authored as `ActionSkillDefinition`.
+All skills in `data/skills/skillDefinitions.ts` are authored as `ActionSkillDefinition`.
 
 `compileSkillUsePlan` in `skillPlanCompiler.ts` accepts `ActionSkillDefinition` and delegates to
 `compileActionSkillDefinition` (`actionSkillDefinitionCompiler.ts`).

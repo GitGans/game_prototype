@@ -1,6 +1,6 @@
 import type { UnitBlueprint, UnitRace } from "../../shared/unitTypes";
 import { SHAPES } from "../shapeDefinitions";
-import { sid } from "../skillDefinitions";
+import { sid } from "../skills";
 
 export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
   orc: [
