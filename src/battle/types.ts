@@ -10,7 +10,7 @@ export type {
 export type {
   SpriteState, SpriteSheetConfig, RowTrait, UnitRace, UnitClass,
   UnitProgressionStatModifiers, UnitBattleStats,
-  UnitUpgradeOption, UnitUpgradeTier, SkillTier, EnemyLevelSkill, UnitBlueprint,
+  UnitUpgradeOption, UnitUpgradeTier, EnemySkillUnlock, UnitBlueprint, UpgradeOptionId,
 } from '../shared/unitTypes';
 export type {
   EquipSlot, BattleStatBonuses, MapStatBonuses,

@@ -1,4 +1,4 @@
-import type { ActionSkillDefinition } from "../shared/skillDefinitionTypes";
+import type { ActionSkillDefinition, SkillId } from "../shared/skillDefinitionTypes";
 import type {
   DamageModifierType,
   LeveledMultiplierMatrix,
@@ -419,7 +419,7 @@ export const VAMPIRISM_LEVELS: SkillLevelTable<number> = {
 
 // ─── Skill Definitions ────────────────────────────────────────────────────────
 
-export const SKILLS: Record<string, ActionSkillDefinition> = {
+export const SKILLS = {
   p_melee_basic: {
     definitionKind: "action_skill",
     id: "p_melee_basic",
@@ -759,4 +759,17 @@ export const SKILLS: Record<string, ActionSkillDefinition> = {
       },
     ],
   },
-};
+} satisfies Record<string, ActionSkillDefinition>;
+
+/**
+ * Returns a validated SkillId for the given registry key.
+ *
+ * This is the ONLY authorised way to produce a SkillId in content authoring.
+ * Do NOT write `"skill_name" as SkillId` — that bypasses validation.
+ *
+ * Usage:
+ *   baseSkillId: sid("p_melee_basic")
+ */
+export function sid(id: keyof typeof SKILLS): SkillId {
+  return id as SkillId;
+}

@@ -7,16 +7,13 @@ import type { PlayerBattleSetup }         from './battleSetup';
 import type { PlayerPlacementCandidate, EnemyPlacementCandidates } from '../battle/autoPlace';
 import type { UnitBlueprint, UnitRace }   from '../shared/unitTypes';
 import type { ActionSkillDefinition }      from '../shared/skillDefinitionTypes';
+import { resolveSkillDefinition }          from './skillResolver';
 import type { CellCoord }                 from '../shared/gridTypes';
 
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): ActionSkillDefinition[] {
-  const base = (blueprint.skillTiers ?? [])
-    .filter(t => t.unlocksAtLevel === 0)
-    .flatMap(t => t.options.slice(0, 1));
-  const leveled = (blueprint.levelSkills ?? [])
-    .filter(ls => ls.unlocksAtLevel <= level)
-    .map(ls => ls.skill);
-  return [...base, ...leveled];
+  return (blueprint.enemySkillUnlocks ?? [])
+    .filter(u => u.unlocksAtLevel <= level)
+    .map(u => resolveSkillDefinition(u.skillId));
 }
 
 export function buildPlayerAutoPlacementCandidates(

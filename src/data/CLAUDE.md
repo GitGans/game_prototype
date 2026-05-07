@@ -41,6 +41,8 @@ Live game state in `BattleState` / `CampaignState`
 - `unitDefinitions.ts` may only import from within `src/data` (shapes, skills)
 - No runtime helper functions — all skill runtime lookups live in `src/battle/skillDefinitionRuntime.ts`
 - Adding a new entity requires only adding to the relevant constant; no registration elsewhere
+- `SkillId` references must always be created via `sid()` from `skillDefinitions.ts`.
+  Direct casts (`"name" as SkillId`) are forbidden outside of `sid()` itself. Enforced by code review.
 
 ## Where to Modify
 - add/change a player or enemy unit → `unitDefinitions.ts`

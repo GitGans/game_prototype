@@ -159,10 +159,13 @@ export function buildSkillIconSnapshot(skill: ActionSkillDefinition): SkillIconS
 // ─── Upgrade presentation ─────────────────────────────────────────────────────
 
 // Priority: option.description → skill description → ''
-export function buildUnitUpgradeDescription(option: UnitUpgradeOption): string {
+export function buildUnitUpgradeDescription(
+  option: UnitUpgradeOption,
+  resolvedSkill?: ActionSkillDefinition,
+): string {
   const explicit = option.description?.trim();
   if (explicit) return explicit;
-  if (option.skill) return buildSkillDescription(option.skill);
+  if (resolvedSkill) return buildSkillDescription(resolvedSkill);
   return '';
 }
 

@@ -8,6 +8,7 @@ export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
 import type { BenchUnitSnapshot, BattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/battleSnapshots';
 import type { PlacementSelection, BattleState, BattleMode, Side } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
+import type { UpgradeOptionId } from '../shared/unitTypes';
 
 export interface CampUnitSnapshot {
   templateId: string;
@@ -17,7 +18,7 @@ export interface CampUnitSnapshot {
 }
 
 export interface UpgradeOptionSnapshot {
-  id:           string;
+  id:           UpgradeOptionId;
   name:         string;
   description:  string;
   skill:        SkillIconSnapshot | null;
@@ -28,7 +29,7 @@ export interface UpgradeOptionSnapshot {
 export interface UpgradeTierSnapshot {
   tierId:          5 | 10 | 15 | 20;
   options:         UpgradeOptionSnapshot[];
-  chosenUpgradeId: string | null;
+  chosenUpgradeId: UpgradeOptionId | null;
   isLocked:        boolean;
 }
 
@@ -148,7 +149,7 @@ export type PhaseAction =
   | { type: 'toggle_camp_unit'; templateId: string }
   | { type: 'open_upgrade_tree' }
   | { type: 'close_upgrade_tree' }
-  | { type: 'choose_upgrade'; templateId: string; tierId: 5 | 10 | 15 | 20; upgradeId: string }
+  | { type: 'choose_upgrade'; templateId: string; tierId: 5 | 10 | 15 | 20; upgradeId: UpgradeOptionId }
   // ── Debug battle ──────────────────────────────────────────────
   | { type: 'init_debug'; level: number }
   | { type: 'switch_debug_unit'; templateId: string }

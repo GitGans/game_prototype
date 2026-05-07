@@ -1,6 +1,22 @@
 import type { DamageModifierType, PostDamageType, ProbabilityEffectType, SkillLevel } from './skillTypes';
 
 // ---------------------------------------------------------------------------
+// Skill ID
+// ---------------------------------------------------------------------------
+
+declare const __skillIdBrand: unique symbol;
+
+/**
+ * Branded string that identifies a skill in the SKILLS registry.
+ * At runtime this is a plain string; the brand exists only for TypeScript
+ * to distinguish arbitrary strings from validated skill references.
+ *
+ * Never construct via cast (`"foo" as SkillId`). Use `sid()` from
+ * `src/data/skillDefinitions.ts` — it validates the key against the registry.
+ */
+export type SkillId = string & { readonly [__skillIdBrand]: never };
+
+// ---------------------------------------------------------------------------
 // Target policy
 // ---------------------------------------------------------------------------
 

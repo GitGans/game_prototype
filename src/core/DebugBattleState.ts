@@ -1,5 +1,6 @@
 import { ItemInstance, ItemContainer, CellCoord, BattleStatBonuses } from '../battle/types';
 import { PLAYER_UNITS } from '../data/unitDefinitions';
+import type { UpgradeOptionId } from '../shared/unitTypes';
 
 export interface DebugBattleState {
   level: number;
@@ -9,7 +10,7 @@ export interface DebugBattleState {
   unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>>;
   playerUnitPlacements: Record<string, CellCoord>;
   playerBenchIds: string[] | null;
-  chosenUpgrades: Record<string, Partial<Record<5 | 10 | 15 | 20, string>>>;
+  chosenUpgrades: Record<string, Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>>;
 }
 
 export function createDebugBattleState(level: number): DebugBattleState {
