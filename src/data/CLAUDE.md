@@ -12,7 +12,11 @@ Static data layer for all game entities. Contains only read-only constant defini
 - Define grid occupancy shapes for units
 
 ## Key Files
-- `unitDefinitions.ts` — player and enemy unit blueprints; exports `PLAYER_UNITS`, `ENEMY_UNITS`, `PLAYER_STARTING_IDS`
+- `unitDefinitions.ts` — compatibility re-export shim; do not add content here
+- `units/playerUnits.ts` — player unit blueprints; exports `PLAYER_UNITS`, `PLAYER_STARTING_IDS`
+- `units/enemyUnits.ts` — enemy unit blueprints by race; exports `ENEMY_UNITS`
+- `units/upgradeOptionHelpers.ts` — internal helper `opt()` for building player upgrade options
+- `units/index.ts` — barrel re-export for `src/data/units/`
 - `skillDefinitions.ts` — 28 combat skills, multiplier/effect matrices, level tables; exports `SKILLS`, `MULTIPLIER_MATRICES`, `EFFECT_AREA_MATRICES`, `INSTANT_EFFECT_MATRICES`, `LEVELED_EFFECTS`, `DAMAGE_MODIFIER_LEVELS`, `VAMPIRISM_LEVELS`; runtime helpers live in `src/battle/skillDefinitionRuntime.ts`. `MULTIPLIER_MATRICES` are used by `damage`, `heal`, and `apply_periodic_hp_effect`. `EFFECT_AREA_MATRICES` are shape-only area matrices for `apply_stat_effect`; cells are always `A()` = `{ multiplier: 1 }` and are not used for magnitude — effect magnitude comes from `LEVELED_EFFECTS[effectName].bonusByLevel`.
 - `itemDefinitions.ts` — item configs with stat bonuses and slot assignments; exports `ITEM_DEFINITIONS`, `getItemDescription()`
 - `mapDefinitions.ts` — grid terrain and mob placement per map; exports `MAP_DEFINITIONS`
@@ -45,7 +49,8 @@ Live game state in `BattleState` / `CampaignState`
   Direct casts (`"name" as SkillId`) are forbidden outside of `sid()` itself. Enforced by code review.
 
 ## Where to Modify
-- add/change a player or enemy unit → `unitDefinitions.ts`
+- add/change a player unit or PLAYER_STARTING_IDS → `units/playerUnits.ts`
+- add/change an enemy unit → `units/enemyUnits.ts`
 - add/change a skill or damage pattern → `skillDefinitions.ts`
 - add/change an item → `itemDefinitions.ts`
 - add/change a map layout → `mapDefinitions.ts`

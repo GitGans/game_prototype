@@ -1,5 +1,5 @@
 import { ItemInstance, ItemContainer, CellCoord, BattleStatBonuses } from '../battle/types';
-import { PLAYER_UNITS } from '../data/unitDefinitions';
+import { PLAYER_UNITS } from '../data/units';
 import type { UpgradeOptionId } from '../shared/unitTypes';
 
 export interface DebugBattleState {

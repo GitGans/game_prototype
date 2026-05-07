@@ -1,4 +1,4 @@
-import { PLAYER_UNITS, ENEMY_UNITS }      from '../data/unitDefinitions';
+import { PLAYER_UNITS, ENEMY_UNITS }      from '../data/units';
 import { ITEM_DEFINITIONS }               from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from '../battle/itemOps';
 import { resolveUnitProgression }         from './unitProgression';

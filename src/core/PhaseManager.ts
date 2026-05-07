@@ -4,7 +4,7 @@ import { DebugBattleState, createDebugBattleState } from './DebugBattleState';
 import { GameState } from './GameState';
 import { EventBus, Events } from './EventBus';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
-import { PLAYER_UNITS } from '../data/unitDefinitions';
+import { PLAYER_UNITS } from '../data/units';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { initSubMapState } from '../world/mapLogic';
 import { SubMapDefinition, SubMapState } from '../world/types';

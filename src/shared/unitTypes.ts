@@ -15,7 +15,7 @@ declare const __upgradeOptionIdBrand: unique symbol;
  * Convention: "{templateId}_{tierId}_{skillKey}"
  * Example:    "soldier_5_pierce"
  *
- * Create only via uid() in data/unitDefinitions.ts. Never cast directly.
+ * Create only via uid() in data/units/upgradeOptionHelpers.ts. Never cast directly.
  */
 export type UpgradeOptionId = string & { readonly [__upgradeOptionIdBrand]: never };
 
