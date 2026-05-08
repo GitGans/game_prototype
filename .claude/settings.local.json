@@ -3,7 +3,10 @@
     "allow": [
       "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
       "Read(//home/node/.claude/**)",
-      "Read(//home/node/.codex/**)"
+      "Read(//home/node/.codex/**)",
+      "Bash(ls -la /home/node/ | head -30)",
+      "Read(//home/node/**)",
+      "Bash(mount)"
     ]
   }
 }

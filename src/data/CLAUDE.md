@@ -13,7 +13,8 @@ Static data layer for all game entities. Contains only read-only constant defini
 
 ## Key Files
 - `unitDefinitions.ts` — compatibility re-export shim; do not add content here
-- `units/playerUnits.ts` — player unit blueprints; exports `PLAYER_UNITS`, `PLAYER_STARTING_IDS`
+- `units/playerUnits.ts` — player unit blueprints; exports `PLAYER_UNITS`, `PLAYER_STARTING_IDS`; references upgrade tier definitions from `playerUnitUpgradeTiers.ts`
+- `units/playerUnitUpgradeTiers.ts` — player unit upgrade tier definitions by templateId; internal to `data/units`, not exported from the barrel
 - `units/enemyUnits.ts` — enemy unit blueprints by race; exports `ENEMY_UNITS`
 - `units/upgradeOptionHelpers.ts` — internal helper `opt()` for building player upgrade options
 - `units/index.ts` — barrel re-export for `src/data/units/`
@@ -55,6 +56,7 @@ Live game state in `BattleState` / `CampaignState`
 
 ## Where to Modify
 - add/change a player unit or PLAYER_STARTING_IDS → `units/playerUnits.ts`
+- add/change player unit upgrade tiers → `units/playerUnitUpgradeTiers.ts`
 - add/change an enemy unit → `units/enemyUnits.ts`
 - add/change a skill definition → `skills/skillDefinitions.ts`
 - add/change a damage or area matrix → `skills/matrices.ts`
