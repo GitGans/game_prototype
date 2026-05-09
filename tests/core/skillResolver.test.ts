@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { SKILLS } from "../../src/data/skillDefinitions";
 import type { SkillId } from "../../src/shared/skillDefinitionTypes";
-import { resolveSkillDefinition } from "../../src/core/skillResolver";
+import { resolveSkillDefinition } from "../../src/progression/skillResolver";
 
 const skillKeys = Object.keys(SKILLS) as Array<keyof typeof SKILLS>;
 const firstSkillId = skillKeys[0] as SkillId;

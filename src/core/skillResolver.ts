@@ -1,15 +1,3 @@
-import { SKILLS } from '../data/skills';
-import type { ActionSkillDefinition, SkillId } from '../shared/skillDefinitionTypes';
-
-export function resolveSkillDefinition(skillId: SkillId): ActionSkillDefinition {
-  const skill = SKILLS[skillId as string as keyof typeof SKILLS];
-  if (!skill) throw new Error(`Unknown SkillId: "${skillId}"`);
-  return skill;
-}
-
-export function resolveOptionalSkillDefinition(
-  skillId: SkillId | undefined,
-): ActionSkillDefinition | undefined {
-  if (skillId === undefined) return undefined;
-  return resolveSkillDefinition(skillId);
-}
+// Temporary migration bridge — Stage 2/3 only.
+// Do not add new imports from core/skillResolver. Import from progression/skillResolver instead.
+export * from '../progression/skillResolver';
