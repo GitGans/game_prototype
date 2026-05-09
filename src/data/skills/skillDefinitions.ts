@@ -4,7 +4,6 @@ import type { ActionSkillDefinition, SkillId } from "../../shared/skillDefinitio
 
 export const SKILLS = {
   p_melee_basic: {
-    definitionKind: "action_skill",
     id: "p_melee_basic",
     name: "Strike",
     targetPolicy: { type: "enemy_melee" },
@@ -18,7 +17,6 @@ export const SKILLS = {
   },
 
   p_ranged_basic: {
-    definitionKind: "action_skill",
     id: "p_ranged_basic",
     name: "Shot",
     targetPolicy: { type: "enemy_ranged" },
@@ -32,7 +30,6 @@ export const SKILLS = {
   },
 
   m_ranged_basic: {
-    definitionKind: "action_skill",
     id: "m_ranged_basic",
     name: "Magic Shot",
     targetPolicy: { type: "enemy_ranged" },
@@ -46,7 +43,6 @@ export const SKILLS = {
   },
 
   p_ranged_slowing: {
-    definitionKind: "action_skill",
     id: "p_ranged_slowing",
     name: "Arrow that breaks legs",
     targetPolicy: { type: "enemy_ranged" },
@@ -68,7 +64,6 @@ export const SKILLS = {
   },
 
   m_heal_basic: {
-    definitionKind: "action_skill",
     id: "m_heal_basic",
     name: "Heal",
     targetPolicy: { type: "friendly" },
@@ -82,7 +77,6 @@ export const SKILLS = {
   },
 
   heal_with_defence: {
-    definitionKind: "action_skill",
     id: "heal_with_defence",
     name: "Protective Heal",
     targetPolicy: { type: "friendly" },
@@ -104,7 +98,6 @@ export const SKILLS = {
   },
 
   self_heal_mass_regeneration: {
-    definitionKind: "action_skill",
     id: "self_heal_mass_regeneration",
     name: "Regenerative Heal",
     targetPolicy: { type: "self" },
@@ -132,7 +125,6 @@ export const SKILLS = {
   },
 
   arcane_cross: {
-    definitionKind: "action_skill",
     id: "arcane_cross",
     name: "Arcane Cross",
     targetPolicy: { type: "enemy_ranged" },
@@ -160,7 +152,6 @@ export const SKILLS = {
   },
 
   row_strike: {
-    definitionKind: "action_skill",
     id: "row_strike",
     name: "Row Strike",
     targetPolicy: { type: "enemy_melee" },
@@ -178,7 +169,6 @@ export const SKILLS = {
   },
 
   pierce: {
-    definitionKind: "action_skill",
     id: "pierce",
     name: "Pierce",
     targetPolicy: { type: "enemy_melee" },
@@ -192,7 +182,6 @@ export const SKILLS = {
   },
 
   poison_strike: {
-    definitionKind: "action_skill",
     id: "poison_strike",
     name: "Poison Strike",
     targetPolicy: { type: "enemy_melee" },
@@ -216,7 +205,6 @@ export const SKILLS = {
   },
 
   weaken_curse: {
-    definitionKind: "action_skill",
     id: "weaken_curse",
     name: "Weaken Curse",
     targetPolicy: { type: "enemy_ranged" },
@@ -238,7 +226,6 @@ export const SKILLS = {
   },
 
   provoke_strike: {
-    definitionKind: "action_skill",
     id: "provoke_strike",
     name: "Provoke",
     targetPolicy: { type: "enemy_melee" },
@@ -262,7 +249,6 @@ export const SKILLS = {
   },
 
   distract_shot: {
-    definitionKind: "action_skill",
     id: "distract_shot",
     name: "Distract",
     targetPolicy: { type: "enemy_ranged" },
@@ -286,7 +272,6 @@ export const SKILLS = {
   },
 
   armor_pierce: {
-    definitionKind: "action_skill",
     id: "armor_pierce",
     name: "Armor Pierce",
     targetPolicy: { type: "enemy_melee" },
@@ -301,7 +286,6 @@ export const SKILLS = {
   },
 
   drain_strike: {
-    definitionKind: "action_skill",
     id: "drain_strike",
     name: "Drain Strike",
     targetPolicy: { type: "enemy_melee" },
@@ -320,7 +304,6 @@ export const SKILLS = {
   },
 
   life_sweep: {
-    definitionKind: "action_skill",
     id: "life_sweep",
     name: "Life Sweep",
     targetPolicy: { type: "enemy_melee" },

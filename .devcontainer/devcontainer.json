@@ -2,7 +2,7 @@
   "name": "Claude Code Sandbox",
   "build": {
     "dockerfile": "Dockerfile",
-    "network": "host", // # delete if you have problems with container
+    // "network": "host", // # delete if you have problems with container
     "args": {
       "TZ": "${localEnv:TZ:America/Los_Angeles}",
       "CLAUDE_CODE_VERSION": "latest",
