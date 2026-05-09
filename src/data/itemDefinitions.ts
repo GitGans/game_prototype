@@ -1,4 +1,5 @@
 import type { BattleStatBonuses, ItemDefinition } from '../shared/itemTypes';
+import { ucid } from '../shared/unitTypes';
 
 const STAT_LABELS: Record<keyof BattleStatBonuses, string> = {
   hp: 'HP',
@@ -39,7 +40,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     usage: 'equip',
     equipSlot: 'necklace',
     buyPrice: 50,
-    allowedClasses: ['warrior', 'pikeman', 'halberdist', 'crusher'],
+    allowedClassIds: [ucid('warrior'), ucid('pikeman'), ucid('halberdist'), ucid('crusher')],
     battleStatBonuses: { hp: 0, physicalStrength: 0, magicalStrength: 3, physicalDefense: 0, magicalDefense: 0 },
     sprite: 'assets/sprites/items/bronze_necklace.png',
   },

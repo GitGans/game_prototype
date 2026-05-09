@@ -113,7 +113,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
     const data: ItemTooltipData = {
       name: def.name,
       stats,
-      classRestriction: def.allowedClasses?.length ? def.allowedClasses.join(', ') : null,
+      classRestriction: def.allowedClassIds?.length ? def.allowedClassIds.join(', ') : null,
       classAllowed: null,
     };
 

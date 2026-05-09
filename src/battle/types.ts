@@ -8,10 +8,12 @@ export type {
   PostDamageType,
 } from '../shared/skillTypes';
 export type {
-  SpriteState, SpriteSheetConfig, RowTrait, UnitRace, UnitClass,
+  SpriteState, SpriteSheetConfig, RowTrait, UnitRace,
+  UnitClassId, UnitClassDefinition,
   UnitProgressionStatModifiers, UnitBattleStats,
   UnitUpgradeOption, UnitUpgradeTier, EnemySkillUnlock, UnitBlueprint, UpgradeOptionId,
 } from '../shared/unitTypes';
+export { ucid } from '../shared/unitTypes';
 export type {
   EquipSlot, BattleStatBonuses, MapStatBonuses,
   ItemUsage, ItemUseEffectType, ItemUseEffect, ItemDefinition,

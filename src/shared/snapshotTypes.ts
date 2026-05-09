@@ -1,4 +1,4 @@
-import type { UnitClass } from './unitTypes';
+import type { UnitClassId } from './unitTypes';
 import type { ItemDefinition } from './itemTypes';
 
 // ─── Stat Snapshots ───────────────────────────────────────────────────────────
@@ -51,8 +51,8 @@ export interface EquipmentSnapshot {
 // ─── Unit Tab Snapshot ────────────────────────────────────────────────────────
 
 export interface UnitTabSnapshot {
-  templateId: string;
-  name:       string;
-  unitClass:  UnitClass;
-  spriteKey:  string | null;
+  templateId:  string;
+  name:        string;
+  baseClassId: UnitClassId;
+  spriteKey:   string | null;
 }

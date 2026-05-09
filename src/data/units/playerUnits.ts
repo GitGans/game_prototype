@@ -1,4 +1,5 @@
 import type { UnitBlueprint } from "../../shared/unitTypes";
+import { ucid } from "../../shared/unitTypes";
 import { SHAPES } from "../shapeDefinitions";
 import { sid } from "../skills";
 import { PLAYER_UNIT_UPGRADE_TIERS } from "./playerUnitUpgradeTiers";
@@ -8,7 +9,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "soldier",
     name: "Soldier",
-    unitClass: "soldier",
+    baseClassId: ucid("soldier"),
     hp: 120,
     physicalStrength: 20,
     magicalStrength: 15,
@@ -27,7 +28,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "warrior",
     name: "Warrior",
-    unitClass: "warrior",
+    baseClassId: ucid("warrior"),
     hp: 130,
     physicalStrength: 25,
     magicalStrength: 10,
@@ -46,7 +47,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "guard",
     name: "Guard",
-    unitClass: "guard",
+    baseClassId: ucid("guard"),
     hp: 110,
     physicalStrength: 25,
     magicalStrength: 15,
@@ -65,7 +66,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "brawler",
     name: "Brawler",
-    unitClass: "brawler",
+    baseClassId: ucid("brawler"),
     hp: 90,
     physicalStrength: 20,
     magicalStrength: 20,
@@ -84,7 +85,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "marksman",
     name: "Marksman",
-    unitClass: "marksman",
+    baseClassId: ucid("marksman"),
     hp: 110,
     physicalStrength: 25,
     magicalStrength: 15,
@@ -103,7 +104,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "forest_ranger",
     name: "Forest Ranger",
-    unitClass: "forest_ranger",
+    baseClassId: ucid("forest_ranger"),
     hp: 90,
     physicalStrength: 20,
     magicalStrength: 20,
@@ -122,7 +123,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "elementalist",
     name: "Elementalist",
-    unitClass: "elementalist",
+    baseClassId: ucid("elementalist"),
     hp: 80,
     physicalStrength: 10,
     magicalStrength: 30,
@@ -141,7 +142,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "monk",
     name: "Monk",
-    unitClass: "monk",
+    baseClassId: ucid("monk"),
     hp: 110,
     physicalStrength: 25,
     magicalStrength: 15,
@@ -160,7 +161,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "troublemaker",
     name: "Troublemaker",
-    unitClass: "troublemaker",
+    baseClassId: ucid("troublemaker"),
     hp: 80,
     physicalStrength: 10,
     magicalStrength: 30,
@@ -179,7 +180,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "healer",
     name: "Healer",
-    unitClass: "healer",
+    baseClassId: ucid("healer"),
     hp: 90,
     physicalStrength: 15,
     magicalStrength: 25,
@@ -198,7 +199,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "shaman",
     name: "Shaman",
-    unitClass: "shaman",
+    baseClassId: ucid("shaman"),
     hp: 100,
     physicalStrength: 20,
     magicalStrength: 20,
@@ -217,7 +218,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
   {
     templateId: "destroyer",
     name: "Destroyer",
-    unitClass: "destroyer",
+    baseClassId: ucid("destroyer"),
     hp: 120,
     physicalStrength: 20,
     magicalStrength: 15,

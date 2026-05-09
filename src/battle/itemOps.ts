@@ -1,6 +1,6 @@
 import {
   EquipSlot, ItemContainer, ItemDefinition, ItemInstance,
-  BattleStatBonuses, UnitClass,
+  BattleStatBonuses, UnitClassId,
   BackpackSnapshot, EquipmentSnapshot, ItemSlotSnapshot,
   UnitActivatableAbility, UnitBlueprint,
   UnitProgressionStatModifiers, UnitBattleStats,
@@ -45,10 +45,10 @@ export function canPlace(
 
 /**
  * Returns true if the unit class is allowed to equip this item.
- * If the item has no allowedClasses (or empty array), all classes are allowed.
+ * If the item has no allowedClassIds (or empty array), all classes are allowed.
  */
 export function canUnitEquipItem(
-  unitClass: UnitClass,
+  classId: UnitClassId,
   instanceId: string,
   instances: Record<string, ItemInstance>,
   definitions: Record<string, ItemDefinition>,
@@ -57,8 +57,8 @@ export function canUnitEquipItem(
   if (!instance) return false;
   const definition = definitions[instance.definitionId];
   if (!definition) return false;
-  if (!definition.allowedClasses || definition.allowedClasses.length === 0) return true;
-  return definition.allowedClasses.includes(unitClass);
+  if (!definition.allowedClassIds || definition.allowedClassIds.length === 0) return true;
+  return definition.allowedClassIds.includes(classId);
 }
 
 /**
@@ -130,7 +130,7 @@ export function moveItem(
  */
 export function equipItem(
   unitTemplateId: string,
-  unitClass: UnitClass,
+  classId: UnitClassId,
   instanceId: string,
   containers: Record<string, ItemContainer>,
   instances: Record<string, ItemInstance>,
@@ -143,7 +143,7 @@ export function equipItem(
   if (!definition || !definition.equipSlot) return false;
 
   // Class restriction check
-  if (!canUnitEquipItem(unitClass, instanceId, instances, definitions)) return false;
+  if (!canUnitEquipItem(classId, instanceId, instances, definitions)) return false;
 
   // Rings can equip into ring_1 or ring_2; pick first free, else swap ring_1.
   const equipContainerForRingCheck = containers[`equip_${unitTemplateId}`];

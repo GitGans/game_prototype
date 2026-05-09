@@ -213,7 +213,7 @@ class PhaseManagerClass {
       return {
         templateId: bp.templateId,
         name:       bp.name,
-        unitClass:  bp.unitClass,
+        baseClassId: bp.baseClassId,
         spriteKey:  this.spriteKeyFromProgression(bp.templateId, progression),
       };
     });
@@ -649,7 +649,7 @@ class PhaseManagerClass {
       if (bp) {
         equipItem(
           action.unitTemplateId,
-          bp.unitClass,
+          bp.baseClassId,
           action.instanceId,
           GameState.itemContainers,
           GameState.itemInstances,
@@ -737,7 +737,7 @@ class PhaseManagerClass {
       if (bp) {
         equipItem(
           action.unitTemplateId,
-          bp.unitClass,
+          bp.baseClassId,
           action.instanceId,
           this.debugState!.itemContainers,
           this.debugState!.itemInstances,

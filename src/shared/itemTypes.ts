@@ -1,4 +1,4 @@
-import type { UnitClass } from './unitTypes';
+import type { UnitClassId } from './unitTypes';
 
 export type EquipSlot =
   | 'ring_1'
@@ -43,7 +43,11 @@ export interface ItemDefinition {
   usage: ItemUsage;
   equipSlot: EquipSlot | null;       // null = backpack-only (consumables)
   subclass?: string;
-  allowedClasses?: UnitClass[];
+  /**
+   * Class ids allowed to equip this item.
+   * Undefined or an empty array means the item has no class restriction.
+   */
+  allowedClassIds?: UnitClassId[];
   battleStatBonuses: BattleStatBonuses;
   mapStatBonuses?: MapStatBonuses;
   buyPrice: number;                   // sellPrice = floor(buyPrice/4), computed
