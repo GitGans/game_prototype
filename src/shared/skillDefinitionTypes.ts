@@ -48,7 +48,7 @@ export type SkillDefinitionPowerSource =
  */
 export type SkillDefinitionMatrixRef =
   | { kind: 'multiplier_matrix'; matrixName: string; level: SkillLevel }
-  | { kind: 'effect_area_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'effect_area_matrix'; matrixName: string }
   | { kind: 'probability_matrix'; matrixName: string; level: SkillLevel };
 
 /** Narrowed alias — use when a field must reference a multiplier matrix. */

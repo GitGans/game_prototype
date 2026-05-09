@@ -48,9 +48,6 @@ export interface EffectAreaPattern {
   cells: (AreaPatternCell | null)[][];
 }
 
-export interface EffectAreaMatrix {
-  levels: SkillLevelTable<EffectAreaPattern>;
-}
 
 export type EffectDirection = 'buff' | 'debuff';
 

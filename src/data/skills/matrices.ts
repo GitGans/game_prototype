@@ -1,7 +1,7 @@
 import type {
   ScalingMultiplierMatrix,
   ScalingProbabilityMatrix,
-  EffectAreaMatrix,
+  EffectAreaPattern,
   AreaPatternCell,
 } from "../../shared/skillTypes";
 
@@ -19,17 +19,19 @@ const A = (): AreaPatternCell => ({ multiplier: 1 as const });
 export const MULTIPLIER_MATRICES: Record<string, ScalingMultiplierMatrix> = {
   /** Single cell. */
   single: {
-    anchorRow: 0, anchorCol: 0,
+    anchorRow: 0,
+    anchorCol: 0,
     cells: [[P(0.1)]],
     scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   cross_flat: {
-    anchorRow: 1, anchorCol: 1,
+    anchorRow: 1,
+    anchorCol: 1,
     cells: [
-      [null,   P(0.1), null  ],
+      [null, P(0.1), null],
       [P(0.1), P(0.1), P(0.1)],
-      [null,   P(0.1), null  ],
+      [null, P(0.1), null],
     ],
     scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
@@ -41,25 +43,28 @@ export const MULTIPLIER_MATRICES: Record<string, ScalingMultiplierMatrix> = {
    *   [ ]  [X]  [ ]
    */
   cross: {
-    anchorRow: 1, anchorCol: 1,
+    anchorRow: 1,
+    anchorCol: 1,
     cells: [
-      [null,   P(0.1), null  ],
-      [P(0.1), P(0.1), P(0.1)],
-      [null,   P(0.1), null  ],
+      [null, P(0.1), null],
+      [P(0.1), P(0.5), P(0.1)],
+      [null, P(0.1), null],
     ],
-    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
+    scaling: { anchorPerLevelIncrease: 0.1, otherPerLevelIncrease: 0.05 },
   },
 
   /** All 3 cells in target row. */
   row_sweep: {
-    anchorRow: 0, anchorCol: 1,
+    anchorRow: 0,
+    anchorCol: 1,
     cells: [[P(0.1), P(0.1), P(0.1)]],
     scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /** Target cell + same column in next row. */
   pierce: {
-    anchorRow: 0, anchorCol: 0,
+    anchorRow: 0,
+    anchorCol: 0,
     cells: [[P(0.1)], [P(0.1)]],
     scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
@@ -70,15 +75,11 @@ export const MULTIPLIER_MATRICES: Record<string, ScalingMultiplierMatrix> = {
 // Shape-only area matrices for apply_stat_effect.
 // Cell presence (A()) means "this cell is in the area". Multiplier is always 1 and is not used for magnitude.
 // Effect magnitude comes from STAT_EFFECTS[effectName].bonusByLevel.
-// Level keys are authored explicitly. Runtime resolves exact levels only.
+// Static patterns — no levels, no scaling.
 
-export const EFFECT_AREA_MATRICES: Record<string, EffectAreaMatrix> = {
+export const EFFECT_AREA_MATRICES: Record<string, EffectAreaPattern> = {
   /** Single target. */
-  single: {
-    levels: {
-      1: { anchorRow: 0, anchorCol: 0, cells: [[A()]] },
-    },
-  },
+  single: { anchorRow: 0, anchorCol: 0, cells: [[A()]] },
 
   /**
    * Cross: center + 4 orthogonal neighbours.
@@ -87,17 +88,13 @@ export const EFFECT_AREA_MATRICES: Record<string, EffectAreaMatrix> = {
    *   [ ]  [X]  [ ]
    */
   cross: {
-    levels: {
-      1: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, A(), null],
-          [A(), A(), A()],
-          [null, A(), null],
-        ],
-      },
-    },
+    anchorRow: 1,
+    anchorCol: 1,
+    cells: [
+      [null, A(), null],
+      [A(),  A(),  A() ],
+      [null, A(), null],
+    ],
   },
 };
 
@@ -111,28 +108,32 @@ export const EFFECT_AREA_MATRICES: Record<string, EffectAreaMatrix> = {
 export const PROBABILITY_MATRICES: Record<string, ScalingProbabilityMatrix> = {
   /** Single target. */
   single: {
-    anchorRow: 0, anchorCol: 0,
+    anchorRow: 0,
+    anchorCol: 0,
     cells: [[P(0.1)]],
     scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /** 3 cells in one row. */
   row_sweep: {
-    anchorRow: 0, anchorCol: 1,
+    anchorRow: 0,
+    anchorCol: 1,
     cells: [[P(0.1), P(0.1), P(0.1)]],
     scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /** 2 cells in one row. */
   shot_sweep: {
-    anchorRow: 0, anchorCol: 0,
+    anchorRow: 0,
+    anchorCol: 0,
     cells: [[P(0.1), P(0.1)]],
     scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /** 3×3 area. */
   all: {
-    anchorRow: 1, anchorCol: 1,
+    anchorRow: 1,
+    anchorCol: 1,
     cells: [
       [P(0.1), P(0.1), P(0.1)],
       [P(0.1), P(0.1), P(0.1)],
@@ -148,18 +149,20 @@ export const PROBABILITY_MATRICES: Record<string, ScalingProbabilityMatrix> = {
    *   [ ]  [X]  [ ]
    */
   cross: {
-    anchorRow: 1, anchorCol: 1,
+    anchorRow: 1,
+    anchorCol: 1,
     cells: [
-      [null,   P(0.1), null  ],
+      [null, P(0.1), null],
       [P(0.1), P(0.1), P(0.1)],
-      [null,   P(0.1), null  ],
+      [null, P(0.1), null],
     ],
     scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /** Main target + one additional target. */
   pierce: {
-    anchorRow: 0, anchorCol: 0,
+    anchorRow: 0,
+    anchorCol: 0,
     cells: [[P(0.1), P(0.1)]],
     scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
