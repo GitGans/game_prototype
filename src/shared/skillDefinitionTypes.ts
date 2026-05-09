@@ -158,7 +158,6 @@ export interface SkillDefinitionProbabilityAction {
  * The compiler (compileSkillUsePlan) maps it to a SkillUsePlan.
  */
 export interface ActionSkillDefinition {
-  definitionKind: 'action_skill';
   id: string;
   name: string;
   targetPolicy: SkillDefinitionTargetPolicy;
