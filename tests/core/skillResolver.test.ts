@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SKILLS } from "../../src/data/skillDefinitions";
+import { SKILLS } from "../../src/data/skills";
 import type { SkillId } from "../../src/shared/skillDefinitionTypes";
 import { resolveSkillDefinition } from "../../src/progression/skillResolver";
 

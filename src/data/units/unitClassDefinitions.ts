@@ -1,5 +1,5 @@
-import type { UnitClassDefinition } from '../shared/unitTypes';
-import { ucid } from '../shared/unitTypes';
+import type { UnitClassDefinition } from '../../shared/unitTypes';
+import { ucid } from '../../shared/unitTypes';
 
 export const UNIT_CLASS_DEFINITIONS = {
   warrior:       { id: ucid('warrior'),       name: 'Warrior' },

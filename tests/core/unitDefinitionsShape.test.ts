@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PLAYER_UNITS, ENEMY_UNITS } from "../../src/data/unitDefinitions";
+import { PLAYER_UNITS, ENEMY_UNITS } from "../../src/data/units";
 
 describe("unitDefinitions shape", () => {
   it("player blueprints store skill IDs not embedded skill objects", () => {

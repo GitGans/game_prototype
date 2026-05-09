@@ -1,6 +1,6 @@
 import { PLAYER_UNITS, ENEMY_UNITS } from '../data/units';
 import { SKILLS } from '../data/skills';
-import { UNIT_CLASS_DEFINITIONS } from '../data/unitClassDefinitions';
+import { UNIT_CLASS_DEFINITIONS } from '../data/units/unitClassDefinitions';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import type { UnitBlueprint, UnitRace } from '../shared/unitTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';

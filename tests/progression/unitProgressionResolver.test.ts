@@ -4,7 +4,7 @@ import type { UnitBlueprint, UpgradeOptionId, UnitClassId } from "../../src/shar
 import type { UnitShape } from "../../src/shared/gridTypes";
 import type { SkillId } from "../../src/shared/skillDefinitionTypes";
 import { SKILLS } from "../../src/data/skills";
-import { UNIT_CLASS_DEFINITIONS } from "../../src/data/unitClassDefinitions";
+import { UNIT_CLASS_DEFINITIONS } from "../../src/data/units/unitClassDefinitions";
 import { resolveUnitProgression } from "../../src/progression/unitProgressionResolver";
 
 // ---------------------------------------------------------------------------

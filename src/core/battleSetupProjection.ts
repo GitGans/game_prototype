@@ -1,13 +1,13 @@
 import { PLAYER_UNITS, ENEMY_UNITS }      from '../data/units';
 import { ITEM_DEFINITIONS }               from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from '../battle/itemOps';
-import { resolveUnitProgression }         from './unitProgression';
+import { resolveUnitProgression }         from '../progression';
 import { createUnitInstance, type CreateUnitInstanceInput } from '../battle/unitFactory';
 import type { PlayerBattleSetup }         from './battleSetup';
 import type { PlayerPlacementCandidate, EnemyPlacementCandidates } from '../battle/autoPlace';
 import type { UnitBlueprint, UnitRace }   from '../shared/unitTypes';
 import type { ActionSkillDefinition }      from '../shared/skillDefinitionTypes';
-import { resolveSkillDefinition }          from './skillResolver';
+import { resolveSkillDefinition }          from '../progression';
 import type { CellCoord }                 from '../shared/gridTypes';
 
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): ActionSkillDefinition[] {

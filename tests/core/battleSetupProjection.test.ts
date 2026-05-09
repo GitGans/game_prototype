@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PLAYER_UNITS } from "../../src/data/unitDefinitions";
+import { PLAYER_UNITS } from "../../src/data/units";
 import { buildPlayerUnitInput } from "../../src/core/battleSetupProjection";
 import type { PlayerBattleSetup } from "../../src/core/battleSetup";
 import type { PlayerUnitState } from "../../src/core/GameState";

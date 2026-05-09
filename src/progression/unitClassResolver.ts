@@ -1,4 +1,4 @@
-import { UNIT_CLASS_DEFINITIONS } from '../data/unitClassDefinitions';
+import { UNIT_CLASS_DEFINITIONS } from '../data/units/unitClassDefinitions';
 import type { UnitClassDefinition, UnitClassId } from '../shared/unitTypes';
 
 export function resolveUnitClassDefinition(id: UnitClassId): UnitClassDefinition {

@@ -8,7 +8,7 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - Maintain persistent campaign data (units, items, money, map progress)
 - Initialize battle state from campaign snapshot
 - Build display snapshots (bench cards, stats, upgrades) for each phase
-- Resolve unit progression (skills, stat modifiers) from chosen upgrades
+- Invoke progression resolvers from `src/progression/` to build battle-ready unit input
 - Isolate debug mode state from campaign saves
 
 ## Key Files
@@ -17,7 +17,6 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `GameState.ts` — persistent singleton holding `CampaignState` and `BattleState`
 - `battleInitialization.ts` — battle state factory; builds auto-placed or replay battle states
 - `battleSetupProjection.ts` — builds typed placement candidates with embedded unit factory functions
-- `unitProgression.ts` — resolves chosen upgrade effects into skills and stat modifiers
 - `unitPreviewSnapshot.ts` — builds bench card snapshots for each player unit
 - `unitStatsSnapshot.ts` — computes base and final stats for display
 - `unitUpgradePresentation.ts` — generates upgrade text, stat lines, and skill descriptions for UI
@@ -44,7 +43,7 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 Scenes re-render from new `GamePhase`
 
 ## Dependencies
-- depends on: `src/battle/` (unit factory, placement logic, item ops, auto-place), `src/data/` (unit/enemy blueprints, item definitions)
+- depends on: `src/battle/` (unit factory, placement logic, item ops, auto-place), `src/data/` (unit/enemy blueprints, item definitions), `src/progression/` (unit progression and skill resolution)
 - used by: `src/scenes/` (all scenes call `PhaseManager.transition()`), `src/objects/` (reads snapshots from `GamePhase`)
 
 ## Invariants
@@ -71,7 +70,7 @@ Scenes re-render from new `GamePhase`
 - Change battle turn-flow action handling → `phaseHandlers/battlePhaseHandler.ts` and `PhaseManager.applyActionSideEffects()`
 - Change battle snapshot fields (what controllers see) → `PhaseManager.rebuildSnapshot()`
 - Change how units are initialized for battle → `battleInitialization.ts` / `battleSetupProjection.ts`
-- Change upgrade stat/skill resolution → `unitProgression.ts`
+- Change upgrade stat/skill resolution → `src/progression/`
 - Change bench card display data → `unitPreviewSnapshot.ts`
 - Change stat display computation → `unitStatsSnapshot.ts`
 - Change upgrade description text → `unitUpgradePresentation.ts`
