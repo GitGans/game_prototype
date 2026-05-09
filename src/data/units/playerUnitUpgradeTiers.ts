@@ -1,6 +1,7 @@
 import type { UnitUpgradeTier } from "../../shared/unitTypes";
 import { sid } from "../skills";
 import { opt } from "./upgradeOptionHelpers";
+import { playerUnitSprite } from "./unitSpriteHelpers";
 
 type PlayerUnitTemplateId =
   | "soldier"
@@ -25,12 +26,7 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
         opt("soldier_5_pierce", "Pierce", sid("pierce"), {
           description: "Gain Pierce and become tougher.",
           statModifiers: { hp: 20 },
-          spriteSheet: {
-            path: "assets/sprites/units/soldier_elite.png",
-            frameWidth: 128,
-            frameHeight: 128,
-            states: ["idle", "attack", "death"] as const,
-          },
+          spriteSheet: playerUnitSprite("soldier_elite.png"),
         }),
       ],
     },

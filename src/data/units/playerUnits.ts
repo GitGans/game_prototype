@@ -2,6 +2,7 @@ import type { UnitBlueprint } from "../../shared/unitTypes";
 import { SHAPES } from "../shapeDefinitions";
 import { sid } from "../skills";
 import { PLAYER_UNIT_UPGRADE_TIERS } from "./playerUnitUpgradeTiers";
+import { playerUnitSprite } from "./unitSpriteHelpers";
 
 export const PLAYER_UNITS: UnitBlueprint[] = [
   {
@@ -21,12 +22,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.soldier,
     rowTrait: "front",
-    spriteSheet: {
-      path: "assets/sprites/units/soldier.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("soldier.png"),
   },
   {
     templateId: "warrior",
@@ -45,12 +41,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.warrior,
     rowTrait: "front",
-    spriteSheet: {
-      path: "assets/sprites/units/warrior.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("warrior.png"),
   },
   {
     templateId: "guard",
@@ -69,12 +60,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.guard,
     rowTrait: "front",
-    spriteSheet: {
-      path: "assets/sprites/units/guard.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("guard.png"),
   },
   {
     templateId: "brawler",
@@ -93,12 +79,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.brawler,
     rowTrait: "front",
-    spriteSheet: {
-      path: "assets/sprites/units/brawler.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("brawler.png"),
   },
   {
     templateId: "marksman",
@@ -117,12 +98,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.marksman,
     rowTrait: "front",
-    spriteSheet: {
-      path: "assets/sprites/units/marksman.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("marksman.png"),
   },
   {
     templateId: "forest_ranger",
@@ -141,12 +117,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.forest_ranger,
     rowTrait: "front",
-    spriteSheet: {
-      path: "assets/sprites/units/forest_ranger.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("forest_ranger.png"),
   },
   {
     templateId: "elementalist",
@@ -165,12 +136,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.elementalist,
     rowTrait: "back",
-    spriteSheet: {
-      path: "assets/sprites/units/elementalist.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("elementalist.png"),
   },
   {
     templateId: "monk",
@@ -189,12 +155,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.monk,
     rowTrait: "back",
-    spriteSheet: {
-      path: "assets/sprites/units/monk.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("monk.png"),
   },
   {
     templateId: "troublemaker",
@@ -213,12 +174,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.troublemaker,
     rowTrait: "back",
-    spriteSheet: {
-      path: "assets/sprites/units/troublemaker.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("troublemaker.png"),
   },
   {
     templateId: "healer",
@@ -237,12 +193,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_heal_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.healer,
     rowTrait: "back",
-    spriteSheet: {
-      path: "assets/sprites/units/healer.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("healer.png"),
   },
   {
     templateId: "shaman",
@@ -261,12 +212,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.shaman,
     rowTrait: "back",
-    spriteSheet: {
-      path: "assets/sprites/units/shaman.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("shaman.png"),
   },
   {
     templateId: "destroyer",
@@ -285,12 +231,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.destroyer,
     rowTrait: "front",
-    spriteSheet: {
-      path: "assets/sprites/units/destroyer.png",
-      frameWidth: 128,
-      frameHeight: 128,
-      states: ["idle", "attack", "death"],
-    },
+    spriteSheet: playerUnitSprite("destroyer.png"),
   },
 ];
 
