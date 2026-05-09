@@ -7,7 +7,7 @@ import type { CellCoord } from "../../src/shared/gridTypes";
 
 function containsSkillObject(value: unknown): boolean {
   if (value === null || typeof value !== "object") return false;
-  if ((value as Record<string, unknown>).definitionKind === "action_skill") return true;
+  if (Array.isArray((value as Record<string, unknown>).actions)) return true;
   return Object.values(value as Record<string, unknown>).some(containsSkillObject);
 }
 
@@ -39,7 +39,7 @@ describe("buildPlayerUnitInput — campaign/battle boundary", () => {
     const result = buildPlayerUnitInput(bp.templateId, anchor, "u1", setup);
     expect(result).not.toBeNull();
     expect(result!.skills.length).toBeGreaterThanOrEqual(1);
-    expect(result!.skills.every(s => s.definitionKind === "action_skill")).toBe(true);
+    expect(result!.skills.every(s => Array.isArray(s.actions))).toBe(true);
   });
 
   it("setup state retains string IDs — no ActionSkillDefinition leaked into campaign state", () => {

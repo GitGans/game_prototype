@@ -2,7 +2,6 @@ import type { ActionSkillDefinition } from "../../../src/shared/skillDefinitionT
 
 /** Single-cell physical melee attack. */
 export const testStrike: ActionSkillDefinition = {
-  definitionKind: "action_skill",
   id: "test_strike",
   name: "Test Strike",
   targetPolicy: { type: "enemy_melee" },
@@ -17,7 +16,6 @@ export const testStrike: ActionSkillDefinition = {
 
 /** Single-cell magical ranged attack. */
 export const testMagicBolt: ActionSkillDefinition = {
-  definitionKind: "action_skill",
   id: "test_magic_bolt",
   name: "Test Magic Bolt",
   targetPolicy: { type: "enemy_ranged" },
@@ -32,7 +30,6 @@ export const testMagicBolt: ActionSkillDefinition = {
 
 /** Full-row physical attack (for AOE / dedup tests). Uses the production "row_sweep" matrix. */
 export const testRowStrike: ActionSkillDefinition = {
-  definitionKind: "action_skill",
   id: "test_row_strike",
   name: "Test Row Strike",
   targetPolicy: { type: "enemy_melee" },
@@ -47,7 +44,6 @@ export const testRowStrike: ActionSkillDefinition = {
 
 /** Single-target vampirism attack (for vampirism cap tests). */
 export const testVampireStrike: ActionSkillDefinition = {
-  definitionKind: "action_skill",
   id: "test_vampire_strike",
   name: "Test Vampire Strike",
   targetPolicy: { type: "enemy_melee" },

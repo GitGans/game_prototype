@@ -17,7 +17,6 @@ const minimalSpriteSheet: SpriteSheetConfig = {
 };
 
 const validSkill: ActionSkillDefinition = {
-  definitionKind: "action_skill",
   id: "test_skill" as SkillId,
   name: "Test",
   targetPolicy: { type: "enemy_melee" },

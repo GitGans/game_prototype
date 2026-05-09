@@ -9,7 +9,7 @@ const firstSkillId = skillKeys[0] as SkillId;
 describe("resolveSkillDefinition", () => {
   it("returns an ActionSkillDefinition for a known SkillId", () => {
     const skill = resolveSkillDefinition(firstSkillId);
-    expect(skill.definitionKind).toBe("action_skill");
+    expect(Array.isArray(skill.actions)).toBe(true);
     expect(typeof skill.id).toBe("string");
   });
 

@@ -1,95 +1,67 @@
 import type {
-  LeveledMultiplierMatrix,
+  ScalingMultiplierMatrix,
+  ScalingProbabilityMatrix,
   EffectAreaMatrix,
   AreaPatternCell,
 } from "../../shared/skillTypes";
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const P = (m: number) => ({ multiplier: m });
 const A = (): AreaPatternCell => ({ multiplier: 1 as const });
 
-// ─── Named Multiplier Matrices ────────────────────────────────────────────────────
+// ─── Named Multiplier Matrices ────────────────────────────────────────────────
 //
 // Each entry is a named, reusable multiplier matrix.
-// Level keys are authored explicitly. Runtime resolves exact levels only.
+// Values are computed at runtime by linear formula: baseValue + perLevelIncrease * (level - 1).
 // Multiple skills can share the same matrix name.
 
-export const MULTIPLIER_MATRICES: Record<string, LeveledMultiplierMatrix> = {
-  /** Single cell, 100% damage. */
+export const MULTIPLIER_MATRICES: Record<string, ScalingMultiplierMatrix> = {
+  /** Single cell. */
   single: {
-    levels: {
-      1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.1)]] },
-      10: { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)]] },
-      12: { anchorRow: 0, anchorCol: 0, cells: [[P(1.25)]] },
-    },
+    anchorRow: 0, anchorCol: 0,
+    cells: [[P(0.1)]],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
+
   cross_flat: {
-    levels: {
-      1: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.1), null],
-          [P(0.1), P(0.1), P(0.1)],
-          [null, P(0.1), null],
-        ],
-      },
-      2: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.2), null],
-          [P(0.2), P(0.2), P(0.2)],
-          [null, P(0.2), null],
-        ],
-      },
-    },
+    anchorRow: 1, anchorCol: 1,
+    cells: [
+      [null,   P(0.1), null  ],
+      [P(0.1), P(0.1), P(0.1)],
+      [null,   P(0.1), null  ],
+    ],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /**
-   * Cross: center 100%, 4 orthogonal neighbours 20%.
+   * Cross: center + 4 orthogonal neighbours.
    *   [ ]  [X]  [ ]
    *   [X]  [X]  [X]
    *   [ ]  [X]  [ ]
    */
   cross: {
-    levels: {
-      1: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.2), null],
-          [P(0.2), P(1.0), P(0.2)],
-          [null, P(0.2), null],
-        ],
-      },
-      2: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.4), null],
-          [P(0.4), P(1.0), P(0.4)],
-          [null, P(0.4), null],
-        ],
-      },
-    },
+    anchorRow: 1, anchorCol: 1,
+    cells: [
+      [null,   P(0.1), null  ],
+      [P(0.1), P(0.1), P(0.1)],
+      [null,   P(0.1), null  ],
+    ],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
-  /** All 3 cells in target row at 100%. */
+  /** All 3 cells in target row. */
   row_sweep: {
-    levels: {
-      1: { anchorRow: 0, anchorCol: 1, cells: [[P(1.0), P(1.0), P(1.0)]] },
-      2: { anchorRow: 0, anchorCol: 1, cells: [[P(1.3), P(1.3), P(1.3)]] },
-    },
+    anchorRow: 0, anchorCol: 1,
+    cells: [[P(0.1), P(0.1), P(0.1)]],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
-  /** Target cell 100%, same column next row 50%. */
+  /** Target cell + same column in next row. */
   pierce: {
-    levels: {
-      1: { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)], [P(0.5)]] },
-      2: { anchorRow: 0, anchorCol: 0, cells: [[P(1.0)], [P(0.75)]] },
-    },
+    anchorRow: 0, anchorCol: 0,
+    cells: [[P(0.1)], [P(0.1)]],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 };
 
@@ -134,131 +106,61 @@ export const EFFECT_AREA_MATRICES: Record<string, EffectAreaMatrix> = {
 // Cell multiplier values represent success PROBABILITY (0–1), not a damage
 // scaling factor. These matrices drive provoke/distract probability rolls.
 // Dodge / block / defense do NOT apply to this roll.
-// Level keys are authored explicitly. Runtime resolves exact levels only.
+// Values are computed at runtime by linear formula and clamped to [0..1].
 
-export const PROBABILITY_MATRICES: Record<string, LeveledMultiplierMatrix> = {
+export const PROBABILITY_MATRICES: Record<string, ScalingProbabilityMatrix> = {
   /** Single target. */
   single: {
-    levels: {
-      1: { anchorRow: 0, anchorCol: 0, cells: [[P(0.6)]] },
-      2: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-      3: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-      4: { anchorRow: 0, anchorCol: 0, cells: [[P(1)]] },
-    },
+    anchorRow: 0, anchorCol: 0,
+    cells: [[P(0.1)]],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /** 3 cells in one row. */
   row_sweep: {
-    levels: {
-      1: {
-        anchorRow: 0,
-        anchorCol: 1,
-        cells: [[P(0.6), P(0.6), P(0.6)]],
-      },
-    },
+    anchorRow: 0, anchorCol: 1,
+    cells: [[P(0.1), P(0.1), P(0.1)]],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /** 2 cells in one row. */
   shot_sweep: {
-    levels: {
-      1: {
-        anchorRow: 0,
-        anchorCol: 0,
-        cells: [[P(0.5), P(0.5)]],
-      },
-      2: {
-        anchorRow: 0,
-        anchorCol: 0,
-        cells: [[P(0.8), P(0.8)]],
-      },
-    },
+    anchorRow: 0, anchorCol: 0,
+    cells: [[P(0.1), P(0.1)]],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
-  /** 3x3 area. */
+  /** 3×3 area. */
   all: {
-    levels: {
-      1: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(0.3), P(0.3), P(0.3)],
-          [P(0.3), P(0.3), P(0.3)],
-          [P(0.3), P(0.3), P(0.3)],
-        ],
-      },
-      2: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(0.4), P(0.4), P(0.4)],
-          [P(0.4), P(0.4), P(0.4)],
-          [P(0.4), P(0.4), P(0.4)],
-        ],
-      },
-      3: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(0.5), P(0.5), P(0.5)],
-          [P(0.5), P(0.5), P(0.5)],
-          [P(0.5), P(0.5), P(0.5)],
-        ],
-      },
-      4: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [P(1), P(1), P(1)],
-          [P(1), P(1), P(1)],
-          [P(1), P(1), P(1)],
-        ],
-      },
-    },
+    anchorRow: 1, anchorCol: 1,
+    cells: [
+      [P(0.1), P(0.1), P(0.1)],
+      [P(0.1), P(0.1), P(0.1)],
+      [P(0.1), P(0.1), P(0.1)],
+    ],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /**
    * Cross: center + 4 orthogonal neighbours.
+   *   [ ]  [X]  [ ]
+   *   [X]  [X]  [X]
+   *   [ ]  [X]  [ ]
    */
   cross: {
-    levels: {
-      1: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.5), null],
-          [P(0.5), P(0.1), P(0.5)],
-          [null, P(0.5), null],
-        ],
-      },
-      2: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.4), null],
-          [P(0.4), P(0.7), P(0.4)],
-          [null, P(0.4), null],
-        ],
-      },
-      3: {
-        anchorRow: 1,
-        anchorCol: 1,
-        cells: [
-          [null, P(0.3), null],
-          [P(0.3), P(1), P(0.3)],
-          [null, P(0.3), null],
-        ],
-      },
-    },
+    anchorRow: 1, anchorCol: 1,
+    cells: [
+      [null,   P(0.1), null  ],
+      [P(0.1), P(0.1), P(0.1)],
+      [null,   P(0.1), null  ],
+    ],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 
   /** Main target + one additional target. */
   pierce: {
-    levels: {
-      1: {
-        anchorRow: 0,
-        anchorCol: 0,
-        cells: [[P(0.75), P(1)]],
-      },
-    },
+    anchorRow: 0, anchorCol: 0,
+    cells: [[P(0.1), P(0.1)]],
+    scaling: { anchorPerLevelIncrease: 0.05, otherPerLevelIncrease: 0.05 },
   },
 };
