@@ -3,7 +3,7 @@ import type {
   SkillDefinitionAction,
 } from '../shared/skillDefinitionTypes';
 import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
-import { STAT_EFFECTS, PERIODIC_HP_EFFECTS } from '../data/skillDefinitions';
+import { STAT_EFFECTS, PERIODIC_HP_EFFECTS } from '../data/skills';
 import { resolveStatEffect } from './skillEffectCompiler';
 
 function compileAction(action: SkillDefinitionAction): SkillUseAction {

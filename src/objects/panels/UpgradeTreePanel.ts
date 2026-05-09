@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { UpgradeTreePhase, UpgradeTierSnapshot } from '../../core/phases';
+import type { UpgradeOptionId } from '../../shared/unitTypes';
 import { UpgradeCard, UpgradeCardStatus } from '../UpgradeCard';
 import { Button } from '../../ui/Button';
 import { scaled } from '../../ui/layout';
@@ -19,14 +20,14 @@ export interface UpgradeTreePanelConfig {
   h:               number;
   phase:           UpgradeTreePhase;
   onBack:          () => void;
-  onChooseUpgrade: (templateId: string, tierId: 5 | 10 | 15 | 20, upgradeId: string) => void;
+  onChooseUpgrade: (templateId: string, tierId: 5 | 10 | 15 | 20, upgradeId: UpgradeOptionId) => void;
 }
 
 export class UpgradeTreePanel {
   private scene:           Phaser.Scene;
   private w:               number;
   private h:               number;
-  private onChooseUpgrade: (templateId: string, tierId: 5 | 10 | 15 | 20, upgradeId: string) => void;
+  private onChooseUpgrade: (templateId: string, tierId: 5 | 10 | 15 | 20, upgradeId: UpgradeOptionId) => void;
   private tierContainer:   Phaser.GameObjects.Container | null = null;
 
   constructor(cfg: UpgradeTreePanelConfig) {

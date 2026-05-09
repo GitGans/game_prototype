@@ -9,7 +9,7 @@ import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { buildSkillIconSnapshot } from './unitUpgradePresentation';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
-import { PLAYER_UNITS } from '../data/unitDefinitions';
+import { PLAYER_UNITS } from '../data/units';
 
 // unitState should always be present for player units.
 // undefined is a defensive fallback — callers should not rely on it for normal flow.

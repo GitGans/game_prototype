@@ -2,7 +2,7 @@ import type { DamageModifierRef, PostDamageEffect } from '../shared/skillTypes';
 import {
   DAMAGE_MODIFIER_LEVELS,
   VAMPIRISM_LEVELS,
-} from '../data/skillDefinitions';
+} from '../data/skills';
 import { requireSkillLevel } from './skillLevels';
 
 /** Returns the ignore-% for a DamageModifierRef. Missing levels throw. */

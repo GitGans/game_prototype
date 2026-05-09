@@ -1,7 +1,9 @@
 import { UnitBlueprint, UnitUpgradeOption, UnitProgressionStatModifiers, SpriteSheetConfig } from '../battle/types';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
+import type { UpgradeOptionId } from '../shared/unitTypes';
+import { resolveOptionalSkillDefinition } from './skillResolver';
 
-export type UnitUpgradeChoices = Partial<Record<5 | 10 | 15 | 20, string>>;
+export type UnitUpgradeChoices = Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>;
 
 export interface ResolvedUnitProgression {
   chosenUpgrades: UnitUpgradeOption[];
@@ -51,9 +53,11 @@ function resolveSkillsFromUpgrades(
   upgrades: UnitUpgradeOption[],
 ): ActionSkillDefinition[] {
   const skills: ActionSkillDefinition[] = [];
-  if (blueprint.baseSkill) skills.push(blueprint.baseSkill);
+  const base = resolveOptionalSkillDefinition(blueprint.baseSkillId);
+  if (base) skills.push(base);
   for (const option of upgrades) {
-    if (option.skill) skills.push(option.skill);
+    const skill = resolveOptionalSkillDefinition(option.skillId);
+    if (skill) skills.push(skill);
   }
   return skills;
 }

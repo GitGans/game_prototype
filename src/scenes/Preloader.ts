@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PLAYER_UNITS, ENEMY_UNITS } from '../data/unitDefinitions';
+import { PLAYER_UNITS, ENEMY_UNITS } from '../data/units';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { SpriteSheetConfig } from '../battle/types';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';

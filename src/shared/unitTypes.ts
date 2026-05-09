@@ -1,5 +1,23 @@
 import type { UnitShape } from './gridTypes';
-import type { ActionSkillDefinition } from './skillDefinitionTypes';
+import type { SkillId } from './skillDefinitionTypes';
+
+// ---------------------------------------------------------------------------
+// Upgrade Option ID
+// ---------------------------------------------------------------------------
+
+declare const __upgradeOptionIdBrand: unique symbol;
+
+/**
+ * Branded string that identifies a specific upgrade option within a unit's
+ * upgrade tiers. Distinct from SkillId — multiple upgrade options can grant
+ * the same skill across different units or tiers.
+ *
+ * Convention: "{templateId}_{tierId}_{skillKey}"
+ * Example:    "soldier_5_pierce"
+ *
+ * Create only via uid() in data/units/upgradeOptionHelpers.ts. Never cast directly.
+ */
+export type UpgradeOptionId = string & { readonly [__upgradeOptionIdBrand]: never };
 
 export type SpriteState = 'idle' | 'attack' | 'death';
 
@@ -44,10 +62,10 @@ export interface UnitBattleStats {
 }
 
 export interface UnitUpgradeOption {
-  id: string;
+  id: UpgradeOptionId;
   name: string;
   description?: string;
-  skill?: ActionSkillDefinition;
+  skillId?: SkillId;
   statModifiers?: UnitProgressionStatModifiers;
   spriteSheet?: SpriteSheetConfig;
 }
@@ -57,14 +75,9 @@ export interface UnitUpgradeTier {
   options: UnitUpgradeOption[];
 }
 
-export interface SkillTier {
+export interface EnemySkillUnlock {
   unlocksAtLevel: 0 | 5 | 10 | 15 | 20;
-  options: ActionSkillDefinition[];
-}
-
-export interface EnemyLevelSkill {
-  unlocksAtLevel: 5 | 10 | 15 | 20;
-  skill: ActionSkillDefinition;
+  skillId: SkillId;
 }
 
 export interface UnitBlueprint {
@@ -80,10 +93,9 @@ export interface UnitBlueprint {
   level: number;
   initiative: number;
   shape: UnitShape;
-  baseSkill?: ActionSkillDefinition;                // player units only; auto-learned at level 0
-  upgradeTiers?: UnitUpgradeTier[];  // player units only; tiers 5/10/15/20
-  skillTiers?: SkillTier[];         // enemy units only; tier 0 base skill
-  levelSkills?: EnemyLevelSkill[];  // enemy-only; absent on player blueprints
+  baseSkillId?: SkillId;              // player units only; auto-learned at level 0
+  upgradeTiers?: UnitUpgradeTier[];   // player units only; tiers 5/10/15/20
+  enemySkillUnlocks?: EnemySkillUnlock[];  // enemy units only; replaces skillTiers + levelSkills
   rowTrait: RowTrait;
   race?: UnitRace;
   unitClass: UnitClass;

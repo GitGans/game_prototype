@@ -4,7 +4,7 @@ import { DebugBattleState, createDebugBattleState } from './DebugBattleState';
 import { GameState } from './GameState';
 import { EventBus, Events } from './EventBus';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
-import { PLAYER_UNITS } from '../data/unitDefinitions';
+import { PLAYER_UNITS } from '../data/units';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { initSubMapState } from '../world/mapLogic';
 import { SubMapDefinition, SubMapState } from '../world/types';
@@ -44,6 +44,7 @@ import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
+import { resolveOptionalSkillDefinition } from './skillResolver';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
@@ -173,7 +174,7 @@ class PhaseManagerClass {
   private buildUpgradeTiers(
     templateId: string,
     debugLevel?: number,
-    debugChosenUpgrades?: Partial<Record<5 | 10 | 15 | 20, string>>,
+    debugChosenUpgrades?: UnitUpgradeChoices,
   ): UpgradeTierSnapshot[] {
     const bp = PLAYER_UNITS.find(u => u.templateId === templateId);
     if (!bp) return [];
@@ -182,16 +183,19 @@ class PhaseManagerClass {
     const chosenUpgrades = debugChosenUpgrades ?? unitState?.chosenUpgrades ?? {};
     return (bp.upgradeTiers ?? []).map(tier => ({
       tierId: tier.unlocksAtLevel,
-      options: tier.options.map((upg): UpgradeOptionSnapshot => ({
-        id:           upg.id,
-        name:         upg.name,
-        description:  buildUnitUpgradeDescription(upg),
-        skill:        upg.skill ? toSkillIcon(upg.skill) : null,
-        statLines:    buildUnitUpgradeStatLines(upg.statModifiers ?? {}),
-        spritePreview: upg.spriteSheet
-          ? getUnitSpriteTextureKey(bp.templateId, upg.spriteSheet)
-          : null,
-      })),
+      options: tier.options.map((upg): UpgradeOptionSnapshot => {
+        const skill = resolveOptionalSkillDefinition(upg.skillId);
+        return {
+          id:           upg.id,
+          name:         upg.name,
+          description:  buildUnitUpgradeDescription(upg, skill),
+          skill:        skill ? toSkillIcon(skill) : null,
+          statLines:    buildUnitUpgradeStatLines(upg.statModifiers ?? {}),
+          spritePreview: upg.spriteSheet
+            ? getUnitSpriteTextureKey(bp.templateId, upg.spriteSheet)
+            : null,
+        };
+      }),
       chosenUpgradeId: chosenUpgrades[tier.unlocksAtLevel] ?? null,
       isLocked: level < tier.unlocksAtLevel,
     }));

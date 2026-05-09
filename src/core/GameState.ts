@@ -14,6 +14,7 @@ import {
   resetTurnContextForNewBattle,
 } from '../battle/turnResolver';
 import { BattleParticipant } from './phases';
+import type { UpgradeOptionId } from '../shared/unitTypes';
 import { SubMapState } from '../world/types';
 import { buildOccupancy } from "../battle/occupancy";
 
@@ -35,7 +36,7 @@ export interface PlayerUnitState {
   isInCamp: boolean;
   lastPlacement: CellCoord | null;
   permanentBonuses: Partial<BattleStatBonuses>;
-  chosenUpgrades: Partial<Record<5 | 10 | 15 | 20, string>>; // upgrade id per tier
+  chosenUpgrades: Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>; // upgrade option id per tier
 }
 
 export interface CampaignState {

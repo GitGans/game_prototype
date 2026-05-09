@@ -3,7 +3,7 @@ import {
   MULTIPLIER_MATRICES,
   EFFECT_AREA_MATRICES,
   PROBABILITY_MATRICES,
-} from '../data/skillDefinitions';
+} from '../data/skills';
 import type { PatternRef } from './skillUsePlan';
 import { requireSkillLevel } from './skillLevels';
 
