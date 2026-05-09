@@ -28,7 +28,7 @@ export type {
 
 import type { CellCoord, UnitShape } from '../shared/gridTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
-import type { SpriteSheetConfig, RowTrait, UnitRace } from '../shared/unitTypes';
+import type { SpriteSheetConfig, RowTrait, UnitRace, UnitClassId } from '../shared/unitTypes';
 import type { UnitActivatableAbility } from '../shared/itemTypes';
 
 export type { ActiveEffect } from '../shared/activeEffect';
@@ -46,6 +46,7 @@ export interface Unit {
   dodge: number;
   block: number;
   level: number;
+  classId: UnitClassId;
   initiative: number;
   shape: UnitShape;
   anchor: CellCoord;

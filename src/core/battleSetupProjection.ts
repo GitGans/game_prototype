@@ -43,6 +43,7 @@ export function buildPlayerAutoPlacementCandidates(
         savedAnchor: unitState?.lastPlacement ?? null,
         createUnit:  (anchor: CellCoord, id: string) => createUnitInstance({
           blueprint: bp, id, anchor, level,
+          classId:              progression.currentClassId,
           stats,
           skills:               progression.skills,
           spriteSheet:          progression.spriteSheet ?? bp.spriteSheet,
@@ -69,6 +70,7 @@ export function buildEnemyPlacementCandidates(
       rowTrait:   bp.rowTrait,
       createUnit: (anchor: CellCoord, id: string) => createUnitInstance({
         blueprint: bp, id, anchor, level,
+        classId:              bp.baseClassId,
         stats, skills,
         spriteSheet:          bp.spriteSheet,
         activatableAbilities: [],
@@ -100,6 +102,7 @@ export function buildEnemyReplayInputs(
       id:                   `e${counter++}`,
       anchor:               saved.anchor,
       level:                saved.level,
+      classId:              bp.baseClassId,
       stats, skills,
       spriteSheet:          bp.spriteSheet,
       activatableAbilities: [],
@@ -131,6 +134,7 @@ export function buildPlayerUnitInput(
   );
   return {
     blueprint: bp, id, anchor, level,
+    classId:              progression.currentClassId,
     stats,
     skills:               progression.skills,
     spriteSheet:          progression.spriteSheet ?? bp.spriteSheet,

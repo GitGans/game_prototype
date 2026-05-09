@@ -213,7 +213,8 @@ class PhaseManagerClass {
       return {
         templateId: bp.templateId,
         name:       bp.name,
-        baseClassId: bp.baseClassId,
+        classId:    progression.currentClassId,
+        className:  progression.currentClass.name,
         spriteKey:  this.spriteKeyFromProgression(bp.templateId, progression),
       };
     });
@@ -647,9 +648,11 @@ class PhaseManagerClass {
     if (action.type === 'equip_item') {
       const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
       if (bp) {
+        const chosenUpgrades = GameState.playerUnits[action.unitTemplateId]?.chosenUpgrades ?? {};
+        const progression    = resolveUnitProgression(bp, chosenUpgrades);
         equipItem(
           action.unitTemplateId,
-          bp.baseClassId,
+          progression.currentClassId,
           action.instanceId,
           GameState.itemContainers,
           GameState.itemInstances,
@@ -735,9 +738,11 @@ class PhaseManagerClass {
     if (action.type === 'equip_item' && prev.type === 'debug_equip_screen') {
       const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
       if (bp) {
+        const chosenUpgrades = this.debugState!.chosenUpgrades[action.unitTemplateId] ?? {};
+        const progression    = resolveUnitProgression(bp, chosenUpgrades);
         equipItem(
           action.unitTemplateId,
-          bp.baseClassId,
+          progression.currentClassId,
           action.instanceId,
           this.debugState!.itemContainers,
           this.debugState!.itemInstances,

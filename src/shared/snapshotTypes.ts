@@ -51,8 +51,9 @@ export interface EquipmentSnapshot {
 // ─── Unit Tab Snapshot ────────────────────────────────────────────────────────
 
 export interface UnitTabSnapshot {
-  templateId:  string;
-  name:        string;
-  baseClassId: UnitClassId;
-  spriteKey:   string | null;
+  templateId: string;
+  name:       string;
+  classId:    UnitClassId;
+  className:  string;
+  spriteKey:  string | null;
 }

@@ -1,4 +1,4 @@
-import type { UnitBlueprint, UnitBattleStats, SpriteSheetConfig } from '../shared/unitTypes';
+import type { UnitBlueprint, UnitBattleStats, SpriteSheetConfig, UnitClassId } from '../shared/unitTypes';
 import type { ActionSkillDefinition }  from '../shared/skillDefinitionTypes';
 import type { UnitActivatableAbility } from '../shared/itemTypes';
 import type { CellCoord }              from '../shared/gridTypes';
@@ -9,6 +9,7 @@ export interface CreateUnitInstanceInput {
   id:                   string;
   anchor:               CellCoord;
   level:                number;
+  classId:              UnitClassId;
   stats:                UnitBattleStats;
   skills:               ActionSkillDefinition[];
   spriteSheet:          SpriteSheetConfig | undefined;
@@ -16,7 +17,7 @@ export interface CreateUnitInstanceInput {
 }
 
 export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
-  const { blueprint: bp, id, anchor, level, stats, skills, spriteSheet, activatableAbilities } = input;
+  const { blueprint: bp, id, anchor, level, classId, stats, skills, spriteSheet, activatableAbilities } = input;
   return {
     id,
     name:                bp.name,
@@ -29,6 +30,7 @@ export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
     dodge:               stats.dodge,
     block:               stats.block,
     level,
+    classId,
     initiative:          stats.initiative,
     shape:               bp.shape,
     anchor,

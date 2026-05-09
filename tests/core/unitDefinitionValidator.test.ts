@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateUnitDefinitionCollections } from "../../src/core/unitDefinitionValidator";
+import { ucid } from "../../src/shared/unitTypes";
 import type { UnitBlueprint, UnitRace, SpriteSheetConfig, UpgradeOptionId } from "../../src/shared/unitTypes";
 import type { UnitShape } from "../../src/shared/gridTypes";
 import type { ActionSkillDefinition, SkillId } from "../../src/shared/skillDefinitionTypes";
@@ -30,7 +31,7 @@ const validSkills: Record<string, ActionSkillDefinition> = {
 const validPlayerUnit: UnitBlueprint = {
   templateId: "test_player",
   name: "P",
-  unitClass: "soldier",
+  baseClassId: ucid("soldier"),
   rowTrait: "front",
   hp: 10,
   physicalStrength: 1,
@@ -49,7 +50,7 @@ const validPlayerUnit: UnitBlueprint = {
 const validEnemyUnit: UnitBlueprint = {
   templateId: "test_enemy",
   name: "E",
-  unitClass: "soldier",
+  baseClassId: ucid("soldier"),
   rowTrait: "front",
   hp: 10,
   physicalStrength: 1,
@@ -80,6 +81,7 @@ describe("validateUnitDefinitionCollections", () => {
         playerUnits: [validPlayerUnit],
         enemyUnits: validEnemyUnits,
         skills: validSkills,
+        itemDefinitions: {},
       })
     ).not.toThrow();
   });
@@ -94,6 +96,7 @@ describe("validateUnitDefinitionCollections", () => {
         playerUnits: [bad],
         enemyUnits: validEnemyUnits,
         skills: validSkills,
+        itemDefinitions: {},
       })
     ).toThrow(/baseSkillId.*missing_skill/);
   });
@@ -111,6 +114,7 @@ describe("validateUnitDefinitionCollections", () => {
         playerUnits: [bad],
         enemyUnits: validEnemyUnits,
         skills: validSkills,
+        itemDefinitions: {},
       })
     ).toThrow(/ghost_skill/);
   });
@@ -125,6 +129,7 @@ describe("validateUnitDefinitionCollections", () => {
         playerUnits: [validPlayerUnit],
         enemyUnits: { orc: [bad], demon: [], undead: [] },
         skills: validSkills,
+        itemDefinitions: {},
       })
     ).toThrow(/ghost_skill/);
   });
@@ -143,6 +148,7 @@ describe("validateUnitDefinitionCollections", () => {
         playerUnits: [bad],
         enemyUnits: validEnemyUnits,
         skills: validSkills,
+        itemDefinitions: {},
       })
     ).toThrow(/duplicate upgrade option id/);
   });
