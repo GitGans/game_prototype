@@ -2,15 +2,19 @@ import type {
   ScalingMultiplierMatrix,
   ScalingProbabilityMatrix,
   SkillPattern,
-  EffectAreaMatrix,
-  EffectAreaPattern,
-  SkillLevel,
 } from '../shared/skillTypes';
-import { requireSkillLevel } from './skillLevels';
 
 // Shared computation — not exported. Called by both public resolver functions.
 function computeScaledPattern(matrix: ScalingMultiplierMatrix, level: number): SkillPattern {
-  if (level < 1) throw new Error(`Invalid skill level: ${level}. Level must be >= 1.`);
+  if (!Number.isInteger(level) || level < 1)
+    throw new Error(`Invalid skill level: ${level}. Level must be a positive integer.`);
+
+  const anchorCell = matrix.cells[matrix.anchorRow]?.[matrix.anchorCol];
+  if (!anchorCell)
+    throw new Error(
+      `Invalid matrix: anchor cell at [${matrix.anchorRow}][${matrix.anchorCol}] is null or out of bounds.`
+    );
+
   return {
     anchorRow: matrix.anchorRow,
     anchorCol: matrix.anchorCol,
@@ -51,17 +55,4 @@ export function resolveScalingProbabilityPattern(
       )
     ),
   };
-}
-
-// For apply_stat_effect actions. Keeps the leveled lookup model — EFFECT_AREA_MATRICES unchanged.
-// label must include the matrix name so the error message is readable.
-// Returns EffectAreaPattern, which is structurally compatible with SkillPattern
-// (AreaPatternCell = { multiplier: 1 } ⊂ PatternCell = { multiplier: number }).
-// tsc confirms this at the call site in resolvePlanPattern — no cast needed.
-export function resolveEffectAreaPattern(
-  matrix: EffectAreaMatrix,
-  level: SkillLevel,
-  label: string,
-): EffectAreaPattern {
-  return requireSkillLevel(matrix.levels, level, label);
 }

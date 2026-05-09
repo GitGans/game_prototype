@@ -2,9 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveScalingMultiplierPattern,
   resolveScalingProbabilityPattern,
-  resolveEffectAreaPattern,
 } from '../../src/battle/skillMatrixResolver';
-import type { ScalingSkillMatrix, EffectAreaMatrix } from '../../src/shared/skillTypes';
+import type { ScalingSkillMatrix } from '../../src/shared/skillTypes';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -74,6 +73,32 @@ describe('resolveScalingMultiplierPattern', () => {
   it('throws for negative level', () => {
     expect(() => resolveScalingMultiplierPattern(singleCell, -1)).toThrow();
   });
+
+  it('throws for NaN level', () => {
+    expect(() => resolveScalingMultiplierPattern(singleCell, Number.NaN)).toThrow();
+  });
+
+  it('throws for fractional level', () => {
+    expect(() => resolveScalingMultiplierPattern(singleCell, 1.5)).toThrow();
+  });
+
+  it('throws when anchor cell is null', () => {
+    const badAnchor: ScalingSkillMatrix = {
+      anchorRow: 0, anchorCol: 0,
+      cells: [[null]],
+      scaling: { anchorPerLevelIncrease: 0.1, otherPerLevelIncrease: 0.05 },
+    };
+    expect(() => resolveScalingMultiplierPattern(badAnchor, 1)).toThrow();
+  });
+
+  it('throws when anchor is out of bounds', () => {
+    const badAnchor: ScalingSkillMatrix = {
+      anchorRow: 5, anchorCol: 5,
+      cells: [[{ multiplier: 0.1 }]],
+      scaling: { anchorPerLevelIncrease: 0.1, otherPerLevelIncrease: 0.05 },
+    };
+    expect(() => resolveScalingMultiplierPattern(badAnchor, 1)).toThrow();
+  });
 });
 
 // ─── resolveScalingProbabilityPattern ────────────────────────────────────────
@@ -108,26 +133,5 @@ describe('resolveScalingProbabilityPattern', () => {
 
   it('throws for level < 1', () => {
     expect(() => resolveScalingProbabilityPattern(singleCell, 0)).toThrow();
-  });
-});
-
-// ─── resolveEffectAreaPattern ─────────────────────────────────────────────────
-
-describe('resolveEffectAreaPattern', () => {
-  const effectMatrix: EffectAreaMatrix = {
-    levels: {
-      1: { anchorRow: 0, anchorCol: 0, cells: [[{ multiplier: 1 }]] },
-    },
-  };
-
-  it('returns the pattern for an existing level', () => {
-    const result = resolveEffectAreaPattern(effectMatrix, 1, 'effect area matrix "single"');
-    expect(result.anchorRow).toBe(0);
-  });
-
-  it('throws with matrix name in the error for a missing level', () => {
-    expect(() =>
-      resolveEffectAreaPattern(effectMatrix, 5, 'effect area matrix "single"')
-    ).toThrow('effect area matrix "single"');
   });
 });

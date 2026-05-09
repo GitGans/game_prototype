@@ -49,7 +49,7 @@ export type CombatPowerSource = PowerSource;
 
 export type PatternRef =
   | { kind: 'multiplier_matrix'; matrixName: string; level: SkillLevel }
-  | { kind: 'effect_area_matrix'; matrixName: string; level: SkillLevel }
+  | { kind: 'effect_area_matrix'; matrixName: string }
   | { kind: 'probability_matrix'; matrixName: string; level: SkillLevel };
 
 export type MultiplierPatternRef = Extract<PatternRef, { kind: 'multiplier_matrix' }>;

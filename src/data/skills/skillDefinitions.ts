@@ -1,4 +1,7 @@
-import type { ActionSkillDefinition, SkillId } from "../../shared/skillDefinitionTypes";
+import type {
+  ActionSkillDefinition,
+  SkillId,
+} from "../../shared/skillDefinitionTypes";
 
 // ─── Skill Definitions ────────────────────────────────────────────────────────
 
@@ -58,7 +61,7 @@ export const SKILLS = {
         displayName: "Slow",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_area_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "effect_area_matrix", matrixName: "single" },
       },
     ],
   },
@@ -92,7 +95,7 @@ export const SKILLS = {
         displayName: "Defence",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_area_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "effect_area_matrix", matrixName: "single" },
       },
     ],
   },
@@ -132,7 +135,7 @@ export const SKILLS = {
       {
         type: "damage",
         powerSource: "magical_strength",
-        matrix: { kind: "multiplier_matrix", matrixName: "cross", level: 1 },
+        matrix: { kind: "multiplier_matrix", matrixName: "cross", level: 5 },
       },
       {
         type: "apply_periodic_hp_effect",
@@ -220,7 +223,7 @@ export const SKILLS = {
         displayName: "Weakened",
         level: 1,
         duration: 2,
-        matrix: { kind: "effect_area_matrix", matrixName: "single", level: 1 },
+        matrix: { kind: "effect_area_matrix", matrixName: "single" },
       },
     ],
   },
