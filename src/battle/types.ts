@@ -2,7 +2,7 @@
 export type { Side, Row, Col, CellCoord, ShapeOffset, UnitShape } from '../shared/gridTypes';
 export type {
   Effect,
-  PatternCell, SkillPattern, LeveledMultiplierMatrix,
+  PatternCell, SkillPattern,
   ProbabilityEffectType, ProbabilityEffectEvent,
   DamageModifierType,
   PostDamageType,

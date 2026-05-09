@@ -24,9 +24,21 @@ export interface SkillPattern {
   cells: (PatternCell | null)[][];
 }
 
-export interface LeveledMultiplierMatrix {
-  levels: SkillLevelTable<SkillPattern>;
+export interface ScalingSkillMatrix {
+  anchorRow: number;
+  anchorCol: number;
+  cells: (PatternCell | null)[][];  // base multiplier values at level 1
+  scaling: {
+    anchorPerLevelIncrease: number;
+    otherPerLevelIncrease: number;
+  };
 }
+
+// Semantic aliases — same underlying type, but registries and function signatures
+// communicate which contract (multiplier vs probability) is expected.
+// Must be used consistently everywhere: registries, resolver signatures, call sites.
+export type ScalingMultiplierMatrix = ScalingSkillMatrix;
+export type ScalingProbabilityMatrix = ScalingSkillMatrix;
 
 export type AreaPatternCell = { multiplier: 1 };
 

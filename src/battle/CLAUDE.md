@@ -71,6 +71,14 @@ All skills in `data/skills/skillDefinitions.ts` are authored as `ActionSkillDefi
 
 The executor (`skillExecution.ts`) and counter-attack both run through `SkillUsePlan` exclusively.
 
+**Matrix resolution**
+- `skillMatrixResolver.ts` is the single module containing all pattern computation logic.
+- `MULTIPLIER_MATRICES` and `PROBABILITY_MATRICES` use `ScalingSkillMatrix` — values are computed
+  by linear formula for any requested level >= 1; there are no explicit level entries authored.
+- `EFFECT_AREA_MATRICES` keep the leveled lookup model and still use `requireSkillLevel`.
+- `resolvePlanPattern()` in `skillPlanPatterns.ts` is a thin facade used by both preview and
+  execution; it delegates to `skillMatrixResolver` for all three matrix kinds.
+
 **Targeting**
 - `SkillUsePlan.targetPolicy` is authoritative for target resolution, auto/quick target choice,
   manual prompt kind, and target highlight kind.

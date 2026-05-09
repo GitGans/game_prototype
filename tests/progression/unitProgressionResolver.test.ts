@@ -101,7 +101,7 @@ describe("resolveUnitProgression", () => {
     expect(result.chosenUpgrades).toHaveLength(1);
     expect(result.chosenUpgrades[0].id).toBe(optionId);
     expect(result.skills).toHaveLength(2);
-    expect(result.skills.every(s => s.definitionKind === "action_skill")).toBe(true);
+    expect(result.skills.every(s => Array.isArray(s.actions))).toBe(true);
     expect(result.skills[0].id).toBe(baseSkillId);
     expect(result.skills[1].id).toBe(upgradeSkillId);
   });
