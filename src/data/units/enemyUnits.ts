@@ -1,4 +1,5 @@
 import type { UnitBlueprint, UnitRace } from "../../shared/unitTypes";
+import { ucid } from "../../shared/unitTypes";
 import { SHAPES } from "../shapeDefinitions";
 import { sid } from "../skills";
 
@@ -7,7 +8,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_tank",
       name: "Orc Guardian",
-      unitClass: "tank",
+      baseClassId: ucid("tank"),
       hp: 140,
       physicalStrength: 18,
       magicalStrength: 0,
@@ -35,7 +36,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_dd",
       name: "Orc Fighter",
-      unitClass: "warrior",
+      baseClassId: ucid("warrior"),
       hp: 90,
       physicalStrength: 24,
       magicalStrength: 0,
@@ -63,7 +64,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_archer",
       name: "Orc Archer",
-      unitClass: "archer",
+      baseClassId: ucid("archer"),
       hp: 75,
       physicalStrength: 22,
       magicalStrength: 0,
@@ -91,7 +92,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_mage",
       name: "Orc Shaman",
-      unitClass: "shaman",
+      baseClassId: ucid("shaman"),
       hp: 70,
       physicalStrength: 0,
       magicalStrength: 25,
@@ -119,7 +120,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "orc_healer",
       name: "Orc Witch Doctor",
-      unitClass: "healer",
+      baseClassId: ucid("healer"),
       hp: 70,
       physicalStrength: 0,
       magicalStrength: 20,
@@ -149,7 +150,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_tank",
       name: "Demon Guardian",
-      unitClass: "warrior",
+      baseClassId: ucid("warrior"),
       hp: 108,
       physicalStrength: 18,
       magicalStrength: 18,
@@ -177,7 +178,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_dd",
       name: "Demon",
-      unitClass: "warrior",
+      baseClassId: ucid("warrior"),
       hp: 80,
       physicalStrength: 28,
       magicalStrength: 0,
@@ -205,7 +206,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_archer",
       name: "Demon Archer",
-      unitClass: "ranger",
+      baseClassId: ucid("ranger"),
       hp: 65,
       physicalStrength: 25,
       magicalStrength: 0,
@@ -233,7 +234,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_mage",
       name: "Warlock",
-      unitClass: "mage",
+      baseClassId: ucid("mage"),
       hp: 65,
       physicalStrength: 0,
       magicalStrength: 28,
@@ -261,7 +262,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "demon_healer",
       name: "Fallen Priest",
-      unitClass: "priest",
+      baseClassId: ucid("priest"),
       hp: 65,
       physicalStrength: 0,
       magicalStrength: 20,
@@ -291,7 +292,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_tank",
       name: "Bone Guardian",
-      unitClass: "warrior",
+      baseClassId: ucid("warrior"),
       hp: 120,
       physicalStrength: 13,
       magicalStrength: 0,
@@ -319,7 +320,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_dd",
       name: "Zombie",
-      unitClass: "warrior",
+      baseClassId: ucid("warrior"),
       hp: 90,
       physicalStrength: 22,
       magicalStrength: 0,
@@ -347,7 +348,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_archer",
       name: "Skeleton Archer",
-      unitClass: "ranger",
+      baseClassId: ucid("ranger"),
       hp: 70,
       physicalStrength: 20,
       magicalStrength: 0,
@@ -375,7 +376,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_mage",
       name: "Necromancer",
-      unitClass: "mage",
+      baseClassId: ucid("mage"),
       hp: 70,
       physicalStrength: 0,
       magicalStrength: 22,
@@ -403,7 +404,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
     {
       templateId: "undead_healer",
       name: "Lich",
-      unitClass: "priest",
+      baseClassId: ucid("priest"),
       hp: 70,
       physicalStrength: 0,
       magicalStrength: 18,

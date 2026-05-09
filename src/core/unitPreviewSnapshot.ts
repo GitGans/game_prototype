@@ -4,7 +4,7 @@ import type { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
 import type { SkillIconSnapshot } from '../shared/snapshotTypes';
 import type { BenchUnitRef } from '../battle/types';
-import { resolveUnitProgression } from './unitProgression';
+import { resolveUnitProgression } from '../progression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { buildSkillIconSnapshot } from './unitUpgradePresentation';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';

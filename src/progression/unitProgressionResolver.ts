@@ -1,16 +1,13 @@
-import { UnitBlueprint, UnitUpgradeOption, UnitProgressionStatModifiers, SpriteSheetConfig } from '../battle/types';
+import type {
+  UnitBlueprint,
+  UnitUpgradeOption,
+  UnitProgressionStatModifiers,
+  SpriteSheetConfig,
+} from '../shared/unitTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
-import type { UpgradeOptionId } from '../shared/unitTypes';
 import { resolveOptionalSkillDefinition } from './skillResolver';
-
-export type UnitUpgradeChoices = Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>;
-
-export interface ResolvedUnitProgression {
-  chosenUpgrades: UnitUpgradeOption[];
-  skills: ActionSkillDefinition[];
-  statModifiers: UnitProgressionStatModifiers;
-  spriteSheet: SpriteSheetConfig | undefined;
-}
+import { resolveUnitClassDefinition } from './unitClassResolver';
+import type { UnitUpgradeChoices, ResolvedUnitProgression } from './progressionTypes';
 
 export function resolveChosenUnitUpgrades(
   blueprint: UnitBlueprint,
@@ -36,14 +33,14 @@ export function computeUnitUpgradeStatModifiers(
   for (const upgrade of upgrades) {
     const m = upgrade.statModifiers;
     if (!m) continue;
-    result.hp              = (result.hp              ?? 0) + (m.hp              ?? 0);
-    result.physicalStrength  = (result.physicalStrength  ?? 0) + (m.physicalStrength  ?? 0);
-    result.magicalStrength   = (result.magicalStrength   ?? 0) + (m.magicalStrength   ?? 0);
-    result.physicalDefense = (result.physicalDefense ?? 0) + (m.physicalDefense ?? 0);
-    result.magicalDefense  = (result.magicalDefense  ?? 0) + (m.magicalDefense  ?? 0);
-    result.dodge           = (result.dodge           ?? 0) + (m.dodge           ?? 0);
-    result.block           = (result.block           ?? 0) + (m.block           ?? 0);
-    result.initiative      = (result.initiative      ?? 0) + (m.initiative      ?? 0);
+    result.hp               = (result.hp               ?? 0) + (m.hp               ?? 0);
+    result.physicalStrength = (result.physicalStrength  ?? 0) + (m.physicalStrength  ?? 0);
+    result.magicalStrength  = (result.magicalStrength   ?? 0) + (m.magicalStrength   ?? 0);
+    result.physicalDefense  = (result.physicalDefense   ?? 0) + (m.physicalDefense   ?? 0);
+    result.magicalDefense   = (result.magicalDefense    ?? 0) + (m.magicalDefense    ?? 0);
+    result.dodge            = (result.dodge             ?? 0) + (m.dodge             ?? 0);
+    result.block            = (result.block             ?? 0) + (m.block             ?? 0);
+    result.initiative       = (result.initiative        ?? 0) + (m.initiative        ?? 0);
   }
   return result;
 }
@@ -78,11 +75,22 @@ export function resolveUnitProgression(
   chosenUpgradeIds: UnitUpgradeChoices,
 ): ResolvedUnitProgression {
   const chosenUpgrades = resolveChosenUnitUpgrades(blueprint, chosenUpgradeIds);
+
+  // chosenUpgrades is sorted ascending by tier, so later entries overwrite earlier ones.
+  // If multiple upgrades define classId, the highest tier wins.
+  let currentClassId = blueprint.baseClassId;
+  for (const upgrade of chosenUpgrades) {
+    if (upgrade.classId) {
+      currentClassId = upgrade.classId;
+    }
+  }
+
   return {
     chosenUpgrades,
     skills:        resolveSkillsFromUpgrades(blueprint, chosenUpgrades),
     statModifiers: computeUnitUpgradeStatModifiers(chosenUpgrades),
     spriteSheet:   resolveSpriteSheetFromUpgrades(blueprint, chosenUpgrades),
+    currentClassId,
+    currentClass:  resolveUnitClassDefinition(currentClassId),
   };
 }
-

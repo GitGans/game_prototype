@@ -73,6 +73,11 @@ const RULES = [
       'objects/prepVisualTheme',
     ],
   },
+  {
+    layer: 'progression/**',
+    dir: join(SRC, 'progression'),
+    banned: ['core/', 'battle/', 'objects/', 'scenes/', 'ui/', 'world/'],
+  },
 ];
 
 // Matches both `import ... from 'x'` and `export ... from 'x'`

@@ -43,8 +43,8 @@ import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import { hasChargedThisRound } from '../battle/turnResolver';
-import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from './unitProgression';
-import { resolveOptionalSkillDefinition } from './skillResolver';
+import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from '../progression';
+import { resolveOptionalSkillDefinition } from '../progression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
@@ -213,7 +213,8 @@ class PhaseManagerClass {
       return {
         templateId: bp.templateId,
         name:       bp.name,
-        unitClass:  bp.unitClass,
+        classId:    progression.currentClassId,
+        className:  progression.currentClass.name,
         spriteKey:  this.spriteKeyFromProgression(bp.templateId, progression),
       };
     });
@@ -647,9 +648,11 @@ class PhaseManagerClass {
     if (action.type === 'equip_item') {
       const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
       if (bp) {
+        const chosenUpgrades = GameState.playerUnits[action.unitTemplateId]?.chosenUpgrades ?? {};
+        const progression    = resolveUnitProgression(bp, chosenUpgrades);
         equipItem(
           action.unitTemplateId,
-          bp.unitClass,
+          progression.currentClassId,
           action.instanceId,
           GameState.itemContainers,
           GameState.itemInstances,
@@ -735,9 +738,11 @@ class PhaseManagerClass {
     if (action.type === 'equip_item' && prev.type === 'debug_equip_screen') {
       const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
       if (bp) {
+        const chosenUpgrades = this.debugState!.chosenUpgrades[action.unitTemplateId] ?? {};
+        const progression    = resolveUnitProgression(bp, chosenUpgrades);
         equipItem(
           action.unitTemplateId,
-          bp.unitClass,
+          progression.currentClassId,
           action.instanceId,
           this.debugState!.itemContainers,
           this.debugState!.itemInstances,

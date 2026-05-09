@@ -30,14 +30,25 @@ export interface SpriteSheetConfig {
 
 export type RowTrait = 'front' | 'back';
 export type UnitRace = 'orc' | 'demon' | 'undead';
-export type UnitClass =
-  | 'warrior' | 'ranger' | 'mage' | 'priest'
-  | 'pikeman' | 'halberdist' | 'crusher'
-  | 'archer' | 'crossbowman' | 'stormbearer'
-  | 'hieromonk' | 'warcryer' | 'therapist' | 'schemamonk'
-  | 'tank'
-  | 'soldier' | 'guard' | 'brawler' | 'marksman' | 'forest_ranger'
-  | 'elementalist' | 'monk' | 'troublemaker' | 'healer' | 'shaman' | 'destroyer';
+declare const __unitClassIdBrand: unique symbol;
+
+/**
+ * Branded string identifying a unit class.
+ * Create only via ucid() in unitTypes.ts. Never cast directly.
+ */
+export type UnitClassId = string & { readonly [__unitClassIdBrand]: never };
+
+export function ucid(id: string): UnitClassId {
+  return id as UnitClassId;
+}
+
+export interface UnitClassDefinition {
+  id: UnitClassId;
+  name: string;
+  description?: string;
+  icon?: string;
+  tags?: readonly string[];
+}
 
 export interface UnitProgressionStatModifiers {
   hp?: number;
@@ -68,6 +79,11 @@ export interface UnitUpgradeOption {
   skillId?: SkillId;
   statModifiers?: UnitProgressionStatModifiers;
   spriteSheet?: SpriteSheetConfig;
+  /**
+   * If this upgrade option is chosen, this class id becomes the unit's current class.
+   * If omitted, the option does not change the current class.
+   */
+  classId?: UnitClassId;
 }
 
 export interface UnitUpgradeTier {
@@ -98,6 +114,6 @@ export interface UnitBlueprint {
   enemySkillUnlocks?: EnemySkillUnlock[];  // enemy units only; replaces skillTiers + levelSkills
   rowTrait: RowTrait;
   race?: UnitRace;
-  unitClass: UnitClass;
+  baseClassId: UnitClassId;
   spriteSheet?: SpriteSheetConfig;
 }

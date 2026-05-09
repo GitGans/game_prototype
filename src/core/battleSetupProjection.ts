@@ -1,13 +1,13 @@
 import { PLAYER_UNITS, ENEMY_UNITS }      from '../data/units';
 import { ITEM_DEFINITIONS }               from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from '../battle/itemOps';
-import { resolveUnitProgression }         from './unitProgression';
+import { resolveUnitProgression }         from '../progression';
 import { createUnitInstance, type CreateUnitInstanceInput } from '../battle/unitFactory';
 import type { PlayerBattleSetup }         from './battleSetup';
 import type { PlayerPlacementCandidate, EnemyPlacementCandidates } from '../battle/autoPlace';
 import type { UnitBlueprint, UnitRace }   from '../shared/unitTypes';
 import type { ActionSkillDefinition }      from '../shared/skillDefinitionTypes';
-import { resolveSkillDefinition }          from './skillResolver';
+import { resolveSkillDefinition }          from '../progression';
 import type { CellCoord }                 from '../shared/gridTypes';
 
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): ActionSkillDefinition[] {
@@ -43,6 +43,7 @@ export function buildPlayerAutoPlacementCandidates(
         savedAnchor: unitState?.lastPlacement ?? null,
         createUnit:  (anchor: CellCoord, id: string) => createUnitInstance({
           blueprint: bp, id, anchor, level,
+          classId:              progression.currentClassId,
           stats,
           skills:               progression.skills,
           spriteSheet:          progression.spriteSheet ?? bp.spriteSheet,
@@ -69,6 +70,7 @@ export function buildEnemyPlacementCandidates(
       rowTrait:   bp.rowTrait,
       createUnit: (anchor: CellCoord, id: string) => createUnitInstance({
         blueprint: bp, id, anchor, level,
+        classId:              bp.baseClassId,
         stats, skills,
         spriteSheet:          bp.spriteSheet,
         activatableAbilities: [],
@@ -100,6 +102,7 @@ export function buildEnemyReplayInputs(
       id:                   `e${counter++}`,
       anchor:               saved.anchor,
       level:                saved.level,
+      classId:              bp.baseClassId,
       stats, skills,
       spriteSheet:          bp.spriteSheet,
       activatableAbilities: [],
@@ -131,6 +134,7 @@ export function buildPlayerUnitInput(
   );
   return {
     blueprint: bp, id, anchor, level,
+    classId:              progression.currentClassId,
     stats,
     skills:               progression.skills,
     spriteSheet:          progression.spriteSheet ?? bp.spriteSheet,
