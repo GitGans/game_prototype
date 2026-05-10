@@ -1,4 +1,9 @@
 import { PLAYER_UNITS, ENEMY_UNITS }      from '../data/units';
+import {
+  resolvePlayerUnitSpriteSheet,
+  getEnemyUnitSpriteSheet,
+  findEnemyUnitBlueprintWithRace,
+} from './unitSprites';
 import { ITEM_DEFINITIONS }               from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from '../battle/itemOps';
 import { resolveUnitProgression }         from '../progression';
@@ -46,7 +51,7 @@ export function buildPlayerAutoPlacementCandidates(
           classId:              progression.currentClassId,
           stats,
           skills:               progression.skills,
-          spriteSheet:          progression.spriteSheet ?? bp.spriteSheet,
+          spriteSheet:          resolvePlayerUnitSpriteSheet(bp, progression),
           activatableAbilities,
         }),
       };
@@ -72,7 +77,9 @@ export function buildEnemyPlacementCandidates(
         blueprint: bp, id, anchor, level,
         classId:              bp.baseClassId,
         stats, skills,
-        spriteSheet:          bp.spriteSheet,
+        spriteSheet:          bp.spriteFilename
+          ? getEnemyUnitSpriteSheet(race, bp.spriteFilename)
+          : undefined,
         activatableAbilities: [],
       }),
     };
@@ -87,12 +94,12 @@ export function buildEnemyPlacementCandidates(
 export function buildEnemyReplayInputs(
   savedPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }>,
 ): CreateUnitInstanceInput[] {
-  const allBlueprints = Object.values(ENEMY_UNITS).flat();
   let counter = 1;
   const result: CreateUnitInstanceInput[] = [];
   for (const saved of savedPlacements) {
-    const bp = allBlueprints.find(b => b.templateId === saved.templateId);
-    if (!bp) continue;
+    const found = findEnemyUnitBlueprintWithRace(saved.templateId);
+    if (!found) continue;
+    const { blueprint: bp, race: bpRace } = found;
     const skills = resolveEnemySkills(bp, saved.level);
     const stats  = computeUnitBattleStats(
       bp, saved.level, {}, {}, ITEM_DEFINITIONS, {}, {},
@@ -104,7 +111,9 @@ export function buildEnemyReplayInputs(
       level:                saved.level,
       classId:              bp.baseClassId,
       stats, skills,
-      spriteSheet:          bp.spriteSheet,
+      spriteSheet:          bp.spriteFilename
+        ? getEnemyUnitSpriteSheet(bpRace, bp.spriteFilename)
+        : undefined,
       activatableAbilities: [],
     });
   }
@@ -137,7 +146,7 @@ export function buildPlayerUnitInput(
     classId:              progression.currentClassId,
     stats,
     skills:               progression.skills,
-    spriteSheet:          progression.spriteSheet ?? bp.spriteSheet,
+    spriteSheet:          resolvePlayerUnitSpriteSheet(bp, progression),
     activatableAbilities,
   };
 }

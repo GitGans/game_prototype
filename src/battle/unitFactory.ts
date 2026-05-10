@@ -37,7 +37,6 @@ export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
     skills,
     activeSkillIndex:    0,
     rowTrait:            bp.rowTrait,
-    race:                bp.race,
     templateId:          bp.templateId,
     spriteSheet,
     activeEffects:       [],

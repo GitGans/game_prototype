@@ -34,7 +34,6 @@ export function buildBattleUnitSnapshot(unit: Unit): BattleUnitSnapshot {
     activeEffects:    unit.activeEffects,
 
     rowTrait:   unit.rowTrait,
-    race:       unit.race,
     templateId: unit.templateId,
     spriteSheet: unit.spriteSheet,
 

@@ -2,7 +2,6 @@ import type {
   UnitBlueprint,
   UnitUpgradeOption,
   UnitProgressionStatModifiers,
-  SpriteSheetConfig,
 } from '../shared/unitTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import { resolveOptionalSkillDefinition } from './skillResolver';
@@ -59,15 +58,15 @@ function resolveSkillsFromUpgrades(
   return skills;
 }
 
-function resolveSpriteSheetFromUpgrades(
+function resolveSpriteFilenameFromUpgrades(
   blueprint: UnitBlueprint,
-  upgrades: UnitUpgradeOption[],
-): SpriteSheetConfig | undefined {
-  let result: SpriteSheetConfig | undefined;
+  upgrades:  UnitUpgradeOption[],
+): string | undefined {
+  let result: string | undefined;
   for (const option of upgrades) {
-    if (option.spriteSheet) result = option.spriteSheet; // highest tier wins (upgrades sorted ascending)
+    if (option.spriteFilename) result = option.spriteFilename; // highest tier wins (upgrades sorted ascending)
   }
-  return result ?? blueprint.spriteSheet;
+  return result ?? blueprint.spriteFilename;
 }
 
 export function resolveUnitProgression(
@@ -89,7 +88,7 @@ export function resolveUnitProgression(
     chosenUpgrades,
     skills:        resolveSkillsFromUpgrades(blueprint, chosenUpgrades),
     statModifiers: computeUnitUpgradeStatModifiers(chosenUpgrades),
-    spriteSheet:   resolveSpriteSheetFromUpgrades(blueprint, chosenUpgrades),
+    spriteFilename: resolveSpriteFilenameFromUpgrades(blueprint, chosenUpgrades),
     currentClassId,
     currentClass:  resolveUnitClassDefinition(currentClassId),
   };
