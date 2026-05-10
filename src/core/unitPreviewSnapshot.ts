@@ -8,6 +8,7 @@ import { resolveUnitProgression } from '../progression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { buildSkillIconSnapshot } from './unitUpgradePresentation';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
+import { resolvePlayerUnitSpriteSheet } from './unitSprites';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { PLAYER_UNITS } from '../data/units';
 
@@ -33,8 +34,9 @@ export function buildPlayerUnitPreviewSnapshot(
 
   const skills: SkillIconSnapshot[] = progression.skills.map(buildSkillIconSnapshot);
 
-  const spriteKey = progression.spriteSheet
-    ? getUnitSpriteTextureKey(blueprint.templateId, progression.spriteSheet)
+  const sheet     = resolvePlayerUnitSpriteSheet(blueprint, progression);
+  const spriteKey = sheet
+    ? getUnitSpriteTextureKey(blueprint.templateId, sheet)
     : null;
 
   return {

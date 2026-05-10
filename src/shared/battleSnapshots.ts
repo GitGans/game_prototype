@@ -1,6 +1,6 @@
 import type { CellCoord, UnitShape }                from './gridTypes';
 import type { ActionSkillDefinition }                from './skillDefinitionTypes';
-import type { SpriteSheetConfig, RowTrait, UnitRace } from './unitTypes';
+import type { SpriteSheetConfig, RowTrait } from './unitTypes';
 import type { UnitActivatableAbility }               from './itemTypes';
 import type { UnitStatsSnapshot, SkillIconSnapshot } from './snapshotTypes';
 import type { ActiveEffect }                         from './activeEffect';
@@ -48,7 +48,6 @@ export interface BattleUnitSnapshot {
   activeEffects:    readonly ActiveEffect[];
 
   rowTrait:   RowTrait;
-  race?:      UnitRace;
   templateId: string;
   spriteSheet?: SpriteSheetConfig;
 

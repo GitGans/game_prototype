@@ -28,7 +28,7 @@ export type {
 
 import type { CellCoord, UnitShape } from '../shared/gridTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
-import type { SpriteSheetConfig, RowTrait, UnitRace, UnitClassId } from '../shared/unitTypes';
+import type { SpriteSheetConfig, RowTrait, UnitClassId } from '../shared/unitTypes';
 import type { UnitActivatableAbility } from '../shared/itemTypes';
 
 export type { ActiveEffect } from '../shared/activeEffect';
@@ -53,7 +53,6 @@ export interface Unit {
   skills: ActionSkillDefinition[];
   activeSkillIndex: number;
   rowTrait: RowTrait;
-  race?: UnitRace;
   templateId: string;
   spriteSheet?: SpriteSheetConfig;  // resolved at unit creation; undefined = no sprite
   activeEffects: ActiveEffect[]; // runtime only; max 2; ordered oldest-first

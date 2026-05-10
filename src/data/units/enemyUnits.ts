@@ -25,13 +25,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("provoke_strike") },
       ],
       rowTrait: "front",
-      race: "orc",
-      spriteSheet: {
-        path: "assets/sprites/units/orc_tank.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "orc_tank.png",
     },
     {
       templateId: "orc_dd",
@@ -53,13 +47,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("poison_strike") },
       ],
       rowTrait: "front",
-      race: "orc",
-      spriteSheet: {
-        path: "assets/sprites/units/orc_dd.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "orc_dd.png",
     },
     {
       templateId: "orc_archer",
@@ -81,13 +69,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("distract_shot") },
       ],
       rowTrait: "back",
-      race: "orc",
-      spriteSheet: {
-        path: "assets/sprites/units/orc_archer.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "orc_archer.png",
     },
     {
       templateId: "orc_mage",
@@ -109,13 +91,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("weaken_curse") },
       ],
       rowTrait: "back",
-      race: "orc",
-      spriteSheet: {
-        path: "assets/sprites/units/orc_mage.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "orc_mage.png",
     },
     {
       templateId: "orc_healer",
@@ -137,13 +113,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("self_heal_mass_regeneration") },
       ],
       rowTrait: "back",
-      race: "orc",
-      spriteSheet: {
-        path: "assets/sprites/units/orc_healer.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "orc_healer.png",
     },
   ],
   demon: [
@@ -167,13 +137,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("row_strike") },
       ],
       rowTrait: "front",
-      race: "demon",
-      spriteSheet: {
-        path: "assets/sprites/units/demon_tank.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "demon_tank.png",
     },
     {
       templateId: "demon_dd",
@@ -195,13 +159,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("drain_strike") },
       ],
       rowTrait: "front",
-      race: "demon",
-      spriteSheet: {
-        path: "assets/sprites/units/demon_dd.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "demon_dd.png",
     },
     {
       templateId: "demon_archer",
@@ -223,13 +181,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("p_ranged_slowing") },
       ],
       rowTrait: "back",
-      race: "demon",
-      spriteSheet: {
-        path: "assets/sprites/units/demon_archer.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "demon_archer.png",
     },
     {
       templateId: "demon_mage",
@@ -251,13 +203,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("m_ranged_basic") },
       ],
       rowTrait: "back",
-      race: "demon",
-      spriteSheet: {
-        path: "assets/sprites/units/demon_mage.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "demon_mage.png",
     },
     {
       templateId: "demon_healer",
@@ -279,13 +225,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("self_heal_mass_regeneration") },
       ],
       rowTrait: "back",
-      race: "demon",
-      spriteSheet: {
-        path: "assets/sprites/units/demon_healer.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "demon_healer.png",
     },
   ],
   undead: [
@@ -309,13 +249,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("drain_strike") },
       ],
       rowTrait: "front",
-      race: "undead",
-      spriteSheet: {
-        path: "assets/sprites/units/undead_tank.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "undead_tank.png",
     },
     {
       templateId: "undead_dd",
@@ -337,13 +271,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("pierce") },
       ],
       rowTrait: "front",
-      race: "undead",
-      spriteSheet: {
-        path: "assets/sprites/units/undead_dd.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "undead_dd.png",
     },
     {
       templateId: "undead_archer",
@@ -365,13 +293,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("distract_shot") },
       ],
       rowTrait: "back",
-      race: "undead",
-      spriteSheet: {
-        path: "assets/sprites/units/undead_archer.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "undead_archer.png",
     },
     {
       templateId: "undead_mage",
@@ -393,13 +315,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("m_ranged_basic") },
       ],
       rowTrait: "back",
-      race: "undead",
-      spriteSheet: {
-        path: "assets/sprites/units/undead_mage.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "undead_mage.png",
     },
     {
       templateId: "undead_healer",
@@ -421,13 +337,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 10, skillId: sid("self_heal_mass_regeneration") },
       ],
       rowTrait: "back",
-      race: "undead",
-      spriteSheet: {
-        path: "assets/sprites/units/undead_healer.png",
-        frameWidth: 128,
-        frameHeight: 128,
-        states: ["idle", "attack", "death"],
-      },
+      spriteFilename: "undead_healer.png",
     },
   ],
 };

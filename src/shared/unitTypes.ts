@@ -78,7 +78,7 @@ export interface UnitUpgradeOption {
   description?: string;
   skillId?: SkillId;
   statModifiers?: UnitProgressionStatModifiers;
-  spriteSheet?: SpriteSheetConfig;
+  spriteFilename?: string;
   /**
    * If this upgrade option is chosen, this class id becomes the unit's current class.
    * If omitted, the option does not change the current class.
@@ -113,7 +113,6 @@ export interface UnitBlueprint {
   upgradeTiers?: UnitUpgradeTier[];   // player units only; tiers 5/10/15/20
   enemySkillUnlocks?: EnemySkillUnlock[];  // enemy units only; replaces skillTiers + levelSkills
   rowTrait: RowTrait;
-  race?: UnitRace;
   baseClassId: UnitClassId;
-  spriteSheet?: SpriteSheetConfig;
+  spriteFilename?: string;
 }

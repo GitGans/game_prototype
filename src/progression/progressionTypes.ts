@@ -1,7 +1,6 @@
 import type {
   UnitUpgradeOption,
   UnitProgressionStatModifiers,
-  SpriteSheetConfig,
   UnitClassId,
   UnitClassDefinition,
   UpgradeOptionId,
@@ -14,7 +13,7 @@ export interface ResolvedUnitProgression {
   chosenUpgrades: UnitUpgradeOption[];
   skills: ActionSkillDefinition[];
   statModifiers: UnitProgressionStatModifiers;
-  spriteSheet: SpriteSheetConfig | undefined;
+  spriteFilename: string | undefined;
   currentClassId: UnitClassId;
   currentClass: UnitClassDefinition;
 }

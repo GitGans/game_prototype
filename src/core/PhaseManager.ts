@@ -20,6 +20,7 @@ import {
   UnitTabSnapshot,
 } from '../battle/types';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
+import type { UnitBlueprint } from '../shared/unitTypes';
 import { buildSkillIconSnapshot, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
@@ -47,6 +48,7 @@ import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeC
 import { resolveOptionalSkillDefinition } from '../progression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
+import { resolvePlayerUnitSpriteSheet, resolvePlayerUpgradeSpriteSheet } from './unitSprites';
 import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
 
 function toSkillIcon(skill: ActionSkillDefinition): SkillIconSnapshot {
@@ -163,12 +165,11 @@ class PhaseManagerClass {
   }
 
   private spriteKeyFromProgression(
-    templateId: string,
+    blueprint:   UnitBlueprint,
     progression: ResolvedUnitProgression,
   ): string | null {
-    return progression.spriteSheet
-      ? getUnitSpriteTextureKey(templateId, progression.spriteSheet)
-      : null;
+    const sheet = resolvePlayerUnitSpriteSheet(blueprint, progression);
+    return sheet ? getUnitSpriteTextureKey(blueprint.templateId, sheet) : null;
   }
 
   private buildUpgradeTiers(
@@ -191,9 +192,10 @@ class PhaseManagerClass {
           description:  buildUnitUpgradeDescription(upg, skill),
           skill:        skill ? toSkillIcon(skill) : null,
           statLines:    buildUnitUpgradeStatLines(upg.statModifiers ?? {}),
-          spritePreview: upg.spriteSheet
-            ? getUnitSpriteTextureKey(bp.templateId, upg.spriteSheet)
-            : null,
+          spritePreview: (() => {
+            const sheet = resolvePlayerUpgradeSpriteSheet(upg);
+            return sheet ? getUnitSpriteTextureKey(bp.templateId, sheet) : null;
+          })(),
         };
       }),
       chosenUpgradeId: chosenUpgrades[tier.unlocksAtLevel] ?? null,
@@ -215,7 +217,7 @@ class PhaseManagerClass {
         name:       bp.name,
         classId:    progression.currentClassId,
         className:  progression.currentClass.name,
-        spriteKey:  this.spriteKeyFromProgression(bp.templateId, progression),
+        spriteKey:  this.spriteKeyFromProgression(bp, progression),
       };
     });
   }
@@ -248,8 +250,8 @@ class PhaseManagerClass {
           : EMPTY_EQUIP_SNAPSHOT;
         const availableUnits        = this.buildUnitTabSnapshots();
         const selectedUnit          = availableUnits.find(u => u.templateId === phase.selectedUnitTemplateId) ?? null;
-        const selectedUnitSpriteKey = phase.selectedUnitTemplateId && progression
-          ? this.spriteKeyFromProgression(phase.selectedUnitTemplateId, progression)
+        const selectedUnitSpriteKey = bp && progression
+          ? this.spriteKeyFromProgression(bp, progression)
           : null;
         const unitStats = bp && unitState && progression
           ? buildUnitStatsSnapshot(
@@ -295,8 +297,8 @@ class PhaseManagerClass {
           : EMPTY_EQUIP_SNAPSHOT;
         const availableUnits        = this.buildUnitTabSnapshots(ds.chosenUpgrades);
         const selectedUnit          = availableUnits.find(u => u.templateId === phase.selectedUnitTemplateId) ?? null;
-        const selectedUnitSpriteKey = phase.selectedUnitTemplateId && progression
-          ? this.spriteKeyFromProgression(phase.selectedUnitTemplateId, progression)
+        const selectedUnitSpriteKey = bp && progression
+          ? this.spriteKeyFromProgression(bp, progression)
           : null;
         const unitStats = bp && unitState && progression
           ? buildUnitStatsSnapshot(
@@ -532,7 +534,7 @@ class PhaseManagerClass {
         if (!bp) return;
         const wasOnBench  = state.benchUnits.some(b => b?.templateId === templateId);
         const progression = resolveUnitProgression(bp, us.chosenUpgrades ?? {});
-        const spriteKey   = this.spriteKeyFromProgression(templateId, progression);
+        const spriteKey   = this.spriteKeyFromProgression(bp, progression);
         participants.push({ templateId, name: bp.name, level: us.level, isAlive: true, wasOnBench, spriteKey });
       });
       GameState.battleParticipants = participants;
@@ -554,7 +556,7 @@ class PhaseManagerClass {
       for (const bp of PLAYER_UNITS) {
         if (ds.campUnitIds.includes(bp.templateId)) continue;
         const progression = resolveUnitProgression(bp, ds.chosenUpgrades[bp.templateId] ?? {});
-        const spriteKey   = this.spriteKeyFromProgression(bp.templateId, progression);
+        const spriteKey   = this.spriteKeyFromProgression(bp, progression);
         participants.push({ templateId: bp.templateId, name: bp.name, level: ds.level, isAlive: true, wasOnBench: false, spriteKey });
       }
       GameState.battleParticipants = participants;

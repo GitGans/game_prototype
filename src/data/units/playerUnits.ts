@@ -3,7 +3,6 @@ import { ucid } from "../../shared/unitTypes";
 import { SHAPES } from "../shapeDefinitions";
 import { sid } from "../skills";
 import { PLAYER_UNIT_UPGRADE_TIERS } from "./playerUnitUpgradeTiers";
-import { playerUnitSprite } from "./unitSpriteHelpers";
 
 export const PLAYER_UNITS: UnitBlueprint[] = [
   {
@@ -23,7 +22,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.soldier,
     rowTrait: "front",
-    spriteSheet: playerUnitSprite("soldier.png"),
+    spriteFilename: "soldier.png",
   },
   {
     templateId: "warrior",
@@ -42,7 +41,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.warrior,
     rowTrait: "front",
-    spriteSheet: playerUnitSprite("warrior.png"),
+    spriteFilename: "warrior.png",
   },
   {
     templateId: "guard",
@@ -61,7 +60,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.guard,
     rowTrait: "front",
-    spriteSheet: playerUnitSprite("guard.png"),
+    spriteFilename: "guard.png",
   },
   {
     templateId: "brawler",
@@ -80,7 +79,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.brawler,
     rowTrait: "front",
-    spriteSheet: playerUnitSprite("brawler.png"),
+    spriteFilename: "brawler.png",
   },
   {
     templateId: "marksman",
@@ -99,7 +98,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.marksman,
     rowTrait: "front",
-    spriteSheet: playerUnitSprite("marksman.png"),
+    spriteFilename: "marksman.png",
   },
   {
     templateId: "forest_ranger",
@@ -118,7 +117,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.forest_ranger,
     rowTrait: "front",
-    spriteSheet: playerUnitSprite("forest_ranger.png"),
+    spriteFilename: "forest_ranger.png",
   },
   {
     templateId: "elementalist",
@@ -137,7 +136,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.elementalist,
     rowTrait: "back",
-    spriteSheet: playerUnitSprite("elementalist.png"),
+    spriteFilename: "elementalist.png",
   },
   {
     templateId: "monk",
@@ -156,7 +155,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.monk,
     rowTrait: "back",
-    spriteSheet: playerUnitSprite("monk.png"),
+    spriteFilename: "monk.png",
   },
   {
     templateId: "troublemaker",
@@ -175,7 +174,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.troublemaker,
     rowTrait: "back",
-    spriteSheet: playerUnitSprite("troublemaker.png"),
+    spriteFilename: "troublemaker.png",
   },
   {
     templateId: "healer",
@@ -194,7 +193,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_heal_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.healer,
     rowTrait: "back",
-    spriteSheet: playerUnitSprite("healer.png"),
+    spriteFilename: "healer.png",
   },
   {
     templateId: "shaman",
@@ -213,7 +212,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("m_ranged_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.shaman,
     rowTrait: "back",
-    spriteSheet: playerUnitSprite("shaman.png"),
+    spriteFilename: "shaman.png",
   },
   {
     templateId: "destroyer",
@@ -232,7 +231,7 @@ export const PLAYER_UNITS: UnitBlueprint[] = [
     baseSkillId: sid("p_melee_basic"),
     upgradeTiers: PLAYER_UNIT_UPGRADE_TIERS.destroyer,
     rowTrait: "front",
-    spriteSheet: playerUnitSprite("destroyer.png"),
+    spriteFilename: "destroyer.png",
   },
 ];
 
