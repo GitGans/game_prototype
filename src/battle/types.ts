@@ -76,7 +76,11 @@ export interface BenchUnitRef {
 }
 
 export interface PlacementSelection {
-  selectedBenchIdx:    number | null;
+  // Identity of the selected bench unit. UI may still operate on bench slots,
+  // but runtime selection is stored by unit id, resolved through deployments.
+  // Bench slot index is visual placement only and lives in the read model
+  // (GamePhase.selectedBenchSlot), not here.
+  selectedBenchUnitId: string | null;
   selectedFieldUnitId: string | null;
 }
 

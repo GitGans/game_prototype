@@ -2,11 +2,16 @@ import type { BattleState, PlacementSelection, Unit } from './types';
 import type { CellCoord }                             from '../shared/gridTypes';
 import type { UnitDeployment }                        from '../shared/unitDeploymentTypes';
 import { canPlace, deployExistingUnitToField, deployExistingUnitToBench } from './placement';
-import { requireFieldDeployment, getFreeBenchSlot }  from './deployment';
+import {
+  requireFieldDeployment,
+  getFreeBenchSlot,
+  getBenchSlotOccupant,
+  isFieldUnit,
+}                                                     from './deployment';
 import { buildOccupancy }                             from './occupancy';
 
 const CLEAR: PlacementSelection = {
-  selectedBenchIdx:    null,
+  selectedBenchUnitId: null,
   selectedFieldUnitId: null,
 };
 
@@ -24,15 +29,32 @@ function withoutUnits(state: BattleState, unitIds: string[]): BattleState {
 }
 
 export function selectBenchSlot(state: BattleState, benchIdx: number): BattleState {
-  if (benchIdx < 0 || benchIdx >= state.benchUnits.length) return state;
-  if (!state.benchUnits[benchIdx]) return state;
-  return { ...state, placementSelection: { selectedBenchIdx: benchIdx, selectedFieldUnitId: null } };
+  if (benchIdx < 0 || benchIdx >= state.benchSlotCount) return state;
+
+  const unit = getBenchSlotOccupant(state, benchIdx);
+  if (!unit) return state; // empty slot per deployments → no-op
+
+  return {
+    ...state,
+    placementSelection: {
+      selectedBenchUnitId: unit.id,
+      selectedFieldUnitId: null,
+    },
+  };
 }
 
 export function selectFieldUnit(state: BattleState, unitId: string): BattleState {
   const unit = state.units.get(unitId);
   if (!unit || unit.side !== 'player') return state;
-  return { ...state, placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: unitId } };
+  if (!isFieldUnit(state, unitId)) return state; // bench units cannot be selected as field units
+
+  return {
+    ...state,
+    placementSelection: {
+      selectedBenchUnitId: null,
+      selectedFieldUnitId: unitId,
+    },
+  };
 }
 
 export function clearPlacementSelection(state: BattleState): BattleState {

@@ -44,11 +44,9 @@ export function getFieldUnits(state: BattleState): Unit[] {
   return getFieldUnitEntries(state).map(([, u]) => u);
 }
 
-// Stage 1 migration note:
-// Real gameplay bench contents still live in BattleState.benchUnits (old path).
-// These helpers only read UnitDeployment bench entries created via addBenchUnit()
-// and are used in tests or the future bench migration. They return no results in
-// normal Stage 1 gameplay since bench units are not yet added to state.units.
+// Returns the runtime Unit deployed to the given bench slot, or undefined if
+// the slot is empty. Reads state.deployments — the runtime source of truth —
+// not the BattleState.benchUnits compatibility mirror.
 export function getBenchSlotOccupant(state: BattleState, slot: number): Unit | undefined {
   for (const [id, deployment] of state.deployments.entries()) {
     if (deployment.kind === 'bench' && deployment.slot === slot) {

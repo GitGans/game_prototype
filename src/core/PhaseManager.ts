@@ -359,12 +359,24 @@ class PhaseManagerClass {
             : 'target';
         }
 
+        // Derive the selected bench slot from the runtime unit-id selection.
+        // This is a read-model convenience for the legacy bench UI and is NOT stored
+        // in BattleState. If the selected unit is no longer bench-deployed (e.g. it
+        // was just placed on the field but selection was not cleared), the slot is null.
+        let selectedBenchSlot: number | null = null;
+        const { selectedBenchUnitId } = battleState.placementSelection;
+        if (selectedBenchUnitId !== null) {
+          const dep = battleState.deployments.get(selectedBenchUnitId);
+          if (dep?.kind === 'bench') selectedBenchSlot = dep.slot;
+        }
+
         // participants = battle-start snapshot; do NOT rebuild from current placement state
         return {
           ...phase,
           participants:        GameState.battleParticipants,
           benchUnits,
           placementSelection:  battleState.placementSelection,
+          selectedBenchSlot,
           battlePhase:         battleState.phase,
           units,
           unitsById,
@@ -905,7 +917,8 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         mapId:              current.mapId,
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
-        placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
+        placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
+        selectedBenchSlot:  null,                                                     // filled by rebuildSnapshot
         battlePhase:         'placement',
         units:               [],
         unitsById:           new Map(),
@@ -938,7 +951,8 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         isDebug:            true,
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
-        placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
+        placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
+        selectedBenchSlot:  null,                                                     // filled by rebuildSnapshot
         battlePhase:         'placement',
         units:               [],
         unitsById:           new Map(),

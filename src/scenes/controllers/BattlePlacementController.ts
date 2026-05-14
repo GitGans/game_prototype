@@ -79,14 +79,15 @@ export class BattlePlacementController {
 
   handlePlacementCellClick(coord: CellCoord, phase: BattlePhase): void {
     if (coord.side !== 'player') return;
-    const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
+    const { selectedFieldUnitId } = phase.placementSelection;
+    const selectedBenchSlot       = phase.selectedBenchSlot;
     const unitId = phase.occupancy.cellToUnitId.get(cellKey(coord));
 
-    if (selectedBenchIdx !== null) {
+    if (selectedBenchSlot !== null) {
       if (!unitId) {
-        PhaseManager.transition({ type: 'place_bench_unit', benchIdx: selectedBenchIdx, anchor: coord });
+        PhaseManager.transition({ type: 'place_bench_unit', benchIdx: selectedBenchSlot, anchor: coord });
       } else {
-        PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: selectedBenchIdx, fieldUnitId: unitId });
+        PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: selectedBenchSlot, fieldUnitId: unitId });
       }
       return;
     }
@@ -142,7 +143,7 @@ export class BattlePlacementController {
     for (let i = 0; i < BENCH_SLOTS; i++) {
       const snapshot   = phase.benchUnits[i] ?? null;
       const cardY      = startY + i * (cardH + CELL_GAP);
-      const isSelected = phase.placementSelection.selectedBenchIdx === i;
+      const isSelected = phase.selectedBenchSlot === i;
 
       const { x: logX, y: logY, w: logW } = this.deps.getLogBounds();
 
@@ -177,7 +178,7 @@ export class BattlePlacementController {
   private onBenchCardClick(idx: number): void {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'battle') return;
-    const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
+    const { selectedFieldUnitId } = phase.placementSelection;
 
     if (phase.benchUnits[idx] === null) {
       if (selectedFieldUnitId !== null) {
@@ -191,7 +192,7 @@ export class BattlePlacementController {
       return;
     }
 
-    if (selectedBenchIdx === idx) {
+    if (phase.selectedBenchSlot === idx) {
       PhaseManager.transition({ type: 'clear_placement_selection' });
     } else {
       PhaseManager.transition({ type: 'select_bench_slot', benchIdx: idx });

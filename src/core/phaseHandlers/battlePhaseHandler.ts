@@ -63,7 +63,7 @@ export function applyBattleLifecycleAction(input: {
           ...state,
           roundQueue:         buildRoundQueue(new Map(getFieldUnitEntries(state))),
           phase:              'select_target',
-          placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },
+          placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null },
         },
         resetTurnContext:          true,
         persistCampaignPlacements: true,
