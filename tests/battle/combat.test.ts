@@ -13,14 +13,15 @@ import { fixedRng, sequenceRng } from "./helpers/rng";
 describe("resolveAttack", () => {
   it("deduplicates a multi-cell unit and applies only the highest damage hit", () => {
     const bigUnit = makeUnit({
-      id: "big",
-      shape: { offsets: [{ dr: 0, dc: 0 }, { dr: 0, dc: 1 }] }, // 1×2
-      anchor: coord("enemy", 0, 0),
+      id:              "big",
+      side:            "enemy",
+      shape:           { offsets: [{ dr: 0, dc: 0 }, { dr: 0, dc: 1 }] }, // 1×2
       physicalDefense: 0,
-      dodge: 0,
-      block: 0,
+      dodge:           0,
+      block:           0,
     });
-    const state = makeBattleStateFromUnits([bigUnit]);
+    const anchor = coord("enemy", 0, 0);
+    const state  = makeBattleStateFromUnits({ field: [{ unit: bigUnit, anchor }] });
 
     // Two hits on the same unit: multiplier 1.0 (40 dmg) and 0.5 (20 dmg)
     const hitCells: ResolvedHitCell[] = [
@@ -44,14 +45,15 @@ describe("resolveAttack", () => {
 
   it("removes a dead unit from both units and occupancy", () => {
     const target = makeUnit({
-      id: "dead-unit",
-      hp: 10,
+      id:    "dead-unit",
+      side:  "enemy",
+      hp:    10,
       maxHp: 10,
-      anchor: coord("enemy", 0, 0),
       dodge: 0,
       block: 0,
     });
-    const state = makeBattleStateFromUnits([target]);
+    const anchor = coord("enemy", 0, 0);
+    const state  = makeBattleStateFromUnits({ field: [{ unit: target, anchor }] });
     const hitCells: ResolvedHitCell[] = [
       { coord: coord("enemy", 0, 0), multiplier: 1.0 },
     ];
@@ -67,13 +69,9 @@ describe("resolveAttack", () => {
   it("dodges when RNG is below the dodge threshold", () => {
     // dodge=50 means: if rng()*100 < 50 → dodge.
     // fixedRng(0) → rng()*100 = 0 < 50 → dodge.
-    const target = makeUnit({
-      id: "dodger",
-      dodge: 50,
-      block: 0,
-      anchor: coord("enemy", 0, 0),
-    });
-    const state = makeBattleStateFromUnits([target]);
+    const target = makeUnit({ id: "dodger", side: "enemy", dodge: 50, block: 0 });
+    const anchor = coord("enemy", 0, 0);
+    const state  = makeBattleStateFromUnits({ field: [{ unit: target, anchor }] });
     const hitCells: ResolvedHitCell[] = [
       { coord: coord("enemy", 0, 0), multiplier: 1.0 },
     ];
@@ -90,13 +88,9 @@ describe("resolveAttack", () => {
     // dodge=0, block=50.
     // sequenceRng([0.99, 0]): first call (dodge roll) → 0.99 → no dodge;
     //                       second call (block roll) → 0 → 0*100=0 < 50 → block.
-    const target = makeUnit({
-      id: "blocker",
-      dodge: 0,
-      block: 50,
-      anchor: coord("enemy", 0, 0),
-    });
-    const state = makeBattleStateFromUnits([target]);
+    const target = makeUnit({ id: "blocker", side: "enemy", dodge: 0, block: 50 });
+    const anchor = coord("enemy", 0, 0);
+    const state  = makeBattleStateFromUnits({ field: [{ unit: target, anchor }] });
     const hitCells: ResolvedHitCell[] = [
       { coord: coord("enemy", 0, 0), multiplier: 1.0 },
     ];
@@ -134,14 +128,15 @@ describe("applyEffectApplication", () => {
     const effectA = makeEffect("effect-a");
     const effectB = makeEffect("effect-b");
     const target = makeUnit({
-      id: "target",
-      anchor: coord("enemy", 0, 0),
+      id:           "target",
+      side:         "enemy",
       activeEffects: [
         { effectDisplayName: "A", effect: effectA, remainingRounds: 2 },
         { effectDisplayName: "B", effect: effectB, remainingRounds: 2 },
       ],
     });
-    const state = makeBattleStateFromUnits([target]);
+    const anchor = coord("enemy", 0, 0);
+    const state  = makeBattleStateFromUnits({ field: [{ unit: target, anchor }] });
     const effectC = makeEffect("effect-c");
 
     const { state: after } = applyEffectApplication(
@@ -163,14 +158,15 @@ describe("applyEffectApplication", () => {
 
   it("replaces a duplicate effect (same effect.id) instead of stacking", () => {
     const effectA = makeEffect("effect-a");
-    const target = makeUnit({
-      id: "target",
-      anchor: coord("enemy", 0, 0),
+    const target  = makeUnit({
+      id:           "target",
+      side:         "enemy",
       activeEffects: [
         { effectDisplayName: "A", effect: effectA, remainingRounds: 1 },
       ],
     });
-    const state = makeBattleStateFromUnits([target]);
+    const anchor = coord("enemy", 0, 0);
+    const state  = makeBattleStateFromUnits({ field: [{ unit: target, anchor }] });
     const refreshedA: Effect = { ...effectA }; // same id
 
     const { state: after } = applyEffectApplication(
@@ -191,14 +187,14 @@ describe("applyEffectApplication", () => {
 
 describe("applyVampirism", () => {
   it("mass_vampirism does not heal any unit above maxHp", () => {
-    const caster = makeUnit({ id: "caster", anchor: coord("player", 0, 0) });
-    const ally = makeUnit({
-      id: "ally",
-      hp: 95,
-      maxHp: 100,
-      anchor: coord("player", 0, 1),
+    const caster = makeUnit({ id: "caster", side: "player" });
+    const ally   = makeUnit({ id: "ally", side: "player", hp: 95, maxHp: 100 });
+    const state  = makeBattleStateFromUnits({
+      field: [
+        { unit: caster, anchor: coord("player", 0, 0) },
+        { unit: ally,   anchor: coord("player", 0, 1) },
+      ],
     });
-    const state = makeBattleStateFromUnits([caster, ally]);
 
     const { state: after } = applyVampirism(
       { type: "mass_vampirism", level: 1 },

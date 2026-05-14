@@ -2,6 +2,7 @@ import type { BattleMode, BattleState, CellCoord, Unit } from './types';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import { getActiveSkill } from './skillRuntime';
 import { buildRoundQueue, pruneQueue } from './initiative';
+import { getFieldUnitEntries, requireFieldDeployment } from './deployment';
 import { tickEffects } from './combat';
 import type { EffectEvent } from './combat';
 import { compileSkillUsePlan } from './skillPlanCompiler';
@@ -87,7 +88,7 @@ export function advanceTurn(input: {
     for (const e of effectEvents) {
       events.push({ type: 'round_effect', event: e });
     }
-    remaining = buildRoundQueue(newState.units);
+    remaining = buildRoundQueue(new Map(getFieldUnitEntries(newState)));
   }
 
   return {
@@ -162,7 +163,7 @@ export function chargeActiveTurn(input: {
   let newQueue: string[];
   if (remaining.length === 0) {
     // Edge case: unit was last. Move it to the end of the NEXT round's queue.
-    newQueue = buildRoundQueue(state.units).filter((id) => id !== activeId);
+    newQueue = buildRoundQueue(new Map(getFieldUnitEntries(state))).filter((id) => id !== activeId);
     newQueue.push(activeId);
   } else {
     // Standard case: append the active unit at the end of the remaining queue.
@@ -255,7 +256,7 @@ export function resolveActiveTurnStart(input: {
   const currentUnit = state.units.get(activeId)!;
 
   // 6. Player unit in auto mode
-  if (currentUnit.anchor.side === 'player' && mode === 'auto') {
+  if (currentUnit.side === 'player' && mode === 'auto') {
     return {
       state: { ...state, phase: 'select_target', validTargets: [] },
       context,
@@ -265,7 +266,7 @@ export function resolveActiveTurnStart(input: {
   }
 
   // 7. Enemy unit — always auto
-  if (currentUnit.anchor.side === 'enemy') {
+  if (currentUnit.side === 'enemy') {
     return {
       state: { ...state, phase: 'select_target', validTargets: [] },
       context,
@@ -275,12 +276,13 @@ export function resolveActiveTurnStart(input: {
   }
 
   // 8. Player unit in manual mode
-  const currentSkill  = getActiveSkill(currentUnit);
-  const currentPlan   = compileSkillUsePlan(currentSkill);
-  const validTargets  = resolveSkillTargetsForPolicy(
-    currentUnit,
+  const currentSkill   = getActiveSkill(currentUnit);
+  const currentPlan    = compileSkillUsePlan(currentSkill);
+  const currentAnchor  = requireFieldDeployment(state, currentUnit.id).anchor;
+  const validTargets   = resolveSkillTargetsForPolicy(
     currentPlan.targetPolicy,
     state.occupancy,
+    currentAnchor,
   );
 
   if (validTargets.length === 0 && isEnemyMeleeTargetPolicy(currentPlan.targetPolicy)) {
@@ -330,7 +332,7 @@ export function switchActiveSkillForManualTurn(input: {
   const unitId = state.roundQueue[0];
   const activeUnit = state.units.get(unitId);
 
-  if (!activeUnit || activeUnit.anchor.side !== 'player') {
+  if (!activeUnit || activeUnit.side !== 'player') {
     return { state, validTargets: state.validTargets };
   }
 
@@ -338,12 +340,13 @@ export function switchActiveSkillForManualTurn(input: {
   const units = new Map(state.units);
   units.set(unitId, updatedUnit);
 
-  const activeSkill  = updatedUnit.skills[skillIndex] ?? updatedUnit.skills[0];
-  const activePlan   = compileSkillUsePlan(activeSkill);
-  const validTargets = resolveSkillTargetsForPolicy(
-    updatedUnit,
+  const activeSkill   = updatedUnit.skills[skillIndex] ?? updatedUnit.skills[0];
+  const activePlan    = compileSkillUsePlan(activeSkill);
+  const updatedAnchor = requireFieldDeployment(state, updatedUnit.id).anchor;
+  const validTargets  = resolveSkillTargetsForPolicy(
     activePlan.targetPolicy,
     state.occupancy,
+    updatedAnchor,
   );
 
   return {

@@ -29,7 +29,7 @@ export type {
 
 // ─── Runtime battle contracts (only types that exist during an active battle) ──
 
-import type { CellCoord, UnitShape } from '../shared/gridTypes';
+import type { Side, UnitShape, CellCoord } from '../shared/gridTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { SpriteSheetConfig, RowTrait, UnitClassId } from '../shared/unitTypes';
 import type { UnitActivatableAbility } from '../shared/itemTypes';
@@ -52,7 +52,8 @@ export interface Unit {
   classId: UnitClassId;
   initiative: number;
   shape: UnitShape;
-  anchor: CellCoord;
+  // Faction/owner. Field position lives in UnitDeployment.anchor (not on Unit).
+  side: Side;
   skills: ActionSkillDefinition[];
   activeSkillIndex: number;
   rowTrait: RowTrait;
@@ -80,19 +81,22 @@ export interface PlacementSelection {
 }
 
 export interface BattleState {
+  // Runtime invariant:
+  //   state.units = ALL battle participants (field + bench).
+  //   Field combatants  = units with deployments.get(id)?.kind === 'field'.
+  //   Bench participants = units with deployments.get(id)?.kind === 'bench'.
   units:              Map<string, Unit>;
   occupancy:          OccupancyMap;
-  roundQueue:         string[]; // unit IDs to act this round; [0] = currently acting
+  roundQueue:         string[]; // unit IDs to act this round; [0] = currently acting; field units only
   phase:              Phase;
   validTargets:       CellCoord[];
-  // Stage 1 migration bridge: source of truth for bench UI/placement until bench units
-  // become real Unit objects with UnitDeployment bench entries in a later stage.
+  // Compatibility mirror for existing bench UI/read-model.
+  // Synchronized by placement actions in placementState.ts and autoPlace.ts.
+  // Do NOT use for combat logic, deployment decisions, or runtime source of truth.
   benchUnits:         (BenchUnitRef | undefined)[];
   nextPlayerId:       number;          // next p<n> id for unit creation during placement
   placementSelection: PlacementSelection; // UI selection; owned by BattleState so Game.ts stays stateless
-  // Stage 1 invariant: every unit in state.units has exactly one entry here,
-  // and every entry here references an existing unit in state.units.
-  // Bench contents in benchUnits are NOT mirrored here in Stage 1.
+  // Source of truth for all placement. Every unit in state.units has exactly one entry here.
   deployments:        Map<string, UnitDeployment>;
   // Total bench capacity. Set from battle setup; drives getFreeBenchSlot().
   benchSlotCount:     number;

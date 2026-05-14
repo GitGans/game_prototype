@@ -16,6 +16,7 @@ import type { BattleState }                     from '../battle/types';
 import type { UnitRace }                        from '../shared/unitTypes';
 import type { PlayerBattleSetup }               from './battleSetup';
 import type { CellCoord }                       from '../shared/gridTypes';
+import { getFieldUnits, requireFieldDeployment } from '../battle/deployment';
 
 export interface EnemyPlacementRecord {
   templateId: string;
@@ -53,9 +54,10 @@ export function buildNewBattleState(
   state = { ...state, nextPlayerId: maxP + 1 };
 
   // 2. Determine enemy race and level
+  // Use field-deployed player units only — bench units should not inflate enemy difficulty.
   const group       = ENEMY_GROUPS[enemyGroupId];
-  const playerMaxLv = [...state.units.values()]
-    .filter(u => u.anchor.side === 'player' && u.hp > 0)
+  const playerMaxLv = getFieldUnits(state)
+    .filter(u => u.side === 'player' && u.hp > 0)
     .reduce((max, u) => Math.max(max, u.level), 1);
   const race  = group?.race          ?? pickOne(rng, FALLBACK_RACES);
   const level = group?.levelOverride ?? playerMaxLv;
@@ -64,10 +66,14 @@ export function buildNewBattleState(
   const enemyCandidates = buildEnemyPlacementCandidates(race, level);
   state = autoPlaceEnemies(state, enemyCandidates, rng);
 
-  // 4. Capture placement records for replay
+  // 4. Capture placement records for replay (enemies are always field-deployed)
   const enemyPlacements: EnemyPlacementRecord[] = [...state.units.values()]
-    .filter(u => u.id.startsWith('e'))
-    .map(u => ({ templateId: u.templateId, anchor: u.anchor, level: u.level }));
+    .filter(u => u.side === 'enemy')
+    .map(u => ({
+      templateId: u.templateId,
+      anchor:     requireFieldDeployment(state, u.id).anchor,
+      level:      u.level,
+    }));
 
   return { state, race, enemyPlacements };
 }

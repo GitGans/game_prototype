@@ -12,6 +12,7 @@ import {
   isFriendlyOrSelfTargetPolicy,
 } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
+import { requireFieldDeployment } from './deployment';
 
 export type AutoTurnDecision =
   | { type: 'none';         reason: 'battle_ended' | 'non_auto_mode' }
@@ -34,7 +35,7 @@ export function decideAutoTurn(input: {
 
   const unitId     = state.roundQueue[0];
   const activeUnit = unitId ? state.units.get(unitId) : undefined;
-  const isEnemy    = activeUnit?.anchor.side === 'enemy';
+  const isEnemy    = activeUnit?.side === 'enemy';
 
   // Mirrors the guard in the old Game.ts.autoTurn() exactly:
   // - enemy units always proceed regardless of mode;
@@ -54,7 +55,8 @@ export function decideAutoTurn(input: {
   const updatedUnit = { ...activeUnit, activeSkillIndex: skillIndex };
   const skill       = getActiveSkill(updatedUnit);
   const plan        = compileSkillUsePlan(skill);
-  const targets     = resolveSkillTargetsForPolicy(updatedUnit, plan.targetPolicy, state.occupancy);
+  const unitAnchor  = requireFieldDeployment(state, updatedUnit.id).anchor;
+  const targets     = resolveSkillTargetsForPolicy(plan.targetPolicy, state.occupancy, unitAnchor);
 
   if (targets.length === 0) {
     return isEnemyMeleeTargetPolicy(plan.targetPolicy)

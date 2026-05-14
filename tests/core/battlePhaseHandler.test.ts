@@ -10,37 +10,43 @@ import { testStrike } from "../battle/helpers/skills";
 describe("applyBattleTurnAction — battle_use_skill", () => {
   it("ends the battle immediately when skill damage kills the last opposing unit", () => {
     const attacker = makeUnit({
-      id: "attacker",
+      id:               "attacker",
+      side:             "player",
       physicalStrength: 1000, // guaranteed kill
-      anchor: coord("player", 0, 0),
-      skills: [testStrike],
+      skills:           [testStrike],
       activeSkillIndex: 0,
-      dodge: 0,
-      block: 0,
+      dodge:            0,
+      block:            0,
     });
     const enemy = makeUnit({
-      id: "enemy",
-      hp: 1,
+      id:    "enemy",
+      side:  "enemy",
+      hp:    1,
       maxHp: 100,
-      anchor: coord("enemy", 0, 0),
       dodge: 0,
       block: 0,
     });
-    const state = makeBattleStateFromUnits([attacker, enemy], {
-      roundQueue: ["attacker", "enemy"],
-    });
+    const state = makeBattleStateFromUnits(
+      {
+        field: [
+          { unit: attacker, anchor: coord("player", 0, 0) },
+          { unit: enemy,    anchor: coord("enemy",  0, 0) },
+        ],
+      },
+      { roundQueue: ["attacker", "enemy"] },
+    );
     const context = createTurnContext();
 
     const result = applyBattleTurnAction({
       state,
       context,
       action: {
-        type: "battle_use_skill",
+        type:   "battle_use_skill",
         unitId: "attacker",
         target: coord("enemy", 0, 0),
       },
       mode: "manual",
-      rng: fixedRng(0.99),
+      rng:  fixedRng(0.99),
     });
 
     expect(result.state.phase).toBe("end");
@@ -49,37 +55,43 @@ describe("applyBattleTurnAction — battle_use_skill", () => {
 
   it("advances the turn when the battle does not end after skill application", () => {
     const attacker = makeUnit({
-      id: "attacker",
+      id:               "attacker",
+      side:             "player",
       physicalStrength: 10, // not a kill
-      anchor: coord("player", 0, 0),
-      skills: [testStrike],
+      skills:           [testStrike],
       activeSkillIndex: 0,
-      dodge: 0,
-      block: 0,
+      dodge:            0,
+      block:            0,
     });
     const enemy = makeUnit({
-      id: "enemy",
-      hp: 100,
+      id:    "enemy",
+      side:  "enemy",
+      hp:    100,
       maxHp: 100,
-      anchor: coord("enemy", 0, 0),
       dodge: 0,
       block: 0,
     });
-    const state = makeBattleStateFromUnits([attacker, enemy], {
-      roundQueue: ["attacker", "enemy"],
-    });
+    const state = makeBattleStateFromUnits(
+      {
+        field: [
+          { unit: attacker, anchor: coord("player", 0, 0) },
+          { unit: enemy,    anchor: coord("enemy",  0, 0) },
+        ],
+      },
+      { roundQueue: ["attacker", "enemy"] },
+    );
     const context = createTurnContext();
 
     const result = applyBattleTurnAction({
       state,
       context,
       action: {
-        type: "battle_use_skill",
+        type:   "battle_use_skill",
         unitId: "attacker",
         target: coord("enemy", 0, 0),
       },
       mode: "manual",
-      rng: fixedRng(0.99),
+      rng:  fixedRng(0.99),
     });
 
     expect(result.state.phase).not.toBe("end");

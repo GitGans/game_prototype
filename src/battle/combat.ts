@@ -9,6 +9,7 @@ import {
   SkillPattern,
   Unit,
 } from "./types";
+import { getFieldUnits } from "./deployment";
 import type {
   AppliedEffectMeta,
   DamageModifierRef,
@@ -285,10 +286,12 @@ export function applyVampirism(
       }
     }
   } else {
-    // mass_vampirism: find all friendly alive units with missing HP
-    const friendlySide = caster.anchor.side;
+    // mass_vampirism: find all friendly alive field units with missing HP
+    // (bench units must not receive vampirism heals)
+    const friendlySide = caster.side;
     const targets = [...newUnits.values()].filter(
-      (u) => u.anchor.side === friendlySide && u.hp > 0 && u.hp < u.maxHp,
+      (u) => u.side === friendlySide && u.hp > 0 && u.hp < u.maxHp
+           && state.deployments.get(u.id)?.kind === 'field',
     );
     if (targets.length > 0) {
       const healPerUnit = Math.floor(healPool / targets.length);
@@ -596,13 +599,14 @@ export function effectiveStats(unit: StatOwner): EffectiveStats {
 /** Returns the winning side when all units on one side are dead, or null. */
 export function checkGameOver(state: BattleState): Side | null {
   let playerAlive = false;
-  let enemyAlive = false;
-  for (const unit of state.units.values()) {
-    if (unit.anchor.side === "player") playerAlive = true;
-    if (unit.anchor.side === "enemy") enemyAlive = true;
+  let enemyAlive  = false;
+  // Use field units only — bench units must not keep a side alive.
+  for (const unit of getFieldUnits(state)) {
+    if (unit.side === "player") playerAlive = true;
+    if (unit.side === "enemy")  enemyAlive  = true;
   }
   if (!playerAlive) return "player";
-  if (!enemyAlive) return "enemy";
+  if (!enemyAlive)  return "enemy";
   return null;
 }
 

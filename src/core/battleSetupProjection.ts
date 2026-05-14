@@ -9,7 +9,7 @@ import { computeUnitBattleStats, snapshotActivatableAbilities } from '../battle/
 import { resolveUnitProgression }         from '../progression';
 import { createUnitInstance, type CreateUnitInstanceInput } from '../battle/unitFactory';
 import type { PlayerBattleSetup }         from './battleSetup';
-import type { PlayerPlacementCandidate, EnemyPlacementCandidates } from '../battle/autoPlace';
+import type { PlayerPlacementCandidate, EnemyPlacementCandidates, EnemyReplayPlacementInput } from '../battle/autoPlace';
 import type { UnitBlueprint, UnitRace }   from '../shared/unitTypes';
 import type { ActionSkillDefinition }      from '../shared/skillDefinitionTypes';
 import { resolveSkillDefinition }          from '../progression';
@@ -46,8 +46,8 @@ export function buildPlayerAutoPlacementCandidates(
         shape:       bp.shape,
         rowTrait:    bp.rowTrait,
         savedAnchor: unitState?.lastPlacement ?? null,
-        createUnit:  (anchor: CellCoord, id: string) => createUnitInstance({
-          blueprint: bp, id, anchor, level,
+        createUnit:  (id: string) => createUnitInstance({
+          blueprint: bp, id, side: 'player', level,
           classId:              progression.currentClassId,
           stats,
           skills:               progression.skills,
@@ -73,8 +73,8 @@ export function buildEnemyPlacementCandidates(
       templateId: bp.templateId,
       shape:      bp.shape,
       rowTrait:   bp.rowTrait,
-      createUnit: (anchor: CellCoord, id: string) => createUnitInstance({
-        blueprint: bp, id, anchor, level,
+      createUnit: (id: string) => createUnitInstance({
+        blueprint: bp, id, side: 'enemy', level,
         classId:              bp.baseClassId,
         stats, skills,
         spriteSheet:          bp.spriteFilename
@@ -93,9 +93,9 @@ export function buildEnemyPlacementCandidates(
 
 export function buildEnemyReplayInputs(
   savedPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }>,
-): CreateUnitInstanceInput[] {
+): EnemyReplayPlacementInput[] {
   let counter = 1;
-  const result: CreateUnitInstanceInput[] = [];
+  const result: EnemyReplayPlacementInput[] = [];
   for (const saved of savedPlacements) {
     const found = findEnemyUnitBlueprintWithRace(saved.templateId);
     if (!found) continue;
@@ -105,24 +105,29 @@ export function buildEnemyReplayInputs(
       bp, saved.level, {}, {}, ITEM_DEFINITIONS, {}, {},
     );
     result.push({
-      blueprint:            bp,
-      id:                   `e${counter++}`,
-      anchor:               saved.anchor,
-      level:                saved.level,
-      classId:              bp.baseClassId,
-      stats, skills,
-      spriteSheet:          bp.spriteFilename
-        ? getEnemyUnitSpriteSheet(bpRace, bp.spriteFilename)
-        : undefined,
-      activatableAbilities: [],
+      unitInput: {
+        blueprint:            bp,
+        id:                   `e${counter++}`,
+        side:                 'enemy',
+        level:                saved.level,
+        classId:              bp.baseClassId,
+        stats, skills,
+        spriteSheet:          bp.spriteFilename
+          ? getEnemyUnitSpriteSheet(bpRace, bp.spriteFilename)
+          : undefined,
+        activatableAbilities: [],
+      },
+      anchor: saved.anchor,
     });
   }
   return result;
 }
 
+// Stage 3 removal candidate: bench→field placement now deploys existing units
+// via getBenchSlotOccupant() + placeBenchUnitOnField(). This function is no
+// longer called from battlePhaseHandler.ts. Remove after verifying no callers remain.
 export function buildPlayerUnitInput(
   templateId: string,
-  anchor:     CellCoord,
   id:         string,
   setup:      PlayerBattleSetup,
 ): CreateUnitInstanceInput | null {
@@ -142,7 +147,7 @@ export function buildPlayerUnitInput(
     setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
   );
   return {
-    blueprint: bp, id, anchor, level,
+    blueprint: bp, id, side: 'player', level,
     classId:              progression.currentClassId,
     stats,
     skills:               progression.skills,

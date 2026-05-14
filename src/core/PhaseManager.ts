@@ -333,7 +333,7 @@ class PhaseManagerClass {
         const benchUnits = buildBenchUnitSnapshots(battleState.benchUnits, setup);
 
         // ── Stage 4: full scene-facing render data ────────────────────────
-        const units     = buildBattleUnitSnapshots(battleState.units);
+        const units     = buildBattleUnitSnapshots(battleState);
         const unitsById = new Map(units.map(u => [u.id, u]));
         const occupancy = buildBattleOccupancySnapshot(battleState);
 
@@ -410,10 +410,12 @@ class PhaseManagerClass {
 
       if (result.persistCampaignPlacements && !prev.isDebug) {
         for (const unit of currentState.units.values()) {
-          if (unit.anchor.side !== 'player') continue;
+          if (unit.side !== 'player') continue;
+          const deployment = currentState.deployments.get(unit.id);
+          if (deployment?.kind !== 'field') continue; // bench units have no field placement to save
           const unitState = GameState.playerUnits[unit.templateId];
           if (!unitState) continue;
-          GameState.playerUnits[unit.templateId] = { ...unitState, lastPlacement: unit.anchor };
+          GameState.playerUnits[unit.templateId] = { ...unitState, lastPlacement: deployment.anchor };
         }
       }
 
@@ -627,10 +629,13 @@ class PhaseManagerClass {
         }
 
         // Save last field placement
-        for (const unit of GameState.get().units.values()) {
-          if (unit.anchor.side !== 'player') continue;
+        const battleStateAfter = GameState.get();
+        for (const unit of battleStateAfter.units.values()) {
+          if (unit.side !== 'player') continue;
+          const deployment = battleStateAfter.deployments.get(unit.id);
+          if (deployment?.kind !== 'field') continue; // bench units have no field placement to save
           const us = GameState.playerUnits[unit.templateId];
-          if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
+          if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: deployment.anchor };
         }
 
         // Mark trigger entity dead on the map — victory only; defeat must leave the encounter intact
@@ -845,7 +850,7 @@ class PhaseManagerClass {
 
     const aliveTemplateIds = new Set(
       [...GameState.get().units.values()]
-        .filter(u => u.anchor.side === 'player')
+        .filter(u => u.side === 'player')
         .map(u => u.templateId),
     );
 

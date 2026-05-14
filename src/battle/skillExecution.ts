@@ -20,6 +20,7 @@ import { resolvePlanPattern } from './skillPlanPatterns';
 import { getEffectiveUnitPower } from './skillPower';
 import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from "./targeting";
+import { requireFieldDeployment } from "./deployment";
 import { rebuildRemainingQueue } from "./initiative";
 import { resolvePattern } from "./skillPatterns";
 import type { Rng } from '../shared/random';
@@ -415,17 +416,19 @@ function resolveProvokeCounterAttack(input: {
 
   const plan = compileSkillUsePlan(counterSkill);
 
+  const provokedAnchor = requireFieldDeployment(state, provokedUnit.id).anchor;
   const validTargets = resolveSkillTargetsForPolicy(
-    provokedUnit,
     plan.targetPolicy,
     state.occupancy,
+    provokedAnchor,
   );
 
+  const casterAnchor = requireFieldDeployment(state, originalCaster.id).anchor;
   const casterIsReachable = validTargets.some(
     (c) =>
-      c.side === originalCaster.anchor.side &&
-      c.row === originalCaster.anchor.row &&
-      c.col === originalCaster.anchor.col,
+      c.side === casterAnchor.side &&
+      c.row  === casterAnchor.row  &&
+      c.col  === casterAnchor.col,
   );
 
   if (!casterIsReachable) {
@@ -450,7 +453,7 @@ function resolveProvokeCounterAttack(input: {
     state,
     casterId: provokedUnit.id,
     caster: provokedUnit,
-    target: originalCaster.anchor,
+    target: casterAnchor,
     queueContext,
     rng,
   });

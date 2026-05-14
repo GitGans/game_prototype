@@ -9,6 +9,7 @@ import {
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { isFriendlyOrSelfTargetPolicy } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
+import { requireFieldDeployment } from './deployment';
 import { executeSkillUse } from './skillExecution';
 
 export type ComputeOneTurnOptions = {
@@ -44,7 +45,8 @@ export function computeOneTurn(
 
   const skill    = getActiveSkill(updatedUnit);
   const plan     = compileSkillUsePlan(skill);
-  const targets  = resolveSkillTargetsForPolicy(updatedUnit, plan.targetPolicy, state.occupancy);
+  const unitAnchor = requireFieldDeployment(state, updatedUnit.id).anchor;
+  const targets    = resolveSkillTargetsForPolicy(plan.targetPolicy, state.occupancy, unitAnchor);
 
   const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)
     ? resolveBestHealTarget(state, targets)

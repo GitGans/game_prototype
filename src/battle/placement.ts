@@ -85,8 +85,9 @@ export function addBenchUnit(state: BattleState, unit: Unit, slot: number): Batt
   };
 }
 
-// Changes an existing unit's deployment to field. Unit must already be in state.units.
-// Overwrites any existing deployment (intended for re-deployment).
+// Low-level deployment mutator. Does NOT synchronize benchUnits.
+// For gameplay bench-slot moves, use placementState.ts functions which
+// synchronize the benchUnits compatibility mirror in the same operation.
 export function deployExistingUnitToField(
   state: BattleState,
   unitId: string,
@@ -104,9 +105,9 @@ export function deployExistingUnitToField(
   };
 }
 
-// Changes an existing unit's deployment to bench. Unit must already be in state.units.
-// Validates slot range and uniqueness; excludes the unit itself in the uniqueness check
-// so a unit already on bench can be moved to a different slot.
+// Low-level deployment mutator. Does NOT synchronize benchUnits.
+// For gameplay bench-slot moves, use placementState.ts functions which
+// synchronize the benchUnits compatibility mirror in the same operation.
 export function deployExistingUnitToBench(
   state: BattleState,
   unitId: string,
@@ -125,8 +126,3 @@ export function deployExistingUnitToBench(
   };
 }
 
-// Temporary Stage 1 compatibility wrapper.
-// Removed after Unit.anchor is removed and call sites use addFieldUnit() directly.
-export function placeUnit(unit: Unit, state: BattleState): BattleState {
-  return addFieldUnit(state, unit, unit.anchor);
-}

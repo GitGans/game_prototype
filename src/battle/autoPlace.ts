@@ -1,27 +1,29 @@
-import type { BattleState, Unit }             from './types';
-import type { Rng }                            from '../shared/random';
-import { pickOne }                             from '../shared/random';
-import type { BenchUnitRef }                   from './types';
-import type { CellCoord, Col, Row, UnitShape } from '../shared/gridTypes';
-import type { RowTrait }                       from '../shared/unitTypes';
-import { canPlace, placeUnit }                 from './placement';
-import { cellKey }                             from './field';
-import { createUnitInstance }                  from './unitFactory';
-import type { CreateUnitInstanceInput }        from './unitFactory';
+import type { BattleState, Unit, BenchUnitRef } from './types';
+import type { Rng }                              from '../shared/random';
+import { pickOne }                               from '../shared/random';
+import type { CellCoord, Col, Row, UnitShape }   from '../shared/gridTypes';
+import type { RowTrait }                         from '../shared/unitTypes';
+import { canPlace, addFieldUnit, addBenchUnit }  from './placement';
+import { getFreeBenchSlot }                      from './deployment';
+import { cellKey }                               from './field';
+import { createUnitInstance }                    from './unitFactory';
+import type { CreateUnitInstanceInput }          from './unitFactory';
+
+// ─── Candidate Contracts ─────────────────────────────────────────────────────
 
 export interface PlayerPlacementCandidate {
   templateId:  string;
   shape:       UnitShape;
   rowTrait:    RowTrait;
   savedAnchor: CellCoord | null;
-  createUnit:  (anchor: CellCoord, id: string) => Unit;
+  createUnit:  (id: string) => Unit; // no anchor; deployment is assigned separately
 }
 
 export interface EnemyPlacementCandidate {
   templateId: string;
   shape:      UnitShape;
   rowTrait:   RowTrait;
-  createUnit: (anchor: CellCoord, id: string) => Unit;
+  createUnit: (id: string) => Unit;
 }
 
 export interface EnemyPlacementCandidates {
@@ -29,24 +31,29 @@ export interface EnemyPlacementCandidates {
   backPool:  EnemyPlacementCandidate[];
 }
 
+// Anchor is carried outside CreateUnitInstanceInput because CreateUnitInstanceInput
+// no longer contains anchor. core/ imports this type from battle/; that is allowed
+// since core may depend on battle.
+export interface EnemyReplayPlacementInput {
+  unitInput: CreateUnitInstanceInput;
+  anchor:    CellCoord;
+}
+
+// ─── Player Placement ────────────────────────────────────────────────────────
+
 export function autoPlacePlayer(
   state:          BattleState,
   candidates:     PlayerPlacementCandidate[],
   benchSlotCount: number,
 ): BattleState {
-  let counter = 1;
-  const paddedBench: (BenchUnitRef | undefined)[] = Array(benchSlotCount).fill(undefined);
+  state = { ...state, benchSlotCount };
 
-  const addToBench = (templateId: string): boolean => {
-    const slot = paddedBench.indexOf(undefined);
-    if (slot === -1) return false;
-    paddedBench[slot] = { templateId };
-    return true;
-  };
+  let counter = 1;
+  const benchMirror: (BenchUnitRef | undefined)[] = Array(benchSlotCount).fill(undefined);
 
   const tryPlaceOnField = (c: PlayerPlacementCandidate): boolean => {
     if (c.savedAnchor && canPlace(c.savedAnchor, c.shape, state, 'player')) {
-      state = placeUnit(c.createUnit(c.savedAnchor, `p${counter++}`), state);
+      state = addFieldUnit(state, c.createUnit(`p${counter++}`), c.savedAnchor);
       return true;
     }
     const rows: Row[] = c.rowTrait === 'front' ? [0, 1] : [1, 0];
@@ -54,7 +61,7 @@ export function autoPlacePlayer(
       for (const col of [0, 1, 2] as Col[]) {
         const anchor: CellCoord = { side: 'player', row, col };
         if (canPlace(anchor, c.shape, state, 'player')) {
-          state = placeUnit(c.createUnit(anchor, `p${counter++}`), state);
+          state = addFieldUnit(state, c.createUnit(`p${counter++}`), anchor);
           return true;
         }
       }
@@ -62,16 +69,27 @@ export function autoPlacePlayer(
     return false;
   };
 
+  const tryPlaceOnBench = (c: PlayerPlacementCandidate): boolean => {
+    const slot = getFreeBenchSlot(state);
+    if (slot === null) return false;
+    const unit = c.createUnit(`p${counter++}`);
+    state = addBenchUnit(state, unit, slot);
+    benchMirror[slot] = { templateId: unit.templateId }; // synchronize compatibility mirror
+    return true;
+  };
+
   const overflow: PlayerPlacementCandidate[] = [];
   for (const c of candidates) {
     if (!tryPlaceOnField(c)) overflow.push(c);
   }
   for (const c of overflow) {
-    if (!addToBench(c.templateId)) tryPlaceOnField(c);
+    if (!tryPlaceOnBench(c)) tryPlaceOnField(c);
   }
 
-  return { ...state, benchUnits: paddedBench, benchSlotCount };
+  return { ...state, benchUnits: benchMirror };
 }
+
+// ─── Enemy Placement ─────────────────────────────────────────────────────────
 
 export function autoPlaceEnemies(
   state:      BattleState,
@@ -86,8 +104,9 @@ export function autoPlaceEnemies(
     if (state.occupancy.cellToUnitId.has(cellKey(anchor))) continue;
     if (candidates.frontPool.length === 0) continue;
     const c = pickOne(rng, candidates.frontPool);
-    const unit = c.createUnit(anchor, `e${counter++}`);
-    if (canPlace(anchor, c.shape, state, 'enemy')) state = placeUnit(unit, state);
+    if (canPlace(anchor, c.shape, state, 'enemy')) {
+      state = addFieldUnit(state, c.createUnit(`e${counter++}`), anchor);
+    }
   }
 
   for (const col of cols) {
@@ -95,21 +114,24 @@ export function autoPlaceEnemies(
     if (state.occupancy.cellToUnitId.has(cellKey(anchor))) continue;
     if (candidates.backPool.length === 0) continue;
     const c = pickOne(rng, candidates.backPool);
-    const unit = c.createUnit(anchor, `e${counter++}`);
-    if (canPlace(anchor, c.shape, state, 'enemy')) state = placeUnit(unit, state);
+    if (canPlace(anchor, c.shape, state, 'enemy')) {
+      state = addFieldUnit(state, c.createUnit(`e${counter++}`), anchor);
+    }
   }
 
   return state;
 }
 
+// ─── Replay Placement ────────────────────────────────────────────────────────
+
 export function replayPlaceEnemies(
   state:  BattleState,
-  inputs: CreateUnitInstanceInput[],
+  inputs: EnemyReplayPlacementInput[],
 ): BattleState {
-  for (const input of inputs) {
-    const unit = createUnitInstance(input);
-    if (canPlace(input.anchor, input.blueprint.shape, state, 'enemy')) {
-      state = placeUnit(unit, state);
+  for (const { unitInput, anchor } of inputs) {
+    const unit = createUnitInstance(unitInput);
+    if (canPlace(anchor, unitInput.blueprint.shape, state, 'enemy')) {
+      state = addFieldUnit(state, unit, anchor);
     }
   }
   return state;

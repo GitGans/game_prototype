@@ -3,8 +3,6 @@ import { PLAYER_UNITS } from "../../src/data/units";
 import { buildPlayerUnitInput } from "../../src/core/battleSetupProjection";
 import type { PlayerBattleSetup } from "../../src/core/battleSetup";
 import type { PlayerUnitState } from "../../src/core/GameState";
-import type { CellCoord } from "../../src/shared/gridTypes";
-
 function containsSkillObject(value: unknown): boolean {
   if (value === null || typeof value !== "object") return false;
   if (Array.isArray((value as Record<string, unknown>).actions)) return true;
@@ -32,18 +30,16 @@ const setup: PlayerBattleSetup = {
   itemInstances: {},
 };
 
-const anchor: CellCoord = { side: "player", row: 0, col: 0 };
-
 describe("buildPlayerUnitInput — campaign/battle boundary", () => {
   it("returns resolved ActionSkillDefinition[] for battle runtime", () => {
-    const result = buildPlayerUnitInput(bp.templateId, anchor, "u1", setup);
+    const result = buildPlayerUnitInput(bp.templateId, "u1", setup);
     expect(result).not.toBeNull();
     expect(result!.skills.length).toBeGreaterThanOrEqual(1);
     expect(result!.skills.every(s => Array.isArray(s.actions))).toBe(true);
   });
 
   it("setup state retains string IDs — no ActionSkillDefinition leaked into campaign state", () => {
-    buildPlayerUnitInput(bp.templateId, anchor, "u1", setup);
+    buildPlayerUnitInput(bp.templateId, "u1", setup);
     const chosenValue = setup.playerUnits[bp.templateId].chosenUpgrades[tier.unlocksAtLevel];
     expect(typeof chosenValue).toBe("string");
     expect(containsSkillObject(setup.playerUnits)).toBe(false);

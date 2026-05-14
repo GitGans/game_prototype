@@ -1,8 +1,11 @@
 import type { Unit, BattleState } from '../battle/types';
 import type { BattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/battleSnapshots';
+import type { CellCoord } from '../shared/gridTypes';
 import { effectiveStats } from '../battle/combat';
+import { getFieldUnitEntries } from '../battle/deployment';
 
-export function buildBattleUnitSnapshot(unit: Unit): BattleUnitSnapshot {
+// fieldAnchor comes from the unit's deployment, not from Unit itself (Unit no longer has anchor).
+export function buildBattleUnitSnapshot(unit: Unit, fieldAnchor: CellCoord): BattleUnitSnapshot {
   const eff = effectiveStats(unit);
   return {
     id:       unit.id,
@@ -21,13 +24,13 @@ export function buildBattleUnitSnapshot(unit: Unit): BattleUnitSnapshot {
     effectiveInitiative:       eff.initiative,
     effectivePhysicalStrength: eff.physicalStrength,
     effectiveMagicalStrength:  eff.magicalStrength,
-    effectivePhysicalDefense: eff.physicalDefense,
-    effectiveMagicalDefense:  eff.magicalDefense,
-    effectiveDodge:           eff.dodge,
-    effectiveBlock:           eff.block,
+    effectivePhysicalDefense:  eff.physicalDefense,
+    effectiveMagicalDefense:   eff.magicalDefense,
+    effectiveDodge:            eff.dodge,
+    effectiveBlock:            eff.block,
 
     shape:  unit.shape,
-    anchor: { ...unit.anchor },
+    anchor: { ...fieldAnchor },
 
     skills:           unit.skills,
     activeSkillIndex: unit.activeSkillIndex,
@@ -41,10 +44,14 @@ export function buildBattleUnitSnapshot(unit: Unit): BattleUnitSnapshot {
   };
 }
 
-export function buildBattleUnitSnapshots(
-  units: Map<string, Unit>,
-): BattleUnitSnapshot[] {
-  return Array.from(units.values()).map(buildBattleUnitSnapshot);
+// Only field-deployed units are included in the field snapshot.
+// Bench units are rendered via the benchUnits mirror path (BenchUnitSnapshot).
+export function buildBattleUnitSnapshots(state: BattleState): BattleUnitSnapshot[] {
+  return getFieldUnitEntries(state).map(([, unit]) => {
+    const deployment = state.deployments.get(unit.id)!;
+    if (deployment.kind !== 'field') throw new Error('buildBattleUnitSnapshots: invariant violation — non-field unit from getFieldUnitEntries');
+    return buildBattleUnitSnapshot(unit, deployment.anchor);
+  });
 }
 
 export function buildBattleOccupancySnapshot(state: BattleState): BattleOccupancySnapshot {

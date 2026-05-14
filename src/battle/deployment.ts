@@ -11,6 +11,20 @@ export function requireDeployment(state: BattleState, unitId: string): UnitDeplo
   return d;
 }
 
+// Returns the field deployment for a unit, or throws if the unit is bench-deployed or missing.
+// Use whenever field position (anchor, row, col) is required.
+export function requireFieldDeployment(
+  state:  BattleState,
+  unitId: string,
+): Extract<UnitDeployment, { kind: 'field' }> {
+  const d = state.deployments.get(unitId);
+  if (!d) throw new Error(`requireFieldDeployment: no deployment for unit "${unitId}"`);
+  if (d.kind !== 'field') {
+    throw new Error(`requireFieldDeployment: unit "${unitId}" is bench-deployed, not field-deployed`);
+  }
+  return d;
+}
+
 export function isFieldUnit(state: BattleState, unitId: string): boolean {
   return state.deployments.get(unitId)?.kind === 'field';
 }
