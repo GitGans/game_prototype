@@ -86,7 +86,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     CARD_W: number,
     CARD_H: number
   ): void {
-    const isPlayer = unit.anchor.side === 'player';
+    const isPlayer = unit.side === 'player';
     const baseColor = isPlayer ? BATTLE_VISUAL_THEME.unit.player : BATTLE_VISUAL_THEME.unit.enemy;
     const borderColor = isActive ? BATTLE_VISUAL_THEME.cell.selected : BATTLE_VISUAL_THEME.cell.border;
 
@@ -172,7 +172,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
       .sort((a, b) => {
         if (b.effectiveInitiative !== a.effectiveInitiative)
           return b.effectiveInitiative - a.effectiveInitiative;
-        if (a.anchor.side !== b.anchor.side) return a.anchor.side === 'player' ? -1 : 1;
+        if (a.side !== b.side) return a.side === 'player' ? -1 : 1;
         return 0;
       });
   }

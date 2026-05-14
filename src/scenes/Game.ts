@@ -20,7 +20,7 @@ import {
   Side,
   SpriteSheetConfig,
 } from "../battle/types";
-import type { BattleUnitSnapshot } from "../shared/battleSnapshots";
+import type { BattleUnitSnapshot, FieldBattleUnitSnapshot } from "../shared/battleSnapshots";
 import { PhaseManager } from '../core/PhaseManager';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
@@ -186,12 +186,12 @@ export class Game extends Phaser.Scene {
   private buildUnitViews(): void {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'battle') return;
-    for (const unit of phase.units) {
+    for (const unit of phase.fieldUnits) {
       this.createUnitView(unit);
     }
   }
 
-  private createUnitView(unit: BattleUnitSnapshot): void {
+  private createUnitView(unit: FieldBattleUnitSnapshot): void {
     const cells = getOccupiedCells(unit.anchor, unit.shape);
     const rowSpan =
       Math.max(...cells.map((c) => c.row)) -

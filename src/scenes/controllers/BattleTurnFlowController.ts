@@ -3,7 +3,7 @@ import { PhaseManager } from "../../core/PhaseManager";
 import type { PhaseAction } from "../../core/phases";
 import type { BattlePhaseActionResult, AutoTurnIntention } from "../../core/phaseHandlers/battlePhaseHandler";
 import type { CellCoord, Col, Side } from "../../battle/types";
-import type { BattleUnitSnapshot } from "../../shared/battleSnapshots";
+import type { FieldBattleUnitSnapshot } from "../../shared/battleSnapshots";
 import { getOccupiedCells } from "../../battle/shapes";
 import {
   mapDirectiveToPresentationInput,
@@ -526,7 +526,7 @@ export class BattleTurnFlowController {
 
   // ─── Skill Bar ────────────────────────────────────────────────────────────
 
-  private showSkillIcons(unit: BattleUnitSnapshot): void {
+  private showSkillIcons(unit: FieldBattleUnitSnapshot): void {
     if (unit.skills.length < 1) { this.deps.skillBar.hide(); return; }
 
     const iconSize = Math.round(20 * LAYOUT_SCALE);

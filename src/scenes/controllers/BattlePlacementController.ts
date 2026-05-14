@@ -10,7 +10,7 @@ import { PhaseManager } from '../../core/PhaseManager';
 import { cellKey } from '../../battle/field';
 import { getOccupiedCells } from '../../battle/shapes';
 import type { CellCoord, Side } from '../../battle/types';
-import type { BattleUnitSnapshot, BenchUnitSnapshot } from '../../shared/battleSnapshots';
+import type { BattleUnitSnapshot, FieldBattleUnitSnapshot } from '../../shared/battleSnapshots';
 import type { GamePhase } from '../../core/phases';
 import type { CellView } from '../../objects/CellView';
 import type { UnitView } from '../../objects/UnitView';
@@ -37,7 +37,7 @@ export class BattlePlacementController {
     cellPixelPos: (side: Side, row: number, col: number) => { x: number; y: number };
     setStatus: (text: string) => void;
     setBattleLogVisible: (visible: boolean) => void;
-    createUnitView: (unit: BattleUnitSnapshot) => void;
+    createUnitView: (unit: FieldBattleUnitSnapshot) => void;
     destroyUnitView: (unitId: string) => void;
     onStartBattle: () => void;
   }) {}
@@ -154,8 +154,8 @@ export class BattlePlacementController {
           ? { onClick: () => this.onBenchCardClick(i) }
           : {
               onClick:      () => this.onBenchCardClick(i),
-              onHoverStart: (snap: BenchUnitSnapshot) =>
-                this.deps.unitTooltip.showBenchSnapshot(snap, logX, logY, logW),
+              onHoverStart: (snap: BattleUnitSnapshot) =>
+                this.deps.unitTooltip.showFixed(snap, logX, logY, logW),
               onHoverEnd:   () => this.deps.unitTooltip.hide(),
             };
 
@@ -228,8 +228,8 @@ export class BattlePlacementController {
   }
 
   private buildPlacementUnitsSignature(phase: BattlePhase): string {
-    return phase.units
-      .filter(u => u.anchor.side === 'player')
+    return phase.fieldUnits
+      .filter(u => u.side === 'player')
       .map(u => `${u.id}:${u.anchor.row}:${u.anchor.col}`)
       .sort()
       .join(';');
@@ -237,28 +237,23 @@ export class BattlePlacementController {
 
   private reconcilePlacementUnitViews(phase: BattlePhase): void {
     const playerUnitIds = new Set(
-      phase.units.filter(u => u.anchor.side === 'player').map(u => u.id),
+      phase.fieldUnits.filter(u => u.side === 'player').map(u => u.id),
     );
 
     for (const [id] of [...this.deps.unitViews]) {
-      const unit = phase.unitsById.get(id);
-      if (!unit) {
-        this.deps.destroyUnitView(id);
-        continue;
-      }
-      if (unit.anchor.side === 'player' && !playerUnitIds.has(id)) {
+      if (!playerUnitIds.has(id)) {
         this.deps.destroyUnitView(id);
       }
     }
 
-    for (const unit of phase.units) {
-      if (unit.anchor.side === 'player' && !this.deps.unitViews.has(unit.id)) {
+    for (const unit of phase.fieldUnits) {
+      if (unit.side === 'player' && !this.deps.unitViews.has(unit.id)) {
         this.deps.createUnitView(unit);
       }
     }
 
-    for (const unit of phase.units) {
-      if (unit.anchor.side === 'player') {
+    for (const unit of phase.fieldUnits) {
+      if (unit.side === 'player') {
         this.deps.unitViews.get(unit.id)?.update(unit);
       }
     }
@@ -268,7 +263,7 @@ export class BattlePlacementController {
     this.clearPlacementHighlights();
     const selectedId = phase.placementSelection.selectedFieldUnitId;
     if (!selectedId) return;
-    const unit = phase.unitsById.get(selectedId);
+    const unit = phase.fieldUnits.find(u => u.id === selectedId);
     if (!unit) return;
     const cells = getOccupiedCells(unit.anchor, unit.shape);
     for (const coord of cells) {

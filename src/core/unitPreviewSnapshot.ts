@@ -65,6 +65,11 @@ export function buildPlayerUnitPreviewSnapshotByTemplateId(
 }
 
 /**
+ * LEGACY (Stage 4): produced BenchUnitSnapshot for the pre-Stage-4 read model.
+ * As of Stage 4 the battle read model is built from state.units + state.deployments
+ * via buildBenchBattleUnitSnapshots() in core/battleSnapshotBuilder.ts.
+ * This function and BenchUnitSnapshot are scheduled for removal in Stage 5.
+ *
  * Build render snapshots for the entire bench.
  * undefined runtime slot → null render slot (empty card).
  */

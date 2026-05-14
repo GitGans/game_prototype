@@ -7,7 +7,6 @@ import type { BattleUnitSnapshot, BenchUnitSnapshot } from "../shared/battleSnap
 import type { SkillIconColorKind } from "../shared/snapshotTypes";
 import { buildSkillIconSnapshot } from "../core/unitUpgradePresentation";
 import type { UnitStatsSnapshot } from '../core/phases';
-import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 
 const W           = Math.round(200 * LAYOUT_SCALE);
 const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
@@ -265,7 +264,7 @@ function unitToData(unit: BattleUnitSnapshot): TooltipData {
   return {
     templateId:      unit.templateId,
     name:            unit.name,
-    side:            unit.anchor.side,
+    side:            unit.side,
     hp:              flat(unit.hp),
     maxHp:           flat(unit.maxHp),
     physicalStrength:  { value: unit.effectivePhysicalStrength,  base: unit.physicalStrength  },
@@ -280,8 +279,6 @@ function unitToData(unit: BattleUnitSnapshot): TooltipData {
       colorKind: buildSkillIconSnapshot(s).colorKind,
       isActive:  i === unit.activeSkillIndex,
     })),
-    spriteKey: unit.spriteSheet
-      ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
-      : null,
+    spriteKey: unit.spriteKey,
   };
 }

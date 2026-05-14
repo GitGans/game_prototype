@@ -39,7 +39,7 @@ export class UnitView extends Phaser.GameObjects.Container {
   ) {
     super(scene, x, y);
     this.effectTooltip = effectTooltip;
-    this.isPlayer = unit.anchor.side === 'player';
+    this.isPlayer = unit.side === 'player';
 
     const pad   = Math.round(10 * LAYOUT_SCALE);
     const w     = rowSpan * CELL_SIZE + (rowSpan - 1) * CELL_GAP - pad;  // padded — used by rect and UI elements

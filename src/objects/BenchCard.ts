@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
-import type { BenchUnitSnapshot } from '../shared/battleSnapshots';
+import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 
 export type BenchCardMode = 'placement' | 'battle';
 
 export interface BenchCardCallbacks {
   onClick?:       () => void;
-  onHoverStart?:  (snapshot: BenchUnitSnapshot) => void;
+  onHoverStart?:  (snapshot: BattleUnitSnapshot) => void;
   onHoverEnd?:    () => void;
 }
 
@@ -17,7 +17,7 @@ export interface BenchCardConfig {
   y:          number;              // center Y in world space
   width:      number;
   height:     number;
-  snapshot:   BenchUnitSnapshot | null;
+  snapshot:   BattleUnitSnapshot | null;
   selected:   boolean;             // passed from phase; valid for the card's lifetime
   mode:       BenchCardMode;
   callbacks?: BenchCardCallbacks;
@@ -65,7 +65,7 @@ export class BenchCard extends Phaser.GameObjects.Container {
 
   // ── Occupied slot ────────────────────────────────────────────────────────────
 
-  private buildOccupiedSlot(cfg: BenchCardConfig, snapshot: BenchUnitSnapshot): void {
+  private buildOccupiedSlot(cfg: BenchCardConfig, snapshot: BattleUnitSnapshot): void {
     const thickness = Math.max(2, Math.round(2 * LAYOUT_SCALE));
     const fillColor = cfg.selected ? BATTLE_VISUAL_THEME.bench.selected : BATTLE_VISUAL_THEME.bench.bg;
 
@@ -79,8 +79,9 @@ export class BenchCard extends Phaser.GameObjects.Container {
     );
 
     // Sprite (frame 0 = idle) with graceful fallback
-    const sprite = snapshot.spriteKey && cfg.scene.textures.exists(snapshot.spriteKey)
-      ? cfg.scene.add.image(0, 0, snapshot.spriteKey)
+    const spriteKey = snapshot.spriteKey;
+    const sprite = spriteKey && cfg.scene.textures.exists(spriteKey)
+      ? cfg.scene.add.image(0, 0, spriteKey)
           .setFrame(0)
           .setDisplaySize(cfg.width - 2, cfg.height - 2)
       : null;
@@ -102,7 +103,7 @@ export class BenchCard extends Phaser.GameObjects.Container {
     ).setOrigin(0.5, 0);
 
     // HP (bench shows max HP only — unit is at full health before battle)
-    const hp   = snapshot.stats.maxHp.value;
+    const hp   = snapshot.maxHp;
     const barW = cfg.width  - Math.round(12 * LAYOUT_SCALE);
     const barH = Math.round(6  * LAYOUT_SCALE);
     const barY = cfg.height / 2 - Math.round(10 * LAYOUT_SCALE);

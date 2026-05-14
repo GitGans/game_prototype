@@ -38,8 +38,12 @@ import {
   type BattlePhaseActionResult,
   type AutoTurnIntention,
 } from './phaseHandlers/battlePhaseHandler';
-import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
-import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
+import {
+  buildBattleUnitSnapshots,
+  buildFieldBattleUnitSnapshots,
+  buildBenchBattleUnitSnapshots,
+  buildBattleOccupancySnapshot,
+} from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
@@ -327,21 +331,22 @@ class PhaseManagerClass {
       }
       case 'battle': {
         const battleState = GameState.get();
-        const setup       = this.getActiveBattleSetup();
 
-        // ── Existing bench/participants rebuild ───────────────────────────
-        const benchUnits = buildBenchUnitSnapshots(battleState.benchUnits, setup);
+        // ── Stage 4: read model built from state.units + state.deployments ──
+        const units      = buildBattleUnitSnapshots(battleState);
+        const fieldUnits = buildFieldBattleUnitSnapshots(battleState);
+        const benchUnits = buildBenchBattleUnitSnapshots(battleState);
+        const unitsById  = new Map(units.map(u => [u.id, u]));
+        const occupancy  = buildBattleOccupancySnapshot(battleState);
 
-        // ── Stage 4: full scene-facing render data ────────────────────────
-        const units     = buildBattleUnitSnapshots(battleState);
-        const unitsById = new Map(units.map(u => [u.id, u]));
-        const occupancy = buildBattleOccupancySnapshot(battleState);
-
-        const activeUnitId = battleState.roundQueue[0] ?? null;
-        const activeUnit   = activeUnitId ? (unitsById.get(activeUnitId) ?? null) : null;
+        // roundQueue is field-only by invariant — look up via fieldUnits to
+        // preserve FieldBattleUnitSnapshot typing for activeUnit.
+        const fieldById      = new Map(fieldUnits.map(u => [u.id, u]));
+        const activeUnitId   = battleState.roundQueue[0] ?? null;
+        const activeUnit     = activeUnitId ? (fieldById.get(activeUnitId) ?? null) : null;
 
         const battleMode     = GameState.getBattleMode();
-        const activeUnitSide = activeUnit?.anchor.side ?? null;
+        const activeUnitSide = activeUnit?.side ?? null;
 
         const manualTurnControlsVisible =
           battleMode === 'manual' && activeUnitSide === 'player';
@@ -379,6 +384,7 @@ class PhaseManagerClass {
           selectedBenchSlot,
           battlePhase:         battleState.phase,
           units,
+          fieldUnits,
           unitsById,
           occupancy,
           roundQueue:          [...battleState.roundQueue],
@@ -921,6 +927,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         selectedBenchSlot:  null,                                                     // filled by rebuildSnapshot
         battlePhase:         'placement',
         units:               [],
+        fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
         roundQueue:          [],
@@ -955,6 +962,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         selectedBenchSlot:  null,                                                     // filled by rebuildSnapshot
         battlePhase:         'placement',
         units:               [],
+        fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
         roundQueue:          [],
