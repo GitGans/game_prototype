@@ -47,7 +47,7 @@ export function computeOneTurn(
   const targets  = resolveSkillTargetsForPolicy(updatedUnit, plan.targetPolicy, state.occupancy);
 
   const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)
-    ? resolveBestHealTarget(state.occupancy, targets)
+    ? resolveBestHealTarget(state, targets)
     : resolveRandomTarget(targets, rng);
   if (!target) return state;
 

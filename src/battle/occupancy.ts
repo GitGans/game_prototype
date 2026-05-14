@@ -1,31 +1,51 @@
-import { CellCoord, OccupancyMap, Unit } from './types';
+import type { BattleState, OccupancyMap, Unit } from './types';
+import type { UnitDeployment } from '../shared/unitDeploymentTypes';
+import type { CellCoord } from '../shared/gridTypes';
 import { cellKey } from './field';
 import { getOccupiedCells } from './shapes';
 
-export function buildOccupancy(units: Map<string, Unit>): OccupancyMap {
-  const cellToUnit = new Map<string, Unit>();
+export function buildOccupancy(
+  units: Map<string, Unit>,
+  deployments: Map<string, UnitDeployment>,
+): OccupancyMap {
+  const cellToUnitId = new Map<string, string>();
   const unitToCells = new Map<string, CellCoord[]>();
 
   for (const unit of units.values()) {
-    const cells = getOccupiedCells(unit.anchor, unit.shape);
+    const deployment = deployments.get(unit.id);
+    if (!deployment) {
+      throw new Error(
+        `buildOccupancy: unit "${unit.id}" has no deployment. ` +
+        `All units in the units map must have a corresponding deployment entry.`,
+      );
+    }
+    if (deployment.kind !== 'field') continue;
+
+    const cells = getOccupiedCells(deployment.anchor, unit.shape);
     unitToCells.set(unit.id, cells);
     for (const coord of cells) {
-      cellToUnit.set(cellKey(coord), unit);
+      cellToUnitId.set(cellKey(coord), unit.id);
     }
   }
 
-  return { cellToUnit, unitToCells };
+  return { cellToUnitId, unitToCells };
 }
 
 export function removeUnit(unitId: string, occupancy: OccupancyMap): OccupancyMap {
   const cells = occupancy.unitToCells.get(unitId) ?? [];
-  const newCellToUnit = new Map(occupancy.cellToUnit);
+  const newCellToUnitId = new Map(occupancy.cellToUnitId);
   const newUnitToCells = new Map(occupancy.unitToCells);
 
   for (const coord of cells) {
-    newCellToUnit.delete(cellKey(coord));
+    newCellToUnitId.delete(cellKey(coord));
   }
   newUnitToCells.delete(unitId);
 
-  return { cellToUnit: newCellToUnit, unitToCells: newUnitToCells };
+  return { cellToUnitId: newCellToUnitId, unitToCells: newUnitToCells };
+}
+
+// Resolves the unit at a given cell by id lookup.
+export function getUnitAtCell(state: BattleState, coord: CellCoord): Unit | null {
+  const unitId = state.occupancy.cellToUnitId.get(cellKey(coord));
+  return unitId ? (state.units.get(unitId) ?? null) : null;
 }

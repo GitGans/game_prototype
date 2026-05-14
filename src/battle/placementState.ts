@@ -46,9 +46,17 @@ export function swapBenchWithField(
 ): BattleState {
   if (benchIdx < 0 || benchIdx >= state.benchUnits.length) return state;
   if (fieldUnit.anchor.side !== 'player') return state;
+
   const newUnits = new Map(state.units);
   newUnits.delete(fieldUnit.id);
-  let next: BattleState = { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) };
+  const newDeployments = new Map(state.deployments);
+  newDeployments.delete(fieldUnit.id); // remove — fieldUnit is leaving state.units
+  let next: BattleState = {
+    ...state,
+    units:       newUnits,
+    deployments: newDeployments,
+    occupancy:   buildOccupancy(newUnits, newDeployments),
+  };
 
   if (!canPlace(newUnit.anchor, newUnit.shape, next, 'player')) return state;
 
@@ -67,7 +75,15 @@ export function swapFieldUnits(state: BattleState, idA: string, idB: string): Ba
   const tmpUnits = new Map(state.units);
   tmpUnits.delete(idA);
   tmpUnits.delete(idB);
-  const tmp: BattleState = { ...state, units: tmpUnits, occupancy: buildOccupancy(tmpUnits) };
+  const tmpDeployments = new Map(state.deployments);
+  tmpDeployments.delete(idA); // remove — addFieldUnit() would throw on re-add otherwise
+  tmpDeployments.delete(idB);
+  const tmp: BattleState = {
+    ...state,
+    units:       tmpUnits,
+    deployments: tmpDeployments,
+    occupancy:   buildOccupancy(tmpUnits, tmpDeployments),
+  };
 
   if (!canPlace(unitB.anchor, unitA.shape, tmp, 'player')) return state;
   if (!canPlace(unitA.anchor, unitB.shape, tmp, 'player')) return state;
@@ -84,7 +100,14 @@ export function moveFieldUnit(state: BattleState, unitId: string, newAnchor: Cel
 
   const tmpUnits = new Map(state.units);
   tmpUnits.delete(unitId);
-  const tmp: BattleState = { ...state, units: tmpUnits, occupancy: buildOccupancy(tmpUnits) };
+  const tmpDeployments = new Map(state.deployments);
+  tmpDeployments.delete(unitId); // remove — addFieldUnit() would throw on re-add otherwise
+  const tmp: BattleState = {
+    ...state,
+    units:       tmpUnits,
+    deployments: tmpDeployments,
+    occupancy:   buildOccupancy(tmpUnits, tmpDeployments),
+  };
 
   if (!canPlace(newAnchor, unit.shape, tmp, 'player')) return state;
 
@@ -101,12 +124,15 @@ export function moveFieldUnitToBench(state: BattleState, unitId: string, benchId
 
   const newUnits = new Map(state.units);
   newUnits.delete(unit.id);
+  const newDeployments = new Map(state.deployments);
+  newDeployments.delete(unit.id); // remove — unit is leaving state.units
   const newBench = [...state.benchUnits];
   newBench[benchIdx] = { templateId: unit.templateId };
   return {
     ...state,
     units:              newUnits,
-    occupancy:          buildOccupancy(newUnits),
+    deployments:        newDeployments,
+    occupancy:          buildOccupancy(newUnits, newDeployments),
     benchUnits:         newBench,
     placementSelection: CLEAR,
   };
@@ -121,12 +147,15 @@ export function returnFieldUnitToBench(state: BattleState, unitId: string): Batt
 
   const newUnits = new Map(state.units);
   newUnits.delete(unit.id);
+  const newDeployments = new Map(state.deployments);
+  newDeployments.delete(unit.id); // remove — unit is leaving state.units
   const newBench = [...state.benchUnits];
   newBench[emptyIdx] = { templateId: unit.templateId };
   return {
     ...state,
     units:              newUnits,
-    occupancy:          buildOccupancy(newUnits),
+    deployments:        newDeployments,
+    occupancy:          buildOccupancy(newUnits, newDeployments),
     benchUnits:         newBench,
     placementSelection: CLEAR,
   };

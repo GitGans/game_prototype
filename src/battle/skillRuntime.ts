@@ -1,12 +1,12 @@
 import {
+  BattleState,
   CellCoord,
-  OccupancyMap,
   Unit,
 } from './types';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { Rng } from '../shared/random';
 import { pickOneOrNull, randomInt } from '../shared/random';
-import { cellKey } from './field';
+import { getUnitAtCell } from './occupancy';
 
 interface SkillOwner { skills: readonly ActionSkillDefinition[]; activeSkillIndex: number; }
 
@@ -43,13 +43,13 @@ export function resolveRandomSkillIndex(
  * Returns null if targets is empty.
  */
 export function resolveBestHealTarget(
-  occupancy: OccupancyMap,
+  state: BattleState,
   targets: CellCoord[],
 ): CellCoord | null {
   if (targets.length === 0) return null;
   return targets.reduce((best, coord) => {
-    const u = occupancy.cellToUnit.get(cellKey(coord));
-    const bestU = occupancy.cellToUnit.get(cellKey(best));
+    const u = getUnitAtCell(state, coord);
+    const bestU = getUnitAtCell(state, best);
     return u && bestU && u.hp / u.maxHp < bestU.hp / bestU.maxHp ? coord : best;
   });
 }

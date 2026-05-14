@@ -63,7 +63,7 @@ export function decideAutoTurn(input: {
   }
 
   const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)
-    ? resolveBestHealTarget(state.occupancy, targets)
+    ? resolveBestHealTarget(state, targets)
     : resolveRandomTarget(targets, rng);
 
   if (!target) {

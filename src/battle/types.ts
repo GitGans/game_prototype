@@ -1,3 +1,6 @@
+export type { UnitDeployment } from '../shared/unitDeploymentTypes';
+import type { UnitDeployment } from '../shared/unitDeploymentTypes';
+
 // ─── Re-exports — TODO(post-refactor): migrate each caller to direct shared/ import and remove these. ───
 export type { Side, Row, Col, CellCoord, ShapeOffset, UnitShape } from '../shared/gridTypes';
 export type {
@@ -60,7 +63,7 @@ export interface Unit {
 }
 
 export interface OccupancyMap {
-  cellToUnit: Map<string, Unit>;
+  cellToUnitId: Map<string, string>; // cellKey → unit id
   unitToCells: Map<string, CellCoord[]>;
 }
 
@@ -82,9 +85,17 @@ export interface BattleState {
   roundQueue:         string[]; // unit IDs to act this round; [0] = currently acting
   phase:              Phase;
   validTargets:       CellCoord[];
-  benchUnits:         (BenchUnitRef | undefined)[]; // player units waiting on the bench; undefined = empty slot
+  // Stage 1 migration bridge: source of truth for bench UI/placement until bench units
+  // become real Unit objects with UnitDeployment bench entries in a later stage.
+  benchUnits:         (BenchUnitRef | undefined)[];
   nextPlayerId:       number;          // next p<n> id for unit creation during placement
   placementSelection: PlacementSelection; // UI selection; owned by BattleState so Game.ts stays stateless
+  // Stage 1 invariant: every unit in state.units has exactly one entry here,
+  // and every entry here references an existing unit in state.units.
+  // Bench contents in benchUnits are NOT mirrored here in Stage 1.
+  deployments:        Map<string, UnitDeployment>;
+  // Total bench capacity. Set from battle setup; drives getFreeBenchSlot().
+  benchSlotCount:     number;
 }
 
 export interface ResolvedHitCell {

@@ -61,7 +61,7 @@ describe("resolveAttack", () => {
     });
 
     expect(after.units.has("dead-unit")).toBe(false);
-    expect(after.occupancy.cellToUnit.has(cellKey(coord("enemy", 0, 0)))).toBe(false);
+    expect(after.occupancy.cellToUnitId.has(cellKey(coord("enemy", 0, 0)))).toBe(false);
   });
 
   it("dodges when RNG is below the dodge threshold", () => {

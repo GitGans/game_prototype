@@ -48,10 +48,7 @@ export function buildBattleUnitSnapshots(
 }
 
 export function buildBattleOccupancySnapshot(state: BattleState): BattleOccupancySnapshot {
-  const cellToUnitId = new Map<string, string>();
-  for (const [key, unit] of state.occupancy.cellToUnit) {
-    cellToUnitId.set(key, unit.id);
-  }
+  const cellToUnitId = new Map(state.occupancy.cellToUnitId); // direct copy, no conversion
 
   const unitToCells = new Map(
     Array.from(state.occupancy.unitToCells, ([id, cells]) => [

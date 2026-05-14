@@ -14,7 +14,7 @@ const ENEMY_SIDE: Record<Side, Side> = {
 export function isFrontRowAlive(side: Side, occupancy: OccupancyMap): boolean {
   for (const col of [0, 1, 2] as Col[]) {
     const key = cellKey({ side, row: 0 as Row, col });
-    if (occupancy.cellToUnit.has(key)) return true;
+    if (occupancy.cellToUnitId.has(key)) return true;
   }
   return false;
 }
@@ -40,7 +40,7 @@ export function getMeleeTargets(attacker: Unit, occupancy: OccupancyMap): CellCo
 
   for (const col of [0, 1, 2] as Col[]) {
     const coord: CellCoord = { side: targetSide, row: targetRow, col };
-    if (occupancy.cellToUnit.has(cellKey(coord))) {
+    if (occupancy.cellToUnitId.has(cellKey(coord))) {
       cells.push(coord);
     }
   }
@@ -57,7 +57,7 @@ export function getFriendlyTargets(side: Side, occupancy: OccupancyMap): CellCoo
   for (const row of [0, 1] as Row[]) {
     for (const col of [0, 1, 2] as Col[]) {
       const coord: CellCoord = { side, row, col };
-      if (occupancy.cellToUnit.has(cellKey(coord))) {
+      if (occupancy.cellToUnitId.has(cellKey(coord))) {
         cells.push(coord);
       }
     }
@@ -85,7 +85,7 @@ export function getRangedTargets(attackerSide: Side, occupancy: OccupancyMap): C
   for (const row of [0, 1] as Row[]) {
     for (const col of [0, 1, 2] as Col[]) {
       const coord: CellCoord = { side: targetSide, row, col };
-      if (occupancy.cellToUnit.has(cellKey(coord))) {
+      if (occupancy.cellToUnitId.has(cellKey(coord))) {
         cells.push(coord);
       }
     }

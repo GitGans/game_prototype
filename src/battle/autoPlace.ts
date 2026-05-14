@@ -70,7 +70,7 @@ export function autoPlacePlayer(
     if (!addToBench(c.templateId)) tryPlaceOnField(c);
   }
 
-  return { ...state, benchUnits: paddedBench };
+  return { ...state, benchUnits: paddedBench, benchSlotCount };
 }
 
 export function autoPlaceEnemies(
@@ -83,7 +83,7 @@ export function autoPlaceEnemies(
 
   for (const col of cols) {
     const anchor: CellCoord = { side: 'enemy', row: 0, col };
-    if (state.occupancy.cellToUnit.has(cellKey(anchor))) continue;
+    if (state.occupancy.cellToUnitId.has(cellKey(anchor))) continue;
     if (candidates.frontPool.length === 0) continue;
     const c = pickOne(rng, candidates.frontPool);
     const unit = c.createUnit(anchor, `e${counter++}`);
@@ -92,7 +92,7 @@ export function autoPlaceEnemies(
 
   for (const col of cols) {
     const anchor: CellCoord = { side: 'enemy', row: 1, col };
-    if (state.occupancy.cellToUnit.has(cellKey(anchor))) continue;
+    if (state.occupancy.cellToUnitId.has(cellKey(anchor))) continue;
     if (candidates.backPool.length === 0) continue;
     const c = pickOne(rng, candidates.backPool);
     const unit = c.createUnit(anchor, `e${counter++}`);

@@ -21,13 +21,15 @@ import { buildOccupancy } from "../battle/occupancy";
 function emptyState(): BattleState {
   return {
     units:              new Map(),
-    occupancy:          buildOccupancy(new Map()),
+    occupancy:          buildOccupancy(new Map(), new Map()),
     roundQueue:         [],
     phase:              'placement',
     validTargets:       [],
     benchUnits:         [],
     nextPlayerId:       1,
     placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },
+    deployments:        new Map(),
+    benchSlotCount:     0,
   };
 }
 
