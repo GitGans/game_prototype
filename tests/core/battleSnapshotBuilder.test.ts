@@ -33,9 +33,8 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     expect(f.deployment).not.toBe(state.deployments.get('f1'));    // deployment cloned
     if (f.deployment.kind === 'field') {
       expect(f.deployment.anchor).toEqual({ side: 'player', row: 1, col: 2 });
-      expect(f.anchor).not.toBe(f.deployment.anchor);              // anchor cloned independently
     }
-    expect(f.anchor).toEqual({ side: 'player', row: 1, col: 2 });
+    expect('anchor' in f).toBe(false);                              // top-level anchor removed in Stage 5
     expect(f.side).toBe('player');
     expect(f.level).toBe(3);
     expect(f.spriteKey === null || typeof f.spriteKey === 'string').toBe(true);
@@ -51,21 +50,19 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     const b = bench[2]!;
 
     expect(b.deployment).toEqual({ kind: 'bench', slot: 2 });
-    expect(b.anchor).toBeUndefined();
+    expect('anchor' in b).toBe(false);
     expect(b.side).toBe('player');
     expect(b.hp).toBe(3);
     expect(b.maxHp).toBe(10);
     expect(b.level).toBe(1);
   });
 
-  it('buildBenchBattleUnitSnapshots is positional and ignores state.benchUnits mirror', () => {
+  it('buildBenchBattleUnitSnapshots is positional and derived from deployments', () => {
     const unit = makeUnit({ id: 'b1', side: 'player' });
     const state = makeBattleStateFromUnits({
       bench: [{ unit, slot: 2 }],
       benchSlotCount: 4,
     });
-    // Deliberately corrupt the legacy mirror — the builder must not read it.
-    state.benchUnits = [{ unitId: 'GHOST' }, undefined, undefined, undefined];
 
     const bench = buildBenchBattleUnitSnapshots(state);
     expect(bench).toHaveLength(4);

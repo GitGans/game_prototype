@@ -25,7 +25,6 @@ function emptyState(): BattleState {
     roundQueue:         [],
     phase:              'placement',
     validTargets:       [],
-    benchUnits:         [],
     nextPlayerId:       1,
     placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null },
     deployments:        new Map(),

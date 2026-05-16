@@ -147,16 +147,6 @@ describe('autoPlacePlayer — Stage 2', () => {
     assertDeploymentInvariants(result);
   });
 
-  it('populates benchUnits compatibility mirror for bench candidates', () => {
-    const fieldCandidates = Array.from({ length: 6 }, (_, i) => makeCandidate(`field-${i}`));
-    const overflowCandidate = makeCandidate('overflow');
-    const result = autoPlacePlayer(emptyState(3), [...fieldCandidates, overflowCandidate], 3);
-
-    // Mirror has the overflow unit's templateId
-    const mirrorEntry = result.benchUnits.find(b => b?.templateId === 'overflow');
-    expect(mirrorEntry).toBeDefined();
-  });
-
   it('bench candidate is created exactly once (no duplicate units)', () => {
     const fieldCandidates = Array.from({ length: 6 }, (_, i) => makeCandidate(`field-${i}`));
     const overflow = makeCandidate('overflow');
@@ -262,7 +252,6 @@ describe('placeBenchUnitOnField — Stage 2', () => {
     const benchUnit = makeUnit({ side: 'player' });
     let state = emptyState(3);
     state = addBenchUnit(state, benchUnit, 0);
-    state = { ...state, benchUnits: [{ templateId: benchUnit.templateId }] };
 
     const anchor    = coord('player', 0, 0);
     const nextState = placeBenchUnitOnField(state, benchUnit, anchor, 0);
@@ -271,8 +260,6 @@ describe('placeBenchUnitOnField — Stage 2', () => {
     expect(nextState.units.size).toBe(1);
     // Deployment changed to field
     expect(isFieldUnit(nextState, benchUnit.id)).toBe(true);
-    // Mirror cleared
-    expect(nextState.benchUnits[0]).toBeUndefined();
     assertDeploymentInvariants(nextState);
   });
 
@@ -296,15 +283,12 @@ describe('swapBenchWithField — Stage 2', () => {
     let state = emptyState(3);
     state = addFieldUnit(state, fieldUnit, coord('player', 0, 0));
     state = addBenchUnit(state, benchUnit, 0);
-    state = { ...state, benchUnits: [{ templateId: benchUnit.templateId }, undefined, undefined] };
 
     const next = swapBenchWithField(state, benchUnit, 0, fieldUnit);
 
     expect(next.units.size).toBe(2); // no new units
     expect(isFieldUnit(next, benchUnit.id)).toBe(true);
     expect(isBenchUnit(next, fieldUnit.id)).toBe(true);
-    // Mirror updated
-    expect(next.benchUnits[0]?.templateId).toBe(fieldUnit.templateId);
     assertDeploymentInvariants(next);
   });
 });
@@ -321,7 +305,6 @@ describe('moveFieldUnitToBench — Stage 2', () => {
 
     expect(next.units.size).toBe(1); // unit still present
     expect(isBenchUnit(next, unit.id)).toBe(true);
-    expect(next.benchUnits[0]?.templateId).toBe(unit.templateId);
     assertDeploymentInvariants(next);
   });
 });

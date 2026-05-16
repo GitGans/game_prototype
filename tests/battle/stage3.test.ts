@@ -2,9 +2,9 @@
  * Stage 3 tests: Placement runtime selection by unit id (not bench index).
  *
  * Verifies that:
- * - selectBenchSlot resolves through state.deployments, not state.benchUnits.
+ * - selectBenchSlot resolves through state.deployments.
  * - selectBenchSlot stores selectedBenchUnitId, not a slot index.
- * - selectBenchSlot does nothing when only the benchUnits mirror has an entry.
+ * - selectBenchSlot does nothing when the slot is empty.
  * - Bench → field operations preserve the same runtime Unit id.
  */
 
@@ -24,12 +24,10 @@ function emptyState(benchSlotCount = 3): BattleState {
 }
 
 describe('Stage 3 — selectBenchSlot uses deployments as truth', () => {
-  it('selects via deployments even when benchUnits mirror is empty', () => {
+  it('selects via deployments', () => {
     const unit = makeUnit({ side: 'player' });
     let state  = emptyState(3);
     state = addBenchUnit(state, unit, 1);
-    // Deliberately leave state.benchUnits empty — runtime must not depend on it.
-    expect(state.benchUnits.length).toBe(0);
 
     const next = selectBenchSlot(state, 1);
 
@@ -37,15 +35,11 @@ describe('Stage 3 — selectBenchSlot uses deployments as truth', () => {
     expect(next.placementSelection.selectedFieldUnitId).toBeNull();
   });
 
-  it('does NOT select when only the benchUnits mirror has an entry (no deployment)', () => {
-    const state: BattleState = {
-      ...emptyState(3),
-      benchUnits: [{ templateId: 'ghost' }, undefined, undefined],
-    };
+  it('selecting an empty slot is a no-op (preserves prior selection)', () => {
+    const state = emptyState(3);
 
     const next = selectBenchSlot(state, 0);
 
-    // No deployment → no selection, regardless of mirror contents.
     expect(next).toBe(state);
   });
 
@@ -61,7 +55,6 @@ describe('Stage 3 — bench → field preserves unit identity', () => {
     const unit = makeUnit({ side: 'player' });
     let state  = emptyState(3);
     state = addBenchUnit(state, unit, 0);
-    state = { ...state, benchUnits: [{ templateId: unit.templateId }, undefined, undefined] };
 
     const next = placeBenchUnitOnField(state, unit, coord('player', 0, 0), 0);
 

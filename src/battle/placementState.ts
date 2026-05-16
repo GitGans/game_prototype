@@ -83,9 +83,7 @@ export function placeBenchUnitOnField(
   // deployExistingUnitToField overwrites bench deployment with field deployment
   // and rebuilds occupancy from scratch.
   const next = deployExistingUnitToField(state, unit.id, anchor);
-  const newBench = [...next.benchUnits];
-  newBench[benchIdx] = undefined; // synchronize compatibility mirror
-  return { ...next, benchUnits: newBench, placementSelection: CLEAR };
+  return { ...next, placementSelection: CLEAR };
 }
 
 // Swaps an existing bench unit with an existing field unit.
@@ -127,10 +125,7 @@ export function swapBenchWithField(
     occupancy:   buildOccupancy(state.units, newDeployments),
   };
 
-  // Synchronize mirror: bench slot now holds the former field unit.
-  const newBench = [...next.benchUnits];
-  newBench[benchDeployment.slot] = { templateId: fieldUnit.templateId };
-  return { ...next, benchUnits: newBench, placementSelection: CLEAR };
+  return { ...next, placementSelection: CLEAR };
 }
 
 // Swaps two field units' positions.
@@ -194,9 +189,7 @@ export function moveFieldUnitToBench(state: BattleState, unitId: string, benchId
   }
 
   const next = deployExistingUnitToBench(state, unitId, benchIdx);
-  const newBench = [...next.benchUnits];
-  newBench[benchIdx] = { templateId: unit.templateId }; // synchronize mirror
-  return { ...next, benchUnits: newBench, placementSelection: CLEAR };
+  return { ...next, placementSelection: CLEAR };
 }
 
 // Returns a field unit to the first free bench slot.
@@ -210,7 +203,5 @@ export function returnFieldUnitToBench(state: BattleState, unitId: string): Batt
   if (slot === null) return state;
 
   const next = deployExistingUnitToBench(state, unitId, slot);
-  const newBench = [...next.benchUnits];
-  newBench[slot] = { templateId: unit.templateId }; // synchronize mirror
-  return { ...next, benchUnits: newBench, placementSelection: CLEAR };
+  return { ...next, placementSelection: CLEAR };
 }

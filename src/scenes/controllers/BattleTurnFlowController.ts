@@ -532,16 +532,16 @@ export class BattleTurnFlowController {
     const iconSize = Math.round(20 * LAYOUT_SCALE);
     const iconGap  = Math.round(3  * LAYOUT_SCALE);
 
-    const occupiedCells = getOccupiedCells(unit.anchor, unit.shape);
+    const occupiedCells = getOccupiedCells(unit.deployment.anchor, unit.shape);
     const rightmostCol  = Math.max(...occupiedCells.map(c => c.col)) as Col;
     const topRow        = Math.min(...occupiedCells.map(c => c.row));
     const bottomRow     = Math.max(...occupiedCells.map(c => c.row));
 
-    const rightCellPos = this.deps.cellPixelPos(unit.anchor.side, topRow, rightmostCol);
+    const rightCellPos = this.deps.cellPixelPos(unit.deployment.anchor.side, topRow, rightmostCol);
     const iconX        = rightCellPos.x + CELL_SIZE / 2 + iconGap + iconSize / 2;
 
-    const unitTopY    = this.deps.cellPixelPos(unit.anchor.side, topRow,    rightmostCol).y - CELL_SIZE / 2;
-    const unitBottomY = this.deps.cellPixelPos(unit.anchor.side, bottomRow, rightmostCol).y + CELL_SIZE / 2;
+    const unitTopY    = this.deps.cellPixelPos(unit.deployment.anchor.side, topRow,    rightmostCol).y - CELL_SIZE / 2;
+    const unitBottomY = this.deps.cellPixelPos(unit.deployment.anchor.side, bottomRow, rightmostCol).y + CELL_SIZE / 2;
     const unitCenterY = (unitTopY + unitBottomY) / 2;
     const totalH      = unit.skills.length * iconSize + (unit.skills.length - 1) * iconGap;
     const startY      = unitCenterY - totalH / 2 + iconSize / 2;

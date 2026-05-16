@@ -3,7 +3,7 @@ import { LAYOUT_SCALE } from "../core/Constants";
 import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 import { UI_THEME, fontSize } from "../ui/theme";
 import { BaseTooltip } from "../ui/BaseTooltip";
-import type { BattleUnitSnapshot, BenchUnitSnapshot } from "../shared/battleSnapshots";
+import type { BattleUnitSnapshot } from "../shared/battleSnapshots";
 import type { SkillIconColorKind } from "../shared/snapshotTypes";
 import { buildSkillIconSnapshot } from "../core/unitUpgradePresentation";
 import type { UnitStatsSnapshot } from '../core/phases';
@@ -117,46 +117,6 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.bg.setSize(w, h);
     this.setPosition(x, y);
     this.setVisible(true);
-  }
-
-  // Bench preview represents an uninjured reserve unit for battle setup.
-  showBenchSnapshot(
-    snapshot: BenchUnitSnapshot,
-    anchorX:  number,
-    anchorY:  number,
-    overrideW?: number,
-  ): void {
-    const data: TooltipData = {
-      templateId:      snapshot.templateId,
-      name:            snapshot.name,
-      level:           snapshot.level,
-      side:            'player',
-      // Use maxHp for both — bench shows a healthy unit, not mid-battle HP
-      hp:              snapshot.stats.maxHp,
-      maxHp:           snapshot.stats.maxHp,
-      physicalStrength:  snapshot.stats.physicalStrength,
-      magicalStrength:   snapshot.stats.magicalStrength,
-      physicalDefense: snapshot.stats.physicalDefense,
-      magicalDefense:  snapshot.stats.magicalDefense,
-      dodge:           snapshot.stats.dodge,
-      block:           snapshot.stats.block,
-      initiative:      snapshot.stats.initiative,
-      skills: snapshot.skills.map(s => ({
-        name:      s.name,
-        colorKind: s.colorKind,
-        isActive:  false,
-      })),
-      spriteKey: snapshot.spriteKey,
-    };
-    if (overrideW !== undefined) {
-      this.clearContent();
-      const h = this.buildContent(data);
-      this.bg.setSize(overrideW, h);
-      this.setPosition(anchorX, anchorY);
-      this.setVisible(true);
-    } else {
-      super.show(data, anchorX, anchorY, 'right');
-    }
   }
 
   // ── Content builder ────────────────────────────────────────────────────────

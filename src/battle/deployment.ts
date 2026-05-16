@@ -45,8 +45,7 @@ export function getFieldUnits(state: BattleState): Unit[] {
 }
 
 // Returns the runtime Unit deployed to the given bench slot, or undefined if
-// the slot is empty. Reads state.deployments — the runtime source of truth —
-// not the BattleState.benchUnits compatibility mirror.
+// the slot is empty. Reads state.deployments — the runtime source of truth.
 export function getBenchSlotOccupant(state: BattleState, slot: number): Unit | undefined {
   for (const [id, deployment] of state.deployments.entries()) {
     if (deployment.kind === 'bench' && deployment.slot === slot) {

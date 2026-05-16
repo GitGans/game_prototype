@@ -62,9 +62,6 @@ export function buildBattleUnitSnapshot(
 
     activatableAbilities: unit.activatableAbilities,
   };
-  if (deployment.kind === 'field') {
-    snap.anchor = { ...deployment.anchor };
-  }
   return snap;
 }
 

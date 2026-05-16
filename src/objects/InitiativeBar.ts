@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
+import type { FieldBattleUnitSnapshot } from '../shared/battleSnapshots';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
@@ -16,11 +16,11 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  update(snapshot: { roundQueue: string[]; unitsById: Map<string, BattleUnitSnapshot> }): void {
+  update(snapshot: { roundQueue: string[]; fieldUnitsById: Map<string, FieldBattleUnitSnapshot> }): void {
     this.removeAll(true);
 
-    const { roundQueue, unitsById } = snapshot;
-    const nextRound = this.buildNextRound(unitsById);
+    const { roundQueue, fieldUnitsById } = snapshot;
+    const nextRound = this.buildNextRound(fieldUnitsById);
 
     // ── Card size: fit MAX_CARDS across full screen width ──────────────────
     const MAX_CARDS = 18;
@@ -47,7 +47,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
 
     // ── Current round ────────────────────────────────────────────────────────
     for (let i = 0; i < displayedCurrent.length; i++) {
-      const unit = unitsById.get(displayedCurrent[i]);
+      const unit = fieldUnitsById.get(displayedCurrent[i]);
       if (!unit) continue;
       const isActive = i === 0;
       const cardY = isActive ? -ACTIVE_LIFT : 0;
@@ -80,7 +80,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
   private drawCard(
     x: number,
     y: number,
-    unit: BattleUnitSnapshot,
+    unit: FieldBattleUnitSnapshot,
     isActive: boolean,
     alpha: number,
     CARD_W: number,
@@ -166,8 +166,8 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     this.add(toAdd);
   }
 
-  private buildNextRound(unitsById: Map<string, BattleUnitSnapshot>): BattleUnitSnapshot[] {
-    return Array.from(unitsById.values())
+  private buildNextRound(fieldUnitsById: Map<string, FieldBattleUnitSnapshot>): FieldBattleUnitSnapshot[] {
+    return Array.from(fieldUnitsById.values())
       .filter(u => u.hp > 0)
       .sort((a, b) => {
         if (b.effectiveInitiative !== a.effectiveInitiative)

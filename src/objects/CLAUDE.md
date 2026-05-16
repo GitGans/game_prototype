@@ -47,7 +47,7 @@ Applying presentation output to Phaser objects is the responsibility of `BattleP
 - `ItemCell.ts` — single equipment/backpack slot with tooltip; key method: `refresh()`
 - `EquipmentMatrix.ts` — 4×3 equipment grid composed from `ItemCell`
 - `BackpackRow.ts` — configurable inventory grid composed from `ItemCell`
-- `UnitTooltip.ts` — multi-mode unit profile popup (stats, skills, bench snapshot)
+- `UnitTooltip.ts` — multi-mode unit profile popup (stats, skills)
 - `EffectTooltip.ts` — popup for a single active effect
 - `SkillTooltip.ts` — popup for skill name and damage type
 - `SkillCellTooltip.ts` — extended skill popup with description and screen-clamped positioning

@@ -85,9 +85,8 @@ export function addBenchUnit(state: BattleState, unit: Unit, slot: number): Batt
   };
 }
 
-// Low-level deployment mutator. Does NOT synchronize benchUnits.
-// For gameplay bench-slot moves, use placementState.ts functions which
-// synchronize the benchUnits compatibility mirror in the same operation.
+// Low-level deployment mutator. Use placementState.ts functions for
+// gameplay bench/field moves; they also clear placement selection.
 export function deployExistingUnitToField(
   state: BattleState,
   unitId: string,
@@ -105,9 +104,8 @@ export function deployExistingUnitToField(
   };
 }
 
-// Low-level deployment mutator. Does NOT synchronize benchUnits.
-// For gameplay bench-slot moves, use placementState.ts functions which
-// synchronize the benchUnits compatibility mirror in the same operation.
+// Low-level deployment mutator. Use placementState.ts functions for
+// gameplay bench/field moves; they also clear placement selection.
 export function deployExistingUnitToBench(
   state: BattleState,
   unitId: string,

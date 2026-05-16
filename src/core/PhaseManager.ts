@@ -18,6 +18,7 @@ import {
 } from '../battle/itemOps';
 import {
   UnitTabSnapshot,
+  BattleState,
 } from '../battle/types';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { UnitBlueprint } from '../shared/unitTypes';
@@ -174,6 +175,32 @@ class PhaseManagerClass {
   ): string | null {
     const sheet = resolvePlayerUnitSpriteSheet(blueprint, progression);
     return sheet ? getUnitSpriteTextureKey(blueprint.templateId, sheet) : null;
+  }
+
+  // Builds the battle-start participant snapshot. `wasOnBench` is derived from
+  // `state.deployments` at this moment — i.e., the initial deployment — and must
+  // not be recomputed later. Callers must invoke this immediately after
+  // `buildNewBattleState(...)` and before any placement actions can run.
+  private buildBattleParticipantsFromInitialState(state: BattleState): BattleParticipant[] {
+    const participants: BattleParticipant[] = [];
+    Object.entries(GameState.playerUnits).forEach(([templateId, us]) => {
+      if (us.isInCamp) return;
+      const bp = PLAYER_UNITS.find(b => b.templateId === templateId);
+      if (!bp) return;
+      const runtimeUnit = [...state.units.values()].find(
+        u => u.side === 'player' && u.templateId === templateId,
+      );
+      if (!runtimeUnit) return;
+      const dep         = state.deployments.get(runtimeUnit.id);
+      const wasOnBench  = dep?.kind === 'bench';
+      const progression = resolveUnitProgression(bp, us.chosenUpgrades ?? {});
+      const spriteKey   = this.spriteKeyFromProgression(bp, progression);
+      participants.push({
+        templateId, name: bp.name, level: us.level,
+        isAlive: true, wasOnBench, spriteKey,
+      });
+    });
+    return participants;
   }
 
   private buildUpgradeTiers(
@@ -364,24 +391,12 @@ class PhaseManagerClass {
             : 'target';
         }
 
-        // Derive the selected bench slot from the runtime unit-id selection.
-        // This is a read-model convenience for the legacy bench UI and is NOT stored
-        // in BattleState. If the selected unit is no longer bench-deployed (e.g. it
-        // was just placed on the field but selection was not cleared), the slot is null.
-        let selectedBenchSlot: number | null = null;
-        const { selectedBenchUnitId } = battleState.placementSelection;
-        if (selectedBenchUnitId !== null) {
-          const dep = battleState.deployments.get(selectedBenchUnitId);
-          if (dep?.kind === 'bench') selectedBenchSlot = dep.slot;
-        }
-
         // participants = battle-start snapshot; do NOT rebuild from current placement state
         return {
           ...phase,
           participants:        GameState.battleParticipants,
           benchUnits,
           placementSelection:  battleState.placementSelection,
-          selectedBenchSlot,
           battlePhase:         battleState.phase,
           units,
           fieldUnits,
@@ -546,18 +561,7 @@ class PhaseManagerClass {
       GameState.lastEnemyRace       = race;
       GameState.lastEnemyPlacements = enemyPlacements;
 
-      // Snapshot all party members (field + bench) before anyone can die
-      const participants: BattleParticipant[] = [];
-      Object.entries(GameState.playerUnits).forEach(([templateId, us]) => {
-        if (us.isInCamp) return;
-        const bp = PLAYER_UNITS.find(b => b.templateId === templateId);
-        if (!bp) return;
-        const wasOnBench  = state.benchUnits.some(b => b?.templateId === templateId);
-        const progression = resolveUnitProgression(bp, us.chosenUpgrades ?? {});
-        const spriteKey   = this.spriteKeyFromProgression(bp, progression);
-        participants.push({ templateId, name: bp.name, level: us.level, isAlive: true, wasOnBench, spriteKey });
-      });
-      GameState.battleParticipants = participants;
+      GameState.battleParticipants = this.buildBattleParticipantsFromInitialState(state);
     }
 
     // ── Debug battle: initialize BattleState + snapshot participants ──
@@ -924,7 +928,6 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
         placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
-        selectedBenchSlot:  null,                                                     // filled by rebuildSnapshot
         battlePhase:         'placement',
         units:               [],
         fieldUnits:          [],
@@ -959,7 +962,6 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
         placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
-        selectedBenchSlot:  null,                                                     // filled by rebuildSnapshot
         battlePhase:         'placement',
         units:               [],
         fieldUnits:          [],

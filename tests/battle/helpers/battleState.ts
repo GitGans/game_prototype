@@ -38,7 +38,6 @@ export function makeBattleStateFromUnits(
     roundQueue:         field.map(e => e.unit.id), // bench units never in the round queue
     phase:              'select_target',
     validTargets:       [],
-    benchUnits:         [],
     nextPlayerId:       1,
     placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null },
     deployments,

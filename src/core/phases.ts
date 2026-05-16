@@ -70,10 +70,6 @@ export type GamePhase =
       participants:       BattleParticipant[];     // battle-start snapshot; never rebuilt from current placement
       benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
-      // Derived read-model bridge for legacy bench UI.
-      // Source of truth is BattleState.placementSelection.selectedBenchUnitId,
-      // mapped to a slot index through BattleState.deployments. Removed in Stage 5.
-      selectedBenchSlot:  number | null;
       // ── Stage 4: scene-facing render data ─────────────────────────────────
       battlePhase:         BattleState['phase'];
       // Full read model (field + bench). Use for lookups via unitsById.

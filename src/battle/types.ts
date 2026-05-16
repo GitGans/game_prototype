@@ -71,15 +71,9 @@ export interface OccupancyMap {
 export type Phase = 'placement' | 'select_target' | 'end';
 export type BattleMode = 'manual' | 'auto' | 'quick';
 
-export interface BenchUnitRef {
-  templateId: string;
-}
-
 export interface PlacementSelection {
-  // Identity of the selected bench unit. UI may still operate on bench slots,
-  // but runtime selection is stored by unit id, resolved through deployments.
-  // Bench slot index is visual placement only and lives in the read model
-  // (GamePhase.selectedBenchSlot), not here.
+  // Identity of the selected bench unit. UI operates on bench slots, but
+  // runtime selection is stored by unit id, resolved through state.deployments.
   selectedBenchUnitId: string | null;
   selectedFieldUnitId: string | null;
 }
@@ -94,10 +88,6 @@ export interface BattleState {
   roundQueue:         string[]; // unit IDs to act this round; [0] = currently acting; field units only
   phase:              Phase;
   validTargets:       CellCoord[];
-  // Compatibility mirror for existing bench UI/read-model.
-  // Synchronized by placement actions in placementState.ts and autoPlace.ts.
-  // Do NOT use for combat logic, deployment decisions, or runtime source of truth.
-  benchUnits:         (BenchUnitRef | undefined)[];
   nextPlayerId:       number;          // next p<n> id for unit creation during placement
   placementSelection: PlacementSelection; // UI selection; owned by BattleState so Game.ts stays stateless
   // Source of truth for all placement. Every unit in state.units has exactly one entry here.

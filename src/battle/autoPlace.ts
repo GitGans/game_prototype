@@ -1,4 +1,4 @@
-import type { BattleState, Unit, BenchUnitRef } from './types';
+import type { BattleState, Unit } from './types';
 import type { Rng }                              from '../shared/random';
 import { pickOne }                               from '../shared/random';
 import type { CellCoord, Col, Row, UnitShape }   from '../shared/gridTypes';
@@ -49,7 +49,6 @@ export function autoPlacePlayer(
   state = { ...state, benchSlotCount };
 
   let counter = 1;
-  const benchMirror: (BenchUnitRef | undefined)[] = Array(benchSlotCount).fill(undefined);
 
   const tryPlaceOnField = (c: PlayerPlacementCandidate): boolean => {
     if (c.savedAnchor && canPlace(c.savedAnchor, c.shape, state, 'player')) {
@@ -74,7 +73,6 @@ export function autoPlacePlayer(
     if (slot === null) return false;
     const unit = c.createUnit(`p${counter++}`);
     state = addBenchUnit(state, unit, slot);
-    benchMirror[slot] = { templateId: unit.templateId }; // synchronize compatibility mirror
     return true;
   };
 
@@ -86,7 +84,7 @@ export function autoPlacePlayer(
     if (!tryPlaceOnBench(c)) tryPlaceOnField(c);
   }
 
-  return { ...state, benchUnits: benchMirror };
+  return state;
 }
 
 // ─── Enemy Placement ─────────────────────────────────────────────────────────
