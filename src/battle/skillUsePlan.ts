@@ -16,7 +16,8 @@ export type SkillTargetPolicy =
   | { type: 'friendly' }
   | { type: 'self' }
   | { type: 'enemy_melee' }
-  | { type: 'enemy_ranged' };
+  | { type: 'enemy_ranged' }
+  | { type: 'dead_ally_field_unit' };
 
 export function isFriendlyOrSelfTargetPolicy(
   policy: SkillTargetPolicy,
@@ -34,6 +35,12 @@ export function isEnemyMeleeTargetPolicy(
   policy: SkillTargetPolicy,
 ): boolean {
   return policy.type === 'enemy_melee';
+}
+
+export function isDeadTargetPolicy(
+  policy: SkillTargetPolicy,
+): boolean {
+  return policy.type === 'dead_ally_field_unit';
 }
 
 // ─── Power ────────────────────────────────────────────────────────────────────

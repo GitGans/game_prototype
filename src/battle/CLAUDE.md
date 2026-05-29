@@ -64,6 +64,12 @@ returned to `src/core` for phase transition or rendering
 - Queue construction and rebuild operate on living units only: `buildRoundQueue` includes only `isAlive` units, `pruneQueue` drops dead ids, and `rebuildRemainingQueue` only reorders ids already present in `remaining` (it never re-introduces ids and never queries beyond `remaining`). This pre-bakes the future revive rule: revived units do not enter the current round queue.
 - `skipActiveTurn` and `chargeActiveTurn` recover from a missing/dead `roundQueue[0]` by advancing through `advanceTurn` (no `turn_skipped` / `turn_charged` event emitted; the returned `skipped` / `charged` boolean remains `false`).
 - Ordinary combat helpers (`resolveAttack`, `resolveHealWithEvents`, `applyEffectApplication`, `applyPeriodicHpEffectApplication`, `resolveProbabilityEffects`, `applyVampirism`) silently skip dead targets — no event, no state change.
+- Targeting policies split into two groups:
+    - Living-only ordinary policies: `friendly`, `self`, `enemy_melee`, `enemy_ranged`. These resolve through `state.occupancy` and never see dead units.
+    - Side-relative dead policy: `dead_ally_field_unit`. Resolves dead field allies on the caster's side via deployment + `getOccupiedCells`. Does not consult occupancy. Works for both player and enemy casters.
+- `resolveSkillTargetsForPolicy` takes `BattleState` (not `OccupancyMap`) because dead targeting needs deployment access. `unitAnchor` is always the caster's current field anchor.
+- Dead-caster safety is enforced once, at the executor (`resolveCasterAndSkill`) and turn-flow entry points (`autoTurn`, `quickTurn`, `turnResolver`) — never inside the resolver. The resolver trusts that callers gate on `isAlive(caster)`.
+- Campaign/map resurrection (targeting dead units on the world map) is future work outside `battle/`.
 
 ## Where to Modify
 - add/change a unit stat computation → [itemOps.ts](itemOps.ts) `computeUnitBattleStats()`

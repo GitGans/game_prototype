@@ -420,7 +420,7 @@ function resolveProvokeCounterAttack(input: {
   const provokedAnchor = requireFieldDeployment(state, provokedUnit.id).anchor;
   const validTargets = resolveSkillTargetsForPolicy(
     plan.targetPolicy,
-    state.occupancy,
+    state,
     provokedAnchor,
   );
 

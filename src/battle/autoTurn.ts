@@ -57,7 +57,7 @@ export function decideAutoTurn(input: {
   const skill       = getActiveSkill(updatedUnit);
   const plan        = compileSkillUsePlan(skill);
   const unitAnchor  = requireFieldDeployment(state, updatedUnit.id).anchor;
-  const targets     = resolveSkillTargetsForPolicy(plan.targetPolicy, state.occupancy, unitAnchor);
+  const targets     = resolveSkillTargetsForPolicy(plan.targetPolicy, state, unitAnchor);
 
   if (targets.length === 0) {
     return isEnemyMeleeTargetPolicy(plan.targetPolicy)

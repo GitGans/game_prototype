@@ -25,7 +25,8 @@ export type SkillDefinitionTargetPolicy =
   | { type: 'friendly' }
   | { type: 'self' }
   | { type: 'enemy_melee' }
-  | { type: 'enemy_ranged' };
+  | { type: 'enemy_ranged' }
+  | { type: 'dead_ally_field_unit' };
 
 // ---------------------------------------------------------------------------
 // Power sources

@@ -1,5 +1,7 @@
-import { CellCoord, Col, OccupancyMap, Row, Side } from './types';
+import { BattleState, CellCoord, Col, OccupancyMap, Row, Side } from './types';
 import { cellKey } from './field';
+import { getOccupiedCells } from './shapes';
+import { getDeadFieldUnitEntries, requireFieldDeployment } from './deployment';
 import type { SkillTargetPolicy } from './skillUsePlan';
 
 const ENEMY_SIDE: Record<Side, Side> = {
@@ -102,26 +104,53 @@ export function getRangedTargets(attackerSide: Side, occupancy: OccupancyMap): C
 }
 
 /**
+ * Returns body cells of all dead field-deployed allies on `casterSide`.
+ * Uses deployment + shape — does NOT consult occupancy (dead units do not
+ * occupy cells per Stage 2). Side-relative: works for both player and
+ * enemy casters targeting their own dead allies.
+ */
+export function getDeadAllyFieldUnitTargets(
+  state:      BattleState,
+  casterSide: Side,
+): CellCoord[] {
+  const cells: CellCoord[] = [];
+  for (const [unitId, unit] of getDeadFieldUnitEntries(state)) {
+    if (unit.side !== casterSide) continue;
+    const deployment = requireFieldDeployment(state, unitId);
+    for (const cell of getOccupiedCells(deployment.anchor, unit.shape)) {
+      cells.push(cell);
+    }
+  }
+  return cells;
+}
+
+/**
  * `unitAnchor` is the acting unit's current field anchor, obtained from deployment.
  * Callers: `const unitAnchor = requireFieldDeployment(state, unit.id).anchor;`
+ *
+ * Dead-caster safety is enforced upstream by `isAlive(caster)` guards in the
+ * executor and turn-flow entry points — not inside this resolver.
  */
 export function resolveSkillTargetsForPolicy(
   targetPolicy: SkillTargetPolicy,
-  occupancy:    OccupancyMap,
+  state:        BattleState,
   unitAnchor:   CellCoord,
 ): CellCoord[] {
   switch (targetPolicy.type) {
     case 'friendly':
-      return getFriendlyTargets(unitAnchor.side, occupancy);
+      return getFriendlyTargets(unitAnchor.side, state.occupancy);
 
     case 'self':
       return getSelfTarget(unitAnchor);
 
     case 'enemy_ranged':
-      return getRangedTargets(unitAnchor.side, occupancy);
+      return getRangedTargets(unitAnchor.side, state.occupancy);
 
     case 'enemy_melee':
-      return getMeleeTargets(unitAnchor, occupancy);
+      return getMeleeTargets(unitAnchor, state.occupancy);
+
+    case 'dead_ally_field_unit':
+      return getDeadAllyFieldUnitTargets(state, unitAnchor.side);
 
     default: {
       const _exhaustive: never = targetPolicy;

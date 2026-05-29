@@ -305,7 +305,7 @@ export function resolveActiveTurnStart(input: {
   const currentAnchor  = requireFieldDeployment(state, currentUnit.id).anchor;
   const validTargets   = resolveSkillTargetsForPolicy(
     currentPlan.targetPolicy,
-    state.occupancy,
+    state,
     currentAnchor,
   );
 
@@ -369,7 +369,7 @@ export function switchActiveSkillForManualTurn(input: {
   const updatedAnchor = requireFieldDeployment(state, updatedUnit.id).anchor;
   const validTargets  = resolveSkillTargetsForPolicy(
     activePlan.targetPolicy,
-    state.occupancy,
+    state,
     updatedAnchor,
   );
 
