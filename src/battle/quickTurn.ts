@@ -11,6 +11,7 @@ import { isFriendlyOrSelfTargetPolicy } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 import { requireFieldDeployment } from './deployment';
 import { executeSkillUse } from './skillExecution';
+import { isAlive } from './lifeState';
 
 export type ComputeOneTurnOptions = {
   rng: Rng;
@@ -35,7 +36,7 @@ export function computeOneTurn(
 ): BattleState {
   const { rng, queueContext } = options;
   const unit = state.units.get(unitId);
-  if (!unit) return state;
+  if (!unit || !isAlive(unit)) return state;
 
   const randomSkillIdx = resolveRandomSkillIndex(unit, rng);
   const updatedUnit = { ...unit, activeSkillIndex: randomSkillIdx };

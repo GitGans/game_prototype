@@ -50,7 +50,9 @@ describe("applyBattleTurnAction — battle_use_skill", () => {
     });
 
     expect(result.state.phase).toBe("end");
-    expect(result.state.units.has("enemy")).toBe(false);
+    // Death is now a state transition, not deletion (Stage 2).
+    expect(result.state.units.get("enemy")?.lifeState).toBe("dead");
+    expect(result.state.units.get("enemy")?.hp).toBe(0);
   });
 
   it("advances the turn when the battle does not end after skill application", () => {

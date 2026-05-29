@@ -2,7 +2,8 @@ import type { BattleMode, BattleState, CellCoord, Unit } from './types';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import { getActiveSkill } from './skillRuntime';
 import { buildRoundQueue, pruneQueue } from './initiative';
-import { getFieldUnitEntries, requireFieldDeployment } from './deployment';
+import { getLivingFieldUnitEntries, requireFieldDeployment } from './deployment';
+import { isAlive } from './lifeState';
 import { tickEffects } from './combat';
 import type { EffectEvent } from './combat';
 import { compileSkillUsePlan } from './skillPlanCompiler';
@@ -88,7 +89,7 @@ export function advanceTurn(input: {
     for (const e of effectEvents) {
       events.push({ type: 'round_effect', event: e });
     }
-    remaining = buildRoundQueue(new Map(getFieldUnitEntries(newState)));
+    remaining = buildRoundQueue(new Map(getLivingFieldUnitEntries(newState)));
   }
 
   return {
@@ -111,8 +112,17 @@ export function skipActiveTurn(input: {
 }): SkipTurnResult {
   const { state, context, reason = 'manual_skip' } = input;
   const activeUnit = state.units.get(state.roundQueue[0]);
-  if (!activeUnit) {
-    return { state, context, events: [], skipped: false };
+  if (!activeUnit || !isAlive(activeUnit)) {
+    // Stale skip on a missing/dead active unit. Recover through advanceTurn
+    // so the queue cannot stall on a dead roundQueue[0]; do not emit a
+    // turn_skipped event because no skip semantically occurred.
+    const advanced = advanceTurn({ state, context });
+    return {
+      state: advanced.state,
+      context: advanced.context,
+      events: advanced.events,
+      skipped: false,
+    };
   }
 
   const skipEvent: TurnEvent = {
@@ -148,7 +158,21 @@ export function chargeActiveTurn(input: {
   const activeId = state.roundQueue[0];
   const activeUnit = state.units.get(activeId);
 
-  if (!activeUnit || context.chargedThisRound.has(activeId)) {
+  // Recovery: stale manual charge arrived after the active unit died/disappeared.
+  // Advance through advanceTurn so the queue cannot stall; no turn_charged event.
+  if (!activeUnit || !isAlive(activeUnit)) {
+    const advanced = advanceTurn({ state, context });
+    return {
+      state: advanced.state,
+      context: advanced.context,
+      events: advanced.events,
+      charged: false,
+    };
+  }
+
+  // Already-charged remains a true no-op (legitimate UI-level rejection of a
+  // double-tap on a unit that already charged this round).
+  if (context.chargedThisRound.has(activeId)) {
     return { state, context, events: [], charged: false };
   }
 
@@ -163,7 +187,7 @@ export function chargeActiveTurn(input: {
   let newQueue: string[];
   if (remaining.length === 0) {
     // Edge case: unit was last. Move it to the end of the NEXT round's queue.
-    newQueue = buildRoundQueue(new Map(getFieldUnitEntries(state))).filter((id) => id !== activeId);
+    newQueue = buildRoundQueue(new Map(getLivingFieldUnitEntries(state))).filter((id) => id !== activeId);
     newQueue.push(activeId);
   } else {
     // Standard case: append the active unit at the end of the remaining queue.
@@ -234,9 +258,9 @@ export function resolveActiveTurnStart(input: {
     return { state, context, events: [], directive: { type: 'none', reason: 'empty_queue' } };
   }
 
-  // 4. Active unit missing — silent technical recovery, round effects are still preserved
+  // 4. Active unit missing or dead — silent technical recovery, round effects preserved
   const activeUnit = state.units.get(activeId);
-  if (!activeUnit) {
+  if (!activeUnit || !isAlive(activeUnit)) {
     const advanced = advanceTurn({ state, context });
     return {
       state: advanced.state,
@@ -332,7 +356,7 @@ export function switchActiveSkillForManualTurn(input: {
   const unitId = state.roundQueue[0];
   const activeUnit = state.units.get(unitId);
 
-  if (!activeUnit || activeUnit.side !== 'player') {
+  if (!activeUnit || !isAlive(activeUnit) || activeUnit.side !== 'player') {
     return { state, validTargets: state.validTargets };
   }
 

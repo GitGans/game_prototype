@@ -25,6 +25,8 @@ Pure battle domain logic — all computations, state mutations, and validations 
 - [unitFactory.ts](unitFactory.ts) — constructs a runtime `Unit` from a `CreateUnitInstanceInput`
 - [autoPlace.ts](autoPlace.ts) — places player/enemy units on the field at battle start
 - [itemOps.ts](itemOps.ts) — item equip/unequip, inventory queries, stat computation from equipment
+- [lifeState.ts](lifeState.ts) — `isAlive` / `isDead` / `killUnit` / `reviveUnit`; the only place that flips `Unit.lifeState`
+- [deployment.ts](deployment.ts) — field/bench queries; living/dead/all field-helper split
 
 ## Structural Role
 `src/battle` → pure battle domain; consumed by `src/core` orchestration layer
@@ -52,6 +54,16 @@ returned to `src/core` for phase transition or rendering
 - UI-facing display formatting (prompt text, log text, preview estimates) belongs in `src/objects/*Presentation.ts`, not in battle rule modules
 - Combat death is represented by `lifeState: 'dead'` and `hp: 0`. Use `killUnit()` / `reviveUnit()` from `lifeState.ts`; do not flip the field manually.
 - Death clears `activeEffects`. Revive does not restore previous buffs, debuffs, or periodic HP effects.
+- Death is a state transition, not deletion. Combat keeps dead units in `state.units` with `lifeState:'dead'`, `hp:0`, `activeEffects:[]`, and preserved deployment. `retainDeploymentsForUnits` is for true entity removal (bench eviction, debug remove) — not ordinary combat death.
+- `buildOccupancy` is living-only blocking occupancy. Dead field units occupy no cells. `getUnitAtCell(state, coord)` returns a living blocking unit or null; for dead-unit-at-cell lookup walk `state.deployments` + `getOccupiedCells` instead.
+- Field-helper split in `deployment.ts`:
+    - `getFieldUnits` / `getFieldUnitEntries` — all field-deployed units (alive + dead)
+    - `getLivingFieldUnits` / `getLivingFieldUnitEntries` — combat participants (the default)
+    - `getDeadFieldUnits` / `getDeadFieldUnitEntries` — corpses / future revive targets
+- `isAlive(unit)` is the combat eligibility predicate going forward. `isDead(unit)` covers canonical dead state AND legacy `hp <= 0` defensively; prefer `isAlive` for "can act / can be targeted / counts as living" checks.
+- Queue construction and rebuild operate on living units only: `buildRoundQueue` includes only `isAlive` units, `pruneQueue` drops dead ids, and `rebuildRemainingQueue` only reorders ids already present in `remaining` (it never re-introduces ids and never queries beyond `remaining`). This pre-bakes the future revive rule: revived units do not enter the current round queue.
+- `skipActiveTurn` and `chargeActiveTurn` recover from a missing/dead `roundQueue[0]` by advancing through `advanceTurn` (no `turn_skipped` / `turn_charged` event emitted; the returned `skipped` / `charged` boolean remains `false`).
+- Ordinary combat helpers (`resolveAttack`, `resolveHealWithEvents`, `applyEffectApplication`, `applyPeriodicHpEffectApplication`, `resolveProbabilityEffects`, `applyVampirism`) silently skip dead targets — no event, no state change.
 
 ## Where to Modify
 - add/change a unit stat computation → [itemOps.ts](itemOps.ts) `computeUnitBattleStats()`

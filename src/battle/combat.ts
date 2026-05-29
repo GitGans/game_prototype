@@ -9,7 +9,8 @@ import {
   SkillPattern,
   Unit,
 } from "./types";
-import { getFieldUnits } from "./deployment";
+import { getLivingFieldUnits } from "./deployment";
+import { isAlive, killUnit } from "./lifeState";
 import type {
   AppliedEffectMeta,
   DamageModifierRef,
@@ -19,7 +20,6 @@ import type {
 } from '../shared/skillTypes';
 import type { CombatPowerSource } from './skillUsePlan';
 import { buildOccupancy, getUnitAtCell } from "./occupancy";
-import { retainDeploymentsForUnits } from "./deployment";
 import { resolvePattern } from "./skillPatterns";
 import {
   getDamageModifierPercent,
@@ -166,6 +166,7 @@ export function resolveAttack(
   for (const { coord, multiplier } of hitCells) {
     const unit = getUnitAtCell(state, coord);
     if (!unit) continue;
+    if (!isAlive(unit)) continue; // dead targets are inert; no event, no damage
 
     const defIgnoreKey = getDefenseIgnoreModifierTypeForPowerSource(powerSource);
     const defIgnore = ignorePercent[defIgnoreKey] ?? 0;
@@ -232,17 +233,19 @@ export function resolveAttack(
     newUnits.set(unit.id, { ...unit, hp: Math.max(0, unit.hp - finalDmg) });
   }
 
-  for (const unit of [...newUnits.values()]) {
+  // Canonicalize any sub-zero-HP unit to dead state, preserving deployment.
+  // killUnit is idempotent; canonicalizing unconditionally also scrubs any
+  // transitional half-state (e.g. lifeState:'dead' but with stale activeEffects).
+  for (const [id, unit] of newUnits) {
     if (unit.hp <= 0) {
-      newUnits.delete(unit.id);
+      newUnits.set(id, killUnit(unit));
     }
   }
 
-  const newDeployments = retainDeploymentsForUnits(state.deployments, newUnits);
-  const occupancy = buildOccupancy(newUnits, newDeployments);
+  const occupancy = buildOccupancy(newUnits, state.deployments);
 
   return {
-    state: { ...state, units: newUnits, deployments: newDeployments, occupancy },
+    state: { ...state, units: newUnits, deployments: state.deployments, occupancy },
     events,
     totalRealDamage,
   };
@@ -270,7 +273,7 @@ export function applyVampirism(
 
   if (postDamage.type === "self_vampirism") {
     const currentCaster = newUnits.get(caster.id);
-    if (currentCaster && currentCaster.hp > 0) {
+    if (currentCaster && isAlive(currentCaster)) {
       const healed = Math.min(healPool, currentCaster.maxHp - currentCaster.hp);
       if (healed > 0) {
         newUnits.set(caster.id, {
@@ -290,7 +293,7 @@ export function applyVampirism(
     // (bench units must not receive vampirism heals)
     const friendlySide = caster.side;
     const targets = [...newUnits.values()].filter(
-      (u) => u.side === friendlySide && u.hp > 0 && u.hp < u.maxHp
+      (u) => u.side === friendlySide && isAlive(u) && u.hp < u.maxHp
            && state.deployments.get(u.id)?.kind === 'field',
     );
     if (targets.length > 0) {
@@ -335,6 +338,7 @@ export function resolveHealWithEvents(
   for (const { coord, multiplier } of hitCells) {
     const unit = getUnitAtCell(state, coord);
     if (!unit) continue;
+    if (!isAlive(unit)) continue; // dead targets: no heal event, no HP change
     const amount = Math.round(baseHeal * multiplier);
     const existing = hitUnits.get(unit.id);
     if (!existing || amount > existing.heal) {
@@ -401,6 +405,7 @@ export function applyEffectApplication(
   for (const { coord } of hitCells) {
     const unit = getUnitAtCell(state, coord);
     if (!unit || seen.has(unit.id)) continue;
+    if (!isAlive(unit)) continue; // dead targets: no effect_applied event
     seen.add(unit.id);
 
     const newEffect: ActiveEffect = {
@@ -448,6 +453,7 @@ export function applyPeriodicHpEffectApplication(
   for (const hit of hitCells) {
     const unit = getUnitAtCell(state, hit.coord);
     if (!unit) continue;
+    if (!isAlive(unit)) continue; // dead targets: no periodic effect attached
     const amountPerTurn = computePeriodicHpAmount(periodicInput.basePower, hit.multiplier);
     const existing = hitUnits.get(unit.id);
     if (!existing || amountPerTurn > existing.amountPerTurn) {
@@ -486,9 +492,14 @@ export function applyPeriodicHpEffectApplication(
 
 /**
  * Called once per round end (simultaneously for all units).
- * - Applies healPerTurn / damagePerTurn from each active effect.
+ * - Skips units that are not alive at the start of ticking.
+ * - Applies healPerTurn / damagePerTurn from each active effect in order.
  * - Decrements remainingRounds; removes expired effects.
- * - Units that die from damagePerTurn are removed from state.
+ * - If a unit's HP reaches 0 mid-tick, emits the lethal tick event, then
+ *   killUnit() canonicalizes it (clears activeEffects), and remaining effects
+ *   on that unit are dropped without emitting expiry events.
+ * - Dead units remain in state.units with preserved deployment.
+ * - Order-independent across units: each unit only mutates itself.
  */
 export function tickEffects(state: BattleState): {
   state: BattleState;
@@ -498,8 +509,11 @@ export function tickEffects(state: BattleState): {
   const newUnits = new Map(state.units);
 
   for (const unit of state.units.values()) {
+    if (!isAlive(unit)) continue;
+
     let hp = unit.hp;
     const nextEffects: ActiveEffect[] = [];
+    let died = false;
 
     for (const ae of unit.activeEffects) {
       const periodicHp = resolveActiveEffectPeriodicHp(ae);
@@ -525,6 +539,14 @@ export function tickEffects(state: BattleState): {
         }
       }
 
+      if (hp === 0) {
+        // Lethal periodic damage: canonicalize and stop processing this unit.
+        // killUnit clears activeEffects, so remaining ticks/expiries are dropped.
+        newUnits.set(unit.id, killUnit({ ...unit, hp: 0 }));
+        died = true;
+        break;
+      }
+
       const remaining = ae.remainingRounds - 1;
       if (remaining > 0) {
         nextEffects.push({ ...ae, remainingRounds: remaining });
@@ -538,20 +560,14 @@ export function tickEffects(state: BattleState): {
       }
     }
 
-    newUnits.set(unit.id, { ...unit, hp, activeEffects: nextEffects });
-  }
-
-  // Remove units that died from effect damage
-  for (const unit of [...newUnits.values()]) {
-    if (unit.hp <= 0) {
-      newUnits.delete(unit.id);
+    if (!died) {
+      newUnits.set(unit.id, { ...unit, hp, activeEffects: nextEffects });
     }
   }
 
-  const newDeployments = retainDeploymentsForUnits(state.deployments, newUnits);
-  const occupancy = buildOccupancy(newUnits, newDeployments);
+  const occupancy = buildOccupancy(newUnits, state.deployments);
 
-  return { state: { ...state, units: newUnits, deployments: newDeployments, occupancy }, events };
+  return { state: { ...state, units: newUnits, deployments: state.deployments, occupancy }, events };
 }
 
 export interface EffectiveStats {
@@ -596,12 +612,17 @@ export function effectiveStats(unit: StatOwner): EffectiveStats {
   );
 }
 
-/** Returns the winning side when all units on one side are dead, or null. */
+/**
+ * Returns the eliminated side when it has no living field units, or null.
+ * Bench units and dead field units do not keep battle alive.
+ *
+ * Note: the returned side is the LOSER, not the winner. Naming is preserved
+ * for backwards compatibility with existing callers.
+ */
 export function checkGameOver(state: BattleState): Side | null {
   let playerAlive = false;
   let enemyAlive  = false;
-  // Use field units only — bench units must not keep a side alive.
-  for (const unit of getFieldUnits(state)) {
+  for (const unit of getLivingFieldUnits(state)) {
     if (unit.side === "player") playerAlive = true;
     if (unit.side === "enemy")  enemyAlive  = true;
   }
@@ -644,6 +665,7 @@ export function resolveProbabilityEffects(
   for (const hit of hitCells) {
     const unit = getUnitAtCell(state, hit.coord);
     if (!unit || seen.has(unit.id)) continue;
+    if (!isAlive(unit)) continue; // dead targets: no applied/failed event, no provoked/distracted id
     seen.add(unit.id);
     uniqueHits.push(hit);
   }

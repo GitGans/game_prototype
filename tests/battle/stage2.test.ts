@@ -47,6 +47,7 @@ import type { UnitBlueprint } from '../../src/shared/unitTypes';
 import { ucid } from '../../src/shared/unitTypes';
 import { buildOccupancy } from '../../src/battle/occupancy';
 import { getFieldUnitEntries } from '../../src/battle/deployment';
+import { killUnit } from '../../src/battle/lifeState';
 
 beforeEach(() => resetUnitIdCounter());
 
@@ -355,12 +356,11 @@ describe('checkGameOver — Stage 2 (field units only)', () => {
       benchSlotCount: 1,
     });
 
-    // Remove dead player from field (combat would do this)
-    const newUnits       = new Map(state.units);
-    const newDeployments = new Map(state.deployments);
-    newUnits.delete(deadPlayer.id);
-    newDeployments.delete(deadPlayer.id);
-    state = { ...state, units: newUnits, deployments: newDeployments, occupancy: buildOccupancy(newUnits, newDeployments) };
+    // Mark the dead player as dead via killUnit (combat's canonical death).
+    // Deployment is preserved; occupancy excludes dead field units.
+    const newUnits = new Map(state.units);
+    newUnits.set(deadPlayer.id, killUnit(deadPlayer));
+    state = { ...state, units: newUnits, occupancy: buildOccupancy(newUnits, state.deployments) };
 
     // Bench player is still alive in state.units, but checkGameOver should not count bench units
     expect(checkGameOver(state)).toBe('player'); // enemy wins; bench player doesn't prevent loss

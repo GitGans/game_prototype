@@ -1,4 +1,5 @@
 import { Unit } from './types';
+import { isAlive } from './lifeState';
 
 /**
  * Builds the turn order for a round.
@@ -7,7 +8,7 @@ import { Unit } from './types';
  */
 export function buildRoundQueue(units: Map<string, Unit>): string[] {
   const alive = Array.from(units.values())
-    .filter(u => u.hp > 0)
+    .filter(isAlive)
     .map(u => {
       const initBonus = u.activeEffects.reduce((sum, ae) => sum + (ae.effect.initiativeBonus ?? 0), 0);
       return initBonus !== 0 ? { ...u, initiative: u.initiative + initBonus } : u;
@@ -45,7 +46,7 @@ export function buildRoundQueue(units: Map<string, Unit>): string[] {
 export function pruneQueue(queue: string[], units: Map<string, Unit>): string[] {
   return queue.filter(id => {
     const u = units.get(id);
-    return u !== undefined && u.hp > 0;
+    return u !== undefined && isAlive(u);
   });
 }
 
@@ -77,8 +78,15 @@ export function rebuildRemainingQueue(
     return u.initiative + bonus;
   };
 
-  const notCharged = remaining.filter(id => !chargedThisRound.has(id));
-  const charged    = remaining.filter(id =>  chargedThisRound.has(id));
+  // Drop missing/dead ids from BOTH pools. This pre-bakes the future revive rule:
+  // ids removed from `remaining` (e.g. via death) are never re-introduced here,
+  // and we never query units beyond `remaining` to inject new ids.
+  const isEligible = (id: string): boolean => {
+    const u = units.get(id);
+    return u !== undefined && isAlive(u);
+  };
+  const notCharged = remaining.filter(id => isEligible(id) && !chargedThisRound.has(id));
+  const charged    = remaining.filter(id => isEligible(id) &&  chargedThisRound.has(id));
 
   const sortDesc = (ids: string[]) =>
     [...ids].sort((a, b) => effectiveInit(b) - effectiveInit(a));

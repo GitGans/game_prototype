@@ -1,6 +1,7 @@
 // src/battle/skillExecution.ts
 
 import type { BattleState, CellCoord, Unit, ProbabilityEffectEvent } from "./types";
+import { isAlive } from "./lifeState";
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { BattleEvent } from "./battleEvents";
 import type { CombatEvent, EffectEvent } from "./combat";
@@ -86,7 +87,7 @@ function resolveCasterAndSkill(
   input: SkillExecutionInput,
 ): ResolvedCasterAndSkill | null {
   const caster = input.state.units.get(input.casterId);
-  if (!caster) return null;
+  if (!caster || !isAlive(caster)) return null;
   const skill = input.skill ?? getActiveSkill(caster);
   return { casterId: input.casterId, caster, skill };
 }
@@ -371,7 +372,7 @@ function resolveProvokeCounterAttack(input: {
   let state = input.state;
 
   const provokedUnit = state.units.get(provokedUnitId);
-  if (!provokedUnit) return { state, events: [] };
+  if (!provokedUnit || !isAlive(provokedUnit)) return { state, events: [] };
 
   // Re-check queue eligibility at dispatch time because nested counter-attacks
   // can consume units that were eligible when the original probability-effect list
@@ -389,7 +390,7 @@ function resolveProvokeCounterAttack(input: {
   };
 
   const originalCaster = state.units.get(casterId);
-  if (!originalCaster || originalCaster.hp <= 0) {
+  if (!originalCaster || !isAlive(originalCaster)) {
     return {
       state,
       events: [{

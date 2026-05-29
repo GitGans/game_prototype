@@ -3,6 +3,7 @@ import type { UnitDeployment } from '../shared/unitDeploymentTypes';
 import type { CellCoord } from '../shared/gridTypes';
 import { cellKey } from './field';
 import { getOccupiedCells } from './shapes';
+import { isAlive } from './lifeState';
 
 export function buildOccupancy(
   units: Map<string, Unit>,
@@ -20,6 +21,7 @@ export function buildOccupancy(
       );
     }
     if (deployment.kind !== 'field') continue;
+    if (!isAlive(unit)) continue; // dead field units occupy no cells
 
     const cells = getOccupiedCells(deployment.anchor, unit.shape);
     unitToCells.set(unit.id, cells);
@@ -45,6 +47,8 @@ export function removeUnit(unitId: string, occupancy: OccupancyMap): OccupancyMa
 }
 
 // Resolves the unit at a given cell by id lookup.
+// Returns only living blocking units — occupancy excludes dead field units.
+// For dead-unit-at-cell lookup, walk state.deployments + getOccupiedCells instead.
 export function getUnitAtCell(state: BattleState, coord: CellCoord): Unit | null {
   const unitId = state.occupancy.cellToUnitId.get(cellKey(coord));
   return unitId ? (state.units.get(unitId) ?? null) : null;

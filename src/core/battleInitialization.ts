@@ -17,6 +17,7 @@ import type { UnitRace }                        from '../shared/unitTypes';
 import type { PlayerBattleSetup }               from './battleSetup';
 import type { CellCoord }                       from '../shared/gridTypes';
 import { getFieldUnits, requireFieldDeployment } from '../battle/deployment';
+import { isAlive } from '../battle/lifeState';
 
 export interface EnemyPlacementRecord {
   templateId: string;
@@ -47,7 +48,8 @@ export function buildNewBattleState(
   const playerCandidates = buildPlayerAutoPlacementCandidates(setup);
   let state = autoPlacePlayer(emptyState, playerCandidates, BENCH_SLOTS);
 
-  // Seed nextPlayerId from placed units so manual placement IDs don't collide
+  // Seed nextPlayerId from placed units so manual placement IDs don't collide.
+  // Dead units stay in state.units after Stage 2, so this seed is monotonic.
   const maxP = [...state.units.keys()]
     .filter(id => id.startsWith('p'))
     .reduce((max, id) => Math.max(max, parseInt(id.slice(1), 10) || 0), 0);
@@ -57,7 +59,7 @@ export function buildNewBattleState(
   // Use field-deployed player units only — bench units should not inflate enemy difficulty.
   const group       = ENEMY_GROUPS[enemyGroupId];
   const playerMaxLv = getFieldUnits(state)
-    .filter(u => u.side === 'player' && u.hp > 0)
+    .filter(u => u.side === 'player' && isAlive(u))
     .reduce((max, u) => Math.max(max, u.level), 1);
   const race  = group?.race          ?? pickOne(rng, FALLBACK_RACES);
   const level = group?.levelOverride ?? playerMaxLv;

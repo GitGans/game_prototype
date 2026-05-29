@@ -23,7 +23,8 @@ import {
   moveFieldUnitToBench,
   returnFieldUnitToBench,
 } from '../../battle/placementState';
-import { getBenchSlotOccupant, getFieldUnitEntries } from '../../battle/deployment';
+import { getBenchSlotOccupant, getLivingFieldUnitEntries } from '../../battle/deployment';
+import { isAlive } from '../../battle/lifeState';
 
 // ─── Battle Lifecycle Actions ─────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ export function applyBattleLifecycleAction(input: {
       return {
         state: {
           ...state,
-          roundQueue:         buildRoundQueue(new Map(getFieldUnitEntries(state))),
+          roundQueue:         buildRoundQueue(new Map(getLivingFieldUnitEntries(state))),
           phase:              'select_target',
           placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null },
         },
@@ -294,10 +295,12 @@ export function applyBattleTurnAction(input: {
 
       // Stale-intention guard: the DELAY_AUTO_IMPACT window (200 ms) means state
       // may have changed between decide and apply.
+      const intentionUnit = state.units.get(intention.unitId);
       if (
         state.phase === 'end' ||
         state.roundQueue[0] !== intention.unitId ||
-        !state.units.get(intention.unitId)
+        !intentionUnit ||
+        !isAlive(intentionUnit)
       ) {
         return { state, context, events: [], autoTurnApplied: false };
       }

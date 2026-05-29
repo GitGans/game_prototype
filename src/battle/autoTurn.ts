@@ -13,6 +13,7 @@ import {
 } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 import { requireFieldDeployment } from './deployment';
+import { isAlive } from './lifeState';
 
 export type AutoTurnDecision =
   | { type: 'none';         reason: 'battle_ended' | 'non_auto_mode' }
@@ -47,7 +48,7 @@ export function decideAutoTurn(input: {
       : { type: 'none', reason: 'non_auto_mode' };
   }
 
-  if (!activeUnit || !unitId) {
+  if (!activeUnit || !unitId || !isAlive(activeUnit)) {
     return { type: 'restart_turn' };
   }
 
