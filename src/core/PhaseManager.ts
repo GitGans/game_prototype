@@ -44,6 +44,7 @@ import {
   buildFieldBattleUnitSnapshots,
   buildBenchBattleUnitSnapshots,
   buildBattleOccupancySnapshot,
+  buildBattleFieldUnitCellsSnapshot,
 } from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
@@ -363,7 +364,8 @@ class PhaseManagerClass {
         const fieldUnits = buildFieldBattleUnitSnapshots(battleState);
         const benchUnits = buildBenchBattleUnitSnapshots(battleState);
         const unitsById  = new Map(units.map(u => [u.id, u]));
-        const occupancy  = buildBattleOccupancySnapshot(battleState);
+        const occupancy      = buildBattleOccupancySnapshot(battleState);
+        const fieldUnitCells = buildBattleFieldUnitCellsSnapshot(battleState);
 
         // roundQueue is field-only by invariant — look up via fieldUnits to
         // preserve FieldBattleUnitSnapshot typing for activeUnit.
@@ -401,6 +403,7 @@ class PhaseManagerClass {
           fieldUnits,
           unitsById,
           occupancy,
+          fieldUnitCells,
           roundQueue:          [...battleState.roundQueue],
           activeUnitId,
           activeUnit,
@@ -931,6 +934,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
+        fieldUnitCells:      { cellToUnitIds: new Map(), unitToCells: new Map() },
         roundQueue:          [],
         activeUnitId:        null,
         activeUnit:          null,
@@ -965,6 +969,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
+        fieldUnitCells:      { cellToUnitIds: new Map(), unitToCells: new Map() },
         roundQueue:          [],
         activeUnitId:        null,
         activeUnit:          null,

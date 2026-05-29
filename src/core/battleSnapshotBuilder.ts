@@ -3,10 +3,15 @@ import type {
   BattleUnitSnapshot,
   FieldBattleUnitSnapshot,
   BattleOccupancySnapshot,
+  BattleFieldUnitCellsSnapshot,
 } from '../shared/battleSnapshots';
+import type { CellCoord } from '../shared/gridTypes';
 import type { UnitDeployment } from '../shared/unitDeploymentTypes';
 import { effectiveStats } from '../battle/combat';
 import { requireDeployment } from '../battle/deployment';
+import { cellKey } from '../battle/field';
+import { getOccupiedCells } from '../battle/shapes';
+import { isAlive, isDead } from '../battle/lifeState';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 
 function cloneDeployment(d: UnitDeployment): UnitDeployment {
@@ -26,11 +31,12 @@ export function buildBattleUnitSnapshot(
     : null;
 
   const snap: BattleUnitSnapshot = {
-    id:       unit.id,
-    side:     unit.side,
-    name:     unit.name,
-    hp:       unit.hp,
-    maxHp:    unit.maxHp,
+    id:        unit.id,
+    side:      unit.side,
+    name:      unit.name,
+    hp:        unit.hp,
+    maxHp:     unit.maxHp,
+    lifeState: unit.lifeState,
 
     physicalStrength: unit.physicalStrength,
     magicalStrength:  unit.magicalStrength,
@@ -101,6 +107,9 @@ export function buildBenchBattleUnitSnapshots(
   return slots;
 }
 
+// Living/blocking only. Dead units are excluded upstream by
+// battle/occupancy.ts. For all field bodies including dead, use
+// buildBattleFieldUnitCellsSnapshot.
 export function buildBattleOccupancySnapshot(state: BattleState): BattleOccupancySnapshot {
   const cellToUnitId = new Map(state.occupancy.cellToUnitId);
   const unitToCells  = new Map(
@@ -110,4 +119,41 @@ export function buildBattleOccupancySnapshot(state: BattleState): BattleOccupanc
     ]),
   );
   return { cellToUnitId, unitToCells };
+}
+
+// All field-deployed units, alive and dead, both sides. Cell arrays are
+// ordered living-first then dead, preserving state.units insertion order
+// within each group. Uses cellKey() identical to occupancy, so the scene
+// can probe both maps with the same cell key.
+//
+// Uses isAlive/isDead from battle/lifeState. Note: !isAlive ≠ isDead by
+// design — the helpers are intentionally not strict complements. We pass
+// each predicate explicitly to keep semantics aligned with combat rules.
+export function buildBattleFieldUnitCellsSnapshot(
+  state: BattleState,
+): BattleFieldUnitCellsSnapshot {
+  const cellToUnitIds = new Map<string, string[]>();
+  const unitToCells   = new Map<string, CellCoord[]>();
+
+  const ordered = Array.from(state.units.values());
+  const passes: ((u: Unit) => boolean)[] = [isAlive, isDead];
+
+  for (const passPredicate of passes) {
+    for (const unit of ordered) {
+      if (!passPredicate(unit)) continue;
+      const dep = requireDeployment(state, unit.id);
+      if (dep.kind !== 'field') continue;
+
+      const cells = getOccupiedCells(dep.anchor, unit.shape).map(c => ({ ...c }));
+      unitToCells.set(unit.id, cells);
+
+      for (const c of cells) {
+        const key = cellKey(c);
+        const arr = cellToUnitIds.get(key);
+        if (arr) arr.push(unit.id);
+        else cellToUnitIds.set(key, [unit.id]);
+      }
+    }
+  }
+  return { cellToUnitIds, unitToCells };
 }

@@ -317,10 +317,26 @@ export class Game extends Phaser.Scene {
       cell.on('pointerover', () => {
         const phase = PhaseManager.getPhase();
         if (phase.type !== 'battle') return;
-        const unitId = phase.occupancy.cellToUnitId.get(cell.key);
-        const unit   = unitId ? phase.unitsById.get(unitId) : undefined;
-        if (unit && unit.hp > 0) {
-          this.unitTooltip.showFixed(unit, this.logX, this.logY, this.logW);
+
+        // 1. Living blocker on this cell — preferred tooltip target.
+        const livingId = phase.occupancy.cellToUnitId.get(cell.key);
+        if (livingId) {
+          const unit = phase.unitsById.get(livingId);
+          if (unit) {
+            this.unitTooltip.showFixed(unit, this.logX, this.logY, this.logW);
+            return;
+          }
+        }
+
+        // 2. No living unit — scan fieldUnitCells for a dead snapshot on
+        //    this cell. Select explicitly by lifeState === 'dead'. Do not
+        //    infer deadness from absence in occupancy.
+        const ids = phase.fieldUnitCells.cellToUnitIds.get(cell.key) ?? [];
+        const dead = ids
+          .map(id => phase.unitsById.get(id))
+          .find(u => !!u && u.lifeState === 'dead');
+        if (dead) {
+          this.unitTooltip.showFixed(dead, this.logX, this.logY, this.logW);
         }
       });
       cell.on('pointerout', () => this.unitTooltip.hide());
@@ -378,9 +394,29 @@ export class Game extends Phaser.Scene {
 
   private refreshUnits(phase: BattlePhase): void {
     const fieldById = new Map(phase.fieldUnits.map(u => [u.id, u]));
+
+    // 1. Destroy views whose entity is gone from the field snapshot.
+    for (const [id, view] of Array.from(this.unitViews)) {
+      if (!fieldById.has(id)) {
+        view.destroy();
+        this.unitViews.delete(id);
+      }
+    }
+
+    // 2. Create views for new field snapshots.
+    //    createUnitView inserts into this.unitViews itself — do not reassign.
+    for (const unit of phase.fieldUnits) {
+      if (!this.unitViews.has(unit.id)) {
+        this.createUnitView(unit);
+      }
+    }
+
+    // 3. Update existing views with their non-null snapshot.
     for (const [id, view] of this.unitViews) {
+      const snap = fieldById.get(id);
+      if (!snap) continue;
       if (!view.active) continue;
-      view.update(fieldById.get(id) ?? null);
+      view.update(snap);
     }
   }
 

@@ -92,6 +92,10 @@ export class UnitView extends Phaser.GameObjects.Container {
 
     this.add([this.bgSprite, this.nameText, this.hpText, this.hpBar]);
     scene.add.existing(this as unknown as Phaser.GameObjects.GameObject);
+
+    // Apply the initial snapshot through the same render path live updates use.
+    // A dead unit included in the initial phase.fieldUnits must render dead immediately.
+    this.update(unit);
   }
 
   /**
@@ -110,33 +114,59 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.bgSprite.setFrame(frameIndex);
   }
 
-  update(unit: FieldBattleUnitSnapshot | null): void {
-    if (!unit || unit.hp <= 0) {
-      this.isDead = true;
-      this.setSpriteState('death');
-
-      if (this.bgSprite instanceof Phaser.GameObjects.Rectangle) {
-        (this.bgSprite as Phaser.GameObjects.Rectangle).setFillStyle(BATTLE_VISUAL_THEME.unit.dead, 0.4);
-      } else {
-        (this.bgSprite as Phaser.GameObjects.Image).setTint(BATTLE_VISUAL_THEME.unit.deadTint).setAlpha(0.6);
-      }
-
-      this.nameText.setAlpha(0.4);
-      this.hpText.setText('DEAD').setAlpha(0.5);
+  update(unit: FieldBattleUnitSnapshot): void {
+    if (unit.lifeState === 'dead') {
+      this.applyDeadVisual();
+      this.hpText.setText('DEAD');
       this.hpBar.setRatio(0);
-
-      for (const sq of this.effectSquares) sq.destroy();
-      this.effectSquares = [];
-      for (const lbl of this.effectLabels) lbl.destroy();
-      this.effectLabels = [];
+      this.clearEffectSquares();
       return;
     }
 
-    // Unit alive — only update HP display; Game.ts manages attack/idle transitions via setState()
-    this.hpBar.setRatio(unit.hp / unit.maxHp);
+    this.applyAliveVisual();
+    // Unit alive — only update HP display; Game.ts manages attack/idle transitions via setSpriteState()
+    this.hpBar.setRatio(unit.maxHp > 0 ? unit.hp / unit.maxHp : 0);
     this.hpText.setText(`${unit.hp}/${unit.maxHp}`);
-
     this.updateEffectSquares(unit);
+  }
+
+  private applyDeadVisual(): void {
+    this.isDead = true;
+    this.setSpriteState('death');
+
+    if (this.bgSprite instanceof Phaser.GameObjects.Rectangle) {
+      (this.bgSprite as Phaser.GameObjects.Rectangle).setFillStyle(BATTLE_VISUAL_THEME.unit.dead, 0.4);
+    } else {
+      (this.bgSprite as Phaser.GameObjects.Image).setTint(BATTLE_VISUAL_THEME.unit.deadTint).setAlpha(0.6);
+    }
+    this.nameText.setAlpha(0.4);
+    this.hpText.setAlpha(0.5);
+  }
+
+  // Reversal path. Future resurrection may revive either side mid-battle,
+  // so a view that previously rendered dead must be able to render alive again.
+  private applyAliveVisual(): void {
+    if (!this.isDead) return;
+    // Clear isDead BEFORE calling setSpriteState('idle'); the guard in
+    // setSpriteState blocks transitions out of 'death' while isDead is true.
+    this.isDead = false;
+    this.setSpriteState('idle');
+
+    if (this.bgSprite instanceof Phaser.GameObjects.Rectangle) {
+      const color = this.isPlayer ? BATTLE_VISUAL_THEME.unit.player : BATTLE_VISUAL_THEME.unit.enemy;
+      (this.bgSprite as Phaser.GameObjects.Rectangle).setFillStyle(color, 0.85);
+    } else {
+      (this.bgSprite as Phaser.GameObjects.Image).clearTint().setAlpha(1);
+    }
+    this.nameText.setAlpha(1);
+    this.hpText.setAlpha(1);
+  }
+
+  private clearEffectSquares(): void {
+    for (const sq of this.effectSquares) sq.destroy();
+    this.effectSquares = [];
+    for (const lbl of this.effectLabels) lbl.destroy();
+    this.effectLabels = [];
   }
 
   private updateEffectSquares(unit: BattleUnitSnapshot): void {

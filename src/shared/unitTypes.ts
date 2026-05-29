@@ -21,6 +21,8 @@ export type UpgradeOptionId = string & { readonly [__upgradeOptionIdBrand]: neve
 
 export type SpriteState = 'idle' | 'attack' | 'death';
 
+// UnitLifeState lives in shared/ on purpose: snapshot contracts must not
+// depend on battle/. Do not move it.
 export type UnitLifeState = 'alive' | 'dead';
 
 export interface SpriteSheetConfig {
