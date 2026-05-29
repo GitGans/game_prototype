@@ -86,11 +86,9 @@ export function resolveBattleTransition(input: {
         rng,
       });
 
-      // Transitional boundary: skill use and normal turn advancement remain separate.
-      // Current runtime checks game-over between skill execution and turn advancement.
-      // Stage 2 must compose use_skill → game-over check → advance_turn → game-over check
-      // inside battlePhaseHandler or a battle-level compound action.
-      // PhaseManager must not learn battle sequencing details.
+      // Skill use and turn advancement are separate steps. The compound sequence
+      // (use_skill → game-over check → advance_turn → game-over check) is composed
+      // by battlePhaseHandler, not here. PhaseManager must not learn battle sequencing.
       return {
         state: result.state,
         context,
@@ -130,9 +128,8 @@ export function resolveBattleTransition(input: {
         queueContext: getSkillQueueContext(context),
         rng,
       });
-      // quick_turn is state-only in Stage 1: computeOneTurn returns only BattleState.
-      // Eventful quick/replay support is future work.
-      // Turn advancement is handled separately by the caller via advance_turn.
+      // quick_turn is state-only: computeOneTurn returns only BattleState; this path
+      // emits no events. Turn advancement is handled by the caller via advance_turn.
       return {
         state: newState,
         context,

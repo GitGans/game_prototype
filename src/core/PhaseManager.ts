@@ -359,7 +359,6 @@ class PhaseManagerClass {
       case 'battle': {
         const battleState = GameState.get();
 
-        // ── Stage 4: read model built from state.units + state.deployments ──
         const units      = buildBattleUnitSnapshots(battleState);
         const fieldUnits = buildFieldBattleUnitSnapshots(battleState);
         const benchUnits = buildBenchBattleUnitSnapshots(battleState);
@@ -500,8 +499,7 @@ class PhaseManagerClass {
     // ── Battle placement ──
     if (isBattlePlacementAction(action) && prev.type === 'battle') {
       const state    = GameState.get();
-      const setup    = this.getActiveBattleSetup();
-      const nextState = applyBattlePlacementAction(state, setup, action);
+      const nextState = applyBattlePlacementAction(state, action);
       GameState.set(nextState);
       return;
     }

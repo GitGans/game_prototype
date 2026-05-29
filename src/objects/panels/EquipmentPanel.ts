@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GamePhase } from '../../core/phases';
-import { ItemSlotSnapshot } from '../../battle/types';
+import { ItemSlotSnapshot } from '../../shared/snapshotTypes';
 import { scaled } from '../../ui/layout';
 import { UI_THEME } from '../../ui/theme';
 import { ITEM_VISUAL_THEME } from '../itemVisualTheme';

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { CELL_SIZE, CELL_GAP, LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
-import { SpriteState, SpriteSheetConfig } from '../battle/types';
+import { SpriteState, SpriteSheetConfig } from '../shared/unitTypes';
 import type { BattleUnitSnapshot, FieldBattleUnitSnapshot } from '../shared/battleSnapshots';
 import { EffectTooltip } from './EffectTooltip';
 import { UI_THEME, fontSize } from '../ui/theme';

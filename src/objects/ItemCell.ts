@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { fontSize, UI_THEME } from '../ui/theme';
 import { ITEM_VISUAL_THEME } from './itemVisualTheme';
-import { ItemSlotSnapshot } from '../battle/types';
+import { ItemSlotSnapshot } from '../shared/snapshotTypes';
 import { ItemTooltip, ItemTooltipData } from './ItemTooltip';
 
 export interface ItemCellConfig {

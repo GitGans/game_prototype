@@ -47,7 +47,7 @@ Applying presentation output to Phaser objects is the responsibility of `BattleP
 - `ItemCell.ts` — single equipment/backpack slot with tooltip; key method: `refresh()`
 - `EquipmentMatrix.ts` — 4×3 equipment grid composed from `ItemCell`
 - `BackpackRow.ts` — configurable inventory grid composed from `ItemCell`
-- `UnitTooltip.ts` — multi-mode unit profile popup (stats, skills)
+- `UnitTooltip.ts` — unified unit profile popup; renders any `BattleUnitSnapshot` regardless of side or field/bench state
 - `EffectTooltip.ts` — popup for a single active effect
 - `SkillTooltip.ts` — popup for skill name and damage type
 - `SkillCellTooltip.ts` — extended skill popup with description and screen-clamped positioning
@@ -68,9 +68,9 @@ Applying presentation output to Phaser objects is the responsibility of `BattleP
 
 ## Data Flow
 
-`GamePhase` / `BattleState` snapshot data
+`GamePhase` snapshot data (read model)
 ↓
-Component receives typed snapshot (Unit, ItemSlotSnapshot, SkillIconSnapshot, …)
+Component receives typed snapshot (`BattleUnitSnapshot`, `FieldBattleUnitSnapshot`, `ItemSlotSnapshot`, `SkillIconSnapshot`, …)
 ↓
 Renders Phaser primitives; shows tooltips on hover; fires callbacks on click
 ↓
@@ -78,7 +78,7 @@ Scene receives user interaction via callback — no state mutation here
 
 ## Dependencies
 
-- depends on: `src/ui/` (BaseTooltip, HpBar, theme, primitives), `src/battle/types`, `src/core/Constants`, `src/core/phases`, `src/core/unitSpriteKey`, `src/shared/`
+- depends on: `src/ui/` (BaseTooltip, HpBar, theme, primitives), `src/shared/` (grid, unit, snapshot, item, skill contracts; battle snapshots), `src/core/Constants`, `src/core/phases`, `src/core/unitSpriteKey`
 - used by: scenes (`src/scenes/`)
 
 ## Invariants
@@ -95,7 +95,8 @@ Scene receives user interaction via callback — no state mutation here
 - Stable structure (fixed number of children) → update via `update(snapshot)` or `refresh()`
 - Variable structure (list length changes) → destroy and recreate the component
 - Any UI pattern used in ≥2 places must be extracted into a component here or in `src/ui/`
-- Texts are passed as plain strings from phase snapshots — no formatting logic inside components
+- Domain-specific wording (battle event verbs, item rarity names, skill prompt phrasing) lives in `*Presentation.ts` builders or phase snapshots, not in components
+- Components may compose pre-resolved values into local UI templates (e.g. `HP: 10 / 12`, section labels like "Stats" / "Skills")
 - `ui/Panel.ts` is a game-agnostic background rectangle primitive. `objects/panels/*Panel.ts` are game-aware composite panel components that use `Panel` internally. The names share the word "panel" but operate at different abstraction levels.
 - Presentation builders (`objects/*Presentation.ts`) must not import battle runtime formulas or helpers; they receive structured read models from `shared/` or `core/` and format them into strings and display flags
 

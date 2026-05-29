@@ -2,7 +2,6 @@ import type { BattleState, BattleMode } from '../../battle/types';
 import type { PhaseAction }            from '../phases';
 import type { Rng }                    from '../../shared/random';
 import { buildRoundQueue }             from '../../battle/initiative';
-import type { PlayerBattleSetup }      from '../battleSetup';
 import type { BattleEvent }            from '../../battle/battleEvents';
 import type { Side, CellCoord }        from '../../shared/gridTypes';
 import {
@@ -221,7 +220,7 @@ export function applyBattleTurnAction(input: {
     }
 
     // One quick-battle iteration: quick_turn → advance_turn → game-over.
-    // Does NOT loop — the caller (Stage 3 quick-battle loop) iterates.
+    // Does NOT loop — the caller iterates.
     case 'battle_quick_turn': {
       const quick    = resolveBattleTransition({ state, context, action: { type: 'quick_turn', unitId: action.unitId }, rng });
       const advanced = resolveBattleTransition({ state: quick.state, context: quick.context, action: { type: 'advance_turn' }, rng });
@@ -360,7 +359,6 @@ export function applyBattleTurnAction(input: {
 
 export function applyBattlePlacementAction(
   state:  BattleState,
-  _setup: PlayerBattleSetup, // Stage 3 removal candidate: bench placement no longer creates units from setup
   action: BattlePlacementAction,
 ): BattleState {
   if (state.phase !== 'placement') return state;
