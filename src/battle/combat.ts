@@ -9,6 +9,7 @@ import {
   SkillPattern,
   Unit,
 } from "./types";
+import { getFieldUnits } from "./deployment";
 import type {
   AppliedEffectMeta,
   DamageModifierRef,
@@ -17,8 +18,8 @@ import type {
   PostDamageEffect,
 } from '../shared/skillTypes';
 import type { CombatPowerSource } from './skillUsePlan';
-import { cellKey } from "./field";
-import { buildOccupancy, removeUnit } from "./occupancy";
+import { buildOccupancy, getUnitAtCell } from "./occupancy";
+import { retainDeploymentsForUnits } from "./deployment";
 import { resolvePattern } from "./skillPatterns";
 import {
   getDamageModifierPercent,
@@ -163,7 +164,7 @@ export function resolveAttack(
   const hitUnits = new Map<string, { unit: Unit; damage: number }>();
 
   for (const { coord, multiplier } of hitCells) {
-    const unit = state.occupancy.cellToUnit.get(cellKey(coord));
+    const unit = getUnitAtCell(state, coord);
     if (!unit) continue;
 
     const defIgnoreKey = getDefenseIgnoreModifierTypeForPowerSource(powerSource);
@@ -231,16 +232,17 @@ export function resolveAttack(
     newUnits.set(unit.id, { ...unit, hp: Math.max(0, unit.hp - finalDmg) });
   }
 
-  let occupancy = buildOccupancy(newUnits);
-  for (const unit of newUnits.values()) {
+  for (const unit of [...newUnits.values()]) {
     if (unit.hp <= 0) {
       newUnits.delete(unit.id);
-      occupancy = removeUnit(unit.id, occupancy);
     }
   }
 
+  const newDeployments = retainDeploymentsForUnits(state.deployments, newUnits);
+  const occupancy = buildOccupancy(newUnits, newDeployments);
+
   return {
-    state: { ...state, units: newUnits, occupancy },
+    state: { ...state, units: newUnits, deployments: newDeployments, occupancy },
     events,
     totalRealDamage,
   };
@@ -284,10 +286,12 @@ export function applyVampirism(
       }
     }
   } else {
-    // mass_vampirism: find all friendly alive units with missing HP
-    const friendlySide = caster.anchor.side;
+    // mass_vampirism: find all friendly alive field units with missing HP
+    // (bench units must not receive vampirism heals)
+    const friendlySide = caster.side;
     const targets = [...newUnits.values()].filter(
-      (u) => u.anchor.side === friendlySide && u.hp > 0 && u.hp < u.maxHp,
+      (u) => u.side === friendlySide && u.hp > 0 && u.hp < u.maxHp
+           && state.deployments.get(u.id)?.kind === 'field',
     );
     if (targets.length > 0) {
       const healPerUnit = Math.floor(healPool / targets.length);
@@ -309,7 +313,7 @@ export function applyVampirism(
   }
 
   return {
-    state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) },
+    state: { ...state, units: newUnits, deployments: state.deployments, occupancy: buildOccupancy(newUnits, state.deployments) },
     events,
   };
 }
@@ -329,7 +333,7 @@ export function resolveHealWithEvents(
   const hitUnits = new Map<string, { unit: Unit; heal: number }>();
 
   for (const { coord, multiplier } of hitCells) {
-    const unit = state.occupancy.cellToUnit.get(cellKey(coord));
+    const unit = getUnitAtCell(state, coord);
     if (!unit) continue;
     const amount = Math.round(baseHeal * multiplier);
     const existing = hitUnits.get(unit.id);
@@ -349,7 +353,7 @@ export function resolveHealWithEvents(
   }
 
   return {
-    state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) },
+    state: { ...state, units: newUnits, deployments: state.deployments, occupancy: buildOccupancy(newUnits, state.deployments) },
     heals,
   };
 }
@@ -395,7 +399,7 @@ export function applyEffectApplication(
 
   const seen = new Set<string>();
   for (const { coord } of hitCells) {
-    const unit = state.occupancy.cellToUnit.get(cellKey(coord));
+    const unit = getUnitAtCell(state, coord);
     if (!unit || seen.has(unit.id)) continue;
     seen.add(unit.id);
 
@@ -415,7 +419,7 @@ export function applyEffectApplication(
   }
 
   return {
-    state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) },
+    state: { ...state, units: newUnits, deployments: state.deployments, occupancy: buildOccupancy(newUnits, state.deployments) },
     events,
   };
 }
@@ -442,7 +446,7 @@ export function applyPeriodicHpEffectApplication(
   // Deduplicate: for large units spanning multiple cells, keep the highest amountPerTurn.
   const hitUnits = new Map<string, { unit: Unit; amountPerTurn: number }>();
   for (const hit of hitCells) {
-    const unit = state.occupancy.cellToUnit.get(cellKey(hit.coord));
+    const unit = getUnitAtCell(state, hit.coord);
     if (!unit) continue;
     const amountPerTurn = computePeriodicHpAmount(periodicInput.basePower, hit.multiplier);
     const existing = hitUnits.get(unit.id);
@@ -475,7 +479,7 @@ export function applyPeriodicHpEffectApplication(
   }
 
   return {
-    state: { ...state, units: newUnits, occupancy: buildOccupancy(newUnits) },
+    state: { ...state, units: newUnits, deployments: state.deployments, occupancy: buildOccupancy(newUnits, state.deployments) },
     events,
   };
 }
@@ -538,15 +542,16 @@ export function tickEffects(state: BattleState): {
   }
 
   // Remove units that died from effect damage
-  let occupancy = buildOccupancy(newUnits);
-  for (const unit of newUnits.values()) {
+  for (const unit of [...newUnits.values()]) {
     if (unit.hp <= 0) {
       newUnits.delete(unit.id);
-      occupancy = removeUnit(unit.id, occupancy);
     }
   }
 
-  return { state: { ...state, units: newUnits, occupancy }, events };
+  const newDeployments = retainDeploymentsForUnits(state.deployments, newUnits);
+  const occupancy = buildOccupancy(newUnits, newDeployments);
+
+  return { state: { ...state, units: newUnits, deployments: newDeployments, occupancy }, events };
 }
 
 export interface EffectiveStats {
@@ -594,13 +599,14 @@ export function effectiveStats(unit: StatOwner): EffectiveStats {
 /** Returns the winning side when all units on one side are dead, or null. */
 export function checkGameOver(state: BattleState): Side | null {
   let playerAlive = false;
-  let enemyAlive = false;
-  for (const unit of state.units.values()) {
-    if (unit.anchor.side === "player") playerAlive = true;
-    if (unit.anchor.side === "enemy") enemyAlive = true;
+  let enemyAlive  = false;
+  // Use field units only — bench units must not keep a side alive.
+  for (const unit of getFieldUnits(state)) {
+    if (unit.side === "player") playerAlive = true;
+    if (unit.side === "enemy")  enemyAlive  = true;
   }
   if (!playerAlive) return "player";
-  if (!enemyAlive) return "enemy";
+  if (!enemyAlive)  return "enemy";
   return null;
 }
 
@@ -636,7 +642,7 @@ export function resolveProbabilityEffects(
   const seen = new Set<string>();
   const uniqueHits: ResolvedHitCell[] = [];
   for (const hit of hitCells) {
-    const unit = state.occupancy.cellToUnit.get(cellKey(hit.coord));
+    const unit = getUnitAtCell(state, hit.coord);
     if (!unit || seen.has(unit.id)) continue;
     seen.add(unit.id);
     uniqueHits.push(hit);
@@ -650,7 +656,7 @@ export function resolveProbabilityEffects(
   const distractedUnitIds: string[] = [];
 
   for (const { coord, multiplier: probability } of uniqueHits) {
-    const unit = state.occupancy.cellToUnit.get(cellKey(coord));
+    const unit = getUnitAtCell(state, coord);
     if (!unit) continue;
 
     // Probability roll — no dodge/block/defense

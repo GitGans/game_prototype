@@ -5,7 +5,7 @@ import type {
   BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
 } from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
-import type { BenchUnitSnapshot, BattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/battleSnapshots';
+import type { BattleUnitSnapshot, FieldBattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/battleSnapshots';
 import type { PlacementSelection, BattleState, BattleMode, Side } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
@@ -68,16 +68,21 @@ export type GamePhase =
       mapId?:             string;
       isDebug?:           boolean;
       participants:       BattleParticipant[];     // battle-start snapshot; never rebuilt from current placement
-      benchUnits:         (BenchUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
+      benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
-      // ── Stage 4: scene-facing render data ─────────────────────────────────
       battlePhase:         BattleState['phase'];
+      // Full read model (field + bench). Use for lookups via unitsById.
+      // For field iteration (anchor/cell math), use fieldUnits instead.
       units:               BattleUnitSnapshot[];
+      // Field-only narrowed view. Intended iteration source for any code
+      // that reads anchor or does cell math.
+      fieldUnits:          FieldBattleUnitSnapshot[];
       unitsById:           Map<string, BattleUnitSnapshot>;
       occupancy:           BattleOccupancySnapshot;
       roundQueue:          string[];
       activeUnitId:        string | null;
-      activeUnit:          BattleUnitSnapshot | null;
+      // Active unit is always field-deployed (round queue is field-only).
+      activeUnit:          FieldBattleUnitSnapshot | null;
       battleMode:              BattleMode;
       activeUnitSide:          Side | null;
       manualTurnControlsVisible: boolean;

@@ -12,7 +12,7 @@ Pure battle domain logic — all computations, state mutations, and validations 
 - Instantiate units from blueprints and auto-place them on the field
 
 ## Key Files
-- [types.ts](types.ts) — all battle-time types (`BattleState`, `Unit`, `ActiveEffect`, `OccupancyMap`, `BenchUnitRef`, `Phase`, `BattleMode`)
+- [types.ts](types.ts) — all battle-time types (`BattleState`, `Unit`, `ActiveEffect`, `OccupancyMap`, `Phase`, `BattleMode`)
 - [combat.ts](combat.ts) — damage, healing, effect application, vampirism, game-over check; emits `CombatEvent`/`AttackResult`
 - [initiative.ts](initiative.ts) — builds and prunes the round queue by initiative order
 - [placement.ts](placement.ts) — low-level validation and field-placement of units

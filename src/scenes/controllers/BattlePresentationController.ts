@@ -45,7 +45,7 @@ export class BattlePresentationController {
     const activeUnitSide =
       typeof activeUnitOrSide === 'string'
         ? activeUnitOrSide
-        : activeUnitOrSide?.anchor.side ?? null;
+        : activeUnitOrSide?.side ?? null;
 
     const presentations = buildBattleEventPresentations(events, { activeUnitSide });
 

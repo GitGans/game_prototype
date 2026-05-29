@@ -17,7 +17,6 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `GameState.ts` — persistent singleton holding `CampaignState` and `BattleState`
 - `battleInitialization.ts` — battle state factory; builds auto-placed or replay battle states
 - `battleSetupProjection.ts` — builds typed placement candidates with embedded unit factory functions
-- `unitPreviewSnapshot.ts` — builds bench card snapshots for each player unit
 - `unitStatsSnapshot.ts` — computes base and final stats for display
 - `unitUpgradePresentation.ts` — generates upgrade text, stat lines, and skill descriptions for UI
 - `DebugBattleState.ts` — isolated state container for debug battles; never syncs to `GameState`
@@ -71,7 +70,7 @@ Scenes re-render from new `GamePhase`
 - Change battle snapshot fields (what controllers see) → `PhaseManager.rebuildSnapshot()`
 - Change how units are initialized for battle → `battleInitialization.ts` / `battleSetupProjection.ts`
 - Change upgrade stat/skill resolution → `src/progression/`
-- Change bench card display data → `unitPreviewSnapshot.ts`
+- Change bench card display data → `battleSnapshotBuilder.ts` (`buildBenchBattleUnitSnapshots`)
 - Change stat display computation → `unitStatsSnapshot.ts`
 - Change upgrade description text → `unitUpgradePresentation.ts`
 - Change grid/bench layout constants → `Constants.ts`

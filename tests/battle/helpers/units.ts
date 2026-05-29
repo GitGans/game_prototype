@@ -24,7 +24,7 @@ export function makeUnit(overrides: Partial<Unit> = {}): Unit {
     classId:              ucid("warrior"),
     initiative:           10,
     shape:                { offsets: [{ dr: 0, dc: 0 }] },
-    anchor:               { side: "player", row: 0, col: 0 },
+    side:                 'player',
     skills:               [testStrike],
     activeSkillIndex:     0,
     rowTrait:             "front",

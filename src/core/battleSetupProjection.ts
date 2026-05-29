@@ -7,9 +7,9 @@ import {
 import { ITEM_DEFINITIONS }               from '../data/itemDefinitions';
 import { computeUnitBattleStats, snapshotActivatableAbilities } from '../battle/itemOps';
 import { resolveUnitProgression }         from '../progression';
-import { createUnitInstance, type CreateUnitInstanceInput } from '../battle/unitFactory';
+import { createUnitInstance } from '../battle/unitFactory';
 import type { PlayerBattleSetup }         from './battleSetup';
-import type { PlayerPlacementCandidate, EnemyPlacementCandidates } from '../battle/autoPlace';
+import type { PlayerPlacementCandidate, EnemyPlacementCandidates, EnemyReplayPlacementInput } from '../battle/autoPlace';
 import type { UnitBlueprint, UnitRace }   from '../shared/unitTypes';
 import type { ActionSkillDefinition }      from '../shared/skillDefinitionTypes';
 import { resolveSkillDefinition }          from '../progression';
@@ -46,8 +46,8 @@ export function buildPlayerAutoPlacementCandidates(
         shape:       bp.shape,
         rowTrait:    bp.rowTrait,
         savedAnchor: unitState?.lastPlacement ?? null,
-        createUnit:  (anchor: CellCoord, id: string) => createUnitInstance({
-          blueprint: bp, id, anchor, level,
+        createUnit:  (id: string) => createUnitInstance({
+          blueprint: bp, id, side: 'player', level,
           classId:              progression.currentClassId,
           stats,
           skills:               progression.skills,
@@ -73,8 +73,8 @@ export function buildEnemyPlacementCandidates(
       templateId: bp.templateId,
       shape:      bp.shape,
       rowTrait:   bp.rowTrait,
-      createUnit: (anchor: CellCoord, id: string) => createUnitInstance({
-        blueprint: bp, id, anchor, level,
+      createUnit: (id: string) => createUnitInstance({
+        blueprint: bp, id, side: 'enemy', level,
         classId:              bp.baseClassId,
         stats, skills,
         spriteSheet:          bp.spriteFilename
@@ -93,9 +93,9 @@ export function buildEnemyPlacementCandidates(
 
 export function buildEnemyReplayInputs(
   savedPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }>,
-): CreateUnitInstanceInput[] {
+): EnemyReplayPlacementInput[] {
   let counter = 1;
-  const result: CreateUnitInstanceInput[] = [];
+  const result: EnemyReplayPlacementInput[] = [];
   for (const saved of savedPlacements) {
     const found = findEnemyUnitBlueprintWithRace(saved.templateId);
     if (!found) continue;
@@ -105,48 +105,21 @@ export function buildEnemyReplayInputs(
       bp, saved.level, {}, {}, ITEM_DEFINITIONS, {}, {},
     );
     result.push({
-      blueprint:            bp,
-      id:                   `e${counter++}`,
-      anchor:               saved.anchor,
-      level:                saved.level,
-      classId:              bp.baseClassId,
-      stats, skills,
-      spriteSheet:          bp.spriteFilename
-        ? getEnemyUnitSpriteSheet(bpRace, bp.spriteFilename)
-        : undefined,
-      activatableAbilities: [],
+      unitInput: {
+        blueprint:            bp,
+        id:                   `e${counter++}`,
+        side:                 'enemy',
+        level:                saved.level,
+        classId:              bp.baseClassId,
+        stats, skills,
+        spriteSheet:          bp.spriteFilename
+          ? getEnemyUnitSpriteSheet(bpRace, bp.spriteFilename)
+          : undefined,
+        activatableAbilities: [],
+      },
+      anchor: saved.anchor,
     });
   }
   return result;
 }
 
-export function buildPlayerUnitInput(
-  templateId: string,
-  anchor:     CellCoord,
-  id:         string,
-  setup:      PlayerBattleSetup,
-): CreateUnitInstanceInput | null {
-  const bp = PLAYER_UNITS.find(b => b.templateId === templateId);
-  if (!bp) return null;
-  const unitState   = setup.playerUnits[templateId];
-  const level       = unitState?.level ?? bp.level;
-  const progression = resolveUnitProgression(bp, unitState?.chosenUpgrades ?? {});
-  const stats       = computeUnitBattleStats(
-    bp, level,
-    setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
-    { [templateId]: unitState?.permanentBonuses ?? {} },
-    progression.statModifiers,
-  );
-  const activatableAbilities = snapshotActivatableAbilities(
-    templateId,
-    setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
-  );
-  return {
-    blueprint: bp, id, anchor, level,
-    classId:              progression.currentClassId,
-    stats,
-    skills:               progression.skills,
-    spriteSheet:          resolvePlayerUnitSpriteSheet(bp, progression),
-    activatableAbilities,
-  };
-}

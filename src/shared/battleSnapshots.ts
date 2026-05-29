@@ -1,25 +1,15 @@
-import type { CellCoord, UnitShape }                from './gridTypes';
+import type { CellCoord, UnitShape, Side }          from './gridTypes';
 import type { ActionSkillDefinition }                from './skillDefinitionTypes';
 import type { SpriteSheetConfig, RowTrait } from './unitTypes';
 import type { UnitActivatableAbility }               from './itemTypes';
-import type { UnitStatsSnapshot, SkillIconSnapshot } from './snapshotTypes';
 import type { ActiveEffect }                         from './activeEffect';
-
-// ─── Bench unit snapshot (display data for one bench slot) ───────────────────
-
-export interface BenchUnitSnapshot {
-  templateId: string;
-  name:       string;
-  level:      number;
-  spriteKey:  string | null;
-  stats:      UnitStatsSnapshot;
-  skills:     SkillIconSnapshot[];
-}
+import type { UnitDeployment }                       from './unitDeploymentTypes';
 
 // ─── Scene-facing unit snapshot ───────────────────────────────────────────────
 
 export interface BattleUnitSnapshot {
   id:       string;
+  side:     Side;
   name:     string;
   hp:       number;
   maxHp:    number;
@@ -41,7 +31,13 @@ export interface BattleUnitSnapshot {
   effectiveBlock:           number;
 
   shape:  UnitShape;
-  anchor: CellCoord;
+
+  // Always a fresh copy. Never share the runtime UnitDeployment reference.
+  deployment: UnitDeployment;
+
+  // Render-ready texture key derived by core. UI components must read this
+  // field instead of deriving keys themselves.
+  spriteKey: string | null;
 
   skills:           readonly ActionSkillDefinition[];
   activeSkillIndex: number;
@@ -53,6 +49,11 @@ export interface BattleUnitSnapshot {
 
   activatableAbilities: readonly UnitActivatableAbility[];
 }
+
+export type FieldBattleUnitSnapshot =
+  BattleUnitSnapshot & {
+    deployment: Extract<UnitDeployment, { kind: 'field' }>;
+  };
 
 // ─── Occupancy snapshot ───────────────────────────────────────────────────────
 

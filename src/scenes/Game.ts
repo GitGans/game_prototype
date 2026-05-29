@@ -20,7 +20,7 @@ import {
   Side,
   SpriteSheetConfig,
 } from "../battle/types";
-import type { BattleUnitSnapshot } from "../shared/battleSnapshots";
+import type { BattleUnitSnapshot, FieldBattleUnitSnapshot } from "../shared/battleSnapshots";
 import { PhaseManager } from '../core/PhaseManager';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
@@ -186,13 +186,13 @@ export class Game extends Phaser.Scene {
   private buildUnitViews(): void {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'battle') return;
-    for (const unit of phase.units) {
+    for (const unit of phase.fieldUnits) {
       this.createUnitView(unit);
     }
   }
 
-  private createUnitView(unit: BattleUnitSnapshot): void {
-    const cells = getOccupiedCells(unit.anchor, unit.shape);
+  private createUnitView(unit: FieldBattleUnitSnapshot): void {
+    const cells = getOccupiedCells(unit.deployment.anchor, unit.shape);
     const rowSpan =
       Math.max(...cells.map((c) => c.row)) -
       Math.min(...cells.map((c) => c.row)) +
@@ -355,7 +355,8 @@ export class Game extends Phaser.Scene {
     } else if (phase.battlePhase !== 'end') {
       this.refreshCells(phase);
       this.refreshUnits(phase);
-      this.initiativeBar.update({ roundQueue: phase.roundQueue, unitsById: phase.unitsById });
+      const fieldUnitsById = new Map(phase.fieldUnits.map(u => [u.id, u]));
+      this.initiativeBar.update({ roundQueue: phase.roundQueue, fieldUnitsById });
     }
   }
 
@@ -368,7 +369,7 @@ export class Game extends Phaser.Scene {
     }
 
     if (phase.activeUnit) {
-      const cells = getOccupiedCells(phase.activeUnit.anchor, phase.activeUnit.shape);
+      const cells = getOccupiedCells(phase.activeUnit.deployment.anchor, phase.activeUnit.shape);
       for (const coord of cells) {
         this.cellViews.get(cellKey(coord))?.setHighlight('selected');
       }
@@ -376,9 +377,10 @@ export class Game extends Phaser.Scene {
   }
 
   private refreshUnits(phase: BattlePhase): void {
+    const fieldById = new Map(phase.fieldUnits.map(u => [u.id, u]));
     for (const [id, view] of this.unitViews) {
       if (!view.active) continue;
-      view.update(phase.unitsById.get(id) ?? null);
+      view.update(fieldById.get(id) ?? null);
     }
   }
 

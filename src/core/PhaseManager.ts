@@ -18,6 +18,7 @@ import {
 } from '../battle/itemOps';
 import {
   UnitTabSnapshot,
+  BattleState,
 } from '../battle/types';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { UnitBlueprint } from '../shared/unitTypes';
@@ -38,8 +39,12 @@ import {
   type BattlePhaseActionResult,
   type AutoTurnIntention,
 } from './phaseHandlers/battlePhaseHandler';
-import { buildBenchUnitSnapshots } from './unitPreviewSnapshot';
-import { buildBattleUnitSnapshots, buildBattleOccupancySnapshot } from './battleSnapshotBuilder';
+import {
+  buildBattleUnitSnapshots,
+  buildFieldBattleUnitSnapshots,
+  buildBenchBattleUnitSnapshots,
+  buildBattleOccupancySnapshot,
+} from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
@@ -170,6 +175,32 @@ class PhaseManagerClass {
   ): string | null {
     const sheet = resolvePlayerUnitSpriteSheet(blueprint, progression);
     return sheet ? getUnitSpriteTextureKey(blueprint.templateId, sheet) : null;
+  }
+
+  // Builds the battle-start participant snapshot. `wasOnBench` is derived from
+  // `state.deployments` at this moment — i.e., the initial deployment — and must
+  // not be recomputed later. Callers must invoke this immediately after
+  // `buildNewBattleState(...)` and before any placement actions can run.
+  private buildBattleParticipantsFromInitialState(state: BattleState): BattleParticipant[] {
+    const participants: BattleParticipant[] = [];
+    Object.entries(GameState.playerUnits).forEach(([templateId, us]) => {
+      if (us.isInCamp) return;
+      const bp = PLAYER_UNITS.find(b => b.templateId === templateId);
+      if (!bp) return;
+      const runtimeUnit = [...state.units.values()].find(
+        u => u.side === 'player' && u.templateId === templateId,
+      );
+      if (!runtimeUnit) return;
+      const dep         = state.deployments.get(runtimeUnit.id);
+      const wasOnBench  = dep?.kind === 'bench';
+      const progression = resolveUnitProgression(bp, us.chosenUpgrades ?? {});
+      const spriteKey   = this.spriteKeyFromProgression(bp, progression);
+      participants.push({
+        templateId, name: bp.name, level: us.level,
+        isAlive: true, wasOnBench, spriteKey,
+      });
+    });
+    return participants;
   }
 
   private buildUpgradeTiers(
@@ -327,21 +358,21 @@ class PhaseManagerClass {
       }
       case 'battle': {
         const battleState = GameState.get();
-        const setup       = this.getActiveBattleSetup();
 
-        // ── Existing bench/participants rebuild ───────────────────────────
-        const benchUnits = buildBenchUnitSnapshots(battleState.benchUnits, setup);
+        const units      = buildBattleUnitSnapshots(battleState);
+        const fieldUnits = buildFieldBattleUnitSnapshots(battleState);
+        const benchUnits = buildBenchBattleUnitSnapshots(battleState);
+        const unitsById  = new Map(units.map(u => [u.id, u]));
+        const occupancy  = buildBattleOccupancySnapshot(battleState);
 
-        // ── Stage 4: full scene-facing render data ────────────────────────
-        const units     = buildBattleUnitSnapshots(battleState.units);
-        const unitsById = new Map(units.map(u => [u.id, u]));
-        const occupancy = buildBattleOccupancySnapshot(battleState);
-
-        const activeUnitId = battleState.roundQueue[0] ?? null;
-        const activeUnit   = activeUnitId ? (unitsById.get(activeUnitId) ?? null) : null;
+        // roundQueue is field-only by invariant — look up via fieldUnits to
+        // preserve FieldBattleUnitSnapshot typing for activeUnit.
+        const fieldById      = new Map(fieldUnits.map(u => [u.id, u]));
+        const activeUnitId   = battleState.roundQueue[0] ?? null;
+        const activeUnit     = activeUnitId ? (fieldById.get(activeUnitId) ?? null) : null;
 
         const battleMode     = GameState.getBattleMode();
-        const activeUnitSide = activeUnit?.anchor.side ?? null;
+        const activeUnitSide = activeUnit?.side ?? null;
 
         const manualTurnControlsVisible =
           battleMode === 'manual' && activeUnitSide === 'player';
@@ -367,6 +398,7 @@ class PhaseManagerClass {
           placementSelection:  battleState.placementSelection,
           battlePhase:         battleState.phase,
           units,
+          fieldUnits,
           unitsById,
           occupancy,
           roundQueue:          [...battleState.roundQueue],
@@ -410,10 +442,12 @@ class PhaseManagerClass {
 
       if (result.persistCampaignPlacements && !prev.isDebug) {
         for (const unit of currentState.units.values()) {
-          if (unit.anchor.side !== 'player') continue;
+          if (unit.side !== 'player') continue;
+          const deployment = currentState.deployments.get(unit.id);
+          if (deployment?.kind !== 'field') continue; // bench units have no field placement to save
           const unitState = GameState.playerUnits[unit.templateId];
           if (!unitState) continue;
-          GameState.playerUnits[unit.templateId] = { ...unitState, lastPlacement: unit.anchor };
+          GameState.playerUnits[unit.templateId] = { ...unitState, lastPlacement: deployment.anchor };
         }
       }
 
@@ -465,8 +499,7 @@ class PhaseManagerClass {
     // ── Battle placement ──
     if (isBattlePlacementAction(action) && prev.type === 'battle') {
       const state    = GameState.get();
-      const setup    = this.getActiveBattleSetup();
-      const nextState = applyBattlePlacementAction(state, setup, action);
+      const nextState = applyBattlePlacementAction(state, action);
       GameState.set(nextState);
       return;
     }
@@ -526,18 +559,7 @@ class PhaseManagerClass {
       GameState.lastEnemyRace       = race;
       GameState.lastEnemyPlacements = enemyPlacements;
 
-      // Snapshot all party members (field + bench) before anyone can die
-      const participants: BattleParticipant[] = [];
-      Object.entries(GameState.playerUnits).forEach(([templateId, us]) => {
-        if (us.isInCamp) return;
-        const bp = PLAYER_UNITS.find(b => b.templateId === templateId);
-        if (!bp) return;
-        const wasOnBench  = state.benchUnits.some(b => b?.templateId === templateId);
-        const progression = resolveUnitProgression(bp, us.chosenUpgrades ?? {});
-        const spriteKey   = this.spriteKeyFromProgression(bp, progression);
-        participants.push({ templateId, name: bp.name, level: us.level, isAlive: true, wasOnBench, spriteKey });
-      });
-      GameState.battleParticipants = participants;
+      GameState.battleParticipants = this.buildBattleParticipantsFromInitialState(state);
     }
 
     // ── Debug battle: initialize BattleState + snapshot participants ──
@@ -627,10 +649,13 @@ class PhaseManagerClass {
         }
 
         // Save last field placement
-        for (const unit of GameState.get().units.values()) {
-          if (unit.anchor.side !== 'player') continue;
+        const battleStateAfter = GameState.get();
+        for (const unit of battleStateAfter.units.values()) {
+          if (unit.side !== 'player') continue;
+          const deployment = battleStateAfter.deployments.get(unit.id);
+          if (deployment?.kind !== 'field') continue; // bench units have no field placement to save
           const us = GameState.playerUnits[unit.templateId];
-          if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: unit.anchor };
+          if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: deployment.anchor };
         }
 
         // Mark trigger entity dead on the map — victory only; defeat must leave the encounter intact
@@ -845,7 +870,7 @@ class PhaseManagerClass {
 
     const aliveTemplateIds = new Set(
       [...GameState.get().units.values()]
-        .filter(u => u.anchor.side === 'player')
+        .filter(u => u.side === 'player')
         .map(u => u.templateId),
     );
 
@@ -900,9 +925,10 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         mapId:              current.mapId,
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
-        placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
+        placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
         battlePhase:         'placement',
         units:               [],
+        fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
         roundQueue:          [],
@@ -933,9 +959,10 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         isDebug:            true,
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
-        placementSelection: { selectedBenchIdx: null, selectedFieldUnitId: null },   // filled by rebuildSnapshot
+        placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
         battlePhase:         'placement',
         units:               [],
+        fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
         roundQueue:          [],

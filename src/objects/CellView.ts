@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { CELL_SIZE, LAYOUT_SCALE } from "../core/Constants";
-import { CellCoord } from "../battle/types";
+import { CellCoord } from "../shared/gridTypes";
 import { cellKey } from "../battle/field";
 import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 

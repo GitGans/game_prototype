@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { CELL_SIZE, CELL_GAP, LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
-import { SpriteState, SpriteSheetConfig } from '../battle/types';
-import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
+import { SpriteState, SpriteSheetConfig } from '../shared/unitTypes';
+import type { BattleUnitSnapshot, FieldBattleUnitSnapshot } from '../shared/battleSnapshots';
 import { EffectTooltip } from './EffectTooltip';
 import { UI_THEME, fontSize } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
@@ -30,7 +30,7 @@ export class UnitView extends Phaser.GameObjects.Container {
     scene: Phaser.Scene,
     x: number,
     y: number,
-    unit: BattleUnitSnapshot,
+    unit: FieldBattleUnitSnapshot,
     colSpan: number,
     rowSpan: number,
     textureKey?: string,
@@ -39,7 +39,7 @@ export class UnitView extends Phaser.GameObjects.Container {
   ) {
     super(scene, x, y);
     this.effectTooltip = effectTooltip;
-    this.isPlayer = unit.anchor.side === 'player';
+    this.isPlayer = unit.side === 'player';
 
     const pad   = Math.round(10 * LAYOUT_SCALE);
     const w     = rowSpan * CELL_SIZE + (rowSpan - 1) * CELL_GAP - pad;  // padded — used by rect and UI elements
@@ -110,7 +110,7 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.bgSprite.setFrame(frameIndex);
   }
 
-  update(unit: BattleUnitSnapshot | null): void {
+  update(unit: FieldBattleUnitSnapshot | null): void {
     if (!unit || unit.hp <= 0) {
       this.isDead = true;
       this.setSpriteState('death');

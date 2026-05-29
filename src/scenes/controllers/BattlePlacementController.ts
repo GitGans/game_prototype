@@ -10,7 +10,7 @@ import { PhaseManager } from '../../core/PhaseManager';
 import { cellKey } from '../../battle/field';
 import { getOccupiedCells } from '../../battle/shapes';
 import type { CellCoord, Side } from '../../battle/types';
-import type { BattleUnitSnapshot, BenchUnitSnapshot } from '../../shared/battleSnapshots';
+import type { BattleUnitSnapshot, FieldBattleUnitSnapshot } from '../../shared/battleSnapshots';
 import type { GamePhase } from '../../core/phases';
 import type { CellView } from '../../objects/CellView';
 import type { UnitView } from '../../objects/UnitView';
@@ -37,7 +37,7 @@ export class BattlePlacementController {
     cellPixelPos: (side: Side, row: number, col: number) => { x: number; y: number };
     setStatus: (text: string) => void;
     setBattleLogVisible: (visible: boolean) => void;
-    createUnitView: (unit: BattleUnitSnapshot) => void;
+    createUnitView: (unit: FieldBattleUnitSnapshot) => void;
     destroyUnitView: (unitId: string) => void;
     onStartBattle: () => void;
   }) {}
@@ -79,14 +79,16 @@ export class BattlePlacementController {
 
   handlePlacementCellClick(coord: CellCoord, phase: BattlePhase): void {
     if (coord.side !== 'player') return;
-    const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
+    const { selectedFieldUnitId, selectedBenchUnitId } = phase.placementSelection;
     const unitId = phase.occupancy.cellToUnitId.get(cellKey(coord));
 
-    if (selectedBenchIdx !== null) {
+    if (selectedBenchUnitId !== null) {
+      const benchIdx = phase.benchUnits.findIndex(s => s?.id === selectedBenchUnitId);
+      if (benchIdx === -1) return; // selection has gone stale
       if (!unitId) {
-        PhaseManager.transition({ type: 'place_bench_unit', benchIdx: selectedBenchIdx, anchor: coord });
+        PhaseManager.transition({ type: 'place_bench_unit', benchIdx, anchor: coord });
       } else {
-        PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx: selectedBenchIdx, fieldUnitId: unitId });
+        PhaseManager.transition({ type: 'swap_bench_with_field', benchIdx, fieldUnitId: unitId });
       }
       return;
     }
@@ -139,10 +141,11 @@ export class BattlePlacementController {
     const totalH      = BENCH_SLOTS * cardH + (BENCH_SLOTS - 1) * CELL_GAP;
     const startY      = (gridTopY + gridBottomY) / 2 - totalH / 2 + cardH / 2;
 
+    const selectedBenchUnitId = phase.placementSelection.selectedBenchUnitId;
     for (let i = 0; i < BENCH_SLOTS; i++) {
       const snapshot   = phase.benchUnits[i] ?? null;
       const cardY      = startY + i * (cardH + CELL_GAP);
-      const isSelected = phase.placementSelection.selectedBenchIdx === i;
+      const isSelected = snapshot !== null && snapshot.id === selectedBenchUnitId;
 
       const { x: logX, y: logY, w: logW } = this.deps.getLogBounds();
 
@@ -153,8 +156,8 @@ export class BattlePlacementController {
           ? { onClick: () => this.onBenchCardClick(i) }
           : {
               onClick:      () => this.onBenchCardClick(i),
-              onHoverStart: (snap: BenchUnitSnapshot) =>
-                this.deps.unitTooltip.showBenchSnapshot(snap, logX, logY, logW),
+              onHoverStart: (snap: BattleUnitSnapshot) =>
+                this.deps.unitTooltip.showFixed(snap, logX, logY, logW),
               onHoverEnd:   () => this.deps.unitTooltip.hide(),
             };
 
@@ -177,7 +180,7 @@ export class BattlePlacementController {
   private onBenchCardClick(idx: number): void {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'battle') return;
-    const { selectedBenchIdx, selectedFieldUnitId } = phase.placementSelection;
+    const { selectedFieldUnitId } = phase.placementSelection;
 
     if (phase.benchUnits[idx] === null) {
       if (selectedFieldUnitId !== null) {
@@ -191,7 +194,8 @@ export class BattlePlacementController {
       return;
     }
 
-    if (selectedBenchIdx === idx) {
+    const slotSnapshot = phase.benchUnits[idx];
+    if (slotSnapshot !== null && slotSnapshot.id === phase.placementSelection.selectedBenchUnitId) {
       PhaseManager.transition({ type: 'clear_placement_selection' });
     } else {
       PhaseManager.transition({ type: 'select_bench_slot', benchIdx: idx });
@@ -227,37 +231,32 @@ export class BattlePlacementController {
   }
 
   private buildPlacementUnitsSignature(phase: BattlePhase): string {
-    return phase.units
-      .filter(u => u.anchor.side === 'player')
-      .map(u => `${u.id}:${u.anchor.row}:${u.anchor.col}`)
+    return phase.fieldUnits
+      .filter(u => u.side === 'player')
+      .map(u => `${u.id}:${u.deployment.anchor.row}:${u.deployment.anchor.col}`)
       .sort()
       .join(';');
   }
 
   private reconcilePlacementUnitViews(phase: BattlePhase): void {
     const playerUnitIds = new Set(
-      phase.units.filter(u => u.anchor.side === 'player').map(u => u.id),
+      phase.fieldUnits.filter(u => u.side === 'player').map(u => u.id),
     );
 
     for (const [id] of [...this.deps.unitViews]) {
-      const unit = phase.unitsById.get(id);
-      if (!unit) {
-        this.deps.destroyUnitView(id);
-        continue;
-      }
-      if (unit.anchor.side === 'player' && !playerUnitIds.has(id)) {
+      if (!playerUnitIds.has(id)) {
         this.deps.destroyUnitView(id);
       }
     }
 
-    for (const unit of phase.units) {
-      if (unit.anchor.side === 'player' && !this.deps.unitViews.has(unit.id)) {
+    for (const unit of phase.fieldUnits) {
+      if (unit.side === 'player' && !this.deps.unitViews.has(unit.id)) {
         this.deps.createUnitView(unit);
       }
     }
 
-    for (const unit of phase.units) {
-      if (unit.anchor.side === 'player') {
+    for (const unit of phase.fieldUnits) {
+      if (unit.side === 'player') {
         this.deps.unitViews.get(unit.id)?.update(unit);
       }
     }
@@ -267,9 +266,9 @@ export class BattlePlacementController {
     this.clearPlacementHighlights();
     const selectedId = phase.placementSelection.selectedFieldUnitId;
     if (!selectedId) return;
-    const unit = phase.unitsById.get(selectedId);
+    const unit = phase.fieldUnits.find(u => u.id === selectedId);
     if (!unit) return;
-    const cells = getOccupiedCells(unit.anchor, unit.shape);
+    const cells = getOccupiedCells(unit.deployment.anchor, unit.shape);
     for (const coord of cells) {
       this.deps.cellViews.get(cellKey(coord))?.setHighlight('selected');
     }

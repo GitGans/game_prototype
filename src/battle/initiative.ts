@@ -19,7 +19,7 @@ export function buildRoundQueue(units: Map<string, Unit>): string[] {
     if (!groups.has(unit.initiative)) {
       groups.set(unit.initiative, { player: [], enemy: [] });
     }
-    groups.get(unit.initiative)![unit.anchor.side === 'player' ? 'player' : 'enemy'].push(unit);
+    groups.get(unit.initiative)![unit.side].push(unit);
   }
 
   // Sort initiative values descending

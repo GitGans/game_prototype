@@ -18,7 +18,7 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 - `skillDefinitionTypes.ts` — Active authoring contract: `ActionSkillDefinition`, action types, target policy types, matrix refs, power source types
 - `itemTypes.ts` — Item/equipment: `ItemDefinition`, `ItemInstance`, `ItemContainer`, `EquipSlot`
 - `snapshotTypes.ts` — UI projections: `UnitStatsSnapshot`, `SkillIconSnapshot`, `BackpackSnapshot`, `EquipmentSnapshot`
-- `battleSnapshots.ts` — Battle-phase projections: `BenchUnitSnapshot` (rebuilt dynamically per phase)
+- `battleSnapshots.ts` — Battle-phase projections: `BattleUnitSnapshot`, `FieldBattleUnitSnapshot`, `BattleOccupancySnapshot` (rebuilt dynamically per phase)
 - `worldTypes.ts` — Map contracts: `SubMapDefinition`, `SubMapState`, `LayoutCell`, `MapEntityType`
 
 ## Skill Contract Layers

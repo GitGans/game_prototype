@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { EquipmentSnapshot, ItemSlotSnapshot } from '../battle/types';
+import { EquipmentSnapshot, ItemSlotSnapshot } from '../shared/snapshotTypes';
 import { ItemTooltip } from './ItemTooltip';
 import { ItemCell } from './ItemCell';
 
