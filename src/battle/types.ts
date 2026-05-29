@@ -15,6 +15,7 @@ export type {
   UnitClassId, UnitClassDefinition,
   UnitProgressionStatModifiers, UnitBattleStats,
   UnitUpgradeOption, UnitUpgradeTier, EnemySkillUnlock, UnitBlueprint, UpgradeOptionId,
+  UnitLifeState,
 } from '../shared/unitTypes';
 export { ucid } from '../shared/unitTypes';
 export type {
@@ -31,7 +32,7 @@ export type {
 
 import type { Side, UnitShape, CellCoord } from '../shared/gridTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
-import type { SpriteSheetConfig, RowTrait, UnitClassId } from '../shared/unitTypes';
+import type { SpriteSheetConfig, RowTrait, UnitClassId, UnitLifeState } from '../shared/unitTypes';
 import type { UnitActivatableAbility } from '../shared/itemTypes';
 
 export type { ActiveEffect } from '../shared/activeEffect';
@@ -42,6 +43,9 @@ export interface Unit {
   name: string;
   hp: number;
   maxHp: number;
+  // Runtime life/death. Invariant: 'alive' ⇒ hp > 0; 'dead' ⇒ hp === 0.
+  // Use isAlive()/killUnit()/reviveUnit() from ./lifeState — do not flip directly.
+  lifeState: UnitLifeState;
   physicalStrength: number;
   magicalStrength: number;
   physicalDefense: number;

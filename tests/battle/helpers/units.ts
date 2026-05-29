@@ -14,6 +14,7 @@ export function makeUnit(overrides: Partial<Unit> = {}): Unit {
     name:                 "Test Unit",
     hp:                   100,
     maxHp:                100,
+    lifeState:            'alive',
     physicalStrength:     20,
     magicalStrength:      10,
     physicalDefense:      0,

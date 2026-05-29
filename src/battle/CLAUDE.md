@@ -50,6 +50,8 @@ returned to `src/core` for phase transition or rendering
 - No Phaser, scene, or rendering imports anywhere in this folder
 - Battle modules must not import `src/scenes/`, `src/objects/`, or `src/ui/`
 - UI-facing display formatting (prompt text, log text, preview estimates) belongs in `src/objects/*Presentation.ts`, not in battle rule modules
+- Combat death is represented by `lifeState: 'dead'` and `hp: 0`. Use `killUnit()` / `reviveUnit()` from `lifeState.ts`; do not flip the field manually.
+- Death clears `activeEffects`. Revive does not restore previous buffs, debuffs, or periodic HP effects.
 
 ## Where to Modify
 - add/change a unit stat computation → [itemOps.ts](itemOps.ts) `computeUnitBattleStats()`

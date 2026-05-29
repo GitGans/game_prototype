@@ -21,6 +21,8 @@ export type UpgradeOptionId = string & { readonly [__upgradeOptionIdBrand]: neve
 
 export type SpriteState = 'idle' | 'attack' | 'death';
 
+export type UnitLifeState = 'alive' | 'dead';
+
 export interface SpriteSheetConfig {
   path: string;
   frameWidth: number;

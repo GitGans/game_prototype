@@ -23,6 +23,7 @@ export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
     name:                bp.name,
     hp:                  stats.hp,
     maxHp:               stats.hp,
+    lifeState:           'alive',
     physicalStrength:    stats.physicalStrength,
     magicalStrength:     stats.magicalStrength,
     physicalDefense:     stats.physicalDefense,
