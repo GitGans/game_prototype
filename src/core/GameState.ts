@@ -14,7 +14,7 @@ import {
   resetTurnContextForNewBattle,
 } from '../battle/turnResolver';
 import { BattleParticipant } from './phases';
-import type { UpgradeOptionId } from '../shared/unitTypes';
+import type { UnitLifeState, UpgradeOptionId } from '../shared/unitTypes';
 import { SubMapState } from '../world/types';
 import { buildOccupancy } from "../battle/occupancy";
 
@@ -38,6 +38,9 @@ export interface PlayerUnitState {
   lastPlacement: CellCoord | null;
   permanentBonuses: Partial<BattleStatBonuses>;
   chosenUpgrades: Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>; // upgrade option id per tier
+  // alive+null = full HP relative to resolved max; alive+number = concrete HP; dead+0 = dead between battles.
+  lifeState: UnitLifeState;
+  currentHp: number | null;
 }
 
 export interface CampaignState {

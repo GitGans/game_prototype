@@ -144,6 +144,17 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     expect(cells.cellToUnitIds.get(key)).toEqual(['alive', 'dead']);
   });
 
+  it('buildBenchBattleUnitSnapshots copies lifeState for a dead bench unit', () => {
+    const deadOnBench = makeUnit({ id: 'b1', side: 'player', lifeState: 'dead', hp: 0 });
+    const state = makeBattleStateFromUnits({
+      bench: [{ unit: deadOnBench, slot: 0 }],
+      benchSlotCount: 1,
+    });
+    const bench = buildBenchBattleUnitSnapshots(state);
+    expect(bench[0]?.lifeState).toBe('dead');
+    expect(bench[0]?.hp).toBe(0);
+  });
+
   it('buildBenchBattleUnitSnapshots is positional and derived from deployments', () => {
     const unit = makeUnit({ id: 'b1', side: 'player' });
     const state = makeBattleStateFromUnits({

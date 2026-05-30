@@ -33,28 +33,90 @@ const testHeal: ActionSkillDefinition = {
 beforeEach(() => resetUnitIdCounter());
 
 describe('executeSkillUse — dead caster safety', () => {
-  it('dead caster produces no events and does not mutate state', () => {
-    const caster = makeUnit({ id: 'caster', side: 'player', skills: [testStrike] });
-    const target = makeUnit({ id: 'target', side: 'enemy' });
+  for (const side of ['player', 'enemy'] as const) {
+    const otherSide = side === 'player' ? 'enemy' : 'player';
+    it(`dead ${side} caster produces no events and does not mutate state`, () => {
+      const caster = makeUnit({ id: 'caster', side, skills: [testStrike] });
+      const target = makeUnit({ id: 'target', side: otherSide });
+      let state = makeBattleStateFromUnits({
+        field: [
+          { unit: caster, anchor: coord(side,      0, 0) },
+          { unit: target, anchor: coord(otherSide, 0, 0) },
+        ],
+      });
+      state = setDead(state, 'caster');
+
+      const result = executeSkillUse({
+        state,
+        casterId: 'caster',
+        target: coord(otherSide, 0, 0),
+        skill: testStrike,
+        queueContext: { chargedThisRound: new Set() },
+        rng: fixedRng(0.99),
+      });
+
+      expect(result.events).toEqual([]);
+      expect(result.state).toBe(state);
+    });
+  }
+});
+
+describe('executeSkillUse — dead provoked unit cannot counter-attack', () => {
+  const provokeStrike: ActionSkillDefinition = {
+    id: 'test_provoke_strike',
+    name: 'Test Provoke Strike',
+    targetPolicy: { type: 'enemy_melee' },
+    actions: [
+      // Non-lethal damage so the provoked target survives the initial hit;
+      // then we kill it externally before counter-attack would dispatch.
+      {
+        type: 'damage',
+        powerSource: 'physical_strength',
+        matrix: { kind: 'multiplier_matrix', matrixName: 'single', level: 1 },
+      },
+      {
+        type: 'probability_effect',
+        probabilityEffectType: 'provoke',
+        displayName: 'Provoke',
+        matrix: { kind: 'probability_matrix', matrixName: 'single', level: 1 },
+      },
+    ],
+  };
+
+  it('an already-dead enemy is not provoked and no counter-attack runs', () => {
+    const caster = makeUnit({ id: 'caster', side: 'player', physicalStrength: 1, skills: [provokeStrike] });
+    const deadEnemy = makeUnit({
+      id: 'deadEnemy',
+      side: 'enemy',
+      hp: 100,
+      maxHp: 100,
+      skills: [testStrike],
+    });
+    const enemyToBlockOccupancyChange = makeUnit({ id: 'fillerEnemy', side: 'enemy' });
     let state = makeBattleStateFromUnits({
       field: [
-        { unit: caster, anchor: coord('player', 0, 0) },
-        { unit: target, anchor: coord('enemy',  0, 0) },
+        { unit: caster,                   anchor: coord('player', 0, 0) },
+        { unit: deadEnemy,                anchor: coord('enemy',  0, 0) },
+        { unit: enemyToBlockOccupancyChange, anchor: coord('enemy', 0, 1) },
       ],
     });
-    state = setDead(state, 'caster');
+    state = setDead(state, 'deadEnemy');
+    state = { ...state, roundQueue: ['caster', 'fillerEnemy'] };
 
     const result = executeSkillUse({
       state,
       casterId: 'caster',
       target: coord('enemy', 0, 0),
-      skill: testStrike,
+      skill: provokeStrike,
       queueContext: { chargedThisRound: new Set() },
-      rng: fixedRng(0.99),
+      rng: fixedRng(0), // would always succeed probability rolls
     });
 
-    expect(result.events).toEqual([]);
-    expect(result.state).toBe(state);
+    // Dead unit is invisible to combat helpers: no damage, no probability event,
+    // and definitely no counter-attack — the corpse cannot be provoked.
+    expect(result.events.find(e => e.type === 'probability_effect_applied')).toBeUndefined();
+    expect(result.events.find(e => e.type === 'counter_attack_start')).toBeUndefined();
+    expect(result.events.find(e => e.type === 'counter_attack_unavailable')).toBeUndefined();
   });
 });
 
