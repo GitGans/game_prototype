@@ -7,22 +7,40 @@ import type {
   ProbabilityEffectApplication,
   SkillLevel,
 } from '../shared/skillTypes';
+import type { SkillDefinitionTargetPolicy } from '../shared/skillDefinitionTypes';
 
 export type { DamageModifierRef, PostDamageEffect, ProbabilityEffectApplication };
 
 // ─── Targeting ────────────────────────────────────────────────────────────────
 
 export type SkillTargetPolicy =
-  | { type: 'friendly' }
+  | { type: 'alive_friendly' }
   | { type: 'self' }
   | { type: 'enemy_melee' }
   | { type: 'enemy_ranged' }
-  | { type: 'dead_ally_field_unit' };
+  | { type: 'dead_friendly' };
 
-export function isFriendlyOrSelfTargetPolicy(
+// Stops authoring/runtime policy drift at compile time.
+// If a Stage 2+ change adds a policy on one side only, this will fail to build.
+type _RuntimeMatchesAuthoring =
+  SkillTargetPolicy extends SkillDefinitionTargetPolicy ? true : false;
+type _AuthoringMatchesRuntime =
+  SkillDefinitionTargetPolicy extends SkillTargetPolicy ? true : false;
+const _parityRuntime: _RuntimeMatchesAuthoring = true;
+const _parityAuthoring: _AuthoringMatchesRuntime = true;
+void _parityRuntime;
+void _parityAuthoring;
+
+export function isAliveFriendlyTargetPolicy(
   policy: SkillTargetPolicy,
 ): boolean {
-  return policy.type === 'friendly' || policy.type === 'self';
+  return policy.type === 'alive_friendly';
+}
+
+export function isDeadFriendlyTargetPolicy(
+  policy: SkillTargetPolicy,
+): boolean {
+  return policy.type === 'dead_friendly';
 }
 
 export function isHostileTargetPolicy(
@@ -35,12 +53,6 @@ export function isEnemyMeleeTargetPolicy(
   policy: SkillTargetPolicy,
 ): boolean {
   return policy.type === 'enemy_melee';
-}
-
-export function isDeadTargetPolicy(
-  policy: SkillTargetPolicy,
-): boolean {
-  return policy.type === 'dead_ally_field_unit';
 }
 
 // ─── Power ────────────────────────────────────────────────────────────────────

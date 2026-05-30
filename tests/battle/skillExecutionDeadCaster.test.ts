@@ -20,7 +20,7 @@ function setDead(state: BattleState, id: string): BattleState {
 const testHeal: ActionSkillDefinition = {
   id: 'test_heal',
   name: 'Test Heal',
-  targetPolicy: { type: 'friendly' },
+  targetPolicy: { type: 'alive_friendly' },
   actions: [
     {
       type: 'heal',

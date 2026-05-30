@@ -7,7 +7,7 @@ import {
   resolveRandomTarget,
 } from './skillRuntime';
 import { compileSkillUsePlan } from './skillPlanCompiler';
-import { isFriendlyOrSelfTargetPolicy } from './skillUsePlan';
+import { isAliveFriendlyTargetPolicy } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 import { requireFieldDeployment } from './deployment';
 import { executeSkillUse } from './skillExecution';
@@ -49,9 +49,10 @@ export function computeOneTurn(
   const unitAnchor = requireFieldDeployment(state, updatedUnit.id).anchor;
   const targets    = resolveSkillTargetsForPolicy(plan.targetPolicy, state, unitAnchor);
 
-  const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)
-    ? resolveBestHealTarget(state, targets)
-    : resolveRandomTarget(targets, rng);
+  const target =
+    isAliveFriendlyTargetPolicy(plan.targetPolicy) || plan.targetPolicy.type === 'self'
+      ? resolveBestHealTarget(state, targets)
+      : resolveRandomTarget(targets, rng);
   if (!target) return state;
 
   const result = executeSkillUse({

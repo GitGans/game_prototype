@@ -12,7 +12,8 @@
       "Bash(rg \"from ['\\\\\"].*core\" /workspace/src --include=\"*.ts\" -l)",
       "Bash(npm test *)",
       "Bash(npm run *)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(grep -i \"\\\\.ts$\")"
     ]
   }
 }

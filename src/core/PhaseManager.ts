@@ -57,7 +57,7 @@ import {
 } from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
-import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
+import { isAliveFriendlyTargetPolicy } from '../battle/skillUsePlan';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from '../progression';
 import { resolveOptionalSkillDefinition } from '../progression';
@@ -399,9 +399,11 @@ class PhaseManagerClass {
         if (activeUnit && battleState.validTargets.length > 0) {
           const activeSkill = getActiveSkill(activeUnit);
           const activePlan  = compileSkillUsePlan(activeSkill);
-          targetHighlightKind = isFriendlyOrSelfTargetPolicy(activePlan.targetPolicy)
-            ? 'heal_target'
-            : 'target';
+          targetHighlightKind =
+            isAliveFriendlyTargetPolicy(activePlan.targetPolicy) ||
+            activePlan.targetPolicy.type === 'self'
+              ? 'heal_target'
+              : 'target';
         }
 
         // participants = battle-start snapshot; do NOT rebuild from current placement state

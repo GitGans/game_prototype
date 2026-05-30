@@ -15,7 +15,7 @@ import type { ResolvedHitCell } from './types';
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
 import { getEffectiveUnitPower } from './skillPower';
-import type { SkillUsePlan } from './skillUsePlan';
+import { isAliveFriendlyTargetPolicy, type SkillUsePlan } from './skillUsePlan';
 
 export type { SkillPreviewModel } from '../shared/skillPreviewModel';
 
@@ -58,7 +58,7 @@ function formatProbability(cells: ResolvedHitCell[]): string {
 }
 
 function isHealTargetPolicy(plan: SkillUsePlan): boolean {
-  return plan.targetPolicy.type === 'friendly' || plan.targetPolicy.type === 'self';
+  return isAliveFriendlyTargetPolicy(plan.targetPolicy) || plan.targetPolicy.type === 'self';
 }
 
 function getPreviewHeaderColorKindFromPlan(

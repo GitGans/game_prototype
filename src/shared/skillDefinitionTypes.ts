@@ -22,11 +22,11 @@ export type SkillId = string & { readonly [__skillIdBrand]: never };
 
 /** Who this skill targets. */
 export type SkillDefinitionTargetPolicy =
-  | { type: 'friendly' }
+  | { type: 'alive_friendly' }
   | { type: 'self' }
   | { type: 'enemy_melee' }
   | { type: 'enemy_ranged' }
-  | { type: 'dead_ally_field_unit' };
+  | { type: 'dead_friendly' };
 
 // ---------------------------------------------------------------------------
 // Power sources

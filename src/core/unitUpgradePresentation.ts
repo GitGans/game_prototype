@@ -41,11 +41,15 @@ const STAT_LABELS: Record<keyof UnitProgressionStatModifiers, string> = {
 
 function targetPolicyLabel(plan: SkillUsePlan): string {
   switch (plan.targetPolicy.type) {
-    case 'friendly':             return 'friendly';
-    case 'self':                 return 'self';
-    case 'enemy_melee':          return 'melee';
-    case 'enemy_ranged':         return 'ranged';
-    case 'dead_ally_field_unit': return 'dead ally';
+    case 'alive_friendly': return 'friendly';
+    case 'self':           return 'self';
+    case 'enemy_melee':    return 'melee';
+    case 'enemy_ranged':   return 'ranged';
+    case 'dead_friendly':  return 'dead ally';
+    default: {
+      const _exhaustive: never = plan.targetPolicy;
+      return _exhaustive;
+    }
   }
 }
 

@@ -1,7 +1,9 @@
 import { BattleState, CellCoord, Col, OccupancyMap, Row, Side } from './types';
 import { cellKey } from './field';
-import { getOccupiedCells } from './shapes';
-import { getDeadFieldUnitEntries, requireFieldDeployment } from './deployment';
+import {
+  getDeadFriendlyCorpseCells,
+  type DeadFriendlyTargetUnit,
+} from './deadFriendlyTargeting';
 import type { SkillTargetPolicy } from './skillUsePlan';
 
 const ENEMY_SIDE: Record<Side, Side> = {
@@ -105,23 +107,43 @@ export function getRangedTargets(attackerSide: Side, occupancy: OccupancyMap): C
 
 /**
  * Returns body cells of all dead field-deployed allies on `casterSide`.
- * Uses deployment + shape — does NOT consult occupancy (dead units do not
- * occupy cells per Stage 2). Side-relative: works for both player and
- * enemy casters targeting their own dead allies.
+ * Uses deployment + shape via the shared structural walker — does NOT consult
+ * occupancy (dead units do not occupy cells). Side-relative: works for both
+ * player and enemy casters targeting their own dead allies.
  */
-export function getDeadAllyFieldUnitTargets(
+export function getDeadFriendlyUnitTargets(
   state:      BattleState,
   casterSide: Side,
 ): CellCoord[] {
-  const cells: CellCoord[] = [];
-  for (const [unitId, unit] of getDeadFieldUnitEntries(state)) {
-    if (unit.side !== casterSide) continue;
-    const deployment = requireFieldDeployment(state, unitId);
-    for (const cell of getOccupiedCells(deployment.anchor, unit.shape)) {
-      cells.push(cell);
-    }
-  }
-  return cells;
+  return getDeadFriendlyCorpseCells({
+    units:       state.units,
+    deployments: state.deployments,
+    casterSide,
+  }).map(({ cell }) => cell);
+}
+
+/**
+ * Returns the dead friendly unit whose body covers `coord`, or null.
+ * Compares full CellCoord (side + row + col): a mirrored wrong-side coordinate
+ * with matching row/col must not match.
+ */
+export function getDeadFriendlyUnitAtCell(
+  state:      BattleState,
+  casterSide: Side,
+  coord:      CellCoord,
+): DeadFriendlyTargetUnit | null {
+  const match = getDeadFriendlyCorpseCells({
+    units:       state.units,
+    deployments: state.deployments,
+    casterSide,
+  }).find(
+    ({ cell }) =>
+      cell.side === coord.side &&
+      cell.row === coord.row &&
+      cell.col === coord.col,
+  );
+
+  return match?.unit ?? null;
 }
 
 /**
@@ -137,7 +159,7 @@ export function resolveSkillTargetsForPolicy(
   unitAnchor:   CellCoord,
 ): CellCoord[] {
   switch (targetPolicy.type) {
-    case 'friendly':
+    case 'alive_friendly':
       return getFriendlyTargets(unitAnchor.side, state.occupancy);
 
     case 'self':
@@ -149,8 +171,8 @@ export function resolveSkillTargetsForPolicy(
     case 'enemy_melee':
       return getMeleeTargets(unitAnchor, state.occupancy);
 
-    case 'dead_ally_field_unit':
-      return getDeadAllyFieldUnitTargets(state, unitAnchor.side);
+    case 'dead_friendly':
+      return getDeadFriendlyUnitTargets(state, unitAnchor.side);
 
     default: {
       const _exhaustive: never = targetPolicy;

@@ -1,21 +1,24 @@
 import type { Unit } from './types';
 
-// Use this for "can act / can be targeted / counts as living" checks.
-// Do NOT write `!isDead(unit)` — the two helpers are intentionally not strict complements
-// during the multi-stage migration off implicit hp<=0 death.
-export function isAlive(unit: Unit): boolean {
+// Structural input for predicates. Anything carrying current hp and the
+// canonical life-state tag can be classified — full Unit not required.
+// Used by deadFriendlyTargeting.ts so callers can pass structural snapshots.
+export type LifeStateReadable = Pick<Unit, 'hp' | 'lifeState'>;
+
+// These predicates intentionally depend only on hp/lifeState.
+// They are not strict complements during the migration off implicit hp<=0 death:
+// isDead() keeps a defensive `hp <= 0` branch for legacy snapshots that haven't
+// had killUnit applied yet. Prefer isAlive() for "can act / counts as living".
+export function isAlive(unit: LifeStateReadable): boolean {
   return unit.lifeState === 'alive' && unit.hp > 0;
 }
 
-// Defensive/transitional: returns true for the canonical dead state AND for legacy
-// `hp <= 0` units that haven't had `killUnit` applied yet. Canonical invariant remains
-// `lifeState === 'dead' && hp === 0`. New gameplay-eligibility code must use isAlive().
-export function isDead(unit: Unit): boolean {
+export function isDead(unit: LifeStateReadable): boolean {
   return unit.lifeState === 'dead' || unit.hp <= 0;
 }
 
-// Death rule: clears activeEffects. Buffs/debuffs/periodic-HP effects do not survive death;
-// revive does not restore them. See src/battle/CLAUDE.md for the documented invariant.
+// Death rule: clears activeEffects. Buffs/debuffs/periodic-HP effects do not
+// survive death; revive does not restore them. See src/battle/CLAUDE.md.
 export function killUnit(unit: Unit): Unit {
   return {
     ...unit,

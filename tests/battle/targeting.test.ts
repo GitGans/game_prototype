@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   resolveSkillTargetsForPolicy,
-  getDeadAllyFieldUnitTargets,
+  getDeadFriendlyUnitTargets,
 } from '../../src/battle/targeting';
 import { killUnit } from '../../src/battle/lifeState';
 import { buildOccupancy } from '../../src/battle/occupancy';
@@ -85,14 +85,14 @@ describe('resolveSkillTargetsForPolicy — living-only ordinary policies', () =>
     state = setDead(state, deadAlly.id);
 
     const cells = resolveSkillTargetsForPolicy(
-      { type: 'friendly' }, state, coord('player', 0, 0),
+      { type: 'alive_friendly' }, state, coord('player', 0, 0),
     );
     // Only the healer's own (living) cell should remain.
     expect(cells).toEqual([coord('player', 0, 0)]);
   });
 });
 
-describe('resolveSkillTargetsForPolicy — dead_ally_field_unit', () => {
+describe('resolveSkillTargetsForPolicy — dead_friendly', () => {
   it('returns dead player ally cells for player caster', () => {
     const caster   = makeUnit({ side: 'player' });
     const deadAlly = makeUnit({ side: 'player' });
@@ -105,7 +105,7 @@ describe('resolveSkillTargetsForPolicy — dead_ally_field_unit', () => {
     state = setDead(state, deadAlly.id);
 
     const cells = resolveSkillTargetsForPolicy(
-      { type: 'dead_ally_field_unit' }, state, coord('player', 0, 0),
+      { type: 'dead_friendly' }, state, coord('player', 0, 0),
     );
     expect(cells).toEqual([coord('player', 1, 1)]);
   });
@@ -122,7 +122,7 @@ describe('resolveSkillTargetsForPolicy — dead_ally_field_unit', () => {
     state = setDead(state, deadAlly.id);
 
     const cells = resolveSkillTargetsForPolicy(
-      { type: 'dead_ally_field_unit' }, state, coord('enemy', 0, 0),
+      { type: 'dead_friendly' }, state, coord('enemy', 0, 0),
     );
     expect(cells).toEqual([coord('enemy', 1, 2)]);
   });
@@ -138,7 +138,7 @@ describe('resolveSkillTargetsForPolicy — dead_ally_field_unit', () => {
     });
 
     const cells = resolveSkillTargetsForPolicy(
-      { type: 'dead_ally_field_unit' }, state, coord('player', 0, 0),
+      { type: 'dead_friendly' }, state, coord('player', 0, 0),
     );
     expect(cells).toEqual([]);
   });
@@ -155,7 +155,7 @@ describe('resolveSkillTargetsForPolicy — dead_ally_field_unit', () => {
     state = setDead(state, deadEnemy.id);
 
     const cells = resolveSkillTargetsForPolicy(
-      { type: 'dead_ally_field_unit' }, state, coord('player', 0, 0),
+      { type: 'dead_friendly' }, state, coord('player', 0, 0),
     );
     expect(cells).toEqual([]);
   });
@@ -176,7 +176,7 @@ describe('resolveSkillTargetsForPolicy — dead_ally_field_unit', () => {
     state = setDead(state, bigDeadAlly.id);
 
     const cells = resolveSkillTargetsForPolicy(
-      { type: 'dead_ally_field_unit' }, state, coord('player', 0, 0),
+      { type: 'dead_friendly' }, state, coord('player', 0, 0),
     );
     expect(cells.map(cellKey).sort())
       .toEqual([coord('player', 1, 0), coord('player', 1, 1)].map(cellKey).sort());
@@ -201,18 +201,18 @@ describe('resolveSkillTargetsForPolicy — dead_ally_field_unit', () => {
     state = setDead(state, ally.id);
 
     // Assert: every previously-occupied corpse cell is gone from occupancy
-    // (living-only blocking), but `dead_ally_field_unit` still finds the body
+    // (living-only blocking), but `dead_friendly` still finds the body
     // through deployment + shape.
     for (const c of allyCells) {
       expect(state.occupancy.cellToUnitId.has(cellKey(c))).toBe(false);
     }
     const cells = resolveSkillTargetsForPolicy(
-      { type: 'dead_ally_field_unit' }, state, coord('player', 0, 0),
+      { type: 'dead_friendly' }, state, coord('player', 0, 0),
     );
     expect(cells.map(cellKey).sort()).toEqual(allyCells.map(cellKey).sort());
   });
 
-  it('getDeadAllyFieldUnitTargets is side-relative across both sides at once', () => {
+  it('getDeadFriendlyUnitTargets is side-relative across both sides at once', () => {
     const playerCaster = makeUnit({ side: 'player' });
     const deadPlayer   = makeUnit({ side: 'player' });
     const enemyCaster  = makeUnit({ side: 'enemy' });
@@ -228,9 +228,9 @@ describe('resolveSkillTargetsForPolicy — dead_ally_field_unit', () => {
     state = setDead(state, deadPlayer.id);
     state = setDead(state, deadEnemy.id);
 
-    expect(getDeadAllyFieldUnitTargets(state, 'player'))
+    expect(getDeadFriendlyUnitTargets(state, 'player'))
       .toEqual([coord('player', 1, 0)]);
-    expect(getDeadAllyFieldUnitTargets(state, 'enemy'))
+    expect(getDeadFriendlyUnitTargets(state, 'enemy'))
       .toEqual([coord('enemy', 1, 0)]);
   });
 });

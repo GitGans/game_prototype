@@ -8,8 +8,8 @@ import {
 } from './skillRuntime';
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import {
+  isAliveFriendlyTargetPolicy,
   isEnemyMeleeTargetPolicy,
-  isFriendlyOrSelfTargetPolicy,
 } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 import { requireFieldDeployment } from './deployment';
@@ -65,9 +65,10 @@ export function decideAutoTurn(input: {
       : { type: 'advance_turn', unitId, skillIndex };
   }
 
-  const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)
-    ? resolveBestHealTarget(state, targets)
-    : resolveRandomTarget(targets, rng);
+  const target =
+    isAliveFriendlyTargetPolicy(plan.targetPolicy) || plan.targetPolicy.type === 'self'
+      ? resolveBestHealTarget(state, targets)
+      : resolveRandomTarget(targets, rng);
 
   if (!target) {
     return { type: 'advance_turn', unitId, skillIndex };

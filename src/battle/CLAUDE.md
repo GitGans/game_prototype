@@ -18,7 +18,7 @@ Pure battle domain logic — all computations, state mutations, and validations 
 - [placement.ts](placement.ts) — low-level validation and field-placement of units
 - [placementState.ts](placementState.ts) — UI-level placement actions (bench/field selection, swaps, moves)
 - [occupancy.ts](occupancy.ts) — builds and updates the bidirectional `OccupancyMap`
-- [targeting.ts](targeting.ts) — computes valid target cells per skill type (melee, ranged, friendly, self)
+- [targeting.ts](targeting.ts) — computes valid target cells per skill type (melee, ranged, alive_friendly, self, dead_friendly)
 - [skillPatterns.ts](skillPatterns.ts) — resolves `SkillPattern` → `ResolvedHitCell[]` for AOE targeting and damage
 - [shapes.ts](shapes.ts) — computes all cells occupied by a unit from its anchor and shape offsets
 - [field.ts](field.ts) — coordinate primitives: `cellKey()`, `cellExists()`
@@ -27,6 +27,7 @@ Pure battle domain logic — all computations, state mutations, and validations 
 - [itemOps.ts](itemOps.ts) — item equip/unequip, inventory queries, stat computation from equipment
 - [lifeState.ts](lifeState.ts) — `isAlive` / `isDead` / `killUnit` / `reviveUnit`; the only place that flips `Unit.lifeState`
 - [deployment.ts](deployment.ts) — field/bench queries; living/dead/all field-helper split
+- [deadFriendlyTargeting.ts](deadFriendlyTargeting.ts) — shared structural corpse-cell walker for dead-friendly targeting and (Stage 2+) revive. All callers must pass `deployments`; deriving anchors from cell maps is forbidden.
 
 ## Structural Role
 `src/battle` → pure battle domain; consumed by `src/core` orchestration layer
@@ -65,8 +66,9 @@ returned to `src/core` for phase transition or rendering
 - `skipActiveTurn` and `chargeActiveTurn` recover from a missing/dead `roundQueue[0]` by advancing through `advanceTurn` (no `turn_skipped` / `turn_charged` event emitted; the returned `skipped` / `charged` boolean remains `false`).
 - Ordinary combat helpers (`resolveAttack`, `resolveHealWithEvents`, `applyEffectApplication`, `applyPeriodicHpEffectApplication`, `resolveProbabilityEffects`, `applyVampirism`) silently skip dead targets — no event, no state change.
 - Targeting policies split into two groups:
-    - Living-only ordinary policies: `friendly`, `self`, `enemy_melee`, `enemy_ranged`. These resolve through `state.occupancy` and never see dead units.
-    - Side-relative dead policy: `dead_ally_field_unit`. Resolves dead field allies on the caster's side via deployment + `getOccupiedCells`. Does not consult occupancy. Works for both player and enemy casters.
+    - Living-only ordinary policies: `alive_friendly`, `self`, `enemy_melee`, `enemy_ranged`. These resolve through `state.occupancy` and never see dead units.
+    - Side-relative dead policy: `dead_friendly`. Resolves dead field allies on the caster's side via deployment + `getOccupiedCells`. Does not consult occupancy. Works for both player and enemy casters.
+- Dead-friendly corpse cell lookup must go through `deadFriendlyTargeting.ts` (`getDeadFriendlyCorpseCells`). Do not duplicate deployment + shape corpse walking in `targeting.ts`, future revive execution, or future revive preview.
 - `resolveSkillTargetsForPolicy` takes `BattleState` (not `OccupancyMap`) because dead targeting needs deployment access. `unitAnchor` is always the caster's current field anchor.
 - Dead-caster safety is enforced once, at the executor (`resolveCasterAndSkill`) and turn-flow entry points (`autoTurn`, `quickTurn`, `turnResolver`) — never inside the resolver. The resolver trusts that callers gate on `isAlive(caster)`.
 - Campaign/map resurrection (targeting dead units on the world map) is future work outside `battle/`.

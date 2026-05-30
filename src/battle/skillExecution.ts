@@ -19,7 +19,7 @@ import {
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
 import { getEffectiveUnitPower } from './skillPower';
-import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
+import { isHostileTargetPolicy, type SkillUseAction, type SkillUsePlan } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from "./targeting";
 import { requireFieldDeployment } from "./deployment";
 import { rebuildRemainingQueue } from "./initiative";
@@ -433,9 +433,7 @@ function resolveProvokeCounterAttack(input: {
   );
 
   if (!casterIsReachable) {
-    const isHostile =
-      plan.targetPolicy.type === "enemy_melee" ||
-      plan.targetPolicy.type === "enemy_ranged";
+    const isHostile = isHostileTargetPolicy(plan.targetPolicy);
 
     return {
       state,

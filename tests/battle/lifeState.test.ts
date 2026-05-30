@@ -1,7 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { isAlive, isDead, killUnit, reviveUnit } from "../../src/battle/lifeState";
+import {
+  isAlive,
+  isDead,
+  killUnit,
+  reviveUnit,
+  type LifeStateReadable,
+} from "../../src/battle/lifeState";
 import { makeUnit } from "./helpers/units";
 import type { ActiveEffect } from "../../src/shared/activeEffect";
+
+describe("LifeStateReadable structural input", () => {
+  it("isDead accepts a structural object without other Unit fields", () => {
+    const readable: LifeStateReadable = { hp: 0, lifeState: 'dead' };
+    expect(isDead(readable)).toBe(true);
+    expect(isAlive(readable)).toBe(false);
+  });
+
+  it("isAlive accepts a structural object", () => {
+    const readable: LifeStateReadable = { hp: 5, lifeState: 'alive' };
+    expect(isAlive(readable)).toBe(true);
+    expect(isDead(readable)).toBe(false);
+  });
+});
 
 describe("isAlive", () => {
   it("true for lifeState 'alive' and hp 1", () => {

@@ -8,8 +8,8 @@ import { tickEffects } from './combat';
 import type { EffectEvent } from './combat';
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import {
+  isAliveFriendlyTargetPolicy,
   isEnemyMeleeTargetPolicy,
-  isFriendlyOrSelfTargetPolicy,
 } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 
@@ -334,7 +334,11 @@ export function resolveActiveTurnStart(input: {
       activeUnitId: activeId,
       activeSkill: currentSkill,
       validTargets,
-      promptKind: isFriendlyOrSelfTargetPolicy(currentPlan.targetPolicy) ? 'heal' : 'attack',
+      promptKind:
+        isAliveFriendlyTargetPolicy(currentPlan.targetPolicy) ||
+        currentPlan.targetPolicy.type === 'self'
+          ? 'heal'
+          : 'attack',
     },
   };
 }
