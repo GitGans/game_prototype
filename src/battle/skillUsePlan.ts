@@ -89,6 +89,12 @@ export type EffectApplicationMeta = {
   duration: number;
 };
 
+// Runtime payload for the revive action. Carries only the skill level — the
+// percent-of-maxHp table lookup happens in skillDefinitionRuntime.getReviveHpPercent.
+export type ReviveEffect = {
+  level: SkillLevel;
+};
+
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
 export type SkillUseAction =
@@ -125,6 +131,11 @@ export type SkillUseAction =
       type: 'probability_effect';
       probabilityEffect: ProbabilityEffectApplication;
       matrix: ProbabilityPatternRef;
+    }
+  | {
+      type: 'revive';
+      revive: ReviveEffect;
+      matrix: EffectAreaPatternRef;
     };
 
 // ─── Plan ─────────────────────────────────────────────────────────────────────

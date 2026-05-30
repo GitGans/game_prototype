@@ -28,6 +28,7 @@ Pure battle domain logic — all computations, state mutations, and validations 
 - [lifeState.ts](lifeState.ts) — `isAlive` / `isDead` / `killUnit` / `reviveUnit`; the only place that flips `Unit.lifeState`
 - [deployment.ts](deployment.ts) — field/bench queries; living/dead/all field-helper split
 - [deadFriendlyTargeting.ts](deadFriendlyTargeting.ts) — shared structural corpse-cell walker for dead-friendly targeting and (Stage 2+) revive. All callers must pass `deployments`; deriving anchors from cell maps is forbidden.
+- [revive.ts](revive.ts) — revive HP table application (`computeReviveHp`), revive target resolution (`resolveReviveTargetsForAction`), and revive state mutation (`reviveUnitInBattle`). Both target resolution and state mutation must go through this module; do not duplicate corpse walking or call `reviveUnit` directly from execution code.
 
 ## Structural Role
 `src/battle` → pure battle domain; consumed by `src/core` orchestration layer
@@ -72,6 +73,11 @@ returned to `src/core` for phase transition or rendering
 - `resolveSkillTargetsForPolicy` takes `BattleState` (not `OccupancyMap`) because dead targeting needs deployment access. `unitAnchor` is always the caster's current field anchor.
 - Dead-caster safety is enforced once, at the executor (`resolveCasterAndSkill`) and turn-flow entry points (`autoTurn`, `quickTurn`, `turnResolver`) — never inside the resolver. The resolver trusts that callers gate on `isAlive(caster)`.
 - Campaign/map resurrection (targeting dead units on the world map) is future work outside `battle/`.
+- Revive target resolution chokepoint is `resolveReviveTargetsForAction` (in `revive.ts`). Revive state-mutation chokepoint is `reviveUnitInBattle`. Both must route dead-friendly corpse geometry through `deadFriendlyTargeting.ts`.
+- Revive amount is target `maxHp × REVIVE_HP_PERCENT_LEVELS[level]` (clamped to ≥1 via `Math.ceil`). Revive does not use caster power and does not consume matrix multipliers — the `effect_area_matrix` defines shape only.
+- Revive does not restore previous `activeEffects` (death already cleared them).
+- Revive does not insert the revived unit into the current `roundQueue`. `reviveUnitInBattle` reuses the existing `roundQueue` reference; the revived unit becomes eligible only on the next `buildRoundQueue` call.
+- Skills containing a `revive` action must use `targetPolicy: { type: 'dead_friendly' }`. Enforced at compile time by `validateActionSkillDefinition` in `actionSkillDefinitionCompiler.ts`.
 
 ## Where to Modify
 - add/change a unit stat computation → [itemOps.ts](itemOps.ts) `computeUnitBattleStats()`

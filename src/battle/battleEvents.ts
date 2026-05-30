@@ -63,4 +63,10 @@ export type BattleEvent =
 
   | { type: 'effect_expired';
       unitId: string; unitName: string;
-      effectDisplayName: string };
+      effectDisplayName: string }
+
+  // ── Revive ──────────────────────────────────────────────────────────
+  | { type: 'unit_revived';
+      casterId: string; casterName: string;
+      targetId: string; targetName: string;
+      amount: number };

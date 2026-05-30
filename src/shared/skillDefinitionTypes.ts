@@ -75,7 +75,8 @@ export type SkillDefinitionAction =
   | SkillDefinitionApplyStatEffectAction
   | SkillDefinitionApplyPeriodicHpEffectAction
   | SkillDefinitionPostDamageAction
-  | SkillDefinitionProbabilityAction;
+  | SkillDefinitionProbabilityAction
+  | SkillDefinitionReviveAction;
 
 // --- Damage ---
 
@@ -145,6 +146,19 @@ export interface SkillDefinitionProbabilityAction {
   probabilityEffectType: ProbabilityEffectType;
   displayName: string;
   matrix: SkillDefinitionProbabilityMatrixRef;
+}
+
+// --- Revive ---
+
+// Restores a dead friendly field unit to life. Matrix is locked to
+// SkillDefinitionEffectAreaMatrixRef: revive amount comes from target maxHp ×
+// REVIVE_HP_PERCENT_LEVELS[level], not from caster power or matrix multipliers.
+// Skills containing a revive action must use targetPolicy { type: 'dead_friendly' };
+// this is enforced at compile time by validateActionSkillDefinition.
+export interface SkillDefinitionReviveAction {
+  type: 'revive';
+  level: SkillLevel;
+  matrix: SkillDefinitionEffectAreaMatrixRef;
 }
 
 // ---------------------------------------------------------------------------
