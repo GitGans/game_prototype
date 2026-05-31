@@ -10,6 +10,7 @@ import {
 import { makeBattleStateFromUnits } from '../battle/helpers/battleState';
 import { makeUnit, resetUnitIdCounter } from '../battle/helpers/units';
 import { cellKey } from '../../src/battle/field';
+import { placeBenchUnitOnField } from '../../src/battle/placementState';
 
 describe('battleSnapshotBuilder (Stage 4)', () => {
   beforeEach(() => resetUnitIdCounter());
@@ -168,5 +169,32 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     expect(bench[1]).toBeNull();
     expect(bench[2]?.id).toBe('b1');
     expect(bench[3]).toBeNull();
+  });
+
+  it('buildBattleUnitSnapshots reflects runtime fields after a bench unit is moved to field', () => {
+    const u = makeUnit({
+      id:               'b1',
+      side:             'player',
+      hp:               42,
+      maxHp:            80,
+      activeSkillIndex: 2,
+    });
+    const state = makeBattleStateFromUnits({
+      bench: [{ unit: u, slot: 0 }],
+      benchSlotCount: 1,
+    });
+    const anchor = { side: 'player' as const, row: 0 as const, col: 0 as const };
+    const moved  = placeBenchUnitOnField(state, u, anchor, 0);
+
+    const snap = buildBattleUnitSnapshots(moved).find(s => s.id === 'b1');
+
+    expect(snap).toBeDefined();
+    expect(snap!.hp).toBe(42);
+    expect(snap!.maxHp).toBe(80);
+    expect(snap!.activeSkillIndex).toBe(2);
+    expect(snap!.deployment.kind).toBe('field');
+    if (snap!.deployment.kind === 'field') {
+      expect(snap!.deployment.anchor).toEqual(anchor);
+    }
   });
 });
