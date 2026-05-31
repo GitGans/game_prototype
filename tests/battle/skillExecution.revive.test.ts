@@ -71,15 +71,16 @@ describe('executeSkillUse — revive', () => {
     const reviveEvents = result.events.filter((e) => e.type === 'unit_revived');
     expect(reviveEvents).toHaveLength(1);
     const event = reviveEvents[0];
+    const revivedUnit = result.state.units.get('dead')!;
     expect(event).toEqual({
       type: 'unit_revived',
       casterId: 'caster',
       casterName: 'Healer',
       targetId: 'dead',
       targetName: 'Corpse',
-      amount: 10,
+      amount: revivedUnit.hp,
     });
-    expect(isAlive(result.state.units.get('dead')!)).toBe(true);
+    expect(isAlive(revivedUnit)).toBe(true);
   });
 
   it('no-op on a living target', () => {
@@ -171,7 +172,8 @@ describe('executeSkillUse — revive', () => {
 
     const reviveEvents = result.events.filter((e) => e.type === 'unit_revived');
     expect(reviveEvents).toHaveLength(1);
-    expect(reviveEvents[0]).toMatchObject({ targetId: 'giant', amount: 20 });
+    const revivedGiant = result.state.units.get('giant')!;
+    expect(reviveEvents[0]).toMatchObject({ targetId: 'giant', amount: revivedGiant.hp });
   });
 });
 

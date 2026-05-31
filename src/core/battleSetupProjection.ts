@@ -29,8 +29,9 @@ function resolveEnemySkills(blueprint: UnitBlueprint, level: number): ActionSkil
 
 export function buildPlayerAutoPlacementCandidates(
   setup: PlayerBattleSetup,
+  blueprints: readonly UnitBlueprint[] = PLAYER_UNITS,
 ): PlayerPlacementCandidate[] {
-  return PLAYER_UNITS
+  return blueprints
     .filter(bp => {
       const us = setup.playerUnits[bp.templateId];
       return !us?.isInCamp && isPersistentPlayerUnitAlive(us);

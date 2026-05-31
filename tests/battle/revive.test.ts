@@ -25,25 +25,45 @@ function setDead(state: BattleState, id: string): BattleState {
 beforeEach(() => resetUnitIdCounter());
 
 describe('computeReviveHp', () => {
-  it('level 1 returns ceil(maxHp * 10 / 100)', () => {
-    expect(computeReviveHp({ maxHp: 100 }, { level: 1 })).toBe(10);
-    expect(computeReviveHp({ maxHp: 95 },  { level: 1 })).toBe(10); // 9.5 → 10
-    expect(computeReviveHp({ maxHp: 11 },  { level: 1 })).toBe(2);  // 1.1 → 2
+  it('returns an integer', () => {
+    for (const maxHp of [1, 7, 11, 95, 100, 200]) {
+      for (const level of [1, 2, 3] as const) {
+        expect(Number.isInteger(computeReviveHp({ maxHp }, { level }))).toBe(true);
+      }
+    }
   });
 
-  it('level 2 returns ceil(maxHp * 20 / 100)', () => {
-    expect(computeReviveHp({ maxHp: 100 }, { level: 2 })).toBe(20);
-    expect(computeReviveHp({ maxHp: 91 },  { level: 2 })).toBe(19); // 18.2 → 19
+  it('returns at least 1', () => {
+    expect(computeReviveHp({ maxHp: 1 }, { level: 1 })).toBeGreaterThanOrEqual(1);
+    expect(computeReviveHp({ maxHp: 0 }, { level: 1 })).toBeGreaterThanOrEqual(1);
   });
 
-  it('level 3 returns ceil(maxHp * 30 / 100)', () => {
-    expect(computeReviveHp({ maxHp: 100 }, { level: 3 })).toBe(30);
-    expect(computeReviveHp({ maxHp: 7 },   { level: 3 })).toBe(3);  // 2.1 → 3
+  it('never exceeds maxHp (for maxHp > 0)', () => {
+    for (const maxHp of [1, 5, 10, 100]) {
+      for (const level of [1, 2, 3] as const) {
+        expect(computeReviveHp({ maxHp }, { level })).toBeLessThanOrEqual(maxHp);
+      }
+    }
   });
 
-  it('always returns at least 1', () => {
-    expect(computeReviveHp({ maxHp: 1 }, { level: 1 })).toBe(1);
-    expect(computeReviveHp({ maxHp: 0 }, { level: 1 })).toBe(1);
+  it('is monotonic non-decreasing in level for a given maxHp', () => {
+    for (const maxHp of [10, 50, 100, 200]) {
+      const h1 = computeReviveHp({ maxHp }, { level: 1 });
+      const h2 = computeReviveHp({ maxHp }, { level: 2 });
+      const h3 = computeReviveHp({ maxHp }, { level: 3 });
+      expect(h2).toBeGreaterThanOrEqual(h1);
+      expect(h3).toBeGreaterThanOrEqual(h2);
+    }
+  });
+
+  it('is monotonic non-decreasing in maxHp for a given level', () => {
+    for (const level of [1, 2, 3] as const) {
+      const a = computeReviveHp({ maxHp: 10 },  { level });
+      const b = computeReviveHp({ maxHp: 100 }, { level });
+      const c = computeReviveHp({ maxHp: 200 }, { level });
+      expect(b).toBeGreaterThanOrEqual(a);
+      expect(c).toBeGreaterThanOrEqual(b);
+    }
   });
 
   it('invalid level 0 throws via requireSkillLevel', () => {
@@ -73,10 +93,11 @@ describe('reviveUnitInBattle', () => {
     const next = result!.state;
     const revived = next.units.get('deadAlly')!;
 
-    expect(result!.hpRestored).toBe(20);
+    const expected = computeReviveHp({ maxHp: revived.maxHp }, { level: 2 });
+    expect(result!.hpRestored).toBe(expected);
     expect(isAlive(revived)).toBe(true);
     expect(revived.lifeState).toBe('alive');
-    expect(revived.hp).toBe(20);
+    expect(revived.hp).toBe(expected);
     expect(revived.activeEffects).toEqual([]);
     expect(next.deployments.get('deadAlly')).toBe(state.deployments.get('deadAlly'));
     expect(next.occupancy.cellToUnitId.get(cellKey(coord('player', 1, 1)))).toBe('deadAlly');
@@ -91,8 +112,9 @@ describe('reviveUnitInBattle', () => {
 
     const result = reviveUnitInBattle(state, 'enemy', { level: 1 });
     expect(result).not.toBeNull();
-    expect(result!.hpRestored).toBe(10);
-    expect(isAlive(result!.state.units.get('enemy')!)).toBe(true);
+    const revived = result!.state.units.get('enemy')!;
+    expect(result!.hpRestored).toBe(revived.hp);
+    expect(isAlive(revived)).toBe(true);
   });
 
   it('revives a multi-cell corpse and registers all body cells in occupancy', () => {

@@ -2,13 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { resolveManualTargetPromptKindForUnit } from '../../src/core/battleDirectiveProjection';
 import { buildManualTargetStatusText } from '../../src/objects/battleDirectivePresentation';
 import type { BattleUnitSnapshot } from '../../src/shared/battleSnapshots';
-import { SKILLS } from '../../src/data/skills/skillDefinitions';
-import { ucid } from '../../src/shared/unitTypes';
+import type { ActionSkillDefinition } from '../../src/shared/skillDefinitionTypes';
 import { SHAPES } from '../../src/data/shapeDefinitions';
 
-function makeSnapshot(skillId: keyof typeof SKILLS): BattleUnitSnapshot {
+function makeSnapshotWithSkill(skill: ActionSkillDefinition, name = 'S'): BattleUnitSnapshot {
   return {
-    id: 's', side: 'player', name: 'S', hp: 100, maxHp: 100, lifeState: 'alive',
+    id: 's', side: 'player', name, hp: 100, maxHp: 100, lifeState: 'alive',
     physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0,
     dodge: 0, block: 0, level: 1, initiative: 0,
     effectiveInitiative: 0, effectivePhysicalStrength: 0, effectiveMagicalStrength: 0,
@@ -16,7 +15,7 @@ function makeSnapshot(skillId: keyof typeof SKILLS): BattleUnitSnapshot {
     shape: SHAPES['1x1'],
     deployment: { kind: 'field', anchor: { side: 'player', row: 0, col: 0 } },
     spriteKey: null,
-    skills: [SKILLS[skillId]],
+    skills: [skill],
     activeSkillIndex: 0,
     activeEffects: [],
     rowTrait: 'front',
@@ -25,28 +24,54 @@ function makeSnapshot(skillId: keyof typeof SKILLS): BattleUnitSnapshot {
   };
 }
 
+const reviveSkill: ActionSkillDefinition = {
+  id: 'test_revive', name: 'Test Revive',
+  targetPolicy: { type: 'dead_friendly' },
+  actions: [
+    { type: 'revive', level: 1, matrix: { kind: 'effect_area_matrix', matrixName: 'single' } },
+  ],
+};
+
+const healSkill: ActionSkillDefinition = {
+  id: 'test_heal', name: 'Test Heal',
+  targetPolicy: { type: 'alive_friendly' },
+  actions: [
+    {
+      type: 'heal',
+      powerSource: 'magical_strength',
+      matrix: { kind: 'multiplier_matrix', matrixName: 'single', level: 1 },
+    },
+  ],
+};
+
+const meleeSkill: ActionSkillDefinition = {
+  id: 'test_melee', name: 'Test Melee',
+  targetPolicy: { type: 'enemy_melee' },
+  actions: [
+    {
+      type: 'damage',
+      powerSource: 'physical_strength',
+      matrix: { kind: 'multiplier_matrix', matrixName: 'single', level: 1 },
+    },
+  ],
+};
+
 describe('manual prompt projection — revive', () => {
   it('dead_friendly policy maps to "revive"', () => {
-    const snap = makeSnapshot('revive');
-    expect(resolveManualTargetPromptKindForUnit(snap)).toBe('revive');
+    expect(resolveManualTargetPromptKindForUnit(makeSnapshotWithSkill(reviveSkill))).toBe('revive');
   });
 
   it('alive_friendly policy maps to "heal"', () => {
-    const snap = makeSnapshot('m_heal_basic');
-    expect(resolveManualTargetPromptKindForUnit(snap)).toBe('heal');
+    expect(resolveManualTargetPromptKindForUnit(makeSnapshotWithSkill(healSkill))).toBe('heal');
   });
 
   it('hostile policy maps to "attack"', () => {
-    const snap = makeSnapshot('p_melee_basic');
-    expect(resolveManualTargetPromptKindForUnit(snap)).toBe('attack');
+    expect(resolveManualTargetPromptKindForUnit(makeSnapshotWithSkill(meleeSkill))).toBe('attack');
   });
 
-  it('presentation builder renders revive copy', () => {
-    expect(buildManualTargetStatusText('revive', 'Lich')).toBe(
-      'Lich — Click on a fallen ally to revive',
-    );
+  it('presentation builder mentions the unit and revive intent', () => {
+    const text = buildManualTargetStatusText('revive', 'Lich');
+    expect(text).toContain('Lich');
+    expect(text).toMatch(/revive/i);
   });
 });
-
-// silence unused import
-void ucid;

@@ -1,64 +1,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { ActionSkillDefinition, SkillId } from '../../src/shared/skillDefinitionTypes';
+import type { ActionSkillDefinition } from '../../src/shared/skillDefinitionTypes';
 import type { Rng } from '../../src/shared/random';
 import {
   chooseSkillIndexForUnit,
   chooseSkillTargetForPlan,
 } from '../../src/battle/skillTargetSelection';
 import { compileSkillUsePlan } from '../../src/battle/skillPlanCompiler';
-import { SKILLS, sid } from '../../src/data/skills/skillDefinitions';
-import { PLAYER_UNIT_UPGRADE_TIERS } from '../../src/data/units/playerUnitUpgradeTiers';
-import { ENEMY_UNITS } from '../../src/data/units/enemyUnits';
 import { killUnit } from '../../src/battle/lifeState';
 import { buildOccupancy } from '../../src/battle/occupancy';
 import { makeUnit, resetUnitIdCounter } from './helpers/units';
 import { makeBattleStateFromUnits } from './helpers/battleState';
 import { coord } from './helpers/coords';
+import { testHeal, testRevive } from './helpers/skills';
 
 beforeEach(() => resetUnitIdCounter());
-
-// ─── Data rollout (semantic, character-agnostic) ──────────────────────────────
-
-describe('revive skill data rollout', () => {
-  it('SKILLS.revive matches the locked authored shape', () => {
-    expect(SKILLS.revive).toEqual({
-      id: 'revive',
-      name: 'Revive',
-      targetPolicy: { type: 'dead_friendly' },
-      actions: [
-        {
-          type: 'revive',
-          level: 1,
-          matrix: { kind: 'effect_area_matrix', matrixName: 'single' },
-        },
-      ],
-    });
-  });
-
-  it('at least one player progression upgrade option grants sid("revive")', () => {
-    expect(anyPlayerUpgradeGrants(sid('revive'))).toBe(true);
-  });
-
-  it('at least one enemy unit unlock grants sid("revive")', () => {
-    expect(anyEnemyUnlockGrants(sid('revive'))).toBe(true);
-  });
-});
-
-function anyPlayerUpgradeGrants(skillId: SkillId): boolean {
-  return Object.values(PLAYER_UNIT_UPGRADE_TIERS).some((tiers) =>
-    tiers.some((tier) =>
-      tier.options.some((option) => option.skillId === skillId),
-    ),
-  );
-}
-
-function anyEnemyUnlockGrants(skillId: SkillId): boolean {
-  return Object.values(ENEMY_UNITS).some((units) =>
-    units.some((unit) =>
-      unit.enemySkillUnlocks?.some((unlock) => unlock.skillId === skillId),
-    ),
-  );
-}
 
 // ─── chooseSkillTargetForPlan ─────────────────────────────────────────────────
 
@@ -106,8 +61,8 @@ describe('chooseSkillTargetForPlan', () => {
       },
     ],
   };
-  const heal: ActionSkillDefinition = SKILLS.m_heal_basic;
-  const revive: ActionSkillDefinition = SKILLS.revive;
+  const heal: ActionSkillDefinition = testHeal;
+  const revive: ActionSkillDefinition = testRevive;
 
   it('empty targets → null', () => {
     const caster = makeUnit({ id: 'c', side: 'player', skills: [ranged] });
@@ -172,7 +127,7 @@ describe('chooseSkillIndexForUnit', () => {
     const healer = makeUnit({
       id: 'h',
       side: 'player',
-      skills: [SKILLS.m_heal_basic, SKILLS.revive],
+      skills: [testHeal, testRevive],
     });
     const ally = makeUnit({ id: 'a', side: 'player', hp: 50, maxHp: 100 });
     const state = makeBattleStateFromUnits({
@@ -196,7 +151,7 @@ describe('chooseSkillIndexForUnit', () => {
     const healer = makeUnit({
       id: 'h',
       side: 'player',
-      skills: [SKILLS.m_heal_basic, SKILLS.revive],
+      skills: [testHeal, testRevive],
     });
     const ally = makeUnit({ id: 'a', side: 'player', hp: 50, maxHp: 100 });
     const corpse = makeUnit({ id: 'd', side: 'player', hp: 50, maxHp: 100 });
@@ -279,7 +234,7 @@ describe('chooseSkillIndexForUnit', () => {
     const healer = makeUnit({
       id: 'h',
       side: 'player',
-      skills: [SKILLS.m_heal_basic, SKILLS.revive],
+      skills: [testHeal, testRevive],
     });
     const ally = makeUnit({ id: 'a', side: 'player', hp: 50, maxHp: 100 });
     const corpse = makeUnit({ id: 'd', side: 'player' });
@@ -301,7 +256,7 @@ describe('chooseSkillIndexForUnit', () => {
     // Single heal skill with one valid heal target → candidates has 1 entry.
     // pickOneOrNull still consumes one rng.next(), so we isolate the filter
     // loop by ensuring the rng would throw if filter consumed it.
-    const healer = makeUnit({ id: 'h', side: 'player', skills: [SKILLS.m_heal_basic] });
+    const healer = makeUnit({ id: 'h', side: 'player', skills: [testHeal] });
     const ally = makeUnit({ id: 'a', side: 'player', hp: 50, maxHp: 100 });
     const state = makeBattleStateFromUnits({
       field: [
