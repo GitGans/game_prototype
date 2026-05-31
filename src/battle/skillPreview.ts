@@ -1,6 +1,8 @@
-import type { CellCoord } from '../shared/gridTypes';
+import type { CellCoord, Side, UnitShape } from '../shared/gridTypes';
 import type { ActiveEffect } from '../shared/activeEffect';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
+import type { UnitDeployment } from '../shared/unitDeploymentTypes';
+import type { UnitLifeState } from '../shared/unitTypes';
 import type {
   SkillPreviewCell,
   SkillPreviewHeaderColorKind,
@@ -15,7 +17,16 @@ import type { ResolvedHitCell } from './types';
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
 import { getEffectiveUnitPower } from './skillPower';
-import { isAliveFriendlyTargetPolicy, type SkillUsePlan } from './skillUsePlan';
+import {
+  isAliveFriendlyTargetPolicy,
+  isDeadFriendlyTargetPolicy,
+  type SkillUsePlan,
+} from './skillUsePlan';
+import {
+  computeReviveHp,
+  resolveReviveTargetsForAction,
+  type ReviveResolutionUnit,
+} from './revive';
 
 export type { SkillPreviewModel } from '../shared/skillPreviewModel';
 
@@ -26,8 +37,11 @@ export type { SkillPreviewModel } from '../shared/skillPreviewModel';
 export type SkillPreviewUnit = {
   id: string;
   name: string;
+  side: Side;
+  lifeState: UnitLifeState;
   hp: number;
   maxHp: number;
+  shape: UnitShape;
   physicalStrength: number;
   magicalStrength: number;
   physicalDefense: number;
@@ -40,6 +54,16 @@ export type SkillPreviewUnit = {
   activeSkillIndex: number;
 };
 
+// Compile-time check: revive resolver accepts SkillPreviewUnit shape directly.
+// Written as a conditional type + `void` so it survives `noUnusedLocals` /
+// `noUnusedParameters`. If SkillPreviewUnit ever diverges from
+// ReviveResolutionUnit the literal `true` will no longer satisfy the conditional.
+type _SkillPreviewUnitSatisfiesReviveResolutionUnit =
+  SkillPreviewUnit extends ReviveResolutionUnit ? true : false;
+const _skillPreviewUnitSatisfiesReviveResolutionUnit:
+  _SkillPreviewUnitSatisfiesReviveResolutionUnit = true;
+void _skillPreviewUnitSatisfiesReviveResolutionUnit;
+
 export type SkillPreviewInput = {
   activeUnit: SkillPreviewUnit | null;
   targetCoord: CellCoord;
@@ -47,6 +71,7 @@ export type SkillPreviewInput = {
     cellToUnitId: ReadonlyMap<string, string>;
   };
   unitsById: ReadonlyMap<string, SkillPreviewUnit>;
+  deployments: ReadonlyMap<string, UnitDeployment>;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -89,10 +114,16 @@ export function buildSkillPreviewModelFromPlan(
   plan: SkillUsePlan,
   input: SkillPreviewInput,
 ): SkillPreviewModel | null {
-  const { activeUnit, targetCoord, occupancy, unitsById } = input;
+  const { activeUnit, targetCoord, occupancy, unitsById, deployments } = input;
   if (!activeUnit) return null;
 
-  const highlight = isHealTargetPolicy(plan) ? 'heal' : 'damage';
+  const highlight: 'damage' | 'heal' | 'revive' = isDeadFriendlyTargetPolicy(
+    plan.targetPolicy,
+  )
+    ? 'revive'
+    : isHealTargetPolicy(plan)
+      ? 'heal'
+      : 'damage';
   const cells: SkillPreviewCell[] = [];
   const statusLines: string[] = [];
 
@@ -220,6 +251,24 @@ export function buildSkillPreviewModelFromPlan(
       const pct = getVampirismPercent(action.postDamage);
       const label = action.postDamage.type === 'self_vampirism' ? 'Self vampirism' : 'Mass vampirism';
       statusLines.push(`[${label} ${pct}%]`);
+    }
+
+    if (action.type === 'revive') {
+      const { targets } = resolveReviveTargetsForAction({
+        units: unitsById,
+        deployments,
+        casterSide: activeUnit.side,
+        targetAnchor: targetCoord,
+        matrix: action.matrix,
+      });
+
+      for (const { unit, cells: corpseCells } of targets) {
+        for (const cell of corpseCells) {
+          cells.push({ coord: cell, kind: 'effect', highlight: 'revive' });
+        }
+        const hp = computeReviveHp(unit, action.revive);
+        statusLines.push(`${unit.name} revived +${hp} HP`);
+      }
     }
   }
 

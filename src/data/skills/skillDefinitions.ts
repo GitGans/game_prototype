@@ -328,6 +328,19 @@ export const SKILLS = {
       },
     ],
   },
+
+  revive: {
+    id: "revive",
+    name: "Revive",
+    targetPolicy: { type: "dead_friendly" },
+    actions: [
+      {
+        type: "revive",
+        level: 1,
+        matrix: { kind: "effect_area_matrix", matrixName: "single" },
+      },
+    ],
+  },
 } satisfies Record<string, ActionSkillDefinition>;
 
 /**

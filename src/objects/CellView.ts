@@ -4,7 +4,12 @@ import { CellCoord } from "../shared/gridTypes";
 import { cellKey } from "../battle/field";
 import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 
-type HighlightType = "none" | "selected" | "target" | "heal_target";
+type HighlightType =
+  | "none"
+  | "selected"
+  | "target"
+  | "heal_target"
+  | "revive_target";
 type CellMode = "placement" | "battle";
 
 function lerpColor(c1: number, c2: number, t: number): number {
@@ -92,13 +97,21 @@ export class CellView extends Phaser.GameObjects.Container {
       case "heal_target":
         this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.validHeal).setAlpha(0.25);
         break;
-      default:
-        // 'none': in battle keep cell invisible; in placement restore subtle tint
+      case "revive_target":
+        this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.validRevive).setAlpha(0.3);
+        break;
+      case "none":
+        // in battle keep cell invisible; in placement restore subtle tint
         if (this._mode === "battle") {
           this.bg.setAlpha(0);
         } else {
           this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.bg).setAlpha(0.3);
         }
+        break;
+      default: {
+        const _exhaustive: never = type;
+        return _exhaustive;
+      }
     }
   }
 

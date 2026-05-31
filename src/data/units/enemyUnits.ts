@@ -335,6 +335,7 @@ export const ENEMY_UNITS: Record<UnitRace, UnitBlueprint[]> = {
         { unlocksAtLevel: 0, skillId: sid("m_heal_basic") },
         { unlocksAtLevel: 5, skillId: sid("heal_with_defence") },
         { unlocksAtLevel: 10, skillId: sid("self_heal_mass_regeneration") },
+        { unlocksAtLevel: 15, skillId: sid("revive") },
       ],
       rowTrait: "back",
       spriteFilename: "undead_healer.png",

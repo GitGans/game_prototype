@@ -314,6 +314,7 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
       options: [
         opt("healer_15_heal_with_defence", "Protective Heal", sid("heal_with_defence")),
         opt("healer_15_m_heal_basic", "Heal", sid("m_heal_basic")),
+        opt("healer_15_revive", "Revive", sid("revive")),
       ],
     },
     {

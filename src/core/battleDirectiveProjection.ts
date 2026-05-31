@@ -1,7 +1,6 @@
 import type { TurnStartDirective } from '../battle/turnResolver';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
-import { isAliveFriendlyTargetPolicy } from '../battle/skillUsePlan';
 import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 import type {
   BattleDirectivePresentationInput,
@@ -37,7 +36,19 @@ export function resolveManualTargetPromptKindForUnit(
   const skill = getActiveSkill(unit);
   if (!skill) return null;
   const plan = compileSkillUsePlan(skill);
-  return isAliveFriendlyTargetPolicy(plan.targetPolicy) || plan.targetPolicy.type === 'self'
-    ? 'heal'
-    : 'attack';
+  const policy = plan.targetPolicy;
+  switch (policy.type) {
+    case 'enemy_melee':
+    case 'enemy_ranged':
+      return 'attack';
+    case 'alive_friendly':
+    case 'self':
+      return 'heal';
+    case 'dead_friendly':
+      return 'revive';
+    default: {
+      const _exhaustive: never = policy;
+      return _exhaustive;
+    }
+  }
 }

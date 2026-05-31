@@ -57,7 +57,6 @@ import {
 } from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
-import { isAliveFriendlyTargetPolicy } from '../battle/skillUsePlan';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from '../progression';
 import { resolveOptionalSkillDefinition } from '../progression';
@@ -395,15 +394,32 @@ class PhaseManagerClass {
           activeUnitId !== null &&
           hasChargedThisRound(GameState.getBattleTurnContext(), activeUnitId);
 
-        let targetHighlightKind: 'target' | 'heal_target' | 'none' = 'none';
+        let targetHighlightKind:
+          | 'target'
+          | 'heal_target'
+          | 'revive_target'
+          | 'none' = 'none';
         if (activeUnit && battleState.validTargets.length > 0) {
           const activeSkill = getActiveSkill(activeUnit);
           const activePlan  = compileSkillUsePlan(activeSkill);
-          targetHighlightKind =
-            isAliveFriendlyTargetPolicy(activePlan.targetPolicy) ||
-            activePlan.targetPolicy.type === 'self'
-              ? 'heal_target'
-              : 'target';
+          const policy      = activePlan.targetPolicy;
+          switch (policy.type) {
+            case 'enemy_melee':
+            case 'enemy_ranged':
+              targetHighlightKind = 'target';
+              break;
+            case 'alive_friendly':
+            case 'self':
+              targetHighlightKind = 'heal_target';
+              break;
+            case 'dead_friendly':
+              targetHighlightKind = 'revive_target';
+              break;
+            default: {
+              const _exhaustive: never = policy;
+              targetHighlightKind = _exhaustive;
+            }
+          }
         }
 
         // participants = battle-start snapshot; do NOT rebuild from current placement state

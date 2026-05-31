@@ -13,7 +13,9 @@
       "Bash(npm test *)",
       "Bash(npm run *)",
       "Bash(npx vitest *)",
-      "Bash(grep -i \"\\\\.ts$\")"
+      "Bash(grep -i \"\\\\.ts$\")",
+      "Bash(npx tsc *)",
+      "Bash(node scripts/check-boundaries.mjs)"
     ]
   }
 }

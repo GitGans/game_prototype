@@ -1,6 +1,6 @@
 import type { CellCoord } from './gridTypes';
 
-export type SkillPreviewHighlightKind = 'damage' | 'heal';
+export type SkillPreviewHighlightKind = 'damage' | 'heal' | 'revive';
 
 export type SkillPreviewHeaderColorKind = 'physical' | 'magical' | 'neutral';
 

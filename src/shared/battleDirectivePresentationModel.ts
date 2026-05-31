@@ -1,4 +1,4 @@
-export type ManualTargetPromptKind = 'attack' | 'heal';
+export type ManualTargetPromptKind = 'attack' | 'heal' | 'revive';
 
 export type BattleDirectivePresentationInput =
   | {

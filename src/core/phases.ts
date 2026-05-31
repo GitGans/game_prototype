@@ -93,7 +93,7 @@ export type GamePhase =
       manualTurnControlsVisible: boolean;
       manualChargeDisabled:    boolean;
       validTargets:        CellCoord[];
-      targetHighlightKind: 'target' | 'heal_target' | 'none';
+      targetHighlightKind: 'target' | 'heal_target' | 'revive_target' | 'none';
     }
   | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
   | { type: 'debug_level_select' }
