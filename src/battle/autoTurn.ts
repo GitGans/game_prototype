@@ -1,18 +1,15 @@
 import type { BattleMode, BattleState, CellCoord } from './types';
 import type { Rng } from '../shared/random';
-import {
-  getActiveSkill,
-  resolveBestHealTarget,
-  resolveRandomSkillIndex,
-  resolveRandomTarget,
-} from './skillRuntime';
+import { getActiveSkill } from './skillRuntime';
 import { compileSkillUsePlan } from './skillPlanCompiler';
-import {
-  isEnemyMeleeTargetPolicy,
-  isFriendlyOrSelfTargetPolicy,
-} from './skillUsePlan';
+import { isEnemyMeleeTargetPolicy } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 import { requireFieldDeployment } from './deployment';
+import { isAlive } from './lifeState';
+import {
+  chooseSkillIndexForUnit,
+  chooseSkillTargetForPlan,
+} from './skillTargetSelection';
 
 export type AutoTurnDecision =
   | { type: 'none';         reason: 'battle_ended' | 'non_auto_mode' }
@@ -47,16 +44,16 @@ export function decideAutoTurn(input: {
       : { type: 'none', reason: 'non_auto_mode' };
   }
 
-  if (!activeUnit || !unitId) {
+  if (!activeUnit || !unitId || !isAlive(activeUnit)) {
     return { type: 'restart_turn' };
   }
 
-  const skillIndex  = resolveRandomSkillIndex(activeUnit, rng);
+  const skillIndex  = chooseSkillIndexForUnit({ state, unit: activeUnit, rng });
   const updatedUnit = { ...activeUnit, activeSkillIndex: skillIndex };
   const skill       = getActiveSkill(updatedUnit);
   const plan        = compileSkillUsePlan(skill);
   const unitAnchor  = requireFieldDeployment(state, updatedUnit.id).anchor;
-  const targets     = resolveSkillTargetsForPolicy(plan.targetPolicy, state.occupancy, unitAnchor);
+  const targets     = resolveSkillTargetsForPolicy(plan.targetPolicy, state, unitAnchor);
 
   if (targets.length === 0) {
     return isEnemyMeleeTargetPolicy(plan.targetPolicy)
@@ -64,12 +61,11 @@ export function decideAutoTurn(input: {
       : { type: 'advance_turn', unitId, skillIndex };
   }
 
-  const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)
-    ? resolveBestHealTarget(state, targets)
-    : resolveRandomTarget(targets, rng);
-
+  const target = chooseSkillTargetForPlan({ state, plan, targets, rng });
   if (!target) {
-    return { type: 'advance_turn', unitId, skillIndex };
+    return isEnemyMeleeTargetPolicy(plan.targetPolicy)
+      ? { type: 'skip_turn',    unitId, skillIndex, reason: 'blocked_melee' }
+      : { type: 'advance_turn', unitId, skillIndex };
   }
 
   return { type: 'use_skill', unitId, skillIndex, target };

@@ -202,7 +202,7 @@ export class BattleTurnFlowController {
     unitView?.setSpriteState("attack");
     this.schedule(400, () => {
       const current = this.getBattlePhase()?.unitsById.get(unitId);
-      if (current && current.hp > 0) unitView?.setSpriteState("idle");
+      if (current && current.lifeState === 'alive') unitView?.setSpriteState("idle");
     });
   }
 

@@ -70,7 +70,10 @@ export class Game extends Phaser.Scene {
     this.unitTooltip = new UnitTooltip(this, UI_THEME.component.tooltip.bg, UI_THEME.component.tooltip.bgAlpha);
     this.effectTooltip = new EffectTooltip(this);
     this.skillBar = new SkillBar(this, new SkillTooltip(this));
-    this.buildUnitViews();
+
+    const initialPhase = PhaseManager.getPhase();
+    if (initialPhase.type === 'battle') this.syncUnitViews(initialPhase);
+
     this.buildUI();
 
     this.battlePresentation = new BattlePresentationController({
@@ -88,14 +91,11 @@ export class Game extends Phaser.Scene {
     this.battlePlacement = new BattlePlacementController({
       scene: this,
       cellViews: this.cellViews,
-      unitViews: this.unitViews,
       unitTooltip: this.unitTooltip,
       getLogBounds: () => ({ x: this.logX, y: this.logY, w: this.logW, h: this.logH }),
       cellPixelPos: (side, row, col) => this.cellPixelPos(side, row, col),
       setStatus: text => this.setStatus(text),
       setBattleLogVisible: visible => this.battleLog.setVisible(visible),
-      createUnitView: unit => this.createUnitView(unit),
-      destroyUnitView: unitId => this.destroyUnitView(unitId),
       onStartBattle: () => this.startBattle(),
     });
 
@@ -183,15 +183,12 @@ export class Game extends Phaser.Scene {
 
   // ─── Unit Views ────────────────────────────────────────────────────────────
 
-  private buildUnitViews(): void {
-    const phase = PhaseManager.getPhase();
-    if (phase.type !== 'battle') return;
-    for (const unit of phase.fieldUnits) {
-      this.createUnitView(unit);
-    }
-  }
-
-  private createUnitView(unit: FieldBattleUnitSnapshot): void {
+  private getUnitViewGeometry(unit: FieldBattleUnitSnapshot): {
+    x: number;
+    y: number;
+    colSpan: number;
+    rowSpan: number;
+  } {
     const cells = getOccupiedCells(unit.deployment.anchor, unit.shape);
     const rowSpan =
       Math.max(...cells.map((c) => c.row)) -
@@ -203,15 +200,21 @@ export class Game extends Phaser.Scene {
       1;
 
     const positions = cells.map((c) => this.cellPixelPos(c.side, c.row, c.col));
-    const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
-    const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+    const x = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+    const y = positions.reduce((s, p) => s + p.y, 0) / positions.length;
 
+    return { x, y, colSpan, rowSpan };
+  }
+
+  private createUnitView(unit: FieldBattleUnitSnapshot): void {
+    const { x, y, colSpan, rowSpan } = this.getUnitViewGeometry(unit);
     const { key: textureKey, config: spriteConfig } =
       this.getSpriteKeyAndConfig(unit);
+
     const view = new UnitView(
       this,
-      cx,
-      cy,
+      x,
+      y,
       unit,
       colSpan,
       rowSpan,
@@ -317,10 +320,26 @@ export class Game extends Phaser.Scene {
       cell.on('pointerover', () => {
         const phase = PhaseManager.getPhase();
         if (phase.type !== 'battle') return;
-        const unitId = phase.occupancy.cellToUnitId.get(cell.key);
-        const unit   = unitId ? phase.unitsById.get(unitId) : undefined;
-        if (unit && unit.hp > 0) {
-          this.unitTooltip.showFixed(unit, this.logX, this.logY, this.logW);
+
+        // 1. Living blocker on this cell — preferred tooltip target.
+        const livingId = phase.occupancy.cellToUnitId.get(cell.key);
+        if (livingId) {
+          const unit = phase.unitsById.get(livingId);
+          if (unit) {
+            this.unitTooltip.showFixed(unit, this.logX, this.logY, this.logW);
+            return;
+          }
+        }
+
+        // 2. No living unit — scan fieldUnitCells for a dead snapshot on
+        //    this cell. Select explicitly by lifeState === 'dead'. Do not
+        //    infer deadness from absence in occupancy.
+        const ids = phase.fieldUnitCells.cellToUnitIds.get(cell.key) ?? [];
+        const dead = ids
+          .map(id => phase.unitsById.get(id))
+          .find(u => !!u && u.lifeState === 'dead');
+        if (dead) {
+          this.unitTooltip.showFixed(dead, this.logX, this.logY, this.logW);
         }
       });
       cell.on('pointerout', () => this.unitTooltip.hide());
@@ -351,10 +370,11 @@ export class Game extends Phaser.Scene {
     if (phase.type !== 'battle') return;
 
     if (phase.battlePhase === 'placement') {
+      this.syncUnitViews(phase);
       this.battlePlacement.onPlacementStateChanged(phase);
     } else if (phase.battlePhase !== 'end') {
       this.refreshCells(phase);
-      this.refreshUnits(phase);
+      this.syncUnitViews(phase);
       const fieldUnitsById = new Map(phase.fieldUnits.map(u => [u.id, u]));
       this.initiativeBar.update({ roundQueue: phase.roundQueue, fieldUnitsById });
     }
@@ -376,11 +396,37 @@ export class Game extends Phaser.Scene {
     }
   }
 
-  private refreshUnits(phase: BattlePhase): void {
+  private syncUnitViews(phase: BattlePhase): void {
     const fieldById = new Map(phase.fieldUnits.map(u => [u.id, u]));
+
+    // 1. Destroy views whose unit is no longer a field unit
+    //    (e.g. a player unit returned to the bench). Enemies are always field
+    //    units during placement, so they are never destroyed here.
+    for (const [id] of Array.from(this.unitViews)) {
+      if (!fieldById.has(id)) {
+        this.destroyUnitView(id);
+      }
+    }
+
+    // 2. Create views for field units that don't have one yet.
+    //    createUnitView() inserts into this.unitViews itself.
+    for (const unit of phase.fieldUnits) {
+      if (!this.unitViews.has(unit.id)) {
+        this.createUnitView(unit);
+      }
+    }
+
+    // 3. Reposition + update every existing field view from the latest snapshot.
+    //    reposition() MUST precede update(): updateEffectSquares() reads the
+    //    container position when computing effect-tooltip world coordinates.
     for (const [id, view] of this.unitViews) {
+      const snap = fieldById.get(id);
+      if (!snap) continue;
       if (!view.active) continue;
-      view.update(fieldById.get(id) ?? null);
+
+      const { x, y } = this.getUnitViewGeometry(snap);
+      view.reposition(x, y);
+      view.update(snap);
     }
   }
 

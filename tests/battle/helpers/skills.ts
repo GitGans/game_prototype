@@ -42,6 +42,34 @@ export const testRowStrike: ActionSkillDefinition = {
   ],
 };
 
+/** Single-target heal on alive friendly. */
+export const testHeal: ActionSkillDefinition = {
+  id: "test_heal",
+  name: "Test Heal",
+  targetPolicy: { type: "alive_friendly" },
+  actions: [
+    {
+      type: "heal",
+      powerSource: "magical_strength",
+      matrix: { kind: "multiplier_matrix", matrixName: "single", level: 1 },
+    },
+  ],
+};
+
+/** Single-target revive on a dead friendly. */
+export const testRevive: ActionSkillDefinition = {
+  id: "test_revive",
+  name: "Test Revive",
+  targetPolicy: { type: "dead_friendly" },
+  actions: [
+    {
+      type: "revive",
+      level: 1,
+      matrix: { kind: "effect_area_matrix", matrixName: "single" },
+    },
+  ],
+};
+
 /** Single-target vampirism attack (for vampirism cap tests). */
 export const testVampireStrike: ActionSkillDefinition = {
   id: "test_vampire_strike",

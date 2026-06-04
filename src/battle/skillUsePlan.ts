@@ -7,21 +7,40 @@ import type {
   ProbabilityEffectApplication,
   SkillLevel,
 } from '../shared/skillTypes';
+import type { SkillDefinitionTargetPolicy } from '../shared/skillDefinitionTypes';
 
 export type { DamageModifierRef, PostDamageEffect, ProbabilityEffectApplication };
 
 // ─── Targeting ────────────────────────────────────────────────────────────────
 
 export type SkillTargetPolicy =
-  | { type: 'friendly' }
+  | { type: 'alive_friendly' }
   | { type: 'self' }
   | { type: 'enemy_melee' }
-  | { type: 'enemy_ranged' };
+  | { type: 'enemy_ranged' }
+  | { type: 'dead_friendly' };
 
-export function isFriendlyOrSelfTargetPolicy(
+// Stops authoring/runtime policy drift at compile time.
+// If a Stage 2+ change adds a policy on one side only, this will fail to build.
+type _RuntimeMatchesAuthoring =
+  SkillTargetPolicy extends SkillDefinitionTargetPolicy ? true : false;
+type _AuthoringMatchesRuntime =
+  SkillDefinitionTargetPolicy extends SkillTargetPolicy ? true : false;
+const _parityRuntime: _RuntimeMatchesAuthoring = true;
+const _parityAuthoring: _AuthoringMatchesRuntime = true;
+void _parityRuntime;
+void _parityAuthoring;
+
+export function isAliveFriendlyTargetPolicy(
   policy: SkillTargetPolicy,
 ): boolean {
-  return policy.type === 'friendly' || policy.type === 'self';
+  return policy.type === 'alive_friendly';
+}
+
+export function isDeadFriendlyTargetPolicy(
+  policy: SkillTargetPolicy,
+): boolean {
+  return policy.type === 'dead_friendly';
 }
 
 export function isHostileTargetPolicy(
@@ -70,6 +89,12 @@ export type EffectApplicationMeta = {
   duration: number;
 };
 
+// Runtime payload for the revive action. Carries only the skill level — the
+// percent-of-maxHp table lookup happens in skillDefinitionRuntime.getReviveHpPercent.
+export type ReviveEffect = {
+  level: SkillLevel;
+};
+
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
 export type SkillUseAction =
@@ -106,6 +131,11 @@ export type SkillUseAction =
       type: 'probability_effect';
       probabilityEffect: ProbabilityEffectApplication;
       matrix: ProbabilityPatternRef;
+    }
+  | {
+      type: 'revive';
+      revive: ReviveEffect;
+      matrix: EffectAreaPatternRef;
     };
 
 // ─── Plan ─────────────────────────────────────────────────────────────────────

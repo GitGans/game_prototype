@@ -10,10 +10,9 @@ import { PhaseManager } from '../../core/PhaseManager';
 import { cellKey } from '../../battle/field';
 import { getOccupiedCells } from '../../battle/shapes';
 import type { CellCoord, Side } from '../../battle/types';
-import type { BattleUnitSnapshot, FieldBattleUnitSnapshot } from '../../shared/battleSnapshots';
+import type { BattleUnitSnapshot } from '../../shared/battleSnapshots';
 import type { GamePhase } from '../../core/phases';
 import type { CellView } from '../../objects/CellView';
-import type { UnitView } from '../../objects/UnitView';
 import type { UnitTooltip } from '../../objects/UnitTooltip';
 import { BenchCard, type BenchCardMode } from '../../objects/BenchCard';
 import { Button } from '../../ui/Button';
@@ -26,26 +25,21 @@ export class BattlePlacementController {
   private startBattleBtn: Button | null = null;
   private lastClickCoordKey: string | null = null;
   private lastClickTime = 0;
-  private prevPlacementUnitsSignature: string | null = null;
 
   constructor(private readonly deps: {
     scene: Phaser.Scene;
     cellViews: Map<string, CellView>;
-    unitViews: Map<string, UnitView>;
     unitTooltip: UnitTooltip;
     getLogBounds: () => { x: number; y: number; w: number; h: number };
     cellPixelPos: (side: Side, row: number, col: number) => { x: number; y: number };
     setStatus: (text: string) => void;
     setBattleLogVisible: (visible: boolean) => void;
-    createUnitView: (unit: FieldBattleUnitSnapshot) => void;
-    destroyUnitView: (unitId: string) => void;
     onStartBattle: () => void;
   }) {}
 
   // ─── Public API ────────────────────────────────────────────────────────────
 
   enterPlacementPhase(): void {
-    this.prevPlacementUnitsSignature = null;
     this.lastClickCoordKey = null;
     this.lastClickTime = 0;
     this.destroyBenchCards();
@@ -107,13 +101,6 @@ export class BattlePlacementController {
   }
 
   onPlacementStateChanged(phase: BattlePhase): void {
-    const sig = this.buildPlacementUnitsSignature(phase);
-
-    if (sig !== this.prevPlacementUnitsSignature) {
-      this.reconcilePlacementUnitViews(phase);
-      this.prevPlacementUnitsSignature = sig;
-    }
-
     this.buildBenchPanel(true);
     this.applyPlacementHighlights(phase);
   }
@@ -228,38 +215,6 @@ export class BattlePlacementController {
   private destroyBenchCards(): void {
     for (const card of this.benchCards) card.destroy();
     this.benchCards = [];
-  }
-
-  private buildPlacementUnitsSignature(phase: BattlePhase): string {
-    return phase.fieldUnits
-      .filter(u => u.side === 'player')
-      .map(u => `${u.id}:${u.deployment.anchor.row}:${u.deployment.anchor.col}`)
-      .sort()
-      .join(';');
-  }
-
-  private reconcilePlacementUnitViews(phase: BattlePhase): void {
-    const playerUnitIds = new Set(
-      phase.fieldUnits.filter(u => u.side === 'player').map(u => u.id),
-    );
-
-    for (const [id] of [...this.deps.unitViews]) {
-      if (!playerUnitIds.has(id)) {
-        this.deps.destroyUnitView(id);
-      }
-    }
-
-    for (const unit of phase.fieldUnits) {
-      if (unit.side === 'player' && !this.deps.unitViews.has(unit.id)) {
-        this.deps.createUnitView(unit);
-      }
-    }
-
-    for (const unit of phase.fieldUnits) {
-      if (unit.side === 'player') {
-        this.deps.unitViews.get(unit.id)?.update(unit);
-      }
-    }
   }
 
   private applyPlacementHighlights(phase: BattlePhase): void {

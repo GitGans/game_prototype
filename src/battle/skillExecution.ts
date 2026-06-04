@@ -1,6 +1,7 @@
 // src/battle/skillExecution.ts
 
 import type { BattleState, CellCoord, Unit, ProbabilityEffectEvent } from "./types";
+import { isAlive } from "./lifeState";
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { BattleEvent } from "./battleEvents";
 import type { CombatEvent, EffectEvent } from "./combat";
@@ -18,11 +19,15 @@ import {
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
 import { getEffectiveUnitPower } from './skillPower';
-import type { SkillUseAction, SkillUsePlan } from './skillUsePlan';
+import { isHostileTargetPolicy, type SkillUseAction, type SkillUsePlan } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from "./targeting";
 import { requireFieldDeployment } from "./deployment";
 import { rebuildRemainingQueue } from "./initiative";
 import { resolvePattern } from "./skillPatterns";
+import {
+  resolveReviveTargetsForAction,
+  reviveUnitInBattle,
+} from './revive';
 import type { Rng } from '../shared/random';
 
 // ─── Public contract ───────────────────────────────────────────────────────────
@@ -86,7 +91,7 @@ function resolveCasterAndSkill(
   input: SkillExecutionInput,
 ): ResolvedCasterAndSkill | null {
   const caster = input.state.units.get(input.casterId);
-  if (!caster) return null;
+  if (!caster || !isAlive(caster)) return null;
   const skill = input.skill ?? getActiveSkill(caster);
   return { casterId: input.casterId, caster, skill };
 }
@@ -358,6 +363,48 @@ function executeApplyPeriodicHpEffectAction(input: {
   return { state: withEffect, events };
 }
 
+// ─── Revive action runner ─────────────────────────────────────────────────────
+
+function executeReviveAction(input: {
+  state: BattleState;
+  casterId: string;
+  caster: Unit;
+  target: CellCoord;
+  action: Extract<SkillUseAction, { type: 'revive' }>;
+}): SkillExecutionStepResult {
+  const { state, casterId, caster, target, action } = input;
+
+  const { targets } = resolveReviveTargetsForAction({
+    units: state.units,
+    deployments: state.deployments,
+    casterSide: caster.side,
+    targetAnchor: target,
+    matrix: action.matrix,
+  });
+
+  if (targets.length === 0) return { state, events: [] };
+
+  let currentState = state;
+  const events: BattleEvent[] = [];
+
+  for (const { unit: corpse } of targets) {
+    const result = reviveUnitInBattle(currentState, corpse.id, action.revive);
+    if (!result) continue;
+
+    currentState = result.state;
+    events.push({
+      type: 'unit_revived',
+      casterId,
+      casterName: caster.name,
+      targetId: corpse.id,
+      targetName: corpse.name,
+      amount: result.hpRestored,
+    });
+  }
+
+  return { state: currentState, events };
+}
+
 // ─── Counter-attack step ──────────────────────────────────────────────────────
 
 function resolveProvokeCounterAttack(input: {
@@ -371,7 +418,7 @@ function resolveProvokeCounterAttack(input: {
   let state = input.state;
 
   const provokedUnit = state.units.get(provokedUnitId);
-  if (!provokedUnit) return { state, events: [] };
+  if (!provokedUnit || !isAlive(provokedUnit)) return { state, events: [] };
 
   // Re-check queue eligibility at dispatch time because nested counter-attacks
   // can consume units that were eligible when the original probability-effect list
@@ -389,7 +436,7 @@ function resolveProvokeCounterAttack(input: {
   };
 
   const originalCaster = state.units.get(casterId);
-  if (!originalCaster || originalCaster.hp <= 0) {
+  if (!originalCaster || !isAlive(originalCaster)) {
     return {
       state,
       events: [{
@@ -419,7 +466,7 @@ function resolveProvokeCounterAttack(input: {
   const provokedAnchor = requireFieldDeployment(state, provokedUnit.id).anchor;
   const validTargets = resolveSkillTargetsForPolicy(
     plan.targetPolicy,
-    state.occupancy,
+    state,
     provokedAnchor,
   );
 
@@ -432,9 +479,7 @@ function resolveProvokeCounterAttack(input: {
   );
 
   if (!casterIsReachable) {
-    const isHostile =
-      plan.targetPolicy.type === "enemy_melee" ||
-      plan.targetPolicy.type === "enemy_ranged";
+    const isHostile = isHostileTargetPolicy(plan.targetPolicy);
 
     return {
       state,
@@ -606,6 +651,19 @@ function executeSkillUsePlan(input: SkillUsePlanExecutionInput): SkillExecutionR
           action,
           queueContext: input.queueContext,
           rng: input.rng,
+        });
+        state = step.state;
+        events.push(...step.events);
+        break;
+      }
+
+      case 'revive': {
+        const step = executeReviveAction({
+          state,
+          casterId: input.casterId,
+          caster: input.caster,
+          target: input.target,
+          action,
         });
         state = step.state;
         events.push(...step.events);

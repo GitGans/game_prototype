@@ -6,11 +6,14 @@ export const BATTLE_VISUAL_THEME = {
     selected:    0xffaa00,
     validTarget: 0xff4444,
     validHeal:   0x44dd44,
+    validRevive: 0x66ddee,
     skillPreview: {
       healDim:      0x0a2a0a,
       healBright:   0x44dd44,
       damageDim:    0x2a1a00,
       damageBright: 0xff8800,
+      reviveDim:    0x0a2a2a,
+      reviveBright: 0x66ddee,
     },
   },
   unit: {

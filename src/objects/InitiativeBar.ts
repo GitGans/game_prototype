@@ -168,7 +168,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
 
   private buildNextRound(fieldUnitsById: Map<string, FieldBattleUnitSnapshot>): FieldBattleUnitSnapshot[] {
     return Array.from(fieldUnitsById.values())
-      .filter(u => u.hp > 0)
+      .filter(u => u.lifeState === 'alive')
       .sort((a, b) => {
         if (b.effectiveInitiative !== a.effectiveInitiative)
           return b.effectiveInitiative - a.effectiveInitiative;

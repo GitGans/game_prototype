@@ -1,5 +1,6 @@
 import type { BattleState, Unit } from './types';
 import type { UnitDeployment } from '../shared/unitDeploymentTypes';
+import { isAlive, isDead } from './lifeState';
 
 export function getDeployment(state: BattleState, unitId: string): UnitDeployment | undefined {
   return state.deployments.get(unitId);
@@ -33,15 +34,37 @@ export function isBenchUnit(state: BattleState, unitId: string): boolean {
   return state.deployments.get(unitId)?.kind === 'bench';
 }
 
-// Returns [unitId, unit] pairs for all field-deployed units.
+// Returns [unitId, unit] pairs for all field-deployed units, alive and dead.
+// Use only when corpses must be enumerated alongside living units (e.g., snapshot,
+// future resurrection scans). For combat participants use getLivingFieldUnitEntries.
 export function getFieldUnitEntries(state: BattleState): [string, Unit][] {
   return Array.from(state.units.entries()).filter(
     ([id]) => state.deployments.get(id)?.kind === 'field',
   );
 }
 
+// Returns all field-deployed units, alive and dead. See getFieldUnitEntries.
 export function getFieldUnits(state: BattleState): Unit[] {
   return getFieldUnitEntries(state).map(([, u]) => u);
+}
+
+// Living combat participants. The default helper for queue construction,
+// game-over checks, enemy-scaling, and any "currently fighting" enumeration.
+export function getLivingFieldUnitEntries(state: BattleState): [string, Unit][] {
+  return getFieldUnitEntries(state).filter(([, u]) => isAlive(u));
+}
+
+export function getLivingFieldUnits(state: BattleState): Unit[] {
+  return getLivingFieldUnitEntries(state).map(([, u]) => u);
+}
+
+// Corpses on the field — for future resurrection helpers, debug, and tests.
+export function getDeadFieldUnitEntries(state: BattleState): [string, Unit][] {
+  return getFieldUnitEntries(state).filter(([, u]) => isDead(u));
+}
+
+export function getDeadFieldUnits(state: BattleState): Unit[] {
+  return getDeadFieldUnitEntries(state).map(([, u]) => u);
 }
 
 // Returns the runtime Unit deployed to the given bench slot, or undefined if
@@ -77,10 +100,9 @@ export function removeDeployment(
   return next;
 }
 
-// Returns a new deployments map containing only entries whose unit id
-// exists in the given units map.
-// Use in combat.ts AFTER all dead units are removed from newUnits —
-// never before or mid-loop.
+// True entity removal only — e.g., bench eviction, debug remove-unit.
+// NOT for ordinary combat death: combat keeps dead units in state.units with
+// `lifeState:'dead'` and preserved deployment via killUnit().
 export function retainDeploymentsForUnits(
   deployments: Map<string, UnitDeployment>,
   units: Map<string, Unit>,

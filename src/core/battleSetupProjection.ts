@@ -10,10 +10,16 @@ import { resolveUnitProgression }         from '../progression';
 import { createUnitInstance } from '../battle/unitFactory';
 import type { PlayerBattleSetup }         from './battleSetup';
 import type { PlayerPlacementCandidate, EnemyPlacementCandidates, EnemyReplayPlacementInput } from '../battle/autoPlace';
-import type { UnitBlueprint, UnitRace }   from '../shared/unitTypes';
+import type { UnitBlueprint, UnitRace, UpgradeOptionId } from '../shared/unitTypes';
 import type { ActionSkillDefinition }      from '../shared/skillDefinitionTypes';
 import { resolveSkillDefinition }          from '../progression';
 import type { CellCoord }                 from '../shared/gridTypes';
+import type { ItemContainer, ItemInstance, BattleStatBonuses } from '../shared/itemTypes';
+import {
+  isPersistentPlayerUnitAlive,
+  getPersistentCurrentHp,
+  clampAliveCurrentHp,
+} from './playerUnitPersistence';
 
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): ActionSkillDefinition[] {
   return (blueprint.enemySkillUnlocks ?? [])
@@ -23,9 +29,13 @@ function resolveEnemySkills(blueprint: UnitBlueprint, level: number): ActionSkil
 
 export function buildPlayerAutoPlacementCandidates(
   setup: PlayerBattleSetup,
+  blueprints: readonly UnitBlueprint[] = PLAYER_UNITS,
 ): PlayerPlacementCandidate[] {
-  return PLAYER_UNITS
-    .filter(bp => !setup.playerUnits[bp.templateId]?.isInCamp)
+  return blueprints
+    .filter(bp => {
+      const us = setup.playerUnits[bp.templateId];
+      return !us?.isInCamp && isPersistentPlayerUnitAlive(us);
+    })
     .map(bp => {
       const unitState = setup.playerUnits[bp.templateId];
       // unitState must exist for every non-camp unit (initialized at new_game)
@@ -41,6 +51,10 @@ export function buildPlayerAutoPlacementCandidates(
         bp.templateId,
         setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
       );
+      const initialHp = clampAliveCurrentHp(
+        getPersistentCurrentHp(unitState),
+        stats.hp,
+      );
       return {
         templateId:  bp.templateId,
         shape:       bp.shape,
@@ -53,9 +67,31 @@ export function buildPlayerAutoPlacementCandidates(
           skills:               progression.skills,
           spriteSheet:          resolvePlayerUnitSpriteSheet(bp, progression),
           activatableAbilities,
+          initialHp,
         }),
       };
     });
+}
+
+export function resolvePlayerMaxHpForLevel(input: {
+  blueprint: UnitBlueprint;
+  level: number;
+  chosenUpgrades: Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>;
+  permanentBonuses: Partial<BattleStatBonuses>;
+  itemContainers: Record<string, ItemContainer>;
+  itemInstances: Record<string, ItemInstance>;
+}): number {
+  const progression = resolveUnitProgression(input.blueprint, input.chosenUpgrades);
+  const stats = computeUnitBattleStats(
+    input.blueprint,
+    input.level,
+    input.itemContainers,
+    input.itemInstances,
+    ITEM_DEFINITIONS,
+    { [input.blueprint.templateId]: input.permanentBonuses },
+    progression.statModifiers,
+  );
+  return stats.hp;
 }
 
 export function buildEnemyPlacementCandidates(

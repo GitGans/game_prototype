@@ -23,3 +23,13 @@ export const VAMPIRISM_LEVELS: SkillLevelTable<number> = {
   2: 50,
   3: 100,
 };
+
+// ─── Revive HP Levels ─────────────────────────────────────────────────────────
+// Percent of target maxHp restored on revive.
+// Level keys are authored explicitly. Runtime resolves exact levels only.
+
+export const REVIVE_HP_PERCENT_LEVELS: SkillLevelTable<number> = {
+  1: 10,
+  2: 20,
+  3: 30,
+};

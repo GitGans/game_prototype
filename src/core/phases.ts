@@ -5,7 +5,7 @@ import type {
   BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
 } from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
-import type { BattleUnitSnapshot, FieldBattleUnitSnapshot, BattleOccupancySnapshot } from '../shared/battleSnapshots';
+import type { BattleUnitSnapshot, FieldBattleUnitSnapshot, BattleOccupancySnapshot, BattleFieldUnitCellsSnapshot } from '../shared/battleSnapshots';
 import type { PlacementSelection, BattleState, BattleMode, Side } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
@@ -72,13 +72,18 @@ export type GamePhase =
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
       battlePhase:         BattleState['phase'];
       // Full read model (field + bench). Use for lookups via unitsById.
+      // Includes ALL runtime units, alive and dead, field and bench.
       // For field iteration (anchor/cell math), use fieldUnits instead.
       units:               BattleUnitSnapshot[];
-      // Field-only narrowed view. Intended iteration source for any code
-      // that reads anchor or does cell math.
+      // Field-only narrowed view. Includes dead field units (rendered as
+      // corpses by UI). Intended iteration source for any code that reads
+      // anchor or does cell math.
       fieldUnits:          FieldBattleUnitSnapshot[];
       unitsById:           Map<string, BattleUnitSnapshot>;
+      // Living/blocking only.
       occupancy:           BattleOccupancySnapshot;
+      // All field bodies (alive + dead, both sides). For corpse hover.
+      fieldUnitCells:      BattleFieldUnitCellsSnapshot;
       roundQueue:          string[];
       activeUnitId:        string | null;
       // Active unit is always field-deployed (round queue is field-only).
@@ -88,7 +93,7 @@ export type GamePhase =
       manualTurnControlsVisible: boolean;
       manualChargeDisabled:    boolean;
       validTargets:        CellCoord[];
-      targetHighlightKind: 'target' | 'heal_target' | 'none';
+      targetHighlightKind: 'target' | 'heal_target' | 'revive_target' | 'none';
     }
   | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
   | { type: 'debug_level_select' }

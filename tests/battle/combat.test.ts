@@ -43,7 +43,7 @@ describe("resolveAttack", () => {
     expect(hitEvents[0]).toMatchObject({ unitId: "big", damage: 40 });
   });
 
-  it("removes a dead unit from both units and occupancy", () => {
+  it("transitions a lethal-hit unit to dead state, preserves deployment, clears effects, and removes from occupancy", () => {
     const target = makeUnit({
       id:    "dead-unit",
       side:  "enemy",
@@ -51,6 +51,11 @@ describe("resolveAttack", () => {
       maxHp: 10,
       dodge: 0,
       block: 0,
+      activeEffects: [{
+        effectDisplayName: "x",
+        effect: { id: "buff", durationKind: 'rounds', physicalStrengthBonus: 5 } as unknown as Effect,
+        remainingRounds: 2,
+      }],
     });
     const anchor = coord("enemy", 0, 0);
     const state  = makeBattleStateFromUnits({ field: [{ unit: target, anchor }] });
@@ -62,8 +67,16 @@ describe("resolveAttack", () => {
       rng: fixedRng(0.99),
     });
 
-    expect(after.units.has("dead-unit")).toBe(false);
+    // Dead unit stays in state.units as canonical dead state.
+    expect(after.units.has("dead-unit")).toBe(true);
+    expect(after.units.get("dead-unit")?.lifeState).toBe("dead");
+    expect(after.units.get("dead-unit")?.hp).toBe(0);
+    expect(after.units.get("dead-unit")?.activeEffects).toEqual([]);
+    // Deployment is preserved.
+    expect(after.deployments.has("dead-unit")).toBe(true);
+    // Occupancy excludes dead units.
     expect(after.occupancy.cellToUnitId.has(cellKey(coord("enemy", 0, 0)))).toBe(false);
+    expect(after.occupancy.unitToCells.has("dead-unit")).toBe(false);
   });
 
   it("dodges when RNG is below the dodge threshold", () => {

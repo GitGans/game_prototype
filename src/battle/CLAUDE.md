@@ -18,13 +18,18 @@ Pure battle domain logic — all computations, state mutations, and validations 
 - [placement.ts](placement.ts) — low-level validation and field-placement of units
 - [placementState.ts](placementState.ts) — UI-level placement actions (bench/field selection, swaps, moves)
 - [occupancy.ts](occupancy.ts) — builds and updates the bidirectional `OccupancyMap`
-- [targeting.ts](targeting.ts) — computes valid target cells per skill type (melee, ranged, friendly, self)
+- [targeting.ts](targeting.ts) — computes valid target cells per skill type (melee, ranged, alive_friendly, self, dead_friendly)
 - [skillPatterns.ts](skillPatterns.ts) — resolves `SkillPattern` → `ResolvedHitCell[]` for AOE targeting and damage
 - [shapes.ts](shapes.ts) — computes all cells occupied by a unit from its anchor and shape offsets
 - [field.ts](field.ts) — coordinate primitives: `cellKey()`, `cellExists()`
 - [unitFactory.ts](unitFactory.ts) — constructs a runtime `Unit` from a `CreateUnitInstanceInput`
 - [autoPlace.ts](autoPlace.ts) — places player/enemy units on the field at battle start
 - [itemOps.ts](itemOps.ts) — item equip/unequip, inventory queries, stat computation from equipment
+- [lifeState.ts](lifeState.ts) — `isAlive` / `isDead` / `killUnit` / `reviveUnit`; the only place that flips `Unit.lifeState`
+- [deployment.ts](deployment.ts) — field/bench queries; living/dead/all field-helper split
+- [deadFriendlyTargeting.ts](deadFriendlyTargeting.ts) — shared structural corpse-cell walker for dead-friendly targeting and (Stage 2+) revive. All callers must pass `deployments`; deriving anchors from cell maps is forbidden.
+- [revive.ts](revive.ts) — revive HP table application (`computeReviveHp`), revive target resolution (`resolveReviveTargetsForAction`), and revive state mutation (`reviveUnitInBattle`). Both target resolution and state mutation must go through this module; do not duplicate corpse walking or call `reviveUnit` directly from execution code.
+- [skillTargetSelection.ts](skillTargetSelection.ts) — shared auto/quick AI selection (`chooseSkillIndexForUnit`, `chooseSkillTargetForPlan`). Owns the policy-aware target choice and skill eligibility filtering for both `autoTurn.ts` and `quickTurn.ts`. Auto and quick turns must not duplicate skill/target selection.
 
 ## Structural Role
 `src/battle` → pure battle domain; consumed by `src/core` orchestration layer
@@ -50,6 +55,32 @@ returned to `src/core` for phase transition or rendering
 - No Phaser, scene, or rendering imports anywhere in this folder
 - Battle modules must not import `src/scenes/`, `src/objects/`, or `src/ui/`
 - UI-facing display formatting (prompt text, log text, preview estimates) belongs in `src/objects/*Presentation.ts`, not in battle rule modules
+- Combat death is represented by `lifeState: 'dead'` and `hp: 0`. Use `killUnit()` / `reviveUnit()` from `lifeState.ts`; do not flip the field manually.
+- Death clears `activeEffects`. Revive does not restore previous buffs, debuffs, or periodic HP effects.
+- Death is a state transition, not deletion. Combat keeps dead units in `state.units` with `lifeState:'dead'`, `hp:0`, `activeEffects:[]`, and preserved deployment. `retainDeploymentsForUnits` is for true entity removal (bench eviction, debug remove) — not ordinary combat death.
+- `buildOccupancy` is living-only blocking occupancy. Dead field units occupy no cells. `getUnitAtCell(state, coord)` returns a living blocking unit or null; for dead-unit-at-cell lookup walk `state.deployments` + `getOccupiedCells` instead.
+- Field-helper split in `deployment.ts`:
+    - `getFieldUnits` / `getFieldUnitEntries` — all field-deployed units (alive + dead)
+    - `getLivingFieldUnits` / `getLivingFieldUnitEntries` — combat participants (the default)
+    - `getDeadFieldUnits` / `getDeadFieldUnitEntries` — corpses / future revive targets
+- `isAlive(unit)` is the combat eligibility predicate going forward. `isDead(unit)` covers canonical dead state AND legacy `hp <= 0` defensively; prefer `isAlive` for "can act / can be targeted / counts as living" checks.
+- Queue construction and rebuild operate on living units only: `buildRoundQueue` includes only `isAlive` units, `pruneQueue` drops dead ids, and `rebuildRemainingQueue` only reorders ids already present in `remaining` (it never re-introduces ids and never queries beyond `remaining`). This pre-bakes the future revive rule: revived units do not enter the current round queue.
+- `skipActiveTurn` and `chargeActiveTurn` recover from a missing/dead `roundQueue[0]` by advancing through `advanceTurn` (no `turn_skipped` / `turn_charged` event emitted; the returned `skipped` / `charged` boolean remains `false`).
+- Ordinary combat helpers (`resolveAttack`, `resolveHealWithEvents`, `applyEffectApplication`, `applyPeriodicHpEffectApplication`, `resolveProbabilityEffects`, `applyVampirism`) silently skip dead targets — no event, no state change.
+- Targeting policies split into two groups:
+    - Living-only ordinary policies: `alive_friendly`, `self`, `enemy_melee`, `enemy_ranged`. These resolve through `state.occupancy` and never see dead units.
+    - Side-relative dead policy: `dead_friendly`. Resolves dead field allies on the caster's side via deployment + `getOccupiedCells`. Does not consult occupancy. Works for both player and enemy casters.
+- Dead-friendly corpse cell lookup must go through `deadFriendlyTargeting.ts` (`getDeadFriendlyCorpseCells`). Do not duplicate deployment + shape corpse walking in `targeting.ts`, future revive execution, or future revive preview.
+- `resolveSkillTargetsForPolicy` takes `BattleState` (not `OccupancyMap`) because dead targeting needs deployment access. `unitAnchor` is always the caster's current field anchor.
+- Dead-caster safety is enforced once, at the executor (`resolveCasterAndSkill`) and turn-flow entry points (`autoTurn`, `quickTurn`, `turnResolver`) — never inside the resolver. The resolver trusts that callers gate on `isAlive(caster)`.
+- Campaign/map resurrection (targeting dead units on the world map) is future work outside `battle/`.
+- Revive target resolution chokepoint is `resolveReviveTargetsForAction` (in `revive.ts`). Revive state-mutation chokepoint is `reviveUnitInBattle`. Both must route dead-friendly corpse geometry through `deadFriendlyTargeting.ts`.
+- Revive amount is target `maxHp × REVIVE_HP_PERCENT_LEVELS[level]` (clamped to ≥1 via `Math.ceil`). Revive does not use caster power and does not consume matrix multipliers — the `effect_area_matrix` defines shape only.
+- Revive does not restore previous `activeEffects` (death already cleared them).
+- Revive does not insert the revived unit into the current `roundQueue`. `reviveUnitInBattle` reuses the existing `roundQueue` reference; the revived unit becomes eligible only on the next `buildRoundQueue` call.
+- Skills containing a `revive` action must use `targetPolicy: { type: 'dead_friendly' }`. Enforced at compile time by `validateActionSkillDefinition` in `actionSkillDefinitionCompiler.ts`.
+- `chooseSkillIndexForUnit` (`skillTargetSelection.ts`) filters skills by "has at least one valid target". Filtering must be RNG-free; only the final candidate pick consumes RNG. When no candidates exist, fallback delegates to `resolveRandomSkillIndex`.
+- Skill preview reads `unitsById + deployments`. `fieldUnitCells` is render/hover data only and must not be the deployment source for revive geometry. The preview projection (`core/battleSkillPreviewProjection.ts`) builds the `deployments` map from `BattleUnitSnapshot.deployment`.
 
 ## Where to Modify
 - add/change a unit stat computation → [itemOps.ts](itemOps.ts) `computeUnitBattleStats()`

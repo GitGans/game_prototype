@@ -14,15 +14,19 @@ export interface CreateUnitInstanceInput {
   skills:               ActionSkillDefinition[];
   spriteSheet:          SpriteSheetConfig | undefined;
   activatableAbilities: UnitActivatableAbility[];
+  initialHp?:           number;
 }
 
 export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
-  const { blueprint: bp, id, side, level, classId, stats, skills, spriteSheet, activatableAbilities } = input;
+  const { blueprint: bp, id, side, level, classId, stats, skills, spriteSheet, activatableAbilities, initialHp } = input;
+  const maxHp = stats.hp;
+  const hp = Math.max(1, Math.min(maxHp, initialHp ?? maxHp));
   return {
     id,
     name:                bp.name,
-    hp:                  stats.hp,
-    maxHp:               stats.hp,
+    hp,
+    maxHp,
+    lifeState:           'alive',
     physicalStrength:    stats.physicalStrength,
     magicalStrength:     stats.magicalStrength,
     physicalDefense:     stats.physicalDefense,

@@ -1,5 +1,9 @@
-import { CellCoord, Col, OccupancyMap, Row, Side } from './types';
+import { BattleState, CellCoord, Col, OccupancyMap, Row, Side } from './types';
 import { cellKey } from './field';
+import {
+  getDeadFriendlyCorpseCells,
+  type DeadFriendlyTargetUnit,
+} from './deadFriendlyTargeting';
 import type { SkillTargetPolicy } from './skillUsePlan';
 
 const ENEMY_SIDE: Record<Side, Side> = {
@@ -102,26 +106,73 @@ export function getRangedTargets(attackerSide: Side, occupancy: OccupancyMap): C
 }
 
 /**
+ * Returns body cells of all dead field-deployed allies on `casterSide`.
+ * Uses deployment + shape via the shared structural walker — does NOT consult
+ * occupancy (dead units do not occupy cells). Side-relative: works for both
+ * player and enemy casters targeting their own dead allies.
+ */
+export function getDeadFriendlyUnitTargets(
+  state:      BattleState,
+  casterSide: Side,
+): CellCoord[] {
+  return getDeadFriendlyCorpseCells({
+    units:       state.units,
+    deployments: state.deployments,
+    casterSide,
+  }).map(({ cell }) => cell);
+}
+
+/**
+ * Returns the dead friendly unit whose body covers `coord`, or null.
+ * Compares full CellCoord (side + row + col): a mirrored wrong-side coordinate
+ * with matching row/col must not match.
+ */
+export function getDeadFriendlyUnitAtCell(
+  state:      BattleState,
+  casterSide: Side,
+  coord:      CellCoord,
+): DeadFriendlyTargetUnit | null {
+  const match = getDeadFriendlyCorpseCells({
+    units:       state.units,
+    deployments: state.deployments,
+    casterSide,
+  }).find(
+    ({ cell }) =>
+      cell.side === coord.side &&
+      cell.row === coord.row &&
+      cell.col === coord.col,
+  );
+
+  return match?.unit ?? null;
+}
+
+/**
  * `unitAnchor` is the acting unit's current field anchor, obtained from deployment.
  * Callers: `const unitAnchor = requireFieldDeployment(state, unit.id).anchor;`
+ *
+ * Dead-caster safety is enforced upstream by `isAlive(caster)` guards in the
+ * executor and turn-flow entry points — not inside this resolver.
  */
 export function resolveSkillTargetsForPolicy(
   targetPolicy: SkillTargetPolicy,
-  occupancy:    OccupancyMap,
+  state:        BattleState,
   unitAnchor:   CellCoord,
 ): CellCoord[] {
   switch (targetPolicy.type) {
-    case 'friendly':
-      return getFriendlyTargets(unitAnchor.side, occupancy);
+    case 'alive_friendly':
+      return getFriendlyTargets(unitAnchor.side, state.occupancy);
 
     case 'self':
       return getSelfTarget(unitAnchor);
 
     case 'enemy_ranged':
-      return getRangedTargets(unitAnchor.side, occupancy);
+      return getRangedTargets(unitAnchor.side, state.occupancy);
 
     case 'enemy_melee':
-      return getMeleeTargets(unitAnchor, occupancy);
+      return getMeleeTargets(unitAnchor, state.occupancy);
+
+    case 'dead_friendly':
+      return getDeadFriendlyUnitTargets(state, unitAnchor.side);
 
     default: {
       const _exhaustive: never = targetPolicy;

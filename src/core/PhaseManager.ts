@@ -19,7 +19,16 @@ import {
 import {
   UnitTabSnapshot,
   BattleState,
+  Unit,
 } from '../battle/types';
+import { isAlive } from '../battle/lifeState';
+import {
+  applyBattleExitPlayerPersistence,
+  applyVictoryLevelUpPersistence,
+  type PlayerLevelUpInput,
+} from './playerUnitPersistence';
+import { buildPlayerExitInputs } from './playerBattleExitProjection';
+import { resolvePlayerMaxHpForLevel } from './battleSetupProjection';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { UnitBlueprint } from '../shared/unitTypes';
 import { buildSkillIconSnapshot, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
@@ -44,10 +53,10 @@ import {
   buildFieldBattleUnitSnapshots,
   buildBenchBattleUnitSnapshots,
   buildBattleOccupancySnapshot,
+  buildBattleFieldUnitCellsSnapshot,
 } from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
-import { isFriendlyOrSelfTargetPolicy } from '../battle/skillUsePlan';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from '../progression';
 import { resolveOptionalSkillDefinition } from '../progression';
@@ -111,6 +120,8 @@ class PhaseManagerClass {
         lastPlacement:    ds.playerUnitPlacements?.[bp.templateId] ?? null,
         permanentBonuses: ds.unitPermanentBonuses[bp.templateId] ?? {},
         chosenUpgrades:   ds.chosenUpgrades[bp.templateId] ?? {},
+        lifeState:        'alive',
+        currentHp:        null,
       };
     }
     return {
@@ -132,8 +143,9 @@ class PhaseManagerClass {
     }
 
     // Derive exit participants here, outside resolveTransition, to keep it pure.
+    // Derived for both victory and defeat — Stage 5 persistence runs on both.
     let exitParticipants: BattleParticipant[] = [];
-    if (action.type === 'exit_battle' && action.outcome === 'victory' && this.phase.type === 'battle') {
+    if (action.type === 'exit_battle' && this.phase.type === 'battle') {
       exitParticipants = this.buildExitParticipants();
     }
 
@@ -363,7 +375,8 @@ class PhaseManagerClass {
         const fieldUnits = buildFieldBattleUnitSnapshots(battleState);
         const benchUnits = buildBenchBattleUnitSnapshots(battleState);
         const unitsById  = new Map(units.map(u => [u.id, u]));
-        const occupancy  = buildBattleOccupancySnapshot(battleState);
+        const occupancy      = buildBattleOccupancySnapshot(battleState);
+        const fieldUnitCells = buildBattleFieldUnitCellsSnapshot(battleState);
 
         // roundQueue is field-only by invariant — look up via fieldUnits to
         // preserve FieldBattleUnitSnapshot typing for activeUnit.
@@ -381,13 +394,32 @@ class PhaseManagerClass {
           activeUnitId !== null &&
           hasChargedThisRound(GameState.getBattleTurnContext(), activeUnitId);
 
-        let targetHighlightKind: 'target' | 'heal_target' | 'none' = 'none';
+        let targetHighlightKind:
+          | 'target'
+          | 'heal_target'
+          | 'revive_target'
+          | 'none' = 'none';
         if (activeUnit && battleState.validTargets.length > 0) {
           const activeSkill = getActiveSkill(activeUnit);
           const activePlan  = compileSkillUsePlan(activeSkill);
-          targetHighlightKind = isFriendlyOrSelfTargetPolicy(activePlan.targetPolicy)
-            ? 'heal_target'
-            : 'target';
+          const policy      = activePlan.targetPolicy;
+          switch (policy.type) {
+            case 'enemy_melee':
+            case 'enemy_ranged':
+              targetHighlightKind = 'target';
+              break;
+            case 'alive_friendly':
+            case 'self':
+              targetHighlightKind = 'heal_target';
+              break;
+            case 'dead_friendly':
+              targetHighlightKind = 'revive_target';
+              break;
+            default: {
+              const _exhaustive: never = policy;
+              targetHighlightKind = _exhaustive;
+            }
+          }
         }
 
         // participants = battle-start snapshot; do NOT rebuild from current placement state
@@ -401,6 +433,7 @@ class PhaseManagerClass {
           fieldUnits,
           unitsById,
           occupancy,
+          fieldUnitCells,
           roundQueue:          [...battleState.roundQueue],
           activeUnitId,
           activeUnit,
@@ -520,6 +553,8 @@ class PhaseManagerClass {
             lastPlacement: null,
             permanentBonuses: {},
             chosenUpgrades: {},
+            lifeState: 'alive',
+            currentHp: null,
           };
         }
       }
@@ -621,48 +656,19 @@ class PhaseManagerClass {
           this.debugState.level += 1;
         }
       } else {
-        const state = GameState.get();
+        const exits = buildPlayerExitInputs(exitParticipants, GameState.get());
 
-        // Level up all participants (field alive + field dead + bench) — not just state.units
+        GameState.playerUnits = applyBattleExitPlayerPersistence(
+          GameState.playerUnits,
+          exits,
+        );
+
         if (action.outcome === 'victory') {
-          exitParticipants.forEach((p) => {
-            const us = GameState.playerUnits[p.templateId];
-            if (!us) return;
-            const newLevel = us.level + 1;
-            GameState.playerUnits[p.templateId] = { ...us, level: newLevel };
-
-            if (!p.wasOnBench) {
-              // Update live stats only if unit survived (dead units were removed from state.units)
-              const liveUnit = [...state.units.values()].find(u => u.templateId === p.templateId);
-              if (liveUnit) {
-                const bp = PLAYER_UNITS.find(b => b.templateId === p.templateId);
-                if (!bp) return;
-                const scale = 1 + 0.1 * (newLevel - 1);
-                liveUnit.level          = newLevel;
-                liveUnit.maxHp          = Math.round(bp.hp * scale);
-                liveUnit.physicalStrength = Math.round(bp.physicalStrength * scale);
-                liveUnit.magicalStrength  = Math.round(bp.magicalStrength  * scale);
-              }
-            }
-          });
-          GameState.set(state);
-        }
-
-        // Save last field placement
-        const battleStateAfter = GameState.get();
-        for (const unit of battleStateAfter.units.values()) {
-          if (unit.side !== 'player') continue;
-          const deployment = battleStateAfter.deployments.get(unit.id);
-          if (deployment?.kind !== 'field') continue; // bench units have no field placement to save
-          const us = GameState.playerUnits[unit.templateId];
-          if (us) GameState.playerUnits[unit.templateId] = { ...us, lastPlacement: deployment.anchor };
+          this.applyVictoryLevelUp(exitParticipants);
         }
 
         // Mark trigger entity dead on the map — victory only; defeat must leave the encounter intact
         // INVARIANT: action.outcome === 'victory' is required before mutating entityStates.
-        // Test cases when a harness exists:
-        //   victory + mapId + triggerPos → entityStates[key].alive === false
-        //   defeat  + mapId + triggerPos → entityStates[key] unchanged (still alive)
         if (action.outcome === 'victory' && prev.mapId && prev.triggerPos) {
           const key = `${prev.triggerPos.x},${prev.triggerPos.y}`;
           const mapState = GameState.subMapStates[prev.mapId];
@@ -864,20 +870,60 @@ class PhaseManagerClass {
     sm.start(nextScene);
   }
 
+  private applyVictoryLevelUp(exitParticipants: BattleParticipant[]): void {
+    const levelUps: PlayerLevelUpInput[] = [];
+    for (const p of exitParticipants) {
+      const us = GameState.playerUnits[p.templateId];
+      if (!us) continue;
+      const bp = PLAYER_UNITS.find(b => b.templateId === p.templateId);
+      if (!bp) continue;
+
+      const newLevel = us.level + 1;
+      const newMaxHp = resolvePlayerMaxHpForLevel({
+        blueprint:        bp,
+        level:            newLevel,
+        chosenUpgrades:   us.chosenUpgrades ?? {},
+        permanentBonuses: us.permanentBonuses ?? {},
+        itemContainers:   GameState.itemContainers,
+        itemInstances:    GameState.itemInstances,
+      });
+
+      levelUps.push({ templateId: p.templateId, newLevel, newMaxHp });
+    }
+
+    GameState.playerUnits = applyVictoryLevelUpPersistence(
+      GameState.playerUnits,
+      levelUps,
+    );
+  }
+
   private buildExitParticipants(): BattleParticipant[] {
     const phase = this.phase;
     if (phase.type !== 'battle') return [];
 
-    const aliveTemplateIds = new Set(
-      [...GameState.get().units.values()]
-        .filter(u => u.side === 'player')
-        .map(u => u.templateId),
-    );
+    const runtimePlayerByTemplateId = new Map<string, Unit>();
+    for (const u of GameState.get().units.values()) {
+      if (u.side !== 'player') continue;
+      if (runtimePlayerByTemplateId.has(u.templateId)) {
+        throw new Error(
+          `[Stage5] Duplicate runtime player unit for templateId="${u.templateId}". ` +
+          `Campaign roster invariant violated.`,
+        );
+      }
+      runtimePlayerByTemplateId.set(u.templateId, u);
+    }
 
-    return phase.participants.map(pp => ({
-      ...pp,
-      isAlive: pp.wasOnBench || aliveTemplateIds.has(pp.templateId),
-    }));
+    return phase.participants.map(pp => {
+      const runtime = runtimePlayerByTemplateId.get(pp.templateId);
+      if (runtime) {
+        // Runtime state wins over wasOnBench. A bench-origin unit that was
+        // moved to field during placement and then died is reported dead.
+        return { ...pp, isAlive: isAlive(runtime) };
+      }
+      // Fallback: no runtime unit. Treat wasOnBench-origin participants as
+      // alive (they could not have taken battle damage); otherwise dead.
+      return { ...pp, isAlive: pp.wasOnBench };
+    });
   }
 }
 
@@ -931,6 +977,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
+        fieldUnitCells:      { cellToUnitIds: new Map(), unitToCells: new Map() },
         roundQueue:          [],
         activeUnitId:        null,
         activeUnit:          null,
@@ -965,6 +1012,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
+        fieldUnitCells:      { cellToUnitIds: new Map(), unitToCells: new Map() },
         roundQueue:          [],
         activeUnitId:        null,
         activeUnit:          null,

@@ -1,16 +1,15 @@
 import type { BattleState } from './types';
 import type { Rng } from '../shared/random';
-import {
-  getActiveSkill,
-  resolveBestHealTarget,
-  resolveRandomSkillIndex,
-  resolveRandomTarget,
-} from './skillRuntime';
+import { getActiveSkill } from './skillRuntime';
 import { compileSkillUsePlan } from './skillPlanCompiler';
-import { isFriendlyOrSelfTargetPolicy } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 import { requireFieldDeployment } from './deployment';
 import { executeSkillUse } from './skillExecution';
+import { isAlive } from './lifeState';
+import {
+  chooseSkillIndexForUnit,
+  chooseSkillTargetForPlan,
+} from './skillTargetSelection';
 
 export type ComputeOneTurnOptions = {
   rng: Rng;
@@ -35,10 +34,10 @@ export function computeOneTurn(
 ): BattleState {
   const { rng, queueContext } = options;
   const unit = state.units.get(unitId);
-  if (!unit) return state;
+  if (!unit || !isAlive(unit)) return state;
 
-  const randomSkillIdx = resolveRandomSkillIndex(unit, rng);
-  const updatedUnit = { ...unit, activeSkillIndex: randomSkillIdx };
+  const skillIndex = chooseSkillIndexForUnit({ state, unit, rng });
+  const updatedUnit = { ...unit, activeSkillIndex: skillIndex };
   const updatedUnits = new Map(state.units);
   updatedUnits.set(unitId, updatedUnit);
   state = { ...state, units: updatedUnits };
@@ -46,11 +45,8 @@ export function computeOneTurn(
   const skill    = getActiveSkill(updatedUnit);
   const plan     = compileSkillUsePlan(skill);
   const unitAnchor = requireFieldDeployment(state, updatedUnit.id).anchor;
-  const targets    = resolveSkillTargetsForPolicy(plan.targetPolicy, state.occupancy, unitAnchor);
-
-  const target = isFriendlyOrSelfTargetPolicy(plan.targetPolicy)
-    ? resolveBestHealTarget(state, targets)
-    : resolveRandomTarget(targets, rng);
+  const targets    = resolveSkillTargetsForPolicy(plan.targetPolicy, state, unitAnchor);
+  const target = chooseSkillTargetForPlan({ state, plan, targets, rng });
   if (!target) return state;
 
   const result = executeSkillUse({

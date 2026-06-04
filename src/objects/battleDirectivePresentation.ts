@@ -13,9 +13,18 @@ export function buildManualTargetStatusText(
   unitName: string | null,
 ): string {
   const name = unitName ?? '?';
-  return promptKind === 'heal'
-    ? `${name} — Click on the green cell to heal`
-    : `${name} — Click on the red cell to attack`;
+  switch (promptKind) {
+    case 'heal':
+      return `${name} — Click on the green cell to heal`;
+    case 'revive':
+      return `${name} — Click on a fallen ally to revive`;
+    case 'attack':
+      return `${name} — Click on the red cell to attack`;
+    default: {
+      const _exhaustive: never = promptKind;
+      return _exhaustive;
+    }
+  }
 }
 
 export function buildBattleDirectivePresentation(

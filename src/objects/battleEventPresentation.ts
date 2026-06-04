@@ -172,6 +172,17 @@ function presentBattleEvent(
         },
       };
 
+    case 'unit_revived':
+      // Stage 2: reuses the existing 'heal' floating text kind. Stage 3 may
+      // introduce a dedicated revive presentation kind.
+      return {
+        floatingText: { unitId: event.targetId, kind: 'heal', amount: event.amount },
+        logEntry: {
+          text: `${event.casterName} revived ${event.targetName} +${event.amount}`,
+          type: style,
+        },
+      };
+
     default:
       return assertNever(event);
   }

@@ -69,7 +69,7 @@ export const SKILLS = {
   m_heal_basic: {
     id: "m_heal_basic",
     name: "Heal",
-    targetPolicy: { type: "friendly" },
+    targetPolicy: { type: "alive_friendly" },
     actions: [
       {
         type: "heal",
@@ -82,7 +82,7 @@ export const SKILLS = {
   heal_with_defence: {
     id: "heal_with_defence",
     name: "Protective Heal",
-    targetPolicy: { type: "friendly" },
+    targetPolicy: { type: "alive_friendly" },
     actions: [
       {
         type: "heal",
@@ -325,6 +325,19 @@ export const SKILLS = {
         type: "post_damage",
         postDamageType: "mass_vampirism",
         level: 1,
+      },
+    ],
+  },
+
+  revive: {
+    id: "revive",
+    name: "Revive",
+    targetPolicy: { type: "dead_friendly" },
+    actions: [
+      {
+        type: "revive",
+        level: 1,
+        matrix: { kind: "effect_area_matrix", matrixName: "single" },
       },
     ],
   },
