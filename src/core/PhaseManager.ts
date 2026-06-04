@@ -45,6 +45,7 @@ import {
   applyBattleTurnAction,
   isBattleLifecycleAction,
   applyBattleLifecycleAction,
+  setBattlePreviewTarget,
   type BattlePhaseActionResult,
   type AutoTurnIntention,
 } from './phaseHandlers/battlePhaseHandler';
@@ -54,6 +55,7 @@ import {
   buildBenchBattleUnitSnapshots,
   buildBattleOccupancySnapshot,
   buildBattleFieldUnitCellsSnapshot,
+  projectPreviewTarget,
 } from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
@@ -422,6 +424,16 @@ class PhaseManagerClass {
           }
         }
 
+        const { previewTargetCoord, previewTargetUnitId } = projectPreviewTarget({
+          battlePhase:         battleState.phase,
+          previewTargetCoord:  battleState.previewTargetCoord,
+          validTargets:        battleState.validTargets,
+          hasActiveUnit:       activeUnit !== null,
+          fieldUnitCells,
+          unitsById,
+          targetHighlightKind,
+        });
+
         // participants = battle-start snapshot; do NOT rebuild from current placement state
         return {
           ...phase,
@@ -443,6 +455,8 @@ class PhaseManagerClass {
           manualChargeDisabled,
           validTargets:        battleState.validTargets.map(c => ({ ...c })),
           targetHighlightKind,
+          previewTargetCoord,
+          previewTargetUnitId,
         };
       }
       default:
@@ -501,6 +515,14 @@ class PhaseManagerClass {
       }
     }
 
+    // ── Battle preview target ──
+    if (prev.type === 'battle' &&
+        (action.type === 'battle_preview_target' || action.type === 'battle_clear_preview_target')) {
+      const target = action.type === 'battle_preview_target' ? action.target : null;
+      GameState.set(setBattlePreviewTarget(GameState.get(), target));
+      return;
+    }
+
     // ── Battle turn ──
     if (isBattleTurnAction(action) && prev.type === 'battle') {
       const result = applyBattleTurnAction({
@@ -523,7 +545,8 @@ class PhaseManagerClass {
         this.pendingAutoTurnIntention = null;
       }
 
-      GameState.set(result.state);
+      // Any turn action invalidates a pending preview target (skill/active unit/targets change).
+      GameState.set(setBattlePreviewTarget(result.state, null));
       GameState.setBattleTurnContext(result.context);
       this.lastBattleTransition = result;
       return;
@@ -987,6 +1010,8 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         manualChargeDisabled:     false,                                              // filled by rebuildSnapshot
         validTargets:        [],
         targetHighlightKind: 'none',
+        previewTargetCoord:  null,
+        previewTargetUnitId: null,
       };
 
     case 'enter_camp':
@@ -1022,6 +1047,8 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         manualChargeDisabled:     false,                                              // filled by rebuildSnapshot
         validTargets:        [],
         targetHighlightKind: 'none',
+        previewTargetCoord:  null,
+        previewTargetUnitId: null,
       };
 
     case 'exit_battle':
@@ -1165,6 +1192,12 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'battle_apply_auto_turn':
       if (current.type !== 'battle') return null;
       return current; // applyActionSideEffects mutates state; rebuildSnapshot refreshes phase
+
+    // ── Battle preview target (mutation-only) ──────────────────────────────
+    case 'battle_preview_target':
+    case 'battle_clear_preview_target':
+      if (current.type !== 'battle') return null;
+      return current; // applyActionSideEffects mutates BattleState; rebuildSnapshot refreshes phase
   }
 }
 

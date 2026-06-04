@@ -376,7 +376,12 @@ export class Game extends Phaser.Scene {
       this.refreshCells(phase);
       this.syncUnitViews(phase);
       const fieldUnitsById = new Map(phase.fieldUnits.map(u => [u.id, u]));
-      this.initiativeBar.update({ roundQueue: phase.roundQueue, fieldUnitsById });
+      this.initiativeBar.update({
+        roundQueue:          phase.roundQueue,
+        fieldUnitsById,
+        previewTargetUnitId: phase.previewTargetUnitId,
+        targetHighlightKind: phase.targetHighlightKind,
+      });
     }
   }
 

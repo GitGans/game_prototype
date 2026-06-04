@@ -60,9 +60,6 @@ export class BattleTurnFlowController {
   private timers = new Set<Phaser.Time.TimerEvent>();
   private destroyed = false;
 
-  // Manual-target confirmation state
-  private pendingTargetCoord: CellCoord | null = null;
-
   // Battle control buttons
   private autoBattleButtons: Button[] = [];
   private manualTurnButtons: Button[] = [];
@@ -91,7 +88,6 @@ export class BattleTurnFlowController {
     this.destroyed = true;
     this.clearTimers();
     this.destroyControls();
-    this.pendingTargetCoord = null;
     this.deps.skillBar.hide();
   }
 
@@ -212,7 +208,6 @@ export class BattleTurnFlowController {
     if (!result?.winner) return false;
     this.clearTimers();
     this.destroyControls();
-    this.pendingTargetCoord = null;
     this.deps.skillBar.hide();
     this.schedule(BattleTurnFlowController.DELAY_GAMEOVER, () => {
       this.deps.showGameOver(result.winner!);
@@ -237,7 +232,6 @@ export class BattleTurnFlowController {
 
   private startActiveUnitTurn(): void {
     if (this.destroyed) return;
-    this.pendingTargetCoord = null;
     this.clearSkillIcons();
 
     // Capture the active unit BEFORE the action — used as a style hint for event presentation.
@@ -313,14 +307,23 @@ export class BattleTurnFlowController {
     );
     if (!isValid) return;
 
-    const p = this.pendingTargetCoord;
-    if (p && p.side === coord.side && p.row === coord.row && p.col === coord.col) {
-      this.pendingTargetCoord = null;
-      this.deps.refreshCells(phase);
+    const prev = phase.previewTargetCoord;
+    const isSameTarget =
+      prev !== null && prev.side === coord.side && prev.row === coord.row && prev.col === coord.col;
+
+    if (isSameTarget) {
+      // Second click confirms. battle_use_skill clears the preview target centrally,
+      // and onStateChanged → refreshCells repaints the cells.
       this.handleTargetSelect(coord, phase);
-    } else {
-      this.pendingTargetCoord = coord;
-      this.deps.battlePresentation.applySkillPreview(phase, coord);
+      return;
+    }
+
+    // First click (or retarget): store the preview target in battle state, then re-apply the
+    // imperative overlay — the transition emitted STATE_CHANGED, and refreshCells blanked it.
+    PhaseManager.transition({ type: "battle_preview_target", target: coord });
+    const nextPhase = PhaseManager.getPhase();
+    if (nextPhase.type === "battle") {
+      this.deps.battlePresentation.applySkillPreview(nextPhase, coord);
     }
   }
 
@@ -557,7 +560,7 @@ export class BattleTurnFlowController {
     const result = this.runBattleAction({ type: "battle_select_skill", skillIndex: index });
     if (!result) return;
 
-    this.pendingTargetCoord = null;
+    // battle_select_skill clears the preview target centrally in PhaseManager.
 
     const phase = PhaseManager.getPhase();
     const activeUnit = phase.type === "battle" ? phase.activeUnit : null;

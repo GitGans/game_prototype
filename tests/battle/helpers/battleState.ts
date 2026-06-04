@@ -40,6 +40,7 @@ export function makeBattleStateFromUnits(
     validTargets:       [],
     nextPlayerId:       1,
     placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null },
+    previewTargetCoord: null,
     deployments,
     benchSlotCount,
     ...overrides,

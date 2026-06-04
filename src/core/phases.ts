@@ -94,6 +94,10 @@ export type GamePhase =
       manualChargeDisabled:    boolean;
       validTargets:        CellCoord[];
       targetHighlightKind: 'target' | 'heal_target' | 'revive_target' | 'none';
+      // Manual-targeting preview, projected from BattleState.previewTargetCoord.
+      // previewTargetUnitId is the *primary* clicked unit only (never AoE-expanded).
+      previewTargetCoord:  CellCoord | null;
+      previewTargetUnitId: string | null;
     }
   | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
   | { type: 'debug_level_select' }
@@ -189,7 +193,10 @@ export type PhaseAction =
   | { type: 'battle_charge_turn' }
   | { type: 'battle_quick_turn'; unitId: string }
   | { type: 'battle_decide_auto_turn' }
-  | { type: 'battle_apply_auto_turn' };
+  | { type: 'battle_apply_auto_turn' }
+  // ── Battle preview target (mutation-only: resolveTransition returns current) ──
+  | { type: 'battle_preview_target'; target: CellCoord }
+  | { type: 'battle_clear_preview_target' };
 
 // Empty snapshots used by resolveTransition as placeholders —
 // rebuildSnapshot fills them with real data after side effects run.
