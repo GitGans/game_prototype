@@ -27,6 +27,7 @@ function emptyState(): BattleState {
     validTargets:       [],
     nextPlayerId:       1,
     placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null },
+    previewTargetCoord: null,
     deployments:        new Map(),
     benchSlotCount:     0,
   };

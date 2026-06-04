@@ -157,3 +157,49 @@ export function buildBattleFieldUnitCellsSnapshot(
   }
   return { cellToUnitIds, unitToCells };
 }
+
+/**
+ * Projects the transient preview target into render fields.
+ *
+ * Safety net against stale highlights: the preview is exposed only while the player is
+ * actually choosing a target for the current active unit, and only if the stored coord is
+ * still a valid target. If anything drifts, both fields collapse to null even if an explicit
+ * clear was missed.
+ *
+ * Strict policy-aware id resolution: `fieldUnitCells.cellToUnitIds` lists living units before
+ * dead ones, so a corpse sharing a cell with a living unit would resolve wrong via `[0]`. We
+ * pick the candidate whose life state matches the highlight kind (revive → dead, otherwise
+ * alive). If NO candidate matches, return null — never fall back to the first id, which would
+ * reintroduce the exact wrong-unit highlight the policy match exists to prevent.
+ */
+export function projectPreviewTarget(input: {
+  battlePhase:         BattleState['phase'];
+  previewTargetCoord:  CellCoord | null;
+  validTargets:        CellCoord[];
+  hasActiveUnit:       boolean;
+  fieldUnitCells:      BattleFieldUnitCellsSnapshot;
+  unitsById:           Map<string, BattleUnitSnapshot>;
+  targetHighlightKind: 'target' | 'heal_target' | 'revive_target' | 'none';
+}): { previewTargetCoord: CellCoord | null; previewTargetUnitId: string | null } {
+  const { battlePhase, previewTargetCoord, validTargets, hasActiveUnit,
+          fieldUnitCells, unitsById, targetHighlightKind } = input;
+
+  const isValid =
+    battlePhase === 'select_target' &&
+    hasActiveUnit &&
+    previewTargetCoord !== null &&
+    validTargets.some(c => cellKey(c) === cellKey(previewTargetCoord));
+
+  if (!isValid) return { previewTargetCoord: null, previewTargetUnitId: null };
+
+  const ids = fieldUnitCells.cellToUnitIds.get(cellKey(previewTargetCoord!)) ?? [];
+  const wantDead = targetHighlightKind === 'revive_target';
+  // Strict: only a life-state match counts. No `?? ids[0]` fallback.
+  const previewTargetUnitId =
+    ids.find(id => {
+      const u = unitsById.get(id);
+      return u ? (wantDead ? u.lifeState === 'dead' : u.lifeState !== 'dead') : false;
+    }) ?? null;
+
+  return { previewTargetCoord: { ...previewTargetCoord! }, previewTargetUnitId };
+}

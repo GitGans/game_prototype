@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import type { FieldBattleUnitSnapshot } from '../shared/battleSnapshots';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
+import { battleTargetHighlightColor } from './battleTargetHighlightPresentation';
+import type { BattleTargetHighlightKind } from './battleTargetHighlightPresentation';
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 import { fontSize, UI_THEME } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
@@ -16,10 +18,16 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  update(snapshot: { roundQueue: string[]; fieldUnitsById: Map<string, FieldBattleUnitSnapshot> }): void {
+  update(snapshot: {
+    roundQueue:          string[];
+    fieldUnitsById:      Map<string, FieldBattleUnitSnapshot>;
+    previewTargetUnitId: string | null;
+    targetHighlightKind: BattleTargetHighlightKind;
+  }): void {
     this.removeAll(true);
 
-    const { roundQueue, fieldUnitsById } = snapshot;
+    const { roundQueue, fieldUnitsById, previewTargetUnitId, targetHighlightKind } = snapshot;
+    const previewColor = battleTargetHighlightColor(targetHighlightKind);
     const nextRound = this.buildNextRound(fieldUnitsById);
 
     // ── Card size: fit MAX_CARDS across full screen width ──────────────────
@@ -51,7 +59,8 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
       if (!unit) continue;
       const isActive = i === 0;
       const cardY = isActive ? -ACTIVE_LIFT : 0;
-      this.drawCard(curX, cardY, unit, isActive, 1.0, CARD_W, CARD_H);
+      this.drawCard(curX, cardY, unit, isActive,
+        unit.id === previewTargetUnitId, previewColor, 1.0, CARD_W, CARD_H);
       curX += CARD_W + CARD_GAP;
     }
 
@@ -71,7 +80,8 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
       // ── Next round (dimmed) ──────────────────────────────────────────────
       for (let i = 0; i < displayedNext.length; i++) {
         const unit = displayedNext[i];
-        this.drawCard(curX, 0, unit, false, 0.65, CARD_W, CARD_H);
+        this.drawCard(curX, 0, unit, false,
+          unit.id === previewTargetUnitId, previewColor, 0.65, CARD_W, CARD_H);
         curX += CARD_W + CARD_GAP;
       }
     }
@@ -82,6 +92,8 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     y: number,
     unit: FieldBattleUnitSnapshot,
     isActive: boolean,
+    isPreviewTarget: boolean,
+    previewColor: number | null,
     alpha: number,
     CARD_W: number,
     CARD_H: number
@@ -163,6 +175,17 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
 
     const toAdd: Phaser.GameObjects.GameObject[] = [border, bg, initText, hpBar];
     if (nameText) toAdd.splice(2, 0, nameText);
+
+    // Preview-target outline: an additional layer on top, independent of the active-unit
+    // border/lift, so active and preview-target states can both be visible.
+    if (isPreviewTarget && previewColor !== null) {
+      const outlineW = Math.max(2, Math.round(2 * LAYOUT_SCALE));
+      const outline = this.scene.add.rectangle(x + CARD_W / 2, y + CARD_H / 2, CARD_W, CARD_H);
+      outline.isFilled = false;                 // outline only, no fill
+      outline.setStrokeStyle(outlineW, previewColor, alpha);
+      toAdd.push(outline);                       // pushed last → renders on top
+    }
+
     this.add(toAdd);
   }
 

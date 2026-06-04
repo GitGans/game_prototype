@@ -3,6 +3,7 @@ import { CELL_SIZE, LAYOUT_SCALE } from "../core/Constants";
 import { CellCoord } from "../shared/gridTypes";
 import { cellKey } from "../battle/field";
 import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
+import { battleTargetHighlightColor } from "./battleTargetHighlightPresentation";
 
 type HighlightType =
   | "none"
@@ -92,13 +93,13 @@ export class CellView extends Phaser.GameObjects.Container {
         this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.selected).setAlpha(0.25);
         break;
       case "target":
-        this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.validTarget).setAlpha(0.45);
+        this.bg.setFillStyle(battleTargetHighlightColor("target")!).setAlpha(0.45);
         break;
       case "heal_target":
-        this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.validHeal).setAlpha(0.25);
+        this.bg.setFillStyle(battleTargetHighlightColor("heal_target")!).setAlpha(0.25);
         break;
       case "revive_target":
-        this.bg.setFillStyle(BATTLE_VISUAL_THEME.cell.validRevive).setAlpha(0.3);
+        this.bg.setFillStyle(battleTargetHighlightColor("revive_target")!).setAlpha(0.3);
         break;
       case "none":
         // in battle keep cell invisible; in placement restore subtle tint

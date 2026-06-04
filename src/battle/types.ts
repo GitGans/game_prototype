@@ -94,6 +94,9 @@ export interface BattleState {
   validTargets:       CellCoord[];
   nextPlayerId:       number;          // next p<n> id for unit creation during placement
   placementSelection: PlacementSelection; // UI selection; owned by BattleState so Game.ts stays stateless
+  // Manual-targeting preview selection (transient UI). Single source of truth for the
+  // battlefield + initiative-bar target highlight. Never serialized (BattleState is not saved).
+  previewTargetCoord: CellCoord | null;
   // Source of truth for all placement. Every unit in state.units has exactly one entry here.
   deployments:        Map<string, UnitDeployment>;
   // Total bench capacity. Set from battle setup; drives getFreeBenchSlot().

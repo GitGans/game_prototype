@@ -75,6 +75,17 @@ export function applyBattleLifecycleAction(input: {
   }
 }
 
+// ─── Battle Preview Target (transient manual-targeting UI state) ───────────────
+
+// Returns a new BattleState (battle invariant: never mutate in place).
+// A copied coord avoids aliasing the dispatched action.
+export function setBattlePreviewTarget(
+  state:  BattleState,
+  target: CellCoord | null,
+): BattleState {
+  return { ...state, previewTargetCoord: target ? { ...target } : null };
+}
+
 // ─── Battle Placement Actions ─────────────────────────────────────────────────
 
 export type BattlePlacementAction = Extract<PhaseAction, {
