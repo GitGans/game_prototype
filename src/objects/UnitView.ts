@@ -99,6 +99,18 @@ export class UnitView extends Phaser.GameObjects.Container {
   }
 
   /**
+   * Move the whole unit container to a new grid-derived center.
+   * Game.ts owns grid geometry and decides the target; this is the apply surface.
+   *
+   * NOTE: when a unit has active effects, callers must reposition BEFORE update(),
+   * because updateEffectSquares() snapshots the container position to compute
+   * effect-tooltip world coordinates. syncUnitViews() in Game.ts honors this order.
+   */
+  reposition(x: number, y: number): void {
+    this.setPosition(x, y);
+  }
+
+  /**
    * Switch to a sprite state (idle / attack / death).
    * If the unit is already dead, only 'death' is allowed — other states are ignored.
    * Does nothing if bgSprite is a Rectangle (no sprite config).
