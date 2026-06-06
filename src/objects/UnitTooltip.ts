@@ -14,6 +14,9 @@ const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
 interface UnitIdentitySnapshot {
   templateId: string;
   name: string;
+  // Mirrors UnitTabSnapshot.className. Present only for equipment-screen player
+  // snapshots; absent for battle tooltips, which fall back to the "Stats" title.
+  className?: string;
 }
 
 interface StatValue { value: number; base: number }
@@ -28,6 +31,9 @@ interface TooltipData {
   templateId:      string;
   name:            string;
   level?:          number;
+  // Mirrors UnitTabSnapshot.className. Present only for equipment-screen player
+  // snapshots; battle tooltips leave it undefined and fall back to "Stats".
+  className?:      string;
   side:            "player" | "enemy";
   hp:              StatValue;
   maxHp:           StatValue;
@@ -73,9 +79,9 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.setVisible(true);
   }
 
-  showFixedNameOnly(unit: UnitIdentitySnapshot, level: number, x: number, y: number, w: number): void {
+  showFixedNameOnly(unit: UnitIdentitySnapshot, x: number, y: number, w: number): void {
     const data: TooltipData = {
-      templateId: unit.templateId, name: unit.name, level,
+      templateId: unit.templateId, name: unit.name,
       side: 'player',
       hp: flat(0), maxHp: flat(0),
       physicalStrength: flat(0), magicalStrength: flat(0),
@@ -100,6 +106,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       templateId:      unit.templateId,
       name:            unit.name,
       level:           stats.level,
+      className:       unit.className,
       side:            'player',
       hp:              stats.hp,
       maxHp:           stats.maxHp,
@@ -128,7 +135,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     let y        = pad;
 
     if (opts.showNameHeader) {
-      this.addText(pad, y, `${data.name}  Lvl ${data.level ?? 1}`, {
+      this.addText(pad, y, data.name, {
         fontSize: fontSize('md'), color: UI_THEME.color.value.highlight, fontStyle: 'bold',
       });
       y += Math.round(18 * LAYOUT_SCALE);
@@ -166,8 +173,12 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     }
 
     if (opts.showStats !== false) {
-    // Stats section
-    this.addText(pad, y, "Stats", {
+    // Stats section — title shows current class + level on the equip screen,
+    // and falls back to "Stats" for battle/hover tooltips (no className/level).
+    const statsTitle = data.className && data.level !== undefined
+      ? `${data.className}  Lvl ${data.level}`
+      : "Stats";
+    this.addText(pad, y, statsTitle, {
       fontSize: fontSize("md"), color: UI_THEME.color.value.highlight, fontStyle: "bold",
     });
     y += Math.round(18 * LAYOUT_SCALE);

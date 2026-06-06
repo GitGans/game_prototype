@@ -163,7 +163,7 @@ export class EquipmentPanel {
       selectedUnit, unitStats, this.statsX, this.statsY, STATS_W,
     );
     this.namePanel.showFixedNameOnly(
-      selectedUnit, unitStats.level, this.spriteX, this.namePanelY, SPRITE_SZ,
+      selectedUnit, this.spriteX, this.namePanelY, SPRITE_SZ,
     );
     this.matrix.refresh(phase.unitEquipment);
     this.backpack.refresh(phase.backpack);
