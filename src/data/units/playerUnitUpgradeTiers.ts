@@ -1,6 +1,7 @@
 import type { UnitUpgradeTier } from "../../shared/unitTypes";
 import { sid } from "../skills";
 import { opt } from "./upgradeOptionHelpers";
+import { ucid } from "../../shared/unitTypes";
 
 type PlayerUnitTemplateId =
   | "soldier"
@@ -26,6 +27,7 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
           description: "Gain Pierce and become tougher.",
           statModifiers: { hp: 20 },
           spriteFilename: "soldier_elite.png",
+          classId: ucid("knight"),
         }),
       ],
     },
@@ -148,7 +150,11 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
     {
       unlocksAtLevel: 5,
       options: [
-        opt("marksman_5_p_ranged_slowing", "Arrow that breaks legs", sid("p_ranged_slowing")),
+        opt(
+          "marksman_5_p_ranged_slowing",
+          "Arrow that breaks legs",
+          sid("p_ranged_slowing"),
+        ),
         opt("marksman_5_distract_shot", "Distract", sid("distract_shot")),
       ],
     },
@@ -179,28 +185,48 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
       unlocksAtLevel: 5,
       options: [
         opt("forest_ranger_5_distract_shot", "Distract", sid("distract_shot")),
-        opt("forest_ranger_5_p_ranged_slowing", "Arrow that breaks legs", sid("p_ranged_slowing")),
+        opt(
+          "forest_ranger_5_p_ranged_slowing",
+          "Arrow that breaks legs",
+          sid("p_ranged_slowing"),
+        ),
       ],
     },
     {
       unlocksAtLevel: 10,
       options: [
-        opt("forest_ranger_10_poison_strike", "Poison Strike", sid("poison_strike")),
+        opt(
+          "forest_ranger_10_poison_strike",
+          "Poison Strike",
+          sid("poison_strike"),
+        ),
         opt("forest_ranger_10_pierce", "Pierce", sid("pierce")),
       ],
     },
     {
       unlocksAtLevel: 15,
       options: [
-        opt("forest_ranger_15_armor_pierce", "Armor Pierce", sid("armor_pierce")),
-        opt("forest_ranger_15_drain_strike", "Drain Strike", sid("drain_strike")),
+        opt(
+          "forest_ranger_15_armor_pierce",
+          "Armor Pierce",
+          sid("armor_pierce"),
+        ),
+        opt(
+          "forest_ranger_15_drain_strike",
+          "Drain Strike",
+          sid("drain_strike"),
+        ),
       ],
     },
     {
       unlocksAtLevel: 20,
       options: [
         opt("forest_ranger_20_life_sweep", "Life Sweep", sid("life_sweep")),
-        opt("forest_ranger_20_drain_strike", "Drain Strike", sid("drain_strike")),
+        opt(
+          "forest_ranger_20_drain_strike",
+          "Drain Strike",
+          sid("drain_strike"),
+        ),
       ],
     },
   ],
@@ -215,22 +241,46 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
     {
       unlocksAtLevel: 10,
       options: [
-        opt("elementalist_10_arcane_cross", "Arcane Cross", sid("arcane_cross")),
-        opt("elementalist_10_m_ranged_basic", "Magic Shot", sid("m_ranged_basic")),
+        opt(
+          "elementalist_10_arcane_cross",
+          "Arcane Cross",
+          sid("arcane_cross"),
+        ),
+        opt(
+          "elementalist_10_m_ranged_basic",
+          "Magic Shot",
+          sid("m_ranged_basic"),
+        ),
       ],
     },
     {
       unlocksAtLevel: 15,
       options: [
-        opt("elementalist_15_weaken_curse", "Weaken Curse", sid("weaken_curse")),
-        opt("elementalist_15_arcane_cross", "Arcane Cross", sid("arcane_cross")),
+        opt(
+          "elementalist_15_weaken_curse",
+          "Weaken Curse",
+          sid("weaken_curse"),
+        ),
+        opt(
+          "elementalist_15_arcane_cross",
+          "Arcane Cross",
+          sid("arcane_cross"),
+        ),
       ],
     },
     {
       unlocksAtLevel: 20,
       options: [
-        opt("elementalist_20_arcane_cross", "Arcane Cross", sid("arcane_cross")),
-        opt("elementalist_20_weaken_curse", "Weaken Curse", sid("weaken_curse")),
+        opt(
+          "elementalist_20_arcane_cross",
+          "Arcane Cross",
+          sid("arcane_cross"),
+        ),
+        opt(
+          "elementalist_20_weaken_curse",
+          "Weaken Curse",
+          sid("weaken_curse"),
+        ),
       ],
     },
   ],
@@ -275,22 +325,46 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
     {
       unlocksAtLevel: 10,
       options: [
-        opt("troublemaker_10_weaken_curse", "Weaken Curse", sid("weaken_curse")),
-        opt("troublemaker_10_arcane_cross", "Arcane Cross", sid("arcane_cross")),
+        opt(
+          "troublemaker_10_weaken_curse",
+          "Weaken Curse",
+          sid("weaken_curse"),
+        ),
+        opt(
+          "troublemaker_10_arcane_cross",
+          "Arcane Cross",
+          sid("arcane_cross"),
+        ),
       ],
     },
     {
       unlocksAtLevel: 15,
       options: [
-        opt("troublemaker_15_arcane_cross", "Arcane Cross", sid("arcane_cross")),
-        opt("troublemaker_15_m_ranged_basic", "Magic Shot", sid("m_ranged_basic")),
+        opt(
+          "troublemaker_15_arcane_cross",
+          "Arcane Cross",
+          sid("arcane_cross"),
+        ),
+        opt(
+          "troublemaker_15_m_ranged_basic",
+          "Magic Shot",
+          sid("m_ranged_basic"),
+        ),
       ],
     },
     {
       unlocksAtLevel: 20,
       options: [
-        opt("troublemaker_20_weaken_curse", "Weaken Curse", sid("weaken_curse")),
-        opt("troublemaker_20_arcane_cross", "Arcane Cross", sid("arcane_cross")),
+        opt(
+          "troublemaker_20_weaken_curse",
+          "Weaken Curse",
+          sid("weaken_curse"),
+        ),
+        opt(
+          "troublemaker_20_arcane_cross",
+          "Arcane Cross",
+          sid("arcane_cross"),
+        ),
       ],
     },
   ],
@@ -298,21 +372,41 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
     {
       unlocksAtLevel: 5,
       options: [
-        opt("healer_5_heal_with_defence", "Protective Heal", sid("heal_with_defence")),
-        opt("healer_5_self_heal_mass_regeneration", "Regenerative Heal", sid("self_heal_mass_regeneration")),
+        opt(
+          "healer_5_heal_with_defence",
+          "Protective Heal",
+          sid("heal_with_defence"),
+        ),
+        opt(
+          "healer_5_self_heal_mass_regeneration",
+          "Regenerative Heal",
+          sid("self_heal_mass_regeneration"),
+        ),
       ],
     },
     {
       unlocksAtLevel: 10,
       options: [
-        opt("healer_10_self_heal_mass_regeneration", "Regenerative Heal", sid("self_heal_mass_regeneration")),
-        opt("healer_10_heal_with_defence", "Protective Heal", sid("heal_with_defence")),
+        opt(
+          "healer_10_self_heal_mass_regeneration",
+          "Regenerative Heal",
+          sid("self_heal_mass_regeneration"),
+        ),
+        opt(
+          "healer_10_heal_with_defence",
+          "Protective Heal",
+          sid("heal_with_defence"),
+        ),
       ],
     },
     {
       unlocksAtLevel: 15,
       options: [
-        opt("healer_15_heal_with_defence", "Protective Heal", sid("heal_with_defence")),
+        opt(
+          "healer_15_heal_with_defence",
+          "Protective Heal",
+          sid("heal_with_defence"),
+        ),
         opt("healer_15_m_heal_basic", "Heal", sid("m_heal_basic")),
         opt("healer_15_revive", "Revive", sid("revive")),
       ],
@@ -320,8 +414,16 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
     {
       unlocksAtLevel: 20,
       options: [
-        opt("healer_20_self_heal_mass_regeneration", "Regenerative Heal", sid("self_heal_mass_regeneration")),
-        opt("healer_20_heal_with_defence", "Protective Heal", sid("heal_with_defence")),
+        opt(
+          "healer_20_self_heal_mass_regeneration",
+          "Regenerative Heal",
+          sid("self_heal_mass_regeneration"),
+        ),
+        opt(
+          "healer_20_heal_with_defence",
+          "Protective Heal",
+          sid("heal_with_defence"),
+        ),
       ],
     },
   ],
@@ -367,7 +469,11 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
       unlocksAtLevel: 10,
       options: [
         opt("destroyer_10_pierce", "Pierce", sid("pierce")),
-        opt("destroyer_10_poison_strike", "Poison Strike", sid("poison_strike")),
+        opt(
+          "destroyer_10_poison_strike",
+          "Poison Strike",
+          sid("poison_strike"),
+        ),
       ],
     },
     {
