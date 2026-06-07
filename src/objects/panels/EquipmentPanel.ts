@@ -43,7 +43,8 @@ const BACKPACK_ROWS = 2;
 export class EquipmentPanel {
   private scene:      Phaser.Scene;
   private statsPanel: UnitTooltip;
-  private namePanel:  UnitTooltip;
+  private statsHeaderText: Phaser.GameObjects.Text | null = null;
+  private nameHeaderText:  Phaser.GameObjects.Text | null = null;
   private matrix:     EquipmentMatrix;
   private backpack:   BackpackRow;
   private skillRow:   SkillIconRow;
@@ -94,9 +95,6 @@ export class EquipmentPanel {
       phase.unitEquipment, itemTooltip,
       onEquipSlotClick,
     );
-
-    // ── Unit name header (center, transparent bg) ────────────────────────────
-    this.namePanel = new UnitTooltip(scene, 0x000000, 0);
 
     // ── Unit sprite preview (center) ─────────────────────────────────────────
     this._renderSprite(phase.selectedUnitSpriteKey, spriteX, panelTopY);
@@ -159,11 +157,26 @@ export class EquipmentPanel {
     const { selectedUnit, unitStats } = phase;
     if (!selectedUnit || !unitStats) return;
 
-    this.statsPanel.showFixedStatsSnapshot(
-      selectedUnit, unitStats, this.statsX, this.statsY, STATS_W,
-    );
-    this.namePanel.showFixedNameOnly(
-      selectedUnit, this.spriteX, this.namePanelY, SPRITE_SZ,
+    const headerY = this.namePanelY; // === contentTopY, same row as Items / Skills
+
+    // Dynamic headers — destroy previous, recreate for the current unit.
+    this.statsHeaderText?.destroy();
+    this.nameHeaderText?.destroy();
+
+    this.statsHeaderText = this.scene.add.text(
+      this.statsX, headerY,
+      `${selectedUnit.className}  Lvl ${unitStats.level}`,
+      { fontSize: `${scaled(13)}px`, color: UI_THEME.color.value.highlight, fontStyle: 'bold' },
+    ).setOrigin(0, 0);
+
+    this.nameHeaderText = this.scene.add.text(
+      this.spriteX, headerY, selectedUnit.name,
+      { fontSize: `${scaled(13)}px`, color: UI_THEME.color.value.highlight, fontStyle: 'bold' },
+    ).setOrigin(0, 0);
+
+    // Stats BODY (no title) below the header row, aligned with matrix/sprite/skills top.
+    this.statsPanel.showFixedStatsBodySnapshot(
+      selectedUnit, unitStats, this.statsX, this.statsY + HEADER_H, STATS_W,
     );
     this.matrix.refresh(phase.unitEquipment);
     this.backpack.refresh(phase.backpack);
@@ -177,12 +190,15 @@ export class EquipmentPanel {
 
   destroy(): void {
     this.statsPanel.destroy();
-    this.namePanel.destroy();
+    this.statsHeaderText?.destroy();
+    this.nameHeaderText?.destroy();
+    this.statsHeaderText = null;
+    this.nameHeaderText  = null;
     this.matrix.destroy();
     this.backpack.destroy();
     this.skillRow.destroy();
-    // TODO Stage 7: track upgrade button, back button, and header text nodes
-    // for explicit cleanup when switching modes mid-session.
+    // TODO Stage 7: track upgrade button, back button, and the static Items/Skills
+    // headers for explicit cleanup when switching modes mid-session.
   }
 
   private _renderSprite(spriteKey: string | null, x: number, y: number): void {

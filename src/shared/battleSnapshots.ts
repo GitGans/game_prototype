@@ -14,6 +14,7 @@ export interface BattleUnitSnapshot {
   id:        string;
   side:      Side;
   name:      string;
+  className: string;   // resolved class display name; built in core/battleSnapshotBuilder
   hp:        number;
   maxHp:     number;
   lifeState: UnitLifeState;

@@ -31,7 +31,7 @@ import { buildPlayerExitInputs } from './playerBattleExitProjection';
 import { resolvePlayerMaxHpForLevel } from './battleSetupProjection';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { UnitBlueprint } from '../shared/unitTypes';
-import { buildSkillIconSnapshot, buildUnitUpgradeDescription, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
+import { buildSkillIconSnapshot, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
 import {
@@ -61,7 +61,7 @@ import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from '../progression';
-import { resolveOptionalSkillDefinition } from '../progression';
+import { resolveOptionalSkillDefinition, resolveUnitClassDefinition } from '../progression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { resolvePlayerUnitSpriteSheet, resolvePlayerUpgradeSpriteSheet } from './unitSprites';
@@ -231,16 +231,19 @@ class PhaseManagerClass {
       tierId: tier.unlocksAtLevel,
       options: tier.options.map((upg): UpgradeOptionSnapshot => {
         const skill = resolveOptionalSkillDefinition(upg.skillId);
+        const classChangeName = upg.classId
+          ? resolveUnitClassDefinition(upg.classId).name
+          : null;
         return {
           id:           upg.id,
           name:         upg.name,
-          description:  buildUnitUpgradeDescription(upg, skill),
           skill:        skill ? toSkillIcon(skill) : null,
           statLines:    buildUnitUpgradeStatLines(upg.statModifiers ?? {}),
           spritePreview: (() => {
             const sheet = resolvePlayerUpgradeSpriteSheet(upg);
             return sheet ? getUnitSpriteTextureKey(bp.templateId, sheet) : null;
           })(),
+          classChangeName,
         };
       }),
       chosenUpgradeId: chosenUpgrades[tier.unlocksAtLevel] ?? null,

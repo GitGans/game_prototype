@@ -12,6 +12,7 @@ import { requireDeployment } from '../battle/deployment';
 import { cellKey } from '../battle/field';
 import { getOccupiedCells } from '../battle/shapes';
 import { isAlive, isDead } from '../battle/lifeState';
+import { resolveUnitClassDefinition } from '../progression';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 
 function cloneDeployment(d: UnitDeployment): UnitDeployment {
@@ -29,11 +30,13 @@ export function buildBattleUnitSnapshot(
   const spriteKey  = unit.spriteSheet
     ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
     : null;
+  const className  = resolveUnitClassDefinition(unit.classId).name;
 
   const snap: BattleUnitSnapshot = {
     id:        unit.id,
     side:      unit.side,
     name:      unit.name,
+    className,
     hp:        unit.hp,
     maxHp:     unit.maxHp,
     lifeState: unit.lifeState,

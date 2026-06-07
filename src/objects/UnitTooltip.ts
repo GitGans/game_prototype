@@ -14,8 +14,7 @@ const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
 interface UnitIdentitySnapshot {
   templateId: string;
   name: string;
-  // Mirrors UnitTabSnapshot.className. Present only for equipment-screen player
-  // snapshots; absent for battle tooltips, which fall back to the "Stats" title.
+  // Mirrors UnitTabSnapshot.className — the equip screen's stats body source.
   className?: string;
 }
 
@@ -31,8 +30,8 @@ interface TooltipData {
   templateId:      string;
   name:            string;
   level?:          number;
-  // Mirrors UnitTabSnapshot.className. Present only for equipment-screen player
-  // snapshots; battle tooltips leave it undefined and fall back to "Stats".
+  // Class display name. Required whenever a stats title is rendered (battle
+  // hover and equip); the title shows `${className}  Lvl ${level}`.
   className?:      string;
   side:            "player" | "enemy";
   hp:              StatValue;
@@ -55,8 +54,8 @@ interface TooltipData {
 interface BuildOptions {
   showSprite?:     boolean; // default true
   showStats?:      boolean; // default true
+  showStatsTitle?: boolean; // default true — class+level title above the stat rows
   showSkills?:     boolean; // default true
-  showNameHeader?: boolean; // default false — renders "Name  Lvl N" at top
 }
 
 export class UnitTooltip extends BaseTooltip<TooltipData> {
@@ -79,25 +78,9 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.setVisible(true);
   }
 
-  showFixedNameOnly(unit: UnitIdentitySnapshot, x: number, y: number, w: number): void {
-    const data: TooltipData = {
-      templateId: unit.templateId, name: unit.name,
-      side: 'player',
-      hp: flat(0), maxHp: flat(0),
-      physicalStrength: flat(0), magicalStrength: flat(0),
-      physicalDefense: flat(0), magicalDefense: flat(0),
-      dodge: flat(0), block: flat(0), initiative: flat(0),
-      skills: [],
-    };
-    this.clearContent();
-    const h = this.buildContent(data, { showNameHeader: true, showSprite: false, showStats: false, showSkills: false });
-    this.bg.setSize(w, h);
-    this.setPosition(x, y);
-    this.setVisible(true);
-  }
-
-
-  showFixedStatsSnapshot(
+  // Renders the stat rows WITHOUT the class+level title. The equip screen draws
+  // its own header row (see EquipmentPanel), so the title is suppressed here.
+  showFixedStatsBodySnapshot(
     unit:  UnitIdentitySnapshot,
     stats: UnitStatsSnapshot,
     x: number, y: number, w: number,
@@ -120,7 +103,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       skills:          [],
     };
     this.clearContent();
-    const h = this.buildContent(data, { showSprite: false, showSkills: false });
+    const h = this.buildContent(data, { showSprite: false, showSkills: false, showStatsTitle: false });
     this.bg.setSize(w, h);
     this.setPosition(x, y);
     this.setVisible(true);
@@ -133,13 +116,6 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     const panelW = this.tooltipW;
     const pad    = UI_THEME.component.tooltip.pad;
     let y        = pad;
-
-    if (opts.showNameHeader) {
-      this.addText(pad, y, data.name, {
-        fontSize: fontSize('md'), color: UI_THEME.color.value.highlight, fontStyle: 'bold',
-      });
-      y += Math.round(18 * LAYOUT_SCALE);
-    }
 
     if (opts.showSprite !== false) {
       // Sprite or fallback color rect
@@ -173,15 +149,17 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     }
 
     if (opts.showStats !== false) {
-    // Stats section — title shows current class + level on the equip screen,
-    // and falls back to "Stats" for battle/hover tooltips (no className/level).
-    const statsTitle = data.className && data.level !== undefined
-      ? `${data.className}  Lvl ${data.level}`
-      : "Stats";
-    this.addText(pad, y, statsTitle, {
-      fontSize: fontSize("md"), color: UI_THEME.color.value.highlight, fontStyle: "bold",
-    });
-    y += Math.round(18 * LAYOUT_SCALE);
+    // Title shows current class + level. There is no generic "Stats" fallback:
+    // any stats block that renders a title must carry className and level.
+    if (opts.showStatsTitle !== false) {
+      if (!data.className || data.level === undefined) {
+        throw new Error('UnitTooltip stats require className and level');
+      }
+      this.addText(pad, y, `${data.className}  Lvl ${data.level}`, {
+        fontSize: fontSize("md"), color: UI_THEME.color.value.highlight, fontStyle: "bold",
+      });
+      y += Math.round(18 * LAYOUT_SCALE);
+    }
 
     const statLines: Array<{ label: string; display: string; color: string }> = [
       { label: "HP",         display: `${data.hp.value} / ${data.maxHp.value}`, color: statColor(data.maxHp)           },
@@ -235,6 +213,8 @@ function unitToData(unit: BattleUnitSnapshot): TooltipData {
   return {
     templateId:      unit.templateId,
     name:            unit.name,
+    level:           unit.level,
+    className:       unit.className,
     side:            unit.side,
     hp:              flat(unit.hp),
     maxHp:           flat(unit.maxHp),

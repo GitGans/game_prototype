@@ -20,10 +20,10 @@ export interface CampUnitSnapshot {
 export interface UpgradeOptionSnapshot {
   id:           UpgradeOptionId;
   name:         string;
-  description:  string;
   skill:        SkillIconSnapshot | null;
   statLines:    UnitUpgradeStatLineSnapshot[];
   spritePreview: string | null;
+  classChangeName: string | null;
 }
 
 export interface UpgradeTierSnapshot {
