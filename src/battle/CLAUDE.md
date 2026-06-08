@@ -24,7 +24,6 @@ Pure battle domain logic — all computations, state mutations, and validations 
 - [field.ts](field.ts) — coordinate primitives: `cellKey()`, `cellExists()`
 - [unitFactory.ts](unitFactory.ts) — constructs a runtime `Unit` from a `CreateUnitInstanceInput`
 - [autoPlace.ts](autoPlace.ts) — places player/enemy units on the field at battle start
-- [itemOps.ts](itemOps.ts) — item equip/unequip, inventory queries, stat computation from equipment
 - [lifeState.ts](lifeState.ts) — `isAlive` / `isDead` / `killUnit` / `reviveUnit`; the only place that flips `Unit.lifeState`
 - [deployment.ts](deployment.ts) — field/bench queries; living/dead/all field-helper split
 - [deadFriendlyTargeting.ts](deadFriendlyTargeting.ts) — shared structural corpse-cell walker for dead-friendly targeting and (Stage 2+) revive. All callers must pass `deployments`; deriving anchors from cell maps is forbidden.
@@ -84,7 +83,7 @@ returned to `src/core` for phase transition or rendering
 
 ## Where to Modify
 - add/change unit stat growth / final stat resolving → `src/progression/stats/` (`unitBaseStats.ts`, `unitResolvedStats.ts`)
-- add/change equipment stat-bonus aggregation → [itemOps.ts](itemOps.ts) `getEquippedBonuses()`
+- add/change item/equipment rules (equip, unequip, bonuses, item use, snapshots, pricing) → `src/inventory/`
 - change damage or healing resolution → [combat.ts](combat.ts)
 - change turn-order rules → [initiative.ts](initiative.ts)
 - change AOE or targeting patterns → [skillPatterns.ts](skillPatterns.ts), [targeting.ts](targeting.ts)

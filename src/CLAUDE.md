@@ -21,6 +21,7 @@ The system is split into layers: static content definitions, domain logic, orche
 * data/     → static content definitions (units, skills, items, maps)
 * world/    → world-map logic and types
 * battle/   → battle domain rules (placement, combat, targeting, initiative)
+* inventory/→ pure inventory & equipment domain (containers, equip, bonuses, item use, snapshots, pricing)
 * core/     → game orchestration: PhaseManager, GameState, phase definitions, transitions
 * objects/  → game-specific visual components (unit views, tooltips, skill bars)
 * ui/       → reusable, game-agnostic UI primitives (buttons, inputs, theme)
@@ -70,7 +71,8 @@ scene reads GamePhase and renders
 * data     → depends only on shared
 * battle   → depends on shared; no Phaser
 * world    → depends on shared; no Phaser
-* core     → depends on shared, battle, world, data
+* inventory→ depends on shared, data; no Phaser; no GameState; no battle/core/progression
+* core     → depends on shared, battle, world, data, inventory, progression
 * objects  → depends on shared, core; uses ui
 * ui       → no game knowledge; no core/battle/world imports
 * scenes   → depends on all layers; only entry point allowed to trigger PhaseManager

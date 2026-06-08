@@ -68,5 +68,6 @@ Domain contracts defined here
 - change map layout or world entity structure → `worldTypes.ts`
 
 ## Future domains (not yet physical folders)
-`campaign/`, `inventory/`, `progression/`, `dialogue/`, `debug/`, `save/`
+`campaign/`, `dialogue/`, `debug/`, `save/`
 These will live at `src/` top level and import from `shared/` + `data/`.
+(`inventory/` and `progression/` already exist as physical top-level domains.)

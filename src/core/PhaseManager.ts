@@ -14,8 +14,8 @@ import {
   useItem,
   buildBackpackSnapshot,
   buildEquipmentSnapshot,
-  getSellPrice,
-} from '../battle/itemOps';
+} from '../inventory';
+import type { EquipSlot } from '../shared/itemTypes';
 import {
   UnitTabSnapshot,
   BattleState,
@@ -703,54 +703,77 @@ class PhaseManagerClass {
       }
     }
 
-    // ── Item mutations ──
-    if (action.type === 'equip_item') {
-      const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
-      if (bp) {
-        const chosenUpgrades = GameState.playerUnits[action.unitTemplateId]?.chosenUpgrades ?? {};
-        const progression    = resolveUnitProgression(bp, chosenUpgrades);
-        equipItem(
-          action.unitTemplateId,
-          progression.currentClassId,
-          action.instanceId,
-          GameState.itemContainers,
-          GameState.itemInstances,
-          ITEM_DEFINITIONS,
+    // ── Item mutations — applied to EXACTLY ONE inventory state ──
+    // debug_equip_screen → DebugBattleState inventory only; otherwise → GameState only.
+    // No item action may "no-op through" the wrong state first (closes debug→campaign leak).
+    if (action.type === 'equip_item' || action.type === 'unequip_item' || action.type === 'use_item') {
+      const isDebug    = prev.type === 'debug_equip_screen';
+      const containers = isDebug ? this.debugState!.itemContainers : GameState.itemContainers;
+      const instances  = isDebug ? this.debugState!.itemInstances  : GameState.itemInstances;
+      const backpackId = isDebug ? 'backpack_debug' : 'backpack_shared';
+
+      if (action.type === 'equip_item') {
+        const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
+        if (bp) {
+          const chosenUpgrades = isDebug
+            ? (this.debugState!.chosenUpgrades[action.unitTemplateId] ?? {})
+            : (GameState.playerUnits[action.unitTemplateId]?.chosenUpgrades ?? {});
+          const progression = resolveUnitProgression(bp, chosenUpgrades);
+          const result = equipItem(
+            action.unitTemplateId, progression.currentClassId, action.instanceId,
+            containers, instances, ITEM_DEFINITIONS,
+          );
+          if (result.ok) {
+            if (isDebug) this.debugState!.itemContainers = result.nextContainers;
+            else         GameState.itemContainers        = result.nextContainers;
+          }
+        }
+        return;
+      }
+
+      if (action.type === 'unequip_item') {
+        const result = unequipItem(
+          action.unitTemplateId, action.slot as EquipSlot,
+          containers, instances, ITEM_DEFINITIONS, backpackId,
         );
+        if (result.ok) {
+          if (isDebug) this.debugState!.itemContainers = result.nextContainers;
+          else         GameState.itemContainers        = result.nextContainers;
+        }
+        return;
       }
-    }
 
-    if (action.type === 'unequip_item') {
-      unequipItem(
-        action.unitTemplateId,
-        action.slot as any,
-        GameState.itemContainers,
-        GameState.itemInstances,
-        ITEM_DEFINITIONS,
-      );
-    }
-
-    if (action.type === 'use_item') {
-      // Build temporary bonuses record for useItem compat, then sync back
-      const bonusRecord: Record<string, Partial<import('../battle/types').BattleStatBonuses>> = {};
-      for (const [id, unitState] of Object.entries(GameState.playerUnits)) {
-        bonusRecord[id] = unitState.permanentBonuses;
+      // use_item
+      const result = useItem(action.instanceId, containers, instances, ITEM_DEFINITIONS);
+      if (result.ok) {
+        if (isDebug) {
+          this.debugState!.itemContainers = result.nextContainers;
+          this.debugState!.itemInstances  = result.nextInstances;
+        } else {
+          GameState.itemContainers = result.nextContainers;
+          GameState.itemInstances  = result.nextInstances;
+        }
+        if (result.effect.type === 'permanent_stat_boost' && result.effect.stat) {
+          const stat = result.effect.stat, amount = result.effect.amount;
+          if (isDebug) {
+            const existing = this.debugState!.unitPermanentBonuses[action.unitTemplateId] ?? {};
+            this.debugState!.unitPermanentBonuses[action.unitTemplateId] = {
+              ...existing, [stat]: (existing[stat] ?? 0) + amount,
+            };
+          } else {
+            const unitState = GameState.playerUnits[action.unitTemplateId];
+            if (unitState) {
+              const existing = unitState.permanentBonuses ?? {};
+              GameState.playerUnits[action.unitTemplateId] = {
+                ...unitState,
+                permanentBonuses: { ...existing, [stat]: (existing[stat] ?? 0) + amount },
+              };
+            }
+          }
+        }
+        // 'heal' is intentionally a no-op outside battle (preserved behavior).
       }
-      useItem(
-        action.instanceId,
-        action.unitTemplateId,
-        GameState.itemContainers,
-        GameState.itemInstances,
-        bonusRecord,
-        ITEM_DEFINITIONS,
-      );
-      const unitStateAfter = GameState.playerUnits[action.unitTemplateId];
-      if (unitStateAfter) {
-        GameState.playerUnits[action.unitTemplateId] = {
-          ...unitStateAfter,
-          permanentBonuses: bonusRecord[action.unitTemplateId] ?? {},
-        };
-      }
+      return;
     }
 
     // ── Camp unit toggle ──
@@ -792,47 +815,6 @@ class PhaseManagerClass {
       const idx = ds.campUnitIds.indexOf(action.templateId);
       if (idx >= 0) ds.campUnitIds.splice(idx, 1);
       else          ds.campUnitIds.push(action.templateId);
-    }
-
-    if (action.type === 'equip_item' && prev.type === 'debug_equip_screen') {
-      const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
-      if (bp) {
-        const chosenUpgrades = this.debugState!.chosenUpgrades[action.unitTemplateId] ?? {};
-        const progression    = resolveUnitProgression(bp, chosenUpgrades);
-        equipItem(
-          action.unitTemplateId,
-          progression.currentClassId,
-          action.instanceId,
-          this.debugState!.itemContainers,
-          this.debugState!.itemInstances,
-          ITEM_DEFINITIONS,
-        );
-      }
-      return; // skip GameState mutation below
-    }
-
-    if (action.type === 'unequip_item' && prev.type === 'debug_equip_screen') {
-      unequipItem(
-        action.unitTemplateId,
-        action.slot as any,
-        this.debugState!.itemContainers,
-        this.debugState!.itemInstances,
-        ITEM_DEFINITIONS,
-        'backpack_debug',
-      );
-      return;
-    }
-
-    if (action.type === 'use_item' && prev.type === 'debug_equip_screen') {
-      useItem(
-        action.instanceId,
-        action.unitTemplateId,
-        this.debugState!.itemContainers,
-        this.debugState!.itemInstances,
-        this.debugState!.unitPermanentBonuses,
-        ITEM_DEFINITIONS,
-      );
-      return;
     }
 
     // ── Commerce — commented out until 'shop' phase exists ──
@@ -1203,27 +1185,6 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
       return current; // applyActionSideEffects mutates BattleState; rebuildSnapshot refreshes phase
   }
 }
-
-// ─── Helpers (kept for future shop phase) ─────────────────────────────────────
-
-function _findFreeBackpackSlotKey(container: any): string | null {
-  for (let i = 0; i < 10; i++) {
-    if (container.slots[String(i)] === undefined) return String(i);
-  }
-  return null;
-}
-void _findFreeBackpackSlotKey;
-
-function _generateItemId(instances: Record<string, any>): string {
-  let n = Object.keys(instances).length + 1;
-  while (instances[`item_${String(n).padStart(3, '0')}`]) n++;
-  return `item_${String(n).padStart(3, '0')}`;
-}
-void _generateItemId;
-
-// keep getSellPrice import alive for future shop use
-const _getSellPrice = getSellPrice;
-void _getSellPrice;
 
 function allMobsDead(mapDef: SubMapDefinition, mapState: SubMapState): boolean {
   for (let row = 0; row < mapDef.layout.length; row++) {

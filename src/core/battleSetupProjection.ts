@@ -5,7 +5,7 @@ import {
   findEnemyUnitBlueprintWithRace,
 } from './unitSprites';
 import { ITEM_DEFINITIONS }               from '../data/itemDefinitions';
-import { getEquippedBonuses, snapshotActivatableAbilities } from '../battle/itemOps';
+import { getEquippedBonuses, snapshotActivatableAbilities } from '../inventory';
 import { resolveUnitProgression, resolveUnitBattleStats } from '../progression';
 import { createUnitInstance } from '../battle/unitFactory';
 import type { PlayerBattleSetup }         from './battleSetup';
