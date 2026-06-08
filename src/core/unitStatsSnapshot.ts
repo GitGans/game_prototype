@@ -1,22 +1,8 @@
-import type { UnitBlueprint, UnitBattleStats, UnitProgressionStatModifiers } from '../shared/unitTypes';
+import type { UnitBlueprint, UnitProgressionStatModifiers } from '../shared/unitTypes';
 import type { ItemContainer, ItemInstance, ItemDefinition, BattleStatBonuses } from '../shared/itemTypes';
 import type { UnitStatsSnapshot } from '../shared/snapshotTypes';
-import { computeUnitBattleStats } from '../battle/itemOps';
-
-// Must match the base stat scaling rules used by computeUnitBattleStats().
-function computeBaseStats(blueprint: UnitBlueprint, level: number): UnitBattleStats {
-  const scale = 1 + 0.1 * (level - 1);
-  return {
-    hp:              Math.round(blueprint.hp             * scale),
-    physicalStrength:  Math.round(blueprint.physicalStrength * scale),
-    magicalStrength:   Math.round(blueprint.magicalStrength  * scale),
-    physicalDefense: blueprint.physicalDefense,
-    magicalDefense:  blueprint.magicalDefense,
-    dodge:           blueprint.dodge,
-    block:           blueprint.block,
-    initiative:      blueprint.initiative,
-  };
-}
+import { getEquippedBonuses } from '../battle/itemOps';
+import { computeUnitBaseStatsForLevel, resolveUnitBattleStats } from '../progression';
 
 export function buildUnitStatsSnapshot(
   blueprint:        UnitBlueprint,
@@ -27,16 +13,17 @@ export function buildUnitStatsSnapshot(
   itemDefinitions:  Record<string, ItemDefinition>,
   upgradeModifiers: UnitProgressionStatModifiers,
 ): UnitStatsSnapshot {
-  const base  = computeBaseStats(blueprint, level);
-  const final = computeUnitBattleStats(
+  const base = computeUnitBaseStatsForLevel(blueprint, level);
+  const equipmentBonuses = getEquippedBonuses(
+    blueprint.templateId, itemContainers, itemInstances, itemDefinitions,
+  );
+  const final = resolveUnitBattleStats({
     blueprint,
     level,
-    itemContainers,
-    itemInstances,
-    itemDefinitions,
-    { [blueprint.templateId]: permanentBonuses },
     upgradeModifiers,
-  );
+    equipmentBonuses,
+    permanentBonuses,
+  });
 
   return {
     level,

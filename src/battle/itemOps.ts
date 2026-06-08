@@ -2,8 +2,7 @@ import {
   EquipSlot, ItemContainer, ItemDefinition, ItemInstance,
   BattleStatBonuses, UnitClassId,
   BackpackSnapshot, EquipmentSnapshot, ItemSlotSnapshot,
-  UnitActivatableAbility, UnitBlueprint,
-  UnitProgressionStatModifiers, UnitBattleStats,
+  UnitActivatableAbility,
 } from './types';
 
 // ─── Low-level ────────────────────────────────────────────────────────────────
@@ -285,30 +284,6 @@ export function getEquippedBonuses(
 
 export function getSellPrice(def: ItemDefinition): number {
   return Math.floor(def.buyPrice / 4);
-}
-
-export function computeUnitBattleStats(
-  blueprint: UnitBlueprint,
-  level: number,
-  containers: Record<string, ItemContainer>,
-  instances: Record<string, ItemInstance>,
-  definitions: Record<string, ItemDefinition>,
-  permanentBonuses: Record<string, Partial<BattleStatBonuses>>,
-  upgradeModifiers: UnitProgressionStatModifiers = {},
-): UnitBattleStats {
-  const scale = 1 + 0.1 * (level - 1);
-  const equip = getEquippedBonuses(blueprint.templateId, containers, instances, definitions);
-  const perm  = permanentBonuses[blueprint.templateId] ?? {};
-  return {
-    hp:              Math.round(blueprint.hp             * scale) + (upgradeModifiers.hp              ?? 0) + equip.hp              + (perm.hp              ?? 0),
-    physicalStrength: Math.round(blueprint.physicalStrength * scale) + (upgradeModifiers.physicalStrength ?? 0) + equip.physicalStrength + (perm.physicalStrength ?? 0),
-    magicalStrength:  Math.round(blueprint.magicalStrength  * scale) + (upgradeModifiers.magicalStrength  ?? 0) + equip.magicalStrength  + (perm.magicalStrength  ?? 0),
-    physicalDefense: blueprint.physicalDefense                    + (upgradeModifiers.physicalDefense ?? 0) + equip.physicalDefense + (perm.physicalDefense ?? 0),
-    magicalDefense:  blueprint.magicalDefense                     + (upgradeModifiers.magicalDefense  ?? 0) + equip.magicalDefense  + (perm.magicalDefense  ?? 0),
-    dodge:           blueprint.dodge      + (upgradeModifiers.dodge      ?? 0),
-    block:           blueprint.block      + (upgradeModifiers.block      ?? 0),
-    initiative:      blueprint.initiative + (upgradeModifiers.initiative ?? 0),
-  };
 }
 
 export function snapshotActivatableAbilities(

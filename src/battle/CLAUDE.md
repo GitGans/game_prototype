@@ -83,7 +83,8 @@ returned to `src/core` for phase transition or rendering
 - Skill preview reads `unitsById + deployments`. `fieldUnitCells` is render/hover data only and must not be the deployment source for revive geometry. The preview projection (`core/battleSkillPreviewProjection.ts`) builds the `deployments` map from `BattleUnitSnapshot.deployment`.
 
 ## Where to Modify
-- add/change a unit stat computation → [itemOps.ts](itemOps.ts) `computeUnitBattleStats()`
+- add/change unit stat growth / final stat resolving → `src/progression/stats/` (`unitBaseStats.ts`, `unitResolvedStats.ts`)
+- add/change equipment stat-bonus aggregation → [itemOps.ts](itemOps.ts) `getEquippedBonuses()`
 - change damage or healing resolution → [combat.ts](combat.ts)
 - change turn-order rules → [initiative.ts](initiative.ts)
 - change AOE or targeting patterns → [skillPatterns.ts](skillPatterns.ts), [targeting.ts](targeting.ts)

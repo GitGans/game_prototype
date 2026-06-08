@@ -5,8 +5,8 @@ import {
   findEnemyUnitBlueprintWithRace,
 } from './unitSprites';
 import { ITEM_DEFINITIONS }               from '../data/itemDefinitions';
-import { computeUnitBattleStats, snapshotActivatableAbilities } from '../battle/itemOps';
-import { resolveUnitProgression }         from '../progression';
+import { getEquippedBonuses, snapshotActivatableAbilities } from '../battle/itemOps';
+import { resolveUnitProgression, resolveUnitBattleStats } from '../progression';
 import { createUnitInstance } from '../battle/unitFactory';
 import type { PlayerBattleSetup }         from './battleSetup';
 import type { PlayerPlacementCandidate, EnemyPlacementCandidates, EnemyReplayPlacementInput } from '../battle/autoPlace';
@@ -41,12 +41,16 @@ export function buildPlayerAutoPlacementCandidates(
       // unitState must exist for every non-camp unit (initialized at new_game)
       const level       = unitState?.level ?? bp.level;
       const progression = resolveUnitProgression(bp, unitState?.chosenUpgrades ?? {});
-      const stats       = computeUnitBattleStats(
-        bp, level,
-        setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
-        { [bp.templateId]: unitState?.permanentBonuses ?? {} },
-        progression.statModifiers,
+      const equipmentBonuses = getEquippedBonuses(
+        bp.templateId, setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
       );
+      const stats       = resolveUnitBattleStats({
+        blueprint:        bp,
+        level,
+        upgradeModifiers: progression.statModifiers,
+        equipmentBonuses,
+        permanentBonuses: unitState?.permanentBonuses ?? {},
+      });
       const activatableAbilities = snapshotActivatableAbilities(
         bp.templateId,
         setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
@@ -82,15 +86,16 @@ export function resolvePlayerMaxHpForLevel(input: {
   itemInstances: Record<string, ItemInstance>;
 }): number {
   const progression = resolveUnitProgression(input.blueprint, input.chosenUpgrades);
-  const stats = computeUnitBattleStats(
-    input.blueprint,
-    input.level,
-    input.itemContainers,
-    input.itemInstances,
-    ITEM_DEFINITIONS,
-    { [input.blueprint.templateId]: input.permanentBonuses },
-    progression.statModifiers,
+  const equipmentBonuses = getEquippedBonuses(
+    input.blueprint.templateId, input.itemContainers, input.itemInstances, ITEM_DEFINITIONS,
   );
+  const stats = resolveUnitBattleStats({
+    blueprint:        input.blueprint,
+    level:            input.level,
+    upgradeModifiers: progression.statModifiers,
+    equipmentBonuses,
+    permanentBonuses: input.permanentBonuses,
+  });
   return stats.hp;
 }
 
@@ -102,9 +107,7 @@ export function buildEnemyPlacementCandidates(
 
   const toCandidate = (bp: UnitBlueprint) => {
     const skills = resolveEnemySkills(bp, level);
-    const stats  = computeUnitBattleStats(
-      bp, level, {}, {}, ITEM_DEFINITIONS, {}, {},
-    );
+    const stats  = resolveUnitBattleStats({ blueprint: bp, level });
     return {
       templateId: bp.templateId,
       shape:      bp.shape,
@@ -137,9 +140,7 @@ export function buildEnemyReplayInputs(
     if (!found) continue;
     const { blueprint: bp, race: bpRace } = found;
     const skills = resolveEnemySkills(bp, saved.level);
-    const stats  = computeUnitBattleStats(
-      bp, saved.level, {}, {}, ITEM_DEFINITIONS, {}, {},
-    );
+    const stats  = resolveUnitBattleStats({ blueprint: bp, level: saved.level });
     result.push({
       unitInput: {
         blueprint:            bp,
