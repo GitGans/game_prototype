@@ -15,4 +15,4 @@ DO NOT write or edit the code! Just write the plan!
 General information about the game's design is in /workspace/CLAUDE.md and in separate folders in CLAUDE.md - information about the design of these folders.
 Game architecture requirements are in /workspace/architecture_plan.md.
 
-If the user hasn't specified a reply language, reply in English. If they have, reply in the language the user requested.
+If the user hasn't specified a reply language, reply in English. The user's current language is NOT considered a reply language; only a direct request to reply in a specific language is considered. If the user has explicitly specified a language, reply in the language they requested.
