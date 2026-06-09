@@ -19,7 +19,7 @@ function makeSnapshotWithSkill(skill: ActionSkillDefinition, name = 'S'): Battle
     },
     shape: SHAPES['1x1'],
     deployment: { kind: 'field', anchor: { side: 'player', row: 0, col: 0 } },
-    spriteKey: null,
+    sprite: null,
     skills: [skill],
     activeSkillIndex: 0,
     activeEffects: [],

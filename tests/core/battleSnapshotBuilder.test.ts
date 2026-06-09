@@ -42,7 +42,7 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     expect('anchor' in f).toBe(false);                              // top-level anchor removed in Stage 5
     expect(f.side).toBe('player');
     expect(f.statDisplay.level).toBe(3);
-    expect(f.spriteKey === null || typeof f.spriteKey === 'string').toBe(true);
+    expect(f.sprite === null || typeof f.sprite.textureKey === 'string').toBe(true);
   });
 
   it('bench snapshot has bench deployment, no anchor, and runtime hp/maxHp', () => {

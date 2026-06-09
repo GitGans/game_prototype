@@ -1,10 +1,20 @@
 import type { CellCoord, UnitShape, Side }          from './gridTypes';
 import type { ActionSkillDefinition }                from './skillDefinitionTypes';
-import type { SpriteSheetConfig, RowTrait, UnitLifeState } from './unitTypes';
+import type { SpriteState, RowTrait, UnitLifeState } from './unitTypes';
 import type { UnitActivatableAbility }               from './itemTypes';
 import type { ActiveEffect }                         from './activeEffect';
 import type { UnitDeployment }                       from './unitDeploymentTypes';
 import type { UnitStatsSnapshot }                    from './snapshotTypes';
+
+// Minimal render-ready sprite data for a battle unit. Built by
+// core/battleSnapshotBuilder — UI must not derive texture keys itself.
+//   textureKey — resolved Phaser texture key.
+//   states     — sprite-state order; index === spritesheet frame index
+//                (frame 0 is idle by authoring convention).
+export interface UnitSpriteSnapshot {
+  textureKey: string;
+  states: readonly SpriteState[];
+}
 
 // ─── Scene-facing unit snapshot ───────────────────────────────────────────────
 
@@ -32,9 +42,9 @@ export interface BattleUnitSnapshot {
   // Always a fresh copy. Never share the runtime UnitDeployment reference.
   deployment: UnitDeployment;
 
-  // Render-ready texture key derived by core. UI components must read this
-  // field instead of deriving keys themselves.
-  spriteKey: string | null;
+  // Render-ready sprite data derived by core. UI reads sprite?.textureKey /
+  // sprite?.states and never derives texture keys itself. null = no sprite.
+  sprite: UnitSpriteSnapshot | null;
 
   skills:           readonly ActionSkillDefinition[];
   activeSkillIndex: number;
@@ -42,7 +52,6 @@ export interface BattleUnitSnapshot {
 
   rowTrait:   RowTrait;
   templateId: string;
-  spriteSheet?: SpriteSheetConfig;
 
   activatableAbilities: readonly UnitActivatableAbility[];
 }

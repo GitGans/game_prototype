@@ -18,14 +18,13 @@ import { UI_THEME } from "../ui/theme";
 import {
   CellCoord,
   Side,
-  SpriteSheetConfig,
+  SpriteState,
 } from "../battle/types";
 import type { BattleUnitSnapshot, FieldBattleUnitSnapshot } from "../shared/battleSnapshots";
 import { PhaseManager } from '../core/PhaseManager';
 import { SkillTooltip } from '../objects/SkillTooltip';
 import { SkillBar } from '../objects/SkillBar';
 import { BattleEndOverlay, BattleEndOutcome } from '../objects/BattleEndOverlay';
-import { getUnitSpriteTextureKey } from "../core/unitSpriteKey";
 import { cellKey } from "../battle/field";
 import { getOccupiedCells } from "../battle/shapes";
 import { BATTLE_VISUAL_THEME } from "../objects/battleVisualTheme";
@@ -208,8 +207,7 @@ export class Game extends Phaser.Scene {
 
   private createUnitView(unit: FieldBattleUnitSnapshot): void {
     const { x, y, colSpan, rowSpan } = this.getUnitViewGeometry(unit);
-    const { key: textureKey, config: spriteConfig } =
-      this.getSpriteKeyAndConfig(unit);
+    const { textureKey, states } = this.getSpriteRenderData(unit);
 
     const view = new UnitView(
       this,
@@ -219,7 +217,7 @@ export class Game extends Phaser.Scene {
       colSpan,
       rowSpan,
       textureKey,
-      spriteConfig,
+      states,
       this.effectTooltip,
     );
     this.unitViews.set(unit.id, view);
@@ -233,14 +231,13 @@ export class Game extends Phaser.Scene {
     }
   }
 
-  private getSpriteKeyAndConfig(unit: BattleUnitSnapshot): {
-    key: string | undefined;
-    config: SpriteSheetConfig | undefined;
+  private getSpriteRenderData(unit: BattleUnitSnapshot): {
+    textureKey: string | undefined;
+    states: readonly SpriteState[] | undefined;
   } {
-    if (!unit.spriteSheet) return { key: undefined, config: undefined };
     return {
-      key: getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet),
-      config: unit.spriteSheet,
+      textureKey: unit.sprite?.textureKey,
+      states: unit.sprite?.states,
     };
   }
 

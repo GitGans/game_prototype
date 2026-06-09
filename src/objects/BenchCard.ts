@@ -79,7 +79,7 @@ export class BenchCard extends Phaser.GameObjects.Container {
     );
 
     // Sprite (frame 0 = idle) with graceful fallback
-    const spriteKey = snapshot.spriteKey;
+    const spriteKey = snapshot.sprite?.textureKey ?? null;
     const sprite = spriteKey && cfg.scene.textures.exists(spriteKey)
       ? cfg.scene.add.image(0, 0, spriteKey)
           .setFrame(0)

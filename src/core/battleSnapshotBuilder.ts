@@ -28,8 +28,13 @@ export function buildBattleUnitSnapshot(
 ): BattleUnitSnapshot {
   const eff        = effectiveStats(unit);
   const deployment = cloneDeployment(runtimeDeployment);
-  const spriteKey  = unit.spriteSheet
-    ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
+  // states is copied: SpriteSheetConfig.states is mutable runtime config; the
+  // snapshot must not share a reference. Order = spritesheet frame order.
+  const sprite = unit.spriteSheet
+    ? {
+        textureKey: getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet),
+        states: [...unit.spriteSheet.states],
+      }
     : null;
   const className  = resolveUnitClassDefinition(unit.classId).name;
   const hb         = unit.statHighlightBaseStats;
@@ -63,7 +68,7 @@ export function buildBattleUnitSnapshot(
 
     shape:      unit.shape,
     deployment,
-    spriteKey,
+    sprite,
 
     skills:           unit.skills,
     activeSkillIndex: unit.activeSkillIndex,
@@ -71,7 +76,6 @@ export function buildBattleUnitSnapshot(
 
     rowTrait:    unit.rowTrait,
     templateId:  unit.templateId,
-    spriteSheet: unit.spriteSheet,
 
     activatableAbilities: unit.activatableAbilities,
   };

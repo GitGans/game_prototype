@@ -233,6 +233,6 @@ function unitToData(unit: BattleUnitSnapshot): TooltipData {
       colorKind: buildSkillIconSnapshot(sk).colorKind,
       isActive:  i === unit.activeSkillIndex,
     })),
-    spriteKey: unit.spriteKey,
+    spriteKey: unit.sprite?.textureKey ?? null,
   };
 }

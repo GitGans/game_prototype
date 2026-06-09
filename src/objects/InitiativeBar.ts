@@ -4,7 +4,6 @@ import { LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { battleTargetHighlightColor } from './battleTargetHighlightPresentation';
 import type { BattleTargetHighlightKind } from './battleTargetHighlightPresentation';
-import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 import { fontSize, UI_THEME } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
 import { resolveStatTone } from '../shared/statHighlight';
@@ -110,9 +109,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     );
 
     // Sprite or fallback colored rect
-    const spriteKey = unit.spriteSheet
-      ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
-      : null;
+    const spriteKey = unit.sprite?.textureKey ?? null;
     const hasSprite = !!spriteKey && this.scene.textures.exists(spriteKey);
 
     let bg: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
