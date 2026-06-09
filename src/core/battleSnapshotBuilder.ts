@@ -5,6 +5,7 @@ import type {
   BattleOccupancySnapshot,
   BattleFieldUnitCellsSnapshot,
 } from '../shared/battleSnapshots';
+import type { UnitStatsSnapshot } from '../shared/snapshotTypes';
 import type { CellCoord } from '../shared/gridTypes';
 import type { UnitDeployment } from '../shared/unitDeploymentTypes';
 import { effectiveStats } from '../battle/combat';
@@ -31,6 +32,23 @@ export function buildBattleUnitSnapshot(
     ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
     : null;
   const className  = resolveUnitClassDefinition(unit.classId).name;
+  const hb         = unit.statHighlightBaseStats;
+
+  const statDisplay: UnitStatsSnapshot = {
+    level: unit.level,
+    // HP row: lost current HP must NOT read as a debuff. The row is colored by maxHp
+    // (UnitTooltip does this). hp itself stays neutral (value === highlightBase).
+    hp:    { highlightBase: unit.hp, value: unit.hp },
+    maxHp: { highlightBase: hb.hp,   value: unit.maxHp },
+
+    physicalStrength: { highlightBase: hb.physicalStrength, value: eff.physicalStrength },
+    magicalStrength:  { highlightBase: hb.magicalStrength,  value: eff.magicalStrength  },
+    physicalDefense:  { highlightBase: hb.physicalDefense,  value: eff.physicalDefense  },
+    magicalDefense:   { highlightBase: hb.magicalDefense,   value: eff.magicalDefense   },
+    dodge:            { highlightBase: hb.dodge,            value: eff.dodge            },
+    block:            { highlightBase: hb.block,            value: eff.block            },
+    initiative:       { highlightBase: hb.initiative,       value: eff.initiative       },
+  };
 
   const snap: BattleUnitSnapshot = {
     id:        unit.id,
@@ -56,6 +74,8 @@ export function buildBattleUnitSnapshot(
     effectiveMagicalDefense:   eff.magicalDefense,
     effectiveDodge:            eff.dodge,
     effectiveBlock:            eff.block,
+
+    statDisplay,
 
     shape:      unit.shape,
     deployment,

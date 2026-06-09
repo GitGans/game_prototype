@@ -7,6 +7,7 @@ import type { BattleTargetHighlightKind } from './battleTargetHighlightPresentat
 import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 import { fontSize, UI_THEME } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
+import { resolveStatTone } from '../shared/statHighlight';
 
 const CARD_GAP    = Math.round(5  * LAYOUT_SCALE);
 const DIVIDER_GAP = Math.round(14 * LAYOUT_SCALE);
@@ -146,9 +147,10 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
         ).setOrigin(0.5, 0).setAlpha(alpha);
 
     const effInit = unit.effectiveInitiative;
-    const initColor = effInit > unit.initiative ? UI_THEME.color.value.positive
-                    : effInit < unit.initiative ? UI_THEME.color.value.negative
-                    : BATTLE_VISUAL_THEME.unit.textLight;
+    const initTone = resolveStatTone(effInit, unit.initiative);
+    const initColor = initTone === 'positive' ? UI_THEME.color.value.positive
+                    : initTone === 'negative' ? UI_THEME.color.value.negative
+                    : BATTLE_VISUAL_THEME.unit.textLight;   // preserve existing neutral color (NOT UI_THEME neutral)
     const initText = this.scene.add.text(
       x + CARD_W / 2, y + CARD_H - Math.round(18 * LAYOUT_SCALE),
       `★${effInit}`,

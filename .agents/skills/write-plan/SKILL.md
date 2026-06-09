@@ -10,6 +10,11 @@ In the plan:
 
 1. Specify the problem we're solving, what we want to achieve, and why.
 2. Write a complete step-by-step plan for solving the problem. If anything needs clarification in the code for writing the plan, clarify it yourself; don't leave it to the developer to decide.
+3. Don't add manual checks in the plan/
+4. Right checks:
+
+- `npm test`
+- `node scripts/check-boundaries.mjs`
 
 DO NOT write or edit the code! Just write the plan!
 General information about the game's design is in /workspace/CLAUDE.md and in separate folders in CLAUDE.md - information about the design of these folders.

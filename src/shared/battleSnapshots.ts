@@ -4,6 +4,7 @@ import type { SpriteSheetConfig, RowTrait, UnitLifeState } from './unitTypes';
 import type { UnitActivatableAbility }               from './itemTypes';
 import type { ActiveEffect }                         from './activeEffect';
 import type { UnitDeployment }                       from './unitDeploymentTypes';
+import type { UnitStatsSnapshot }                    from './snapshotTypes';
 
 // ─── Scene-facing unit snapshot ───────────────────────────────────────────────
 
@@ -34,6 +35,11 @@ export interface BattleUnitSnapshot {
   effectiveMagicalDefense:  number;
   effectiveDodge:           number;
   effectiveBlock:           number;
+
+  // Unified display+color stat pairs for UnitTooltip. value = effective (incl. equipment
+  // and active effects); highlightBase = level/tier/permanent only. Equipment and active
+  // effects drive color; everything else only changes the number.
+  statDisplay: UnitStatsSnapshot;
 
   shape:  UnitShape;
 

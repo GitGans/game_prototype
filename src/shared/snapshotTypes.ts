@@ -4,8 +4,8 @@ import type { ItemDefinition } from './itemTypes';
 // ─── Stat Snapshots ───────────────────────────────────────────────────────────
 
 export interface UnitStatValueSnapshot {
-  base:  number;  // blueprint + level scaling only
-  value: number;  // final: base + upgrade modifiers + equipment + permanent bonuses
+  highlightBase: number;  // value used ONLY for color comparison: level + tier + permanent (no equipment, no battle effects)
+  value:         number;  // value shown to the player: highlightBase + equipment (+ active battle effects in battle)
 }
 
 export interface UnitStatsSnapshot {

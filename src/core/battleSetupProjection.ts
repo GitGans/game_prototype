@@ -51,6 +51,13 @@ export function buildPlayerAutoPlacementCandidates(
         equipmentBonuses,
         permanentBonuses: unitState?.permanentBonuses ?? {},
       });
+      // Color baseline: identical inputs minus equipment.
+      const statHighlightBaseStats = resolveUnitBattleStats({
+        blueprint:        bp,
+        level,
+        upgradeModifiers: progression.statModifiers,
+        permanentBonuses: unitState?.permanentBonuses ?? {},
+      });
       const activatableAbilities = snapshotActivatableAbilities(
         bp.templateId,
         setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
@@ -68,6 +75,7 @@ export function buildPlayerAutoPlacementCandidates(
           blueprint: bp, id, side: 'player', level,
           classId:              progression.currentClassId,
           stats,
+          statHighlightBaseStats,
           skills:               progression.skills,
           spriteSheet:          resolvePlayerUnitSpriteSheet(bp, progression),
           activatableAbilities,
@@ -115,7 +123,9 @@ export function buildEnemyPlacementCandidates(
       createUnit: (id: string) => createUnitInstance({
         blueprint: bp, id, side: 'enemy', level,
         classId:              bp.baseClassId,
-        stats, skills,
+        stats,
+        statHighlightBaseStats: stats,   // enemies have no equipment
+        skills,
         spriteSheet:          bp.spriteFilename
           ? getEnemyUnitSpriteSheet(race, bp.spriteFilename)
           : undefined,
@@ -148,7 +158,9 @@ export function buildEnemyReplayInputs(
         side:                 'enemy',
         level:                saved.level,
         classId:              bp.baseClassId,
-        stats, skills,
+        stats,
+        statHighlightBaseStats: stats,   // enemies have no equipment
+        skills,
         spriteSheet:          bp.spriteFilename
           ? getEnemyUnitSpriteSheet(bpRace, bp.spriteFilename)
           : undefined,

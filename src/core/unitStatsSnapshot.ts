@@ -2,7 +2,7 @@ import type { UnitBlueprint, UnitProgressionStatModifiers } from '../shared/unit
 import type { ItemContainer, ItemInstance, ItemDefinition, BattleStatBonuses } from '../shared/itemTypes';
 import type { UnitStatsSnapshot } from '../shared/snapshotTypes';
 import { getEquippedBonuses } from '../inventory';
-import { computeUnitBaseStatsForLevel, resolveUnitBattleStats } from '../progression';
+import { resolveUnitBattleStats } from '../progression';
 
 export function buildUnitStatsSnapshot(
   blueprint:        UnitBlueprint,
@@ -13,11 +13,21 @@ export function buildUnitStatsSnapshot(
   itemDefinitions:  Record<string, ItemDefinition>,
   upgradeModifiers: UnitProgressionStatModifiers,
 ): UnitStatsSnapshot {
-  const base = computeUnitBaseStatsForLevel(blueprint, level);
   const equipmentBonuses = getEquippedBonuses(
     blueprint.templateId, itemContainers, itemInstances, itemDefinitions,
   );
-  const final = resolveUnitBattleStats({
+
+  // Color baseline: everything EXCEPT equipment (permanent bonuses are included,
+  // so they change the number but never the color).
+  const highlightBaseStats = resolveUnitBattleStats({
+    blueprint,
+    level,
+    upgradeModifiers,
+    permanentBonuses,
+  });
+
+  // Displayed value: highlight baseline + equipment.
+  const displayStats = resolveUnitBattleStats({
     blueprint,
     level,
     upgradeModifiers,
@@ -25,16 +35,21 @@ export function buildUnitStatsSnapshot(
     permanentBonuses,
   });
 
+  const pair = (k: keyof typeof displayStats) => ({
+    highlightBase: highlightBaseStats[k],
+    value:         displayStats[k],
+  });
+
   return {
     level,
-    hp:              { base: base.hp,              value: final.hp              },
-    maxHp:           { base: base.hp,              value: final.hp              },
-    physicalStrength:  { base: base.physicalStrength,  value: final.physicalStrength  },
-    magicalStrength:   { base: base.magicalStrength,   value: final.magicalStrength   },
-    physicalDefense: { base: base.physicalDefense, value: final.physicalDefense },
-    magicalDefense:  { base: base.magicalDefense,  value: final.magicalDefense  },
-    dodge:           { base: base.dodge,           value: final.dodge           },
-    block:           { base: base.block,           value: final.block           },
-    initiative:      { base: base.initiative,      value: final.initiative      },
+    hp:               pair('hp'),
+    maxHp:            pair('hp'),
+    physicalStrength: pair('physicalStrength'),
+    magicalStrength:  pair('magicalStrength'),
+    physicalDefense:  pair('physicalDefense'),
+    magicalDefense:   pair('magicalDefense'),
+    dodge:            pair('dodge'),
+    block:            pair('block'),
+    initiative:       pair('initiative'),
   };
 }

@@ -7,6 +7,7 @@ import type { BattleUnitSnapshot } from "../shared/battleSnapshots";
 import type { SkillIconColorKind } from "../shared/snapshotTypes";
 import { buildSkillIconSnapshot } from "../core/unitUpgradePresentation";
 import type { UnitStatsSnapshot } from '../core/phases';
+import { resolveStatTone } from "../shared/statHighlight";
 
 const W           = Math.round(200 * LAYOUT_SCALE);
 const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
@@ -18,12 +19,13 @@ interface UnitIdentitySnapshot {
   className?: string;
 }
 
-interface StatValue { value: number; base: number }
-function flat(v: number): StatValue { return { value: v, base: v }; }
+interface StatValue { value: number; highlightBase: number }
 function statColor(sv: StatValue): string {
-  if (sv.value > sv.base) return UI_THEME.color.value.positive;
-  if (sv.value < sv.base) return UI_THEME.color.value.negative;
-  return UI_THEME.color.value.neutral;
+  switch (resolveStatTone(sv.value, sv.highlightBase)) {
+    case 'positive': return UI_THEME.color.value.positive;
+    case 'negative': return UI_THEME.color.value.negative;
+    default:         return UI_THEME.color.value.neutral;
+  }
 }
 
 interface TooltipData {
@@ -210,24 +212,25 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function unitToData(unit: BattleUnitSnapshot): TooltipData {
+  const s = unit.statDisplay;
   return {
     templateId:      unit.templateId,
     name:            unit.name,
     level:           unit.level,
     className:       unit.className,
     side:            unit.side,
-    hp:              flat(unit.hp),
-    maxHp:           flat(unit.maxHp),
-    physicalStrength:  { value: unit.effectivePhysicalStrength,  base: unit.physicalStrength  },
-    magicalStrength:   { value: unit.effectiveMagicalStrength,   base: unit.magicalStrength   },
-    physicalDefense: { value: unit.effectivePhysicalDefense, base: unit.physicalDefense },
-    magicalDefense:  { value: unit.effectiveMagicalDefense,  base: unit.magicalDefense  },
-    dodge:           { value: unit.effectiveDodge,           base: unit.dodge           },
-    block:           { value: unit.effectiveBlock,           base: unit.block           },
-    initiative:      { value: unit.effectiveInitiative,      base: unit.initiative      },
-    skills: unit.skills.map((s, i) => ({
-      name:      s.name,
-      colorKind: buildSkillIconSnapshot(s).colorKind,
+    hp:              s.hp,
+    maxHp:           s.maxHp,
+    physicalStrength: s.physicalStrength,
+    magicalStrength:  s.magicalStrength,
+    physicalDefense:  s.physicalDefense,
+    magicalDefense:   s.magicalDefense,
+    dodge:            s.dodge,
+    block:            s.block,
+    initiative:       s.initiative,
+    skills: unit.skills.map((sk, i) => ({
+      name:      sk.name,
+      colorKind: buildSkillIconSnapshot(sk).colorKind,
       isActive:  i === unit.activeSkillIndex,
     })),
     spriteKey: unit.spriteKey,
