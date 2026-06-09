@@ -124,15 +124,15 @@ export function computePeriodicHpAmount(
  * Returns the raw damage a single hit would deal to `target` before dodge/block.
  * Used by both resolveAttack (combat) and showSkillPreview (display) to keep formulas in sync.
  */
-export function computeDamageVsUnit(
+/** Raw damage vs ALREADY-effective defensive stats, before dodge/block. */
+export function computeDamageVsEffectiveStats(
   baseDamage: number,
   powerSource: CombatPowerSource,
-  target: StatOwner,
+  targetStats: Pick<EffectiveStats, 'physicalDefense' | 'magicalDefense'>,
   multiplier: number,
   defIgnorePercent: number,
 ): number {
-  const stats = effectiveStats(target);
-  const rawDefense = getDefenseForPowerSource(stats, powerSource);
+  const rawDefense = getDefenseForPowerSource(targetStats, powerSource);
   const defense = rawDefense * (1 - defIgnorePercent / 100);
   const minDamage = Math.round(baseDamage * 0.1);
   const effectiveBase = Math.max(
@@ -140,6 +140,22 @@ export function computeDamageVsUnit(
     Math.round(baseDamage * (1 - defense / 100)),
   );
   return Math.round(effectiveBase * multiplier);
+}
+
+export function computeDamageVsUnit(
+  baseDamage: number,
+  powerSource: CombatPowerSource,
+  target: StatOwner,
+  multiplier: number,
+  defIgnorePercent: number,
+): number {
+  return computeDamageVsEffectiveStats(
+    baseDamage,
+    powerSource,
+    effectiveStats(target),
+    multiplier,
+    defIgnorePercent,
+  );
 }
 
 export function resolveAttack(

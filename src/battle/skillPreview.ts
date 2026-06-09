@@ -1,5 +1,4 @@
 import type { CellCoord, Side, UnitShape } from '../shared/gridTypes';
-import type { ActiveEffect } from '../shared/activeEffect';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { UnitDeployment } from '../shared/unitDeploymentTypes';
 import type { UnitLifeState } from '../shared/unitTypes';
@@ -9,14 +8,14 @@ import type {
   SkillPreviewModel,
 } from '../shared/skillPreviewModel';
 import { getActiveSkill } from './skillRuntime';
-import { computeDamageVsUnit, getDefenseIgnoreModifierTypeForPowerSource, computePeriodicHpAmount } from './combat';
+import { computeDamageVsEffectiveStats, getDefenseIgnoreModifierTypeForPowerSource, computePeriodicHpAmount, type EffectiveStats } from './combat';
 import { resolvePattern } from './skillPatterns';
 import { getDamageModifierPercent, getVampirismPercent } from './skillDefinitionRuntime';
 import { cellKey } from './field';
 import type { ResolvedHitCell } from './types';
 import { compileSkillUsePlan } from './skillPlanCompiler';
 import { resolvePlanPattern } from './skillPlanPatterns';
-import { getEffectiveUnitPower } from './skillPower';
+import { getUnitPowerFromEffectiveStats } from './skillPower';
 import {
   isAliveFriendlyTargetPolicy,
   isDeadFriendlyTargetPolicy,
@@ -31,8 +30,10 @@ import {
 export type { SkillPreviewModel } from '../shared/skillPreviewModel';
 
 // ─── Input types ──────────────────────────────────────────────────────────────
-// Defined locally to avoid importing BattleUnitSnapshot (a scene-facing snapshot
-// contract). BattleUnitSnapshot is structurally compatible and satisfies this type.
+// Battle-layer preview input. Built explicitly by core/battleSkillPreviewProjection.ts
+// (the adapter maps the scene-facing BattleUnitSnapshot, including currentHp → hp, into
+// this shape). Kept in battle/ so BattleUnitSnapshot never imports into battle/.
+// `effectiveStats` is already post active-effects, so preview reuses it directly.
 
 export type SkillPreviewUnit = {
   id: string;
@@ -42,14 +43,7 @@ export type SkillPreviewUnit = {
   hp: number;
   maxHp: number;
   shape: UnitShape;
-  physicalStrength: number;
-  magicalStrength: number;
-  physicalDefense: number;
-  magicalDefense: number;
-  dodge: number;
-  block: number;
-  initiative: number;
-  activeEffects: readonly ActiveEffect[];
+  effectiveStats: EffectiveStats;
   skills: readonly ActionSkillDefinition[];
   activeSkillIndex: number;
 };
@@ -164,7 +158,7 @@ export function buildSkillPreviewModelFromPlan(
     // ── Status lines ──────────────────────────────────────────────────────
 
     if (action.type === 'heal') {
-      const baseHeal = getEffectiveUnitPower(activeUnit, action.powerSource);
+      const baseHeal = getUnitPowerFromEffectiveStats(activeUnit.effectiveStats, action.powerSource);
       const pattern = resolvePlanPattern(action.matrix);
       const hitCells = resolvePattern(targetCoord, pattern);
 
@@ -187,8 +181,8 @@ export function buildSkillPreviewModelFromPlan(
     }
 
     if (action.type === 'damage') {
-      // getEffectiveUnitPower applies active effects, matching the executor.
-      const baseDamage = getEffectiveUnitPower(activeUnit, action.powerSource);
+      // effectiveStats already has active effects applied, matching the executor.
+      const baseDamage = getUnitPowerFromEffectiveStats(activeUnit.effectiveStats, action.powerSource);
 
       const ignorePercent: Partial<Record<string, number>> = {};
       if (action.modifiers) {
@@ -207,7 +201,7 @@ export function buildSkillPreviewModelFromPlan(
         const unitId = occupancy.cellToUnitId.get(cellKey(hit.coord));
         const unit = unitId ? unitsById.get(unitId) : undefined;
         if (!unit) continue;
-        const dmg = computeDamageVsUnit(baseDamage, action.powerSource, unit, hit.multiplier, defIgnore);
+        const dmg = computeDamageVsEffectiveStats(baseDamage, action.powerSource, unit.effectiveStats, hit.multiplier, defIgnore);
         const prev = damageByUnitId.get(unit.id) ?? 0;
         if (dmg > prev) damageByUnitId.set(unit.id, dmg);
       }
@@ -227,7 +221,7 @@ export function buildSkillPreviewModelFromPlan(
 
     if (action.type === 'apply_periodic_hp_effect') {
       const pattern = resolvePlanPattern(action.matrix);
-      const basePower = getEffectiveUnitPower(activeUnit, action.powerSource);
+      const basePower = getUnitPowerFromEffectiveStats(activeUnit.effectiveStats, action.powerSource);
       const hitCells = resolvePattern(targetCoord, pattern);
 
       const amountByUnitId = new Map<string, number>();

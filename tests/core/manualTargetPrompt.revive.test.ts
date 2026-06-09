@@ -9,11 +9,7 @@ const neutralPair = (n: number) => ({ highlightBase: n, value: n });
 
 function makeSnapshotWithSkill(skill: ActionSkillDefinition, name = 'S'): BattleUnitSnapshot {
   return {
-    id: 's', side: 'player', name, hp: 100, maxHp: 100, lifeState: 'alive',
-    physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0,
-    dodge: 0, block: 0, level: 1, initiative: 0,
-    effectiveInitiative: 0, effectivePhysicalStrength: 0, effectiveMagicalStrength: 0,
-    effectivePhysicalDefense: 0, effectiveMagicalDefense: 0, effectiveDodge: 0, effectiveBlock: 0,
+    id: 's', side: 'player', name, className: 'C', currentHp: 100, maxHp: 100, lifeState: 'alive',
     statDisplay: {
       level: 1,
       hp: neutralPair(100), maxHp: neutralPair(100),

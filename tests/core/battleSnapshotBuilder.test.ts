@@ -41,7 +41,7 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     }
     expect('anchor' in f).toBe(false);                              // top-level anchor removed in Stage 5
     expect(f.side).toBe('player');
-    expect(f.level).toBe(3);
+    expect(f.statDisplay.level).toBe(3);
     expect(f.spriteKey === null || typeof f.spriteKey === 'string').toBe(true);
   });
 
@@ -57,9 +57,9 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     expect(b.deployment).toEqual({ kind: 'bench', slot: 2 });
     expect('anchor' in b).toBe(false);
     expect(b.side).toBe('player');
-    expect(b.hp).toBe(3);
+    expect(b.currentHp).toBe(3);
     expect(b.maxHp).toBe(10);
-    expect(b.level).toBe(1);
+    expect(b.statDisplay.level).toBe(1);
   });
 
   it('buildBattleUnitSnapshot copies lifeState from the unit', () => {
@@ -153,7 +153,7 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     });
     const bench = buildBenchBattleUnitSnapshots(state);
     expect(bench[0]?.lifeState).toBe('dead');
-    expect(bench[0]?.hp).toBe(0);
+    expect(bench[0]?.currentHp).toBe(0);
   });
 
   it('buildBenchBattleUnitSnapshots is positional and derived from deployments', () => {
@@ -189,7 +189,7 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     const snap = buildBattleUnitSnapshots(moved).find(s => s.id === 'b1');
 
     expect(snap).toBeDefined();
-    expect(snap!.hp).toBe(42);
+    expect(snap!.currentHp).toBe(42);
     expect(snap!.maxHp).toBe(80);
     expect(snap!.activeSkillIndex).toBe(2);
     expect(snap!.deployment.kind).toBe('field');

@@ -103,7 +103,7 @@ export class BenchCard extends Phaser.GameObjects.Container {
     ).setOrigin(0.5, 0);
 
     // HP — runtime hp/maxHp, so mid-battle damage and healing reflect on the card.
-    const hp    = snapshot.hp;
+    const hp    = snapshot.currentHp;
     const maxHp = snapshot.maxHp;
     const barW = cfg.width  - Math.round(12 * LAYOUT_SCALE);
     const barH = Math.round(6  * LAYOUT_SCALE);

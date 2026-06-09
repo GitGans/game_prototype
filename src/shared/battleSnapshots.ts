@@ -16,29 +16,15 @@ export interface BattleUnitSnapshot {
   side:      Side;
   name:      string;
   className: string;   // resolved class display name; built in core/battleSnapshotBuilder
-  hp:        number;
+  currentHp: number;
   maxHp:     number;
   lifeState: UnitLifeState;
 
-  physicalStrength:    number;
-  magicalStrength:     number;
-  physicalDefense:     number;
-  magicalDefense:      number;
-  dodge:               number;
-  block:               number;
-  level:               number;
-  initiative:          number;
-  effectiveInitiative:       number; // pre-computed via effectiveStats; used by InitiativeBar
-  effectivePhysicalStrength: number;
-  effectiveMagicalStrength:  number;
-  effectivePhysicalDefense: number;
-  effectiveMagicalDefense:  number;
-  effectiveDodge:           number;
-  effectiveBlock:           number;
-
-  // Unified display+color stat pairs for UnitTooltip. value = effective (incl. equipment
-  // and active effects); highlightBase = level/tier/permanent only. Equipment and active
-  // effects drive color; everything else only changes the number.
+  // currentHp/maxHp = live battle HP (HP bars, HP text, heal/revive preview, life UI).
+  // statDisplay.hp/maxHp = stat-row display model + color baseline.
+  // statDisplay also owns level and all combat stat rows ({ value, highlightBase }).
+  // value = effective (incl. equipment and active effects); highlightBase = level/tier/permanent
+  // only. Equipment and active effects drive color; everything else only changes the number.
   statDisplay: UnitStatsSnapshot;
 
   shape:  UnitShape;

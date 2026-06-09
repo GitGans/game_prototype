@@ -216,7 +216,7 @@ function unitToData(unit: BattleUnitSnapshot): TooltipData {
   return {
     templateId:      unit.templateId,
     name:            unit.name,
-    level:           unit.level,
+    level:           unit.statDisplay.level,
     className:       unit.className,
     side:            unit.side,
     hp:              s.hp,

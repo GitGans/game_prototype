@@ -10,7 +10,7 @@ In the plan:
 
 1. Specify the problem we're solving, what we want to achieve, and why.
 2. Write a complete step-by-step plan for solving the problem. If anything needs clarification in the code for writing the plan, clarify it yourself; don't leave it to the developer to decide.
-3. Don't add manual checks in the plan/
+3. Don't add manual checks in the plan.
 4. Right checks:
 
 - `npm test`
