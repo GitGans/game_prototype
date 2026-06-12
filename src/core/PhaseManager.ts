@@ -50,9 +50,7 @@ import {
   type AutoTurnIntention,
 } from './phaseHandlers/battlePhaseHandler';
 import {
-  buildBattleUnitSnapshots,
-  buildFieldBattleUnitSnapshots,
-  buildBenchBattleUnitSnapshots,
+  buildBattleUnitSnapshotViews,
   buildBattleOccupancySnapshot,
   buildBattleFieldUnitCellsSnapshot,
   projectPreviewTarget,
@@ -376,10 +374,8 @@ class PhaseManagerClass {
       case 'battle': {
         const battleState = GameState.get();
 
-        const units      = buildBattleUnitSnapshots(battleState);
-        const fieldUnits = buildFieldBattleUnitSnapshots(battleState);
-        const benchUnits = buildBenchBattleUnitSnapshots(battleState);
-        const unitsById  = new Map(units.map(u => [u.id, u]));
+        const { unitsById, fieldUnits, benchUnits } =
+          buildBattleUnitSnapshotViews(battleState);
         const occupancy      = buildBattleOccupancySnapshot(battleState);
         const fieldUnitCells = buildBattleFieldUnitCellsSnapshot(battleState);
 
@@ -444,7 +440,6 @@ class PhaseManagerClass {
           benchUnits,
           placementSelection:  battleState.placementSelection,
           battlePhase:         battleState.phase,
-          units,
           fieldUnits,
           unitsById,
           occupancy,
@@ -981,7 +976,6 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         benchUnits:         [],                                                       // filled by rebuildSnapshot
         placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
         battlePhase:         'placement',
-        units:               [],
         fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
@@ -1018,7 +1012,6 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         benchUnits:         [],                                                       // filled by rebuildSnapshot
         placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
         battlePhase:         'placement',
-        units:               [],
         fieldUnits:          [],
         unitsById:           new Map(),
         occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },

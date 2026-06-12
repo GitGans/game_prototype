@@ -70,7 +70,7 @@ Scenes re-render from new `GamePhase`
 - Change battle snapshot fields (what controllers see) → `PhaseManager.rebuildSnapshot()`
 - Change how units are initialized for battle → `battleInitialization.ts` / `battleSetupProjection.ts`
 - Change upgrade stat/skill resolution → `src/progression/`
-- Change bench card display data → `battleSnapshotBuilder.ts` (`buildBenchBattleUnitSnapshots`)
+- Change unit snapshot views (bench/field/lookup) → `battleSnapshotBuilder.ts` (`buildBattleUnitSnapshotViews`, the canonical battle phase read-model builder)
 - Change stat display computation → `unitStatsSnapshot.ts`
 - Change upgrade description text → `unitUpgradePresentation.ts`
 - Change grid/bench layout constants → `Constants.ts`
