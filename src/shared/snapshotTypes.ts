@@ -4,8 +4,8 @@ import type { ItemDefinition } from './itemTypes';
 // ─── Stat Snapshots ───────────────────────────────────────────────────────────
 
 export interface UnitStatValueSnapshot {
-  base:  number;  // blueprint + level scaling only
-  value: number;  // final: base + upgrade modifiers + equipment + permanent bonuses
+  highlightBase: number;  // value used ONLY for color comparison: level + tier + permanent (no equipment, no battle effects)
+  value:         number;  // value shown to the player: highlightBase + equipment (+ active battle effects in battle)
 }
 
 export interface UnitStatsSnapshot {
@@ -24,11 +24,12 @@ export interface UnitStatsSnapshot {
 export type SkillIconColorKind = 'physical' | 'magical' | 'neutral';
 
 export interface SkillIconSnapshot {
-  id:          string;
-  name:        string;
-  description: string;
-  tag:         string;
-  colorKind:   SkillIconColorKind;
+  id:             string;
+  name:           string;
+  iconTextureKey: string | null;  // prepared skill-icon texture key, or null when no art
+  description:    string;
+  tag:            string;
+  colorKind:      SkillIconColorKind;
 }
 
 // ─── Item Snapshots ───────────────────────────────────────────────────────────

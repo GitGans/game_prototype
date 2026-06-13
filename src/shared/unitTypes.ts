@@ -79,10 +79,9 @@ export interface UnitBattleStats {
 export interface UnitUpgradeOption {
   id: UpgradeOptionId;
   name: string;
-  description?: string;
-  skillId?: SkillId;
+  skillId: SkillId;            // now required — every option grants a skill
   statModifiers?: UnitProgressionStatModifiers;
-  spriteFilename?: string;
+  unitSpriteFilename?: string; // optional upgraded-unit appearance
   /**
    * If this upgrade option is chosen, this class id becomes the unit's current class.
    * If omitted, the option does not change the current class.

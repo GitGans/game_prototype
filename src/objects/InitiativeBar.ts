@@ -4,9 +4,9 @@ import { LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { battleTargetHighlightColor } from './battleTargetHighlightPresentation';
 import type { BattleTargetHighlightKind } from './battleTargetHighlightPresentation';
-import { getUnitSpriteTextureKey } from '../core/unitSpriteKey';
 import { fontSize, UI_THEME } from '../ui/theme';
 import { HpBar } from '../ui/HpBar';
+import { resolveStatTone } from '../shared/statHighlight';
 
 const CARD_GAP    = Math.round(5  * LAYOUT_SCALE);
 const DIVIDER_GAP = Math.round(14 * LAYOUT_SCALE);
@@ -109,9 +109,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     );
 
     // Sprite or fallback colored rect
-    const spriteKey = unit.spriteSheet
-      ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
-      : null;
+    const spriteKey = unit.sprite?.textureKey ?? null;
     const hasSprite = !!spriteKey && this.scene.textures.exists(spriteKey);
 
     let bg: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
@@ -145,13 +143,14 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
           }
         ).setOrigin(0.5, 0).setAlpha(alpha);
 
-    const effInit = unit.effectiveInitiative;
-    const initColor = effInit > unit.initiative ? UI_THEME.color.value.positive
-                    : effInit < unit.initiative ? UI_THEME.color.value.negative
-                    : BATTLE_VISUAL_THEME.unit.textLight;
+    const initiative = unit.statDisplay.initiative;
+    const initTone = resolveStatTone(initiative.value, initiative.highlightBase);
+    const initColor = initTone === 'positive' ? UI_THEME.color.value.positive
+                    : initTone === 'negative' ? UI_THEME.color.value.negative
+                    : BATTLE_VISUAL_THEME.unit.textLight;   // preserve existing neutral color (NOT UI_THEME neutral)
     const initText = this.scene.add.text(
       x + CARD_W / 2, y + CARD_H - Math.round(18 * LAYOUT_SCALE),
-      `★${effInit}`,
+      `★${initiative.value}`,
       {
         fontSize: fontSize('sm'),
         color: initColor,
@@ -168,7 +167,7 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
       y: y + CARD_H - hpBgH / 2,
       width: barInnerW,
       height: hpBgH,
-      ratio: unit.hp / unit.maxHp,
+      ratio: unit.currentHp / unit.maxHp,
       alpha,
       tricolor: true,
     });
@@ -193,8 +192,9 @@ export class InitiativeBar extends Phaser.GameObjects.Container {
     return Array.from(fieldUnitsById.values())
       .filter(u => u.lifeState === 'alive')
       .sort((a, b) => {
-        if (b.effectiveInitiative !== a.effectiveInitiative)
-          return b.effectiveInitiative - a.effectiveInitiative;
+        const aInit = a.statDisplay.initiative.value;
+        const bInit = b.statDisplay.initiative.value;
+        if (bInit !== aInit) return bInit - aInit;
         if (a.side !== b.side) return a.side === 'player' ? -1 : 1;
         return 0;
       });

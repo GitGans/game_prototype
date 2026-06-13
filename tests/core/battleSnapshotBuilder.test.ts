@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   buildBattleUnitSnapshot,
   buildBattleUnitSnapshots,
+  buildBattleUnitSnapshotViews,
   buildFieldBattleUnitSnapshots,
   buildBenchBattleUnitSnapshots,
   buildBattleOccupancySnapshot,
@@ -41,8 +42,8 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     }
     expect('anchor' in f).toBe(false);                              // top-level anchor removed in Stage 5
     expect(f.side).toBe('player');
-    expect(f.level).toBe(3);
-    expect(f.spriteKey === null || typeof f.spriteKey === 'string').toBe(true);
+    expect(f.statDisplay.level).toBe(3);
+    expect(f.sprite === null || typeof f.sprite.textureKey === 'string').toBe(true);
   });
 
   it('bench snapshot has bench deployment, no anchor, and runtime hp/maxHp', () => {
@@ -57,9 +58,9 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     expect(b.deployment).toEqual({ kind: 'bench', slot: 2 });
     expect('anchor' in b).toBe(false);
     expect(b.side).toBe('player');
-    expect(b.hp).toBe(3);
+    expect(b.currentHp).toBe(3);
     expect(b.maxHp).toBe(10);
-    expect(b.level).toBe(1);
+    expect(b.statDisplay.level).toBe(1);
   });
 
   it('buildBattleUnitSnapshot copies lifeState from the unit', () => {
@@ -153,7 +154,7 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     });
     const bench = buildBenchBattleUnitSnapshots(state);
     expect(bench[0]?.lifeState).toBe('dead');
-    expect(bench[0]?.hp).toBe(0);
+    expect(bench[0]?.currentHp).toBe(0);
   });
 
   it('buildBenchBattleUnitSnapshots is positional and derived from deployments', () => {
@@ -189,12 +190,84 @@ describe('battleSnapshotBuilder (Stage 4)', () => {
     const snap = buildBattleUnitSnapshots(moved).find(s => s.id === 'b1');
 
     expect(snap).toBeDefined();
-    expect(snap!.hp).toBe(42);
+    expect(snap!.currentHp).toBe(42);
     expect(snap!.maxHp).toBe(80);
     expect(snap!.activeSkillIndex).toBe(2);
     expect(snap!.deployment.kind).toBe('field');
     if (snap!.deployment.kind === 'field') {
       expect(snap!.deployment.anchor).toEqual(anchor);
     }
+  });
+});
+
+describe('buildBattleUnitSnapshotViews', () => {
+  beforeEach(() => resetUnitIdCounter());
+
+  it('shares one snapshot instance across all views', () => {
+    const f = makeUnit({ id: 'f1', side: 'player' });
+    const b = makeUnit({ id: 'b1', side: 'player' });
+    const state = makeBattleStateFromUnits({
+      field: [{ unit: f, anchor: { side: 'player', row: 0, col: 0 } }],
+      bench: [{ unit: b, slot: 1 }],
+      benchSlotCount: 3,
+    });
+
+    const { unitsById, fieldUnits, benchUnits } = buildBattleUnitSnapshotViews(state);
+
+    for (const fu of fieldUnits) {
+      expect(unitsById.get(fu.id)).toBe(fu);          // reference identity, not just .id
+    }
+    for (const bu of benchUnits) {
+      if (bu) expect(unitsById.get(bu.id)).toBe(bu);
+    }
+  });
+
+  it('preserves state.units insertion order in unitsById and fieldUnits', () => {
+    const b0 = makeUnit({ id: 'b0', side: 'player' });
+    const f0 = makeUnit({ id: 'f0', side: 'player' });
+    const f1 = makeUnit({ id: 'f1', side: 'enemy' });
+    // Insertion order below = field entries first, then bench (see helper).
+    const state = makeBattleStateFromUnits({
+      field: [
+        { unit: f0, anchor: { side: 'player', row: 0, col: 0 } },
+        { unit: f1, anchor: { side: 'enemy',  row: 0, col: 0 } },
+      ],
+      bench: [{ unit: b0, slot: 0 }],
+      benchSlotCount: 1,
+    });
+
+    const runtimeOrder = [...state.units.values()].map(u => u.id);
+    const { unitsById, fieldUnits } = buildBattleUnitSnapshotViews(state);
+
+    expect([...unitsById.keys()]).toEqual(runtimeOrder);
+    expect(fieldUnits.map(s => s.id)).toEqual(['f0', 'f1']);
+  });
+
+  it('includes dead field-deployed units in fieldUnits', () => {
+    const dead  = makeUnit({ id: 'd1', side: 'player', lifeState: 'dead', hp: 0 });
+    const alive = makeUnit({ id: 'a1', side: 'player', lifeState: 'alive' });
+    const state = makeBattleStateFromUnits({
+      field: [
+        { unit: dead,  anchor: { side: 'player', row: 0, col: 0 } },
+        { unit: alive, anchor: { side: 'player', row: 0, col: 1 } },
+      ],
+    });
+
+    const { fieldUnits } = buildBattleUnitSnapshotViews(state);
+    expect(fieldUnits.map(s => s.id).sort()).toEqual(['a1', 'd1']);
+  });
+
+  it('throws when two units claim the same bench slot', () => {
+    const b1 = makeUnit({ id: 'b1', side: 'player' });
+    const b2 = makeUnit({ id: 'b2', side: 'player' });
+    const state = makeBattleStateFromUnits({
+      bench: [
+        { unit: b1, slot: 0 },
+        { unit: b2, slot: 0 },
+      ],
+      benchSlotCount: 2,
+    });
+
+    expect(() => buildBattleUnitSnapshotViews(state)).toThrow(/bench slot/);
   });
 });

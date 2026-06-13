@@ -5,6 +5,7 @@ import type {
   BattleOccupancySnapshot,
   BattleFieldUnitCellsSnapshot,
 } from '../shared/battleSnapshots';
+import type { UnitStatsSnapshot } from '../shared/snapshotTypes';
 import type { CellCoord } from '../shared/gridTypes';
 import type { UnitDeployment } from '../shared/unitDeploymentTypes';
 import { effectiveStats } from '../battle/combat';
@@ -12,6 +13,7 @@ import { requireDeployment } from '../battle/deployment';
 import { cellKey } from '../battle/field';
 import { getOccupiedCells } from '../battle/shapes';
 import { isAlive, isDead } from '../battle/lifeState';
+import { resolveUnitClassDefinition } from '../progression';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 
 function cloneDeployment(d: UnitDeployment): UnitDeployment {
@@ -26,37 +28,47 @@ export function buildBattleUnitSnapshot(
 ): BattleUnitSnapshot {
   const eff        = effectiveStats(unit);
   const deployment = cloneDeployment(runtimeDeployment);
-  const spriteKey  = unit.spriteSheet
-    ? getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet)
+  // states is copied: SpriteSheetConfig.states is mutable runtime config; the
+  // snapshot must not share a reference. Order = spritesheet frame order.
+  const sprite = unit.spriteSheet
+    ? {
+        textureKey: getUnitSpriteTextureKey(unit.templateId, unit.spriteSheet),
+        states: [...unit.spriteSheet.states],
+      }
     : null;
+  const className  = resolveUnitClassDefinition(unit.classId).name;
+  const hb         = unit.statHighlightBaseStats;
+
+  const statDisplay: UnitStatsSnapshot = {
+    level: unit.level,
+    // HP row: lost current HP must NOT read as a debuff. The row is colored by maxHp
+    // (UnitTooltip does this). hp itself stays neutral (value === highlightBase).
+    hp:    { highlightBase: unit.hp, value: unit.hp },
+    maxHp: { highlightBase: hb.hp,   value: unit.maxHp },
+
+    physicalStrength: { highlightBase: hb.physicalStrength, value: eff.physicalStrength },
+    magicalStrength:  { highlightBase: hb.magicalStrength,  value: eff.magicalStrength  },
+    physicalDefense:  { highlightBase: hb.physicalDefense,  value: eff.physicalDefense  },
+    magicalDefense:   { highlightBase: hb.magicalDefense,   value: eff.magicalDefense   },
+    dodge:            { highlightBase: hb.dodge,            value: eff.dodge            },
+    block:            { highlightBase: hb.block,            value: eff.block            },
+    initiative:       { highlightBase: hb.initiative,       value: eff.initiative       },
+  };
 
   const snap: BattleUnitSnapshot = {
     id:        unit.id,
     side:      unit.side,
     name:      unit.name,
-    hp:        unit.hp,
+    className,
+    currentHp: unit.hp,
     maxHp:     unit.maxHp,
     lifeState: unit.lifeState,
 
-    physicalStrength: unit.physicalStrength,
-    magicalStrength:  unit.magicalStrength,
-    physicalDefense:  unit.physicalDefense,
-    magicalDefense:   unit.magicalDefense,
-    dodge:            unit.dodge,
-    block:            unit.block,
-    level:            unit.level,
-    initiative:       unit.initiative,
-    effectiveInitiative:       eff.initiative,
-    effectivePhysicalStrength: eff.physicalStrength,
-    effectiveMagicalStrength:  eff.magicalStrength,
-    effectivePhysicalDefense:  eff.physicalDefense,
-    effectiveMagicalDefense:   eff.magicalDefense,
-    effectiveDodge:            eff.dodge,
-    effectiveBlock:            eff.block,
+    statDisplay,
 
     shape:      unit.shape,
     deployment,
-    spriteKey,
+    sprite,
 
     skills:           unit.skills,
     activeSkillIndex: unit.activeSkillIndex,
@@ -64,47 +76,88 @@ export function buildBattleUnitSnapshot(
 
     rowTrait:    unit.rowTrait,
     templateId:  unit.templateId,
-    spriteSheet: unit.spriteSheet,
 
     activatableAbilities: unit.activatableAbilities,
   };
   return snap;
 }
 
-export function buildBattleUnitSnapshots(state: BattleState): BattleUnitSnapshot[] {
-  return Array.from(state.units.values()).map(u =>
-    buildBattleUnitSnapshot(u, requireDeployment(state, u.id)),
-  );
-}
-
 function isFieldSnapshot(s: BattleUnitSnapshot): s is FieldBattleUnitSnapshot {
   return s.deployment.kind === 'field';
+}
+
+export interface BattleUnitSnapshotViews {
+  unitsById:  Map<string, BattleUnitSnapshot>;
+  fieldUnits: FieldBattleUnitSnapshot[];
+  benchUnits: (BattleUnitSnapshot | null)[];
+}
+
+/**
+ * CANONICAL battle phase unit read-model builder.
+ *
+ * Single-pass projection of BattleState.units into the three battle read-model views.
+ * Each runtime unit is converted to exactly one BattleUnitSnapshot; all three views
+ * reference the same instances. Iteration follows state.units insertion order, so
+ * unitsById and fieldUnits preserve that order (same as the previous helpers).
+ *
+ * Production code that needs a full battle phase read model (i.e. PhaseManager's
+ * rebuildSnapshot) MUST use this builder so the views share one snapshot object set.
+ * The array helpers below are compatibility/test conveniences, not the production API.
+ */
+export function buildBattleUnitSnapshotViews(
+  state: BattleState,
+): BattleUnitSnapshotViews {
+  const unitsById  = new Map<string, BattleUnitSnapshot>();
+  const fieldUnits: FieldBattleUnitSnapshot[] = [];
+  const benchUnits: (BattleUnitSnapshot | null)[] =
+    Array.from({ length: state.benchSlotCount }, () => null);
+
+  for (const unit of state.units.values()) {
+    const dep  = requireDeployment(state, unit.id);
+    const snap = buildBattleUnitSnapshot(unit, dep);
+    unitsById.set(snap.id, snap);
+
+    if (isFieldSnapshot(snap)) {
+      // isFieldSnapshot narrows snap to FieldBattleUnitSnapshot — typed push, no cast.
+      fieldUnits.push(snap);
+      continue;
+    }
+
+    // Bench. dep mirrors snap.deployment; narrow dep to read .slot without a cast.
+    if (dep.kind !== 'bench') continue; // unreachable; keeps TS narrowing honest
+    const existing = benchUnits[dep.slot];
+    if (existing) {
+      throw new Error(
+        `buildBattleUnitSnapshotViews: bench slot ${dep.slot} claimed by ` +
+        `both "${existing.id}" and "${snap.id}"`,
+      );
+    }
+    benchUnits[dep.slot] = snap;
+  }
+
+  return { unitsById, fieldUnits, benchUnits };
+}
+
+// --- Compatibility / test-convenience array views. ---
+// NOT the production read-model API. Each call rebuilds a full view set and returns
+// one slice; calling several of these in one flow yields snapshots from DIFFERENT
+// view sets (separate object instances). Production code that needs a full battle
+// phase read model must call buildBattleUnitSnapshotViews instead.
+
+export function buildBattleUnitSnapshots(state: BattleState): BattleUnitSnapshot[] {
+  return [...buildBattleUnitSnapshotViews(state).unitsById.values()];
 }
 
 export function buildFieldBattleUnitSnapshots(
   state: BattleState,
 ): FieldBattleUnitSnapshot[] {
-  return buildBattleUnitSnapshots(state).filter(isFieldSnapshot);
+  return buildBattleUnitSnapshotViews(state).fieldUnits;
 }
 
 export function buildBenchBattleUnitSnapshots(
   state: BattleState,
 ): (BattleUnitSnapshot | null)[] {
-  const slots: (BattleUnitSnapshot | null)[] =
-    Array.from({ length: state.benchSlotCount }, () => null);
-  for (const unit of state.units.values()) {
-    const dep = requireDeployment(state, unit.id);
-    if (dep.kind !== 'bench') continue;
-    const existing = slots[dep.slot];
-    if (existing) {
-      throw new Error(
-        `buildBenchBattleUnitSnapshots: bench slot ${dep.slot} claimed by ` +
-        `both "${existing.id}" and "${unit.id}"`,
-      );
-    }
-    slots[dep.slot] = buildBattleUnitSnapshot(unit, dep);
-  }
-  return slots;
+  return buildBattleUnitSnapshotViews(state).benchUnits;
 }
 
 // Living/blocking only. Dead units are excluded upstream by

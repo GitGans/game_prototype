@@ -1,22 +1,8 @@
-import type { UnitBlueprint, UnitBattleStats, UnitProgressionStatModifiers } from '../shared/unitTypes';
+import type { UnitBlueprint, UnitProgressionStatModifiers } from '../shared/unitTypes';
 import type { ItemContainer, ItemInstance, ItemDefinition, BattleStatBonuses } from '../shared/itemTypes';
 import type { UnitStatsSnapshot } from '../shared/snapshotTypes';
-import { computeUnitBattleStats } from '../battle/itemOps';
-
-// Must match the base stat scaling rules used by computeUnitBattleStats().
-function computeBaseStats(blueprint: UnitBlueprint, level: number): UnitBattleStats {
-  const scale = 1 + 0.1 * (level - 1);
-  return {
-    hp:              Math.round(blueprint.hp             * scale),
-    physicalStrength:  Math.round(blueprint.physicalStrength * scale),
-    magicalStrength:   Math.round(blueprint.magicalStrength  * scale),
-    physicalDefense: blueprint.physicalDefense,
-    magicalDefense:  blueprint.magicalDefense,
-    dodge:           blueprint.dodge,
-    block:           blueprint.block,
-    initiative:      blueprint.initiative,
-  };
-}
+import { getEquippedBonuses } from '../inventory';
+import { resolveUnitBattleStats } from '../progression';
 
 export function buildUnitStatsSnapshot(
   blueprint:        UnitBlueprint,
@@ -27,27 +13,43 @@ export function buildUnitStatsSnapshot(
   itemDefinitions:  Record<string, ItemDefinition>,
   upgradeModifiers: UnitProgressionStatModifiers,
 ): UnitStatsSnapshot {
-  const base  = computeBaseStats(blueprint, level);
-  const final = computeUnitBattleStats(
+  const equipmentBonuses = getEquippedBonuses(
+    blueprint.templateId, itemContainers, itemInstances, itemDefinitions,
+  );
+
+  // Color baseline: everything EXCEPT equipment (permanent bonuses are included,
+  // so they change the number but never the color).
+  const highlightBaseStats = resolveUnitBattleStats({
     blueprint,
     level,
-    itemContainers,
-    itemInstances,
-    itemDefinitions,
-    { [blueprint.templateId]: permanentBonuses },
     upgradeModifiers,
-  );
+    permanentBonuses,
+  });
+
+  // Displayed value: highlight baseline + equipment.
+  const displayStats = resolveUnitBattleStats({
+    blueprint,
+    level,
+    upgradeModifiers,
+    equipmentBonuses,
+    permanentBonuses,
+  });
+
+  const pair = (k: keyof typeof displayStats) => ({
+    highlightBase: highlightBaseStats[k],
+    value:         displayStats[k],
+  });
 
   return {
     level,
-    hp:              { base: base.hp,              value: final.hp              },
-    maxHp:           { base: base.hp,              value: final.hp              },
-    physicalStrength:  { base: base.physicalStrength,  value: final.physicalStrength  },
-    magicalStrength:   { base: base.magicalStrength,   value: final.magicalStrength   },
-    physicalDefense: { base: base.physicalDefense, value: final.physicalDefense },
-    magicalDefense:  { base: base.magicalDefense,  value: final.magicalDefense  },
-    dodge:           { base: base.dodge,           value: final.dodge           },
-    block:           { base: base.block,           value: final.block           },
-    initiative:      { base: base.initiative,      value: final.initiative      },
+    hp:               pair('hp'),
+    maxHp:            pair('hp'),
+    physicalStrength: pair('physicalStrength'),
+    magicalStrength:  pair('magicalStrength'),
+    physicalDefense:  pair('physicalDefense'),
+    magicalDefense:   pair('magicalDefense'),
+    dodge:            pair('dodge'),
+    block:            pair('block'),
+    initiative:       pair('initiative'),
   };
 }

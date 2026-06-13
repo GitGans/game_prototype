@@ -64,7 +64,7 @@ function resolveSpriteFilenameFromUpgrades(
 ): string | undefined {
   let result: string | undefined;
   for (const option of upgrades) {
-    if (option.spriteFilename) result = option.spriteFilename; // highest tier wins (upgrades sorted ascending)
+    if (option.unitSpriteFilename) result = option.unitSpriteFilename; // highest tier wins (upgrades sorted ascending)
   }
   return result ?? blueprint.spriteFilename;
 }

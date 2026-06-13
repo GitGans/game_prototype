@@ -18,12 +18,12 @@ export interface CampUnitSnapshot {
 }
 
 export interface UpgradeOptionSnapshot {
-  id:           UpgradeOptionId;
-  name:         string;
-  description:  string;
-  skill:        SkillIconSnapshot | null;
-  statLines:    UnitUpgradeStatLineSnapshot[];
-  spritePreview: string | null;
+  id:                    UpgradeOptionId;
+  name:                  string;
+  skill:                 SkillIconSnapshot;   // never null — every option grants a skill
+  statLines:             UnitUpgradeStatLineSnapshot[];
+  unitPreviewTextureKey: string | null;
+  classChangeName:       string | null;
 }
 
 export interface UpgradeTierSnapshot {
@@ -71,14 +71,12 @@ export type GamePhase =
       benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
       battlePhase:         BattleState['phase'];
-      // Full read model (field + bench). Use for lookups via unitsById.
-      // Includes ALL runtime units, alive and dead, field and bench.
-      // For field iteration (anchor/cell math), use fieldUnits instead.
-      units:               BattleUnitSnapshot[];
       // Field-only narrowed view. Includes dead field units (rendered as
       // corpses by UI). Intended iteration source for any code that reads
       // anchor or does cell math.
       fieldUnits:          FieldBattleUnitSnapshot[];
+      // Full id lookup over all runtime units (alive/dead, field/bench).
+      // This is the battle phase's full read model; there is no separate `units` array.
       unitsById:           Map<string, BattleUnitSnapshot>;
       // Living/blocking only.
       occupancy:           BattleOccupancySnapshot;

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { CELL_SIZE, CELL_GAP, LAYOUT_SCALE } from '../core/Constants';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
-import { SpriteState, SpriteSheetConfig } from '../shared/unitTypes';
+import { SpriteState } from '../shared/unitTypes';
 import type { BattleUnitSnapshot, FieldBattleUnitSnapshot } from '../shared/battleSnapshots';
 import { EffectTooltip } from './EffectTooltip';
 import { UI_THEME, fontSize } from '../ui/theme';
@@ -16,7 +16,7 @@ export class UnitView extends Phaser.GameObjects.Container {
   private readonly isPlayer: boolean;
 
   // Sprite state tracking (only used when bgSprite is an Image)
-  private spriteConfig: SpriteSheetConfig | null = null;
+  private spriteStates: readonly SpriteState[] | null = null;
   private isDead = false;
 
   // Buff/debuff squares
@@ -34,7 +34,7 @@ export class UnitView extends Phaser.GameObjects.Container {
     colSpan: number,
     rowSpan: number,
     textureKey?: string,
-    spriteConfig?: SpriteSheetConfig,
+    spriteStates?: readonly SpriteState[],
     effectTooltip?: EffectTooltip
   ) {
     super(scene, x, y);
@@ -50,10 +50,10 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.footprintH = hFull;
 
     if (textureKey && scene.textures.exists(textureKey)) {
-      this.spriteConfig = spriteConfig ?? null;
+      this.spriteStates = spriteStates ?? null;
       const img = scene.add.image(0, 0, textureKey);
-      // Show only the idle frame (column 0) via crop
-      if (this.spriteConfig) {
+      // Show only the idle frame (column 0); frame 0 is idle by authoring convention
+      if (this.spriteStates) {
         img.setFrame(0);
       }
       img.setDisplaySize(wFull, hFull);
@@ -73,7 +73,7 @@ export class UnitView extends Phaser.GameObjects.Container {
       strokeThickness: Math.round(3 * LAYOUT_SCALE),
     }).setOrigin(0.5, 0);
 
-    this.hpText = scene.add.text(0, h / 2 - Math.round(24 * LAYOUT_SCALE), `${unit.hp}/${unit.maxHp}`, {
+    this.hpText = scene.add.text(0, h / 2 - Math.round(24 * LAYOUT_SCALE), `${unit.currentHp}/${unit.maxHp}`, {
       fontSize: fontSize('sm'),
       color: BATTLE_VISUAL_THEME.unit.textDark,
       align: 'center',
@@ -86,7 +86,7 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.hpBar = new HpBar({
       scene, x: 0, y: h / 2 - Math.round(10 * LAYOUT_SCALE),
       width: barW, height: barH,
-      ratio: unit.hp / unit.maxHp,
+      ratio: unit.currentHp / unit.maxHp,
       tricolor: false,
     });
 
@@ -117,10 +117,10 @@ export class UnitView extends Phaser.GameObjects.Container {
    */
   setSpriteState(state: SpriteState): void {
     if (this.isDead && state !== 'death') return;
-    if (!this.spriteConfig) return;
+    if (!this.spriteStates) return;
     if (!(this.bgSprite instanceof Phaser.GameObjects.Image)) return;
 
-    const frameIndex = this.spriteConfig.states.indexOf(state);
+    const frameIndex = this.spriteStates.indexOf(state);
     if (frameIndex === -1) return; // state not present in this sprite sheet
 
     this.bgSprite.setFrame(frameIndex);
@@ -137,8 +137,8 @@ export class UnitView extends Phaser.GameObjects.Container {
 
     this.applyAliveVisual();
     // Unit alive — only update HP display; Game.ts manages attack/idle transitions via setSpriteState()
-    this.hpBar.setRatio(unit.maxHp > 0 ? unit.hp / unit.maxHp : 0);
-    this.hpText.setText(`${unit.hp}/${unit.maxHp}`);
+    this.hpBar.setRatio(unit.maxHp > 0 ? unit.currentHp / unit.maxHp : 0);
+    this.hpText.setText(`${unit.currentHp}/${unit.maxHp}`);
     this.updateEffectSquares(unit);
   }
 

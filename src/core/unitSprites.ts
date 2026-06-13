@@ -33,11 +33,12 @@ export function resolvePlayerUnitSpriteSheet(
   return filename ? getPlayerUnitSpriteSheet(filename) : undefined;
 }
 
+// reads the option-level UNIT SPRITE OVERRIDE (not a skill icon)
 export function resolvePlayerUpgradeSpriteSheet(
   option: UnitUpgradeOption,
 ): SpriteSheetConfig | undefined {
-  return option.spriteFilename
-    ? getPlayerUnitSpriteSheet(option.spriteFilename)
+  return option.unitSpriteFilename
+    ? getPlayerUnitSpriteSheet(option.unitSpriteFilename)
     : undefined;
 }
 

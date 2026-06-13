@@ -1,4 +1,4 @@
-import { UnitProgressionStatModifiers, UnitUpgradeOption } from '../battle/types';
+import { UnitProgressionStatModifiers } from '../battle/types';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import type { SkillUseAction, SkillUsePlan } from '../battle/skillUsePlan';
@@ -6,6 +6,7 @@ import type {
   SkillIconColorKind,
   SkillIconSnapshot,
 } from '../shared/snapshotTypes';
+import { getSkillIconTextureKey } from './unitSpriteKey';
 
 export interface UnitUpgradeStatLineSnapshot {
   stat:  keyof UnitProgressionStatModifiers;
@@ -146,33 +147,19 @@ export function buildSkillTagFromPlan(plan: SkillUsePlan): string {
 
 // ─── Public factories ─────────────────────────────────────────────────────────
 
-export function buildSkillDescription(skill: ActionSkillDefinition): string {
-  return buildSkillDescriptionFromPlan(compileSkillUsePlan(skill));
-}
-
 export function buildSkillIconSnapshot(skill: ActionSkillDefinition): SkillIconSnapshot {
   const plan = compileSkillUsePlan(skill);
   return {
-    id:          skill.id,
-    name:        skill.name,
-    description: buildSkillDescriptionFromPlan(plan),
-    tag:         buildSkillTagFromPlan(plan),
-    colorKind:   getSkillPlanColorKind(plan),
+    id:             skill.id,
+    name:           skill.name,
+    iconTextureKey: skill.skillIconFilename ? getSkillIconTextureKey(skill.id) : null,
+    description:    buildSkillDescriptionFromPlan(plan),
+    tag:            buildSkillTagFromPlan(plan),
+    colorKind:      getSkillPlanColorKind(plan),
   };
 }
 
 // ─── Upgrade presentation ─────────────────────────────────────────────────────
-
-// Priority: option.description → skill description → ''
-export function buildUnitUpgradeDescription(
-  option: UnitUpgradeOption,
-  resolvedSkill?: ActionSkillDefinition,
-): string {
-  const explicit = option.description?.trim();
-  if (explicit) return explicit;
-  if (resolvedSkill) return buildSkillDescription(resolvedSkill);
-  return '';
-}
 
 // Stable order guaranteed by STAT_ORDER, not Object.entries().
 export function buildUnitUpgradeStatLines(

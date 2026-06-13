@@ -7,6 +7,7 @@ import type { BattleUnitSnapshot } from "../shared/battleSnapshots";
 import type { SkillIconColorKind } from "../shared/snapshotTypes";
 import { buildSkillIconSnapshot } from "../core/unitUpgradePresentation";
 import type { UnitStatsSnapshot } from '../core/phases';
+import { resolveStatTone } from "../shared/statHighlight";
 
 const W           = Math.round(200 * LAYOUT_SCALE);
 const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
@@ -14,20 +15,26 @@ const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
 interface UnitIdentitySnapshot {
   templateId: string;
   name: string;
+  // Mirrors UnitTabSnapshot.className — the equip screen's stats body source.
+  className?: string;
 }
 
-interface StatValue { value: number; base: number }
-function flat(v: number): StatValue { return { value: v, base: v }; }
+interface StatValue { value: number; highlightBase: number }
 function statColor(sv: StatValue): string {
-  if (sv.value > sv.base) return UI_THEME.color.value.positive;
-  if (sv.value < sv.base) return UI_THEME.color.value.negative;
-  return UI_THEME.color.value.neutral;
+  switch (resolveStatTone(sv.value, sv.highlightBase)) {
+    case 'positive': return UI_THEME.color.value.positive;
+    case 'negative': return UI_THEME.color.value.negative;
+    default:         return UI_THEME.color.value.neutral;
+  }
 }
 
 interface TooltipData {
   templateId:      string;
   name:            string;
   level?:          number;
+  // Class display name. Required whenever a stats title is rendered (battle
+  // hover and equip); the title shows `${className}  Lvl ${level}`.
+  className?:      string;
   side:            "player" | "enemy";
   hp:              StatValue;
   maxHp:           StatValue;
@@ -49,8 +56,8 @@ interface TooltipData {
 interface BuildOptions {
   showSprite?:     boolean; // default true
   showStats?:      boolean; // default true
+  showStatsTitle?: boolean; // default true — class+level title above the stat rows
   showSkills?:     boolean; // default true
-  showNameHeader?: boolean; // default false — renders "Name  Lvl N" at top
 }
 
 export class UnitTooltip extends BaseTooltip<TooltipData> {
@@ -73,25 +80,9 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     this.setVisible(true);
   }
 
-  showFixedNameOnly(unit: UnitIdentitySnapshot, level: number, x: number, y: number, w: number): void {
-    const data: TooltipData = {
-      templateId: unit.templateId, name: unit.name, level,
-      side: 'player',
-      hp: flat(0), maxHp: flat(0),
-      physicalStrength: flat(0), magicalStrength: flat(0),
-      physicalDefense: flat(0), magicalDefense: flat(0),
-      dodge: flat(0), block: flat(0), initiative: flat(0),
-      skills: [],
-    };
-    this.clearContent();
-    const h = this.buildContent(data, { showNameHeader: true, showSprite: false, showStats: false, showSkills: false });
-    this.bg.setSize(w, h);
-    this.setPosition(x, y);
-    this.setVisible(true);
-  }
-
-
-  showFixedStatsSnapshot(
+  // Renders the stat rows WITHOUT the class+level title. The equip screen draws
+  // its own header row (see EquipmentPanel), so the title is suppressed here.
+  showFixedStatsBodySnapshot(
     unit:  UnitIdentitySnapshot,
     stats: UnitStatsSnapshot,
     x: number, y: number, w: number,
@@ -100,6 +91,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       templateId:      unit.templateId,
       name:            unit.name,
       level:           stats.level,
+      className:       unit.className,
       side:            'player',
       hp:              stats.hp,
       maxHp:           stats.maxHp,
@@ -113,7 +105,7 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
       skills:          [],
     };
     this.clearContent();
-    const h = this.buildContent(data, { showSprite: false, showSkills: false });
+    const h = this.buildContent(data, { showSprite: false, showSkills: false, showStatsTitle: false });
     this.bg.setSize(w, h);
     this.setPosition(x, y);
     this.setVisible(true);
@@ -126,13 +118,6 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     const panelW = this.tooltipW;
     const pad    = UI_THEME.component.tooltip.pad;
     let y        = pad;
-
-    if (opts.showNameHeader) {
-      this.addText(pad, y, `${data.name}  Lvl ${data.level ?? 1}`, {
-        fontSize: fontSize('md'), color: UI_THEME.color.value.highlight, fontStyle: 'bold',
-      });
-      y += Math.round(18 * LAYOUT_SCALE);
-    }
 
     if (opts.showSprite !== false) {
       // Sprite or fallback color rect
@@ -166,11 +151,17 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     }
 
     if (opts.showStats !== false) {
-    // Stats section
-    this.addText(pad, y, "Stats", {
-      fontSize: fontSize("md"), color: UI_THEME.color.value.highlight, fontStyle: "bold",
-    });
-    y += Math.round(18 * LAYOUT_SCALE);
+    // Title shows current class + level. There is no generic "Stats" fallback:
+    // any stats block that renders a title must carry className and level.
+    if (opts.showStatsTitle !== false) {
+      if (!data.className || data.level === undefined) {
+        throw new Error('UnitTooltip stats require className and level');
+      }
+      this.addText(pad, y, `${data.className}  Lvl ${data.level}`, {
+        fontSize: fontSize("md"), color: UI_THEME.color.value.highlight, fontStyle: "bold",
+      });
+      y += Math.round(18 * LAYOUT_SCALE);
+    }
 
     const statLines: Array<{ label: string; display: string; color: string }> = [
       { label: "HP",         display: `${data.hp.value} / ${data.maxHp.value}`, color: statColor(data.maxHp)           },
@@ -221,24 +212,27 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function unitToData(unit: BattleUnitSnapshot): TooltipData {
+  const s = unit.statDisplay;
   return {
     templateId:      unit.templateId,
     name:            unit.name,
+    level:           unit.statDisplay.level,
+    className:       unit.className,
     side:            unit.side,
-    hp:              flat(unit.hp),
-    maxHp:           flat(unit.maxHp),
-    physicalStrength:  { value: unit.effectivePhysicalStrength,  base: unit.physicalStrength  },
-    magicalStrength:   { value: unit.effectiveMagicalStrength,   base: unit.magicalStrength   },
-    physicalDefense: { value: unit.effectivePhysicalDefense, base: unit.physicalDefense },
-    magicalDefense:  { value: unit.effectiveMagicalDefense,  base: unit.magicalDefense  },
-    dodge:           { value: unit.effectiveDodge,           base: unit.dodge           },
-    block:           { value: unit.effectiveBlock,           base: unit.block           },
-    initiative:      { value: unit.effectiveInitiative,      base: unit.initiative      },
-    skills: unit.skills.map((s, i) => ({
-      name:      s.name,
-      colorKind: buildSkillIconSnapshot(s).colorKind,
+    hp:              s.hp,
+    maxHp:           s.maxHp,
+    physicalStrength: s.physicalStrength,
+    magicalStrength:  s.magicalStrength,
+    physicalDefense:  s.physicalDefense,
+    magicalDefense:   s.magicalDefense,
+    dodge:            s.dodge,
+    block:            s.block,
+    initiative:       s.initiative,
+    skills: unit.skills.map((sk, i) => ({
+      name:      sk.name,
+      colorKind: buildSkillIconSnapshot(sk).colorKind,
       isActive:  i === unit.activeSkillIndex,
     })),
-    spriteKey: unit.spriteKey,
+    spriteKey: unit.sprite?.textureKey ?? null,
   };
 }

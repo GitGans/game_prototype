@@ -72,6 +72,12 @@ export const BATTLE_VISUAL_THEME = {
     labelColor:   "#cccccc",
   },
 
+  skillIcon: {
+    fallbackBg:     0x2a2a3a,
+    fallbackBorder: 0x556677,
+    fallbackText:   "#cccccc",
+  },
+
   skillBar: {
     activeBase:     0xffcc00,
     activeHover:    0xffdd44,
@@ -95,7 +101,6 @@ export const BATTLE_VISUAL_THEME = {
     borderChosen:    0xffdd44,
     borderAvailable: 0x44aa44,
     borderLocked:    0x445566,
-    placeholder:     0x4a4a6a,
     hoverBg:         0x6a6a8a,
   },
 

@@ -78,6 +78,12 @@ const RULES = [
     dir: join(SRC, 'progression'),
     banned: ['core/', 'battle/', 'objects/', 'scenes/', 'ui/', 'world/'],
   },
+  {
+    layer: 'inventory/**',
+    dir: join(SRC, 'inventory'),
+    // inventory is a pure domain: only shared/ and data/ allowed (and local inventory/ imports)
+    banned: ['battle/', 'core/', 'progression/', 'objects/', 'scenes/', 'ui/', 'world/'],
+  },
 ];
 
 // Matches both `import ... from 'x'` and `export ... from 'x'`

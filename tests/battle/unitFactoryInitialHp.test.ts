@@ -23,13 +23,15 @@ function makeBlueprint(): UnitBlueprint {
 }
 
 function makeInput(initialHp?: number): CreateUnitInstanceInput {
+  const stats = { hp: 30, physicalStrength: 10, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0, dodge: 0, block: 0, initiative: 10 };
   return {
     blueprint:            makeBlueprint(),
     id:                   'u1',
     side:                 'player',
     level:                1,
     classId:              ucid('warrior'),
-    stats:                { hp: 30, physicalStrength: 10, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0, dodge: 0, block: 0, initiative: 10 },
+    stats,
+    statHighlightBaseStats: stats,   // equal to stats (no equipment)
     skills:               [],
     spriteSheet:          undefined,
     activatableAbilities: [],

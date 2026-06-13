@@ -3,6 +3,7 @@ import { SkillIconSnapshot } from '../core/phases';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { SkillCellTooltip } from './SkillCellTooltip';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
+import { SkillIconView } from './SkillIconView';
 
 const CELL_SIZE     = Math.round(56 * LAYOUT_SCALE);
 const CELL_GAP      = Math.round(6  * LAYOUT_SCALE);
@@ -27,10 +28,7 @@ export class SkillIconRow extends Phaser.GameObjects.Container {
       const s = BATTLE_VISUAL_THEME.skillIconRow;
       const bg = this.scene.add.rectangle(0, cy, CELL_SIZE, CELL_SIZE, s.cellBg).setOrigin(0, 0);
 
-      const textureKey = `skill_${skill.id}`;
-      const icon: Phaser.GameObjects.GameObject = this.scene.textures.exists(textureKey)
-        ? this.scene.add.image(CELL_SIZE / 2, cy + CELL_SIZE / 2, textureKey).setDisplaySize(CELL_SIZE, CELL_SIZE)
-        : this.scene.add.rectangle(0, cy, CELL_SIZE, CELL_SIZE, s.cellFallback).setOrigin(0, 0);
+      const icon = new SkillIconView(this.scene, 0, cy, CELL_SIZE, skill);
 
       const border = this.scene.add.rectangle(0, cy, CELL_SIZE, CELL_SIZE, 0, 0)
         .setOrigin(0, 0).setStrokeStyle(1, s.cellBorder);

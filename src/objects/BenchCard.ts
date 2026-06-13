@@ -79,7 +79,7 @@ export class BenchCard extends Phaser.GameObjects.Container {
     );
 
     // Sprite (frame 0 = idle) with graceful fallback
-    const spriteKey = snapshot.spriteKey;
+    const spriteKey = snapshot.sprite?.textureKey ?? null;
     const sprite = spriteKey && cfg.scene.textures.exists(spriteKey)
       ? cfg.scene.add.image(0, 0, spriteKey)
           .setFrame(0)
@@ -103,7 +103,7 @@ export class BenchCard extends Phaser.GameObjects.Container {
     ).setOrigin(0.5, 0);
 
     // HP — runtime hp/maxHp, so mid-battle damage and healing reflect on the card.
-    const hp    = snapshot.hp;
+    const hp    = snapshot.currentHp;
     const maxHp = snapshot.maxHp;
     const barW = cfg.width  - Math.round(12 * LAYOUT_SCALE);
     const barH = Math.round(6  * LAYOUT_SCALE);

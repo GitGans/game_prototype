@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { validateUnitDefinitionCollections } from "../../src/core/unitDefinitionValidator";
 import { ucid } from "../../src/shared/unitTypes";
-import type { UnitBlueprint, UnitRace, SpriteSheetConfig, UpgradeOptionId } from "../../src/shared/unitTypes";
+import type { UnitBlueprint, UnitRace, SpriteSheetConfig, UpgradeOptionId, UnitUpgradeOption } from "../../src/shared/unitTypes";
 import type { UnitShape } from "../../src/shared/gridTypes";
 import type { ActionSkillDefinition, SkillId } from "../../src/shared/skillDefinitionTypes";
 
@@ -98,6 +98,25 @@ describe("validateUnitDefinitionCollections", () => {
         itemDefinitions: {},
       })
     ).toThrow(/baseSkillId.*missing_skill/);
+  });
+
+  it("throws when a player upgrade option is missing skillId", () => {
+    const bad: UnitBlueprint = {
+      ...validPlayerUnit,
+      upgradeTiers: [{
+        unlocksAtLevel: 5,
+        // skillId intentionally omitted — invalid runtime data the compiler would normally reject
+        options: [{ id: "opt_no_skill" as UpgradeOptionId, name: "X" } as unknown as UnitUpgradeOption],
+      }],
+    };
+    expect(() =>
+      validateUnitDefinitionCollections({
+        playerUnits: [bad],
+        enemyUnits: validEnemyUnits,
+        skills: validSkills,
+        itemDefinitions: {},
+      })
+    ).toThrow(/missing required skillId/);
   });
 
   it("throws when an upgrade option skillId is missing from skills", () => {

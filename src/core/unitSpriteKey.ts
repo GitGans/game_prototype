@@ -4,3 +4,7 @@ export function getUnitSpriteTextureKey(templateId: string, spriteSheet: SpriteS
   const normalized = spriteSheet.path.replace(/[^a-zA-Z0-9]/g, '_');
   return `sprite-${templateId}-${normalized}`;
 }
+
+export function getSkillIconTextureKey(skillId: string): string {
+  return `skill-icon-${skillId}`;
+}

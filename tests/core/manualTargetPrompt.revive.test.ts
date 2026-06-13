@@ -5,16 +5,21 @@ import type { BattleUnitSnapshot } from '../../src/shared/battleSnapshots';
 import type { ActionSkillDefinition } from '../../src/shared/skillDefinitionTypes';
 import { SHAPES } from '../../src/data/shapeDefinitions';
 
+const neutralPair = (n: number) => ({ highlightBase: n, value: n });
+
 function makeSnapshotWithSkill(skill: ActionSkillDefinition, name = 'S'): BattleUnitSnapshot {
   return {
-    id: 's', side: 'player', name, hp: 100, maxHp: 100, lifeState: 'alive',
-    physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0,
-    dodge: 0, block: 0, level: 1, initiative: 0,
-    effectiveInitiative: 0, effectivePhysicalStrength: 0, effectiveMagicalStrength: 0,
-    effectivePhysicalDefense: 0, effectiveMagicalDefense: 0, effectiveDodge: 0, effectiveBlock: 0,
+    id: 's', side: 'player', name, className: 'C', currentHp: 100, maxHp: 100, lifeState: 'alive',
+    statDisplay: {
+      level: 1,
+      hp: neutralPair(100), maxHp: neutralPair(100),
+      physicalStrength: neutralPair(0), magicalStrength: neutralPair(0),
+      physicalDefense: neutralPair(0), magicalDefense: neutralPair(0),
+      dodge: neutralPair(0), block: neutralPair(0), initiative: neutralPair(0),
+    },
     shape: SHAPES['1x1'],
     deployment: { kind: 'field', anchor: { side: 'player', row: 0, col: 0 } },
-    spriteKey: null,
+    sprite: null,
     skills: [skill],
     activeSkillIndex: 0,
     activeEffects: [],

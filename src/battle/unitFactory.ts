@@ -10,7 +10,8 @@ export interface CreateUnitInstanceInput {
   side:                 Side;
   level:                number;
   classId:              UnitClassId;
-  stats:                UnitBattleStats;
+  stats:                UnitBattleStats;        // runtime combat stats (incl. equipment)
+  statHighlightBaseStats: UnitBattleStats;      // stats WITHOUT equipment, for color baseline only
   skills:               ActionSkillDefinition[];
   spriteSheet:          SpriteSheetConfig | undefined;
   activatableAbilities: UnitActivatableAbility[];
@@ -18,7 +19,7 @@ export interface CreateUnitInstanceInput {
 }
 
 export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
-  const { blueprint: bp, id, side, level, classId, stats, skills, spriteSheet, activatableAbilities, initialHp } = input;
+  const { blueprint: bp, id, side, level, classId, stats, statHighlightBaseStats, skills, spriteSheet, activatableAbilities, initialHp } = input;
   const maxHp = stats.hp;
   const hp = Math.max(1, Math.min(maxHp, initialHp ?? maxHp));
   return {
@@ -45,5 +46,6 @@ export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
     spriteSheet,
     activeEffects:       [],
     activatableAbilities,
+    statHighlightBaseStats,
   };
 }
