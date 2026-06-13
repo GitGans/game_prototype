@@ -174,6 +174,7 @@ export const SKILLS = {
   pierce: {
     id: "pierce",
     name: "Pierce",
+    skillIconFilename: "pierce.png",
     targetPolicy: { type: "enemy_melee" },
     actions: [
       {

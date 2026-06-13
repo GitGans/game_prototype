@@ -24,9 +24,8 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
       options: [
         opt("soldier_5_row_strike", "Row Strike", sid("row_strike")),
         opt("soldier_5_pierce", "Pierce", sid("pierce"), {
-          description: "Gain Pierce and become tougher.",
           statModifiers: { hp: 20 },
-          spriteFilename: "soldier_elite.png",
+          unitSpriteFilename: "soldier_elite.png",
           classId: ucid("knight"),
         }),
       ],
@@ -36,7 +35,6 @@ export const PLAYER_UNIT_UPGRADE_TIERS = {
       options: [
         opt("soldier_10_poison_strike", "Poison Strike", sid("poison_strike")),
         opt("soldier_10_provoke_strike", "Provoke", sid("provoke_strike"), {
-          description: "Gain Provoke Strike and act earlier in battle.",
           statModifiers: { initiative: 2 },
         }),
       ],

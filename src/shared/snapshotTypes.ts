@@ -24,11 +24,12 @@ export interface UnitStatsSnapshot {
 export type SkillIconColorKind = 'physical' | 'magical' | 'neutral';
 
 export interface SkillIconSnapshot {
-  id:          string;
-  name:        string;
-  description: string;
-  tag:         string;
-  colorKind:   SkillIconColorKind;
+  id:             string;
+  name:           string;
+  iconTextureKey: string | null;  // prepared skill-icon texture key, or null when no art
+  description:    string;
+  tag:            string;
+  colorKind:      SkillIconColorKind;
 }
 
 // ─── Item Snapshots ───────────────────────────────────────────────────────────

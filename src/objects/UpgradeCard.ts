@@ -3,6 +3,7 @@ import { UpgradeOptionSnapshot } from "../core/phases";
 import { LAYOUT_SCALE } from "../core/Constants";
 import { UI_THEME, fontSize } from "../ui/theme";
 import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
+import { SkillIconView } from "./SkillIconView";
 
 export const CARD_W = Math.round(160 * LAYOUT_SCALE);
 export const CARD_H = Math.round(200 * LAYOUT_SCALE);
@@ -22,7 +23,8 @@ export class UpgradeCard extends Phaser.GameObjects.Container {
   ) {
     super(scene, x, y);
 
-    const spriteSz = Math.round(64 * LAYOUT_SCALE);
+    const iconSz = Math.round(36 * LAYOUT_SCALE);
+    const previewSz = Math.round(48 * LAYOUT_SCALE);
     const pad = Math.round(8 * LAYOUT_SCALE);
     const gap = Math.round(4 * LAYOUT_SCALE);
 
@@ -46,33 +48,37 @@ export class UpgradeCard extends Phaser.GameObjects.Container {
       .setAlpha(alpha);
     this.add([bg, border]);
 
-    // Sprite preview: render only when the option has a loaded texture.
-    // Right-aligned, vertically centered. No placeholder when absent.
-    const spriteKey = upgrade.spritePreview;
-    const hasSprite = !!spriteKey && scene.textures.exists(spriteKey);
-    if (hasSprite) {
+    // ── Top skill row: icon top-left, name immediately to its right ──────────────
+    const skillIcon = new SkillIconView(scene, pad, pad, iconSz, upgrade.skill, alpha);
+    this.add(skillIcon);
+
+    const skillNameText = scene.add
+      .text(pad + iconSz + gap, pad + iconSz / 2, upgrade.skill.name, {
+        fontSize: fontSize("sm"),
+        color: UI_THEME.color.value.neutral,
+        fontStyle: "bold",
+        wordWrap: { width: w - iconSz - pad * 3 }, // stops before the right edge
+      })
+      .setOrigin(0, 0.5)
+      .setAlpha(alpha);
+    this.add(skillNameText);
+
+    // ── Optional upgraded-unit preview: lower-right, separate from the skill icon ─
+    const previewKey = upgrade.unitPreviewTextureKey;
+    const hasPreview = !!previewKey && scene.textures.exists(previewKey);
+    if (hasPreview) {
       const img = scene.add
-        .image(w - pad - spriteSz / 2, h / 2, spriteKey!)
-        .setDisplaySize(spriteSz, spriteSz) // upgrade sprites are square frames
+        .image(w - pad - previewSz / 2, h - pad - previewSz / 2, previewKey!)
+        .setDisplaySize(previewSz, previewSz) // upgrade sprites are square frames
         .setAlpha(alpha);
       this.add(img);
     }
 
-    // Text occupies the left column; reserve room for the sprite only when one is shown.
-    const textW = hasSprite ? w - spriteSz - pad * 3 : w - pad * 2;
-    let textY = pad;
-
-    const nameText = scene.add
-      .text(pad, textY, upgrade.name, {
-        fontSize: fontSize("sm"),
-        color: UI_THEME.color.value.neutral,
-        fontStyle: "bold",
-        wordWrap: { width: textW },
-      })
-      .setOrigin(0, 0)
-      .setAlpha(alpha);
-    this.add(nameText);
-    textY += nameText.height + gap;
+    // ── Content lines start below the top skill row ──────────────────────────────
+    const skillRowBottom = pad + Math.max(iconSz, skillNameText.height);
+    let textY = skillRowBottom + gap;
+    // reserve right space only on the preview row band
+    const textW = hasPreview ? w - previewSz - pad * 3 : w - pad * 2;
 
     if (upgrade.classChangeName) {
       const classText = scene.add

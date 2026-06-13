@@ -6,6 +6,7 @@ import type {
   SkillIconColorKind,
   SkillIconSnapshot,
 } from '../shared/snapshotTypes';
+import { getSkillIconTextureKey } from './unitSpriteKey';
 
 export interface UnitUpgradeStatLineSnapshot {
   stat:  keyof UnitProgressionStatModifiers;
@@ -149,11 +150,12 @@ export function buildSkillTagFromPlan(plan: SkillUsePlan): string {
 export function buildSkillIconSnapshot(skill: ActionSkillDefinition): SkillIconSnapshot {
   const plan = compileSkillUsePlan(skill);
   return {
-    id:          skill.id,
-    name:        skill.name,
-    description: buildSkillDescriptionFromPlan(plan),
-    tag:         buildSkillTagFromPlan(plan),
-    colorKind:   getSkillPlanColorKind(plan),
+    id:             skill.id,
+    name:           skill.name,
+    iconTextureKey: skill.skillIconFilename ? getSkillIconTextureKey(skill.id) : null,
+    description:    buildSkillDescriptionFromPlan(plan),
+    tag:            buildSkillTagFromPlan(plan),
+    colorKind:      getSkillPlanColorKind(plan),
   };
 }
 

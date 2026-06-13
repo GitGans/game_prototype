@@ -18,12 +18,12 @@ export interface CampUnitSnapshot {
 }
 
 export interface UpgradeOptionSnapshot {
-  id:           UpgradeOptionId;
-  name:         string;
-  skill:        SkillIconSnapshot | null;
-  statLines:    UnitUpgradeStatLineSnapshot[];
-  spritePreview: string | null;
-  classChangeName: string | null;
+  id:                    UpgradeOptionId;
+  name:                  string;
+  skill:                 SkillIconSnapshot;   // never null — every option grants a skill
+  statLines:             UnitUpgradeStatLineSnapshot[];
+  unitPreviewTextureKey: string | null;
+  classChangeName:       string | null;
 }
 
 export interface UpgradeTierSnapshot {

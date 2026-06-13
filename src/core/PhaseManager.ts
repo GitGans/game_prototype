@@ -59,7 +59,7 @@ import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from '../progression';
-import { resolveOptionalSkillDefinition, resolveUnitClassDefinition } from '../progression';
+import { resolveSkillDefinition, resolveUnitClassDefinition } from '../progression';
 import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { resolvePlayerUnitSpriteSheet, resolvePlayerUpgradeSpriteSheet } from './unitSprites';
@@ -228,19 +228,17 @@ class PhaseManagerClass {
     return (bp.upgradeTiers ?? []).map(tier => ({
       tierId: tier.unlocksAtLevel,
       options: tier.options.map((upg): UpgradeOptionSnapshot => {
-        const skill = resolveOptionalSkillDefinition(upg.skillId);
+        const skill = resolveSkillDefinition(upg.skillId);
         const classChangeName = upg.classId
           ? resolveUnitClassDefinition(upg.classId).name
           : null;
+        const previewSheet = resolvePlayerUpgradeSpriteSheet(upg);
         return {
-          id:           upg.id,
-          name:         upg.name,
-          skill:        skill ? toSkillIcon(skill) : null,
-          statLines:    buildUnitUpgradeStatLines(upg.statModifiers ?? {}),
-          spritePreview: (() => {
-            const sheet = resolvePlayerUpgradeSpriteSheet(upg);
-            return sheet ? getUnitSpriteTextureKey(bp.templateId, sheet) : null;
-          })(),
+          id:                    upg.id,
+          name:                  upg.name,
+          skill:                 toSkillIcon(skill),
+          statLines:             buildUnitUpgradeStatLines(upg.statModifiers ?? {}),
+          unitPreviewTextureKey: previewSheet ? getUnitSpriteTextureKey(bp.templateId, previewSheet) : null,
           classChangeName,
         };
       }),

@@ -175,6 +175,7 @@ export interface SkillDefinitionReviveAction {
 export interface ActionSkillDefinition {
   id: string;
   name: string;
+  skillIconFilename?: string; // optional; missing icons render via UI fallback
   targetPolicy: SkillDefinitionTargetPolicy;
   // Ordered semantic actions. Compiler must preserve this order when building SkillUsePlan.
   actions: SkillDefinitionAction[];

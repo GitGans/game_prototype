@@ -48,7 +48,12 @@ export function validateUnitDefinitionCollections(input: {
           );
         }
         seenIds.add(option.id);
-        if (option.skillId !== undefined && !(option.skillId in skills)) {
+        if (!option.skillId) {
+          throw new Error(
+            `Player unit "${bp.templateId}", option "${option.id}": missing required skillId`,
+          );
+        }
+        if (!(option.skillId in skills)) {
           throw new Error(
             `Player unit "${bp.templateId}", option "${option.id}": skillId "${option.skillId}" not in SKILLS`,
           );
