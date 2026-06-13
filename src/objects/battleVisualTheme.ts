@@ -72,12 +72,6 @@ export const BATTLE_VISUAL_THEME = {
     labelColor:   "#cccccc",
   },
 
-  skillIcon: {
-    fallbackBg:     0x2a2a3a,
-    fallbackBorder: 0x556677,
-    fallbackText:   "#cccccc",
-  },
-
   skillBar: {
     activeBase:     0xffcc00,
     activeHover:    0xffdd44,

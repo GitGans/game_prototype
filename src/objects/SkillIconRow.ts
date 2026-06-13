@@ -4,11 +4,12 @@ import { LAYOUT_SCALE } from '../core/Constants';
 import { SkillCellTooltip } from './SkillCellTooltip';
 import { BATTLE_VISUAL_THEME } from './battleVisualTheme';
 import { SkillIconView } from './SkillIconView';
+import { OBJECT_ICON_LAYOUT } from './iconLayout';
 
-const CELL_SIZE     = Math.round(56 * LAYOUT_SCALE);
-const CELL_GAP      = Math.round(6  * LAYOUT_SCALE);
-const NAME_OFFSET_X = Math.round(8  * LAYOUT_SCALE);
-const TOOLTIP_W     = Math.round(140 * LAYOUT_SCALE);
+const CELL_SIZE     = OBJECT_ICON_LAYOUT.standardCellSize;
+const CELL_GAP      = OBJECT_ICON_LAYOUT.standardCellGap;
+const NAME_OFFSET_X = OBJECT_ICON_LAYOUT.standardLabelOffsetX;
+const TOOLTIP_W     = OBJECT_ICON_LAYOUT.skillTooltipW;
 
 export class SkillIconRow extends Phaser.GameObjects.Container {
   private cells: Phaser.GameObjects.GameObject[] = [];

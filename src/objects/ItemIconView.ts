@@ -1,20 +1,20 @@
 import Phaser from "phaser";
-import type { SkillIconSnapshot } from "../core/phases";
+import { ItemSlotSnapshot } from "../shared/snapshotTypes";
 import { IconSquareView } from "../ui/IconSquareView";
 import { OBJECT_ICON_LAYOUT } from "./iconLayout";
 
 /**
- * Skill icon at a fixed square size. Adapts a SkillIconSnapshot to the generic
- * IconSquareView. Pure visual — no tooltip, no input. Compose interaction in the parent.
+ * Item icon at a fixed square size. Adapts an ItemSlotSnapshot to the generic
+ * IconSquareView. Pure visual — no tooltip, no input, no slot logic.
  * Top-left at (x, y). Parent must add this to its container.
  */
-export class SkillIconView extends Phaser.GameObjects.Container {
+export class ItemIconView extends Phaser.GameObjects.Container {
   constructor(
     scene: Phaser.Scene,
     x: number,
     y: number,
     size: number,
-    skill: SkillIconSnapshot,
+    item: ItemSlotSnapshot,
     alpha = 1,
   ) {
     super(scene, x, y);
@@ -24,8 +24,8 @@ export class SkillIconView extends Phaser.GameObjects.Container {
         x: 0,
         y: 0,
         size,
-        textureKey: skill.iconTextureKey,
-        fallbackText: skill.name,
+        textureKey: `sprite-item-${item.definition.id}`,
+        fallbackText: item.definition.name,
         alpha,
         inset: OBJECT_ICON_LAYOUT.iconInset,
       }),

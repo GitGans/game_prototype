@@ -84,6 +84,14 @@ const NUMBER_INPUT = {
   borderValid: 0x3a8a3a,
 } as const;
 
+const ICON_SQUARE = {
+  fallbackBg:          0x2a2a3a,
+  fallbackBorder:      0x556677,
+  fallbackText:        "#cccccc",
+  fallbackBorderWidth: 1,
+  fallbackLetterScale: 0.5,
+} as const;
+
 const DEPTH = {
   scene:       0,
   panel:       10,
@@ -123,6 +131,7 @@ export const UI_THEME = {
     overlay:     OVERLAY,
     contextMenu: CONTEXT_MENU,
     numberInput: NUMBER_INPUT,
+    iconSquare:  ICON_SQUARE,
   },
   depth: DEPTH,
 } as const;

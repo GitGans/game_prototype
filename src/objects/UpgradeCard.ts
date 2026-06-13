@@ -4,6 +4,7 @@ import { LAYOUT_SCALE } from "../core/Constants";
 import { UI_THEME, fontSize } from "../ui/theme";
 import { BATTLE_VISUAL_THEME } from "./battleVisualTheme";
 import { SkillIconView } from "./SkillIconView";
+import { OBJECT_ICON_LAYOUT } from "./iconLayout";
 
 export const CARD_W = Math.round(160 * LAYOUT_SCALE);
 export const CARD_H = Math.round(200 * LAYOUT_SCALE);
@@ -23,10 +24,10 @@ export class UpgradeCard extends Phaser.GameObjects.Container {
   ) {
     super(scene, x, y);
 
-    const iconSz = Math.round(36 * LAYOUT_SCALE);
-    const previewSz = Math.round(48 * LAYOUT_SCALE);
-    const pad = Math.round(8 * LAYOUT_SCALE);
-    const gap = Math.round(4 * LAYOUT_SCALE);
+    const iconSz    = OBJECT_ICON_LAYOUT.upgradeSkillIconSize;
+    const previewSz = OBJECT_ICON_LAYOUT.upgradeUnitPreviewSize;
+    const pad       = OBJECT_ICON_LAYOUT.upgradeCardPad;
+    const gap       = OBJECT_ICON_LAYOUT.upgradeCardGap;
 
     const alpha =
       status === "locked" ? UI_THEME.alpha.disabled : UI_THEME.alpha.active;
