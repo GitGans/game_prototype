@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
-import { fontSize, UI_THEME } from '../ui/theme';
+import { fontSize } from '../ui/theme';
 import { ITEM_VISUAL_THEME } from './itemVisualTheme';
 import { ItemSlotSnapshot } from '../shared/snapshotTypes';
 import { ItemTooltip, ItemTooltipData } from './ItemTooltip';
+import { ItemIconView } from './ItemIconView';
 
 export interface ItemCellConfig {
   scene: Phaser.Scene;
@@ -68,7 +69,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
   }
 
   private buildContent(item: ItemSlotSnapshot | null): void {
-    const { scene, size, slotKey, slotLabel } = this.cfg;
+    const { scene, size, slotLabel } = this.cfg;
 
     if (!item) {
       const label = scene.add.text(0, 0, slotLabel, {
@@ -80,25 +81,9 @@ export class ItemCell extends Phaser.GameObjects.Container {
       return;
     }
 
-    const spriteKey = `sprite-item-${item.definition.id}`;
-    if (scene.textures.exists(spriteKey)) {
-      const img = scene.add.image(0, 0, spriteKey)
-        .setDisplaySize(size - 4, size - 4)
-        .setOrigin(0.5);
-      this.add(img);
-      this.contentObjects.push(img);
-    } else {
-      const color = ITEM_VISUAL_THEME.slotTypeColors[slotKey] ?? ITEM_VISUAL_THEME.slotTypeColors['default'];
-      const rect = scene.add.rectangle(-size / 2, -size / 2, size, size, color).setOrigin(0, 0);
-      const letter = scene.add.text(0, 0, item.definition.name.charAt(0), {
-        fontSize: fontSize('md'),
-        color: UI_THEME.color.value.white,
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
-      this.add(rect);
-      this.add(letter);
-      this.contentObjects.push(rect, letter);
-    }
+    const icon = new ItemIconView(scene, -size / 2, -size / 2, size, item);
+    this.add(icon);
+    this.contentObjects.push(icon);
   }
 
   private showTooltip(item: ItemSlotSnapshot): void {
