@@ -1,5 +1,6 @@
 import type { ItemContainer, ItemInstance, ItemDefinition } from '../shared/itemTypes';
 import { BACKPACK_SLOT_COUNT } from './inventoryConstants';
+import { canDefinitionUseEquipmentSlot } from './equipmentSlotResolver';
 
 // ─── Immutable slot primitive ─────────────────────────────────────────────────
 export type SlotChange = { containerId: string; slotKey: string; instanceId: string | null };
@@ -54,8 +55,7 @@ export function canPlaceItem(
     return Number.isInteger(idx) && idx >= 0 && idx < BACKPACK_SLOT_COUNT;
   }
   if (container.kind === 'equipment') {
-    if (definition.equipSlot === 'ring') return slotKey === 'ring_1' || slotKey === 'ring_2';
-    return definition.equipSlot === slotKey;
+    return canDefinitionUseEquipmentSlot(definition, slotKey);
   }
   return false;
 }

@@ -6,6 +6,7 @@ import { EventBus, Events } from './EventBus';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { PLAYER_UNITS } from '../data/units';
 import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
+import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
 import { initSubMapState } from '../world/mapLogic';
 import { SubMapDefinition, SubMapState } from '../world/types';
 import {
@@ -14,7 +15,9 @@ import {
   useItem,
   buildBackpackSnapshot,
   buildEquipmentSnapshot,
+  buildStartingInventory,
 } from '../inventory';
+import { assertStartingEquipmentClassRestrictions } from './startingInventoryValidation';
 import type { EquipSlot } from '../shared/itemTypes';
 import {
   UnitTabSnapshot,
@@ -579,24 +582,18 @@ class PhaseManagerClass {
       }
       // Item containers init (idempotent)
       if (!GameState.itemContainers['backpack_shared']) {
-        GameState.itemContainers['backpack_shared'] = {
-          id: 'backpack_shared', kind: 'backpack', slots: {},
-        };
-        for (const bp of PLAYER_UNITS) {
-          GameState.itemContainers[`equip_${bp.templateId}`] = {
-            id: `equip_${bp.templateId}`, kind: 'equipment',
-            ownerTemplateId: bp.templateId, slots: {},
-          };
-        }
-        let counter = 1;
-        const add = (slot: string, defId: string) => {
-          const id = `item_${String(counter++).padStart(3, '0')}`;
-          GameState.itemInstances[id] = { id, definitionId: defId };
-          GameState.itemContainers['backpack_shared'].slots[slot] = id;
-        };
-        add('0', 'bronze_ring');
-        add('1', 'iron_ring');
-        add('2', 'bronze_necklace');
+        assertStartingEquipmentClassRestrictions({
+          playerUnits: PLAYER_UNITS,
+          itemDefinitions: ITEM_DEFINITIONS,
+          startingItems: CAMPAIGN_STARTING_ITEMS,
+        });
+        const inventory = buildStartingInventory({
+          playerUnitTemplateIds: PLAYER_UNITS.map(bp => bp.templateId),
+          itemDefinitions: ITEM_DEFINITIONS,
+          startingItems: CAMPAIGN_STARTING_ITEMS,
+        });
+        GameState.itemInstances  = inventory.itemInstances;
+        GameState.itemContainers = inventory.itemContainers;
       }
       if (!GameState.money) GameState.money = 0;
     }

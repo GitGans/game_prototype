@@ -5,3 +5,5 @@ export * from './equipmentBonuses';
 export * from './itemUse';
 export * from './inventorySnapshots';
 export * from './pricing';
+export * from './startingInventory';
+export * from './equipmentSlotResolver';

@@ -1,6 +1,7 @@
 import type { EquipSlot, ItemContainer, ItemInstance, ItemDefinition } from '../shared/itemTypes';
 import type { UnitClassId } from '../shared/unitTypes';
 import { canPlaceItem, findFreeBackpackSlot, findItemLocation, moveItem, applySlotChanges } from './containerOps';
+import { resolvePreferredEquipSlot, type ConcreteEquipSlot } from './equipmentSlotResolver';
 
 export type EquipItemResult =
   | { ok: true; nextContainers: Record<string, ItemContainer> }
@@ -70,10 +71,16 @@ export function equipItem(
   const equipContainer = containers[equipContainerId];
   if (!equipContainer) return { ok: false, reason: 'missing_equip_container' };
 
-  // Rings can equip into ring_1 or ring_2; pick first free, else swap ring_1.
-  const slot: EquipSlot = definition.equipSlot === 'ring'
-    ? ((['ring_1', 'ring_2'] as EquipSlot[]).find(s => equipContainer.slots[s] === undefined) ?? 'ring_1')
-    : definition.equipSlot;
+  // Resolve target slot. Player-action semantics: full rings swap ring_1 (preserved).
+  let slot: ConcreteEquipSlot;
+  const resolved = resolvePreferredEquipSlot(definition, equipContainer);
+  if (resolved.ok) {
+    slot = resolved.slot;
+  } else if (resolved.reason === 'no_free_ring_slot') {
+    slot = 'ring_1'; // both rings full → fall through to the existing swap path
+  } else {
+    return { ok: false, reason: 'not_equippable' };
+  }
 
   const location = findItemLocation(instanceId, containers);
   if (!location) return { ok: false, reason: 'missing_location' };
