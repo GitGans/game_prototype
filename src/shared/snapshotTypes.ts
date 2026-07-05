@@ -1,5 +1,5 @@
 import type { UnitClassId } from './unitTypes';
-import type { ItemDefinition } from './itemTypes';
+import type { ItemDefinition, ItemRuntimeMetadata } from './itemTypes';
 
 // ─── Stat Snapshots ───────────────────────────────────────────────────────────
 
@@ -37,6 +37,7 @@ export interface SkillIconSnapshot {
 export interface ItemSlotSnapshot {
   instanceId: string;
   definition: ItemDefinition;
+  metadata: ItemRuntimeMetadata;
 }
 
 export interface BackpackSnapshot {

@@ -23,7 +23,8 @@ Static data layer for all game entities. Contains only read-only constant defini
 - `skills/effects.ts` — effect metadata registries (`STAT_EFFECTS`, `PERIODIC_HP_EFFECTS`). Effect magnitude comes from `STAT_EFFECTS[effectName].bonusByLevel`.
 - `skills/attackAdjustments.ts` — damage modifier and vampirism level tables (`DAMAGE_MODIFIER_LEVELS`, `VAMPIRISM_LEVELS`)
 - `skills/skillDefinitions.ts` — 28 combat skill registry and validated id helper (`SKILLS`, `sid()`); runtime helpers live in `src/battle/skillDefinitionRuntime.ts`
-- `itemDefinitions.ts` — item configs with stat bonuses and slot assignments; exports `ITEM_DEFINITIONS`, `getItemDescription()`
+- `items/` — grouped item authoring + generated catalog (see "Item authoring" below); exports `ITEM_CATALOG`, `ITEM_DEFINITIONS`
+- `itemDefinitions.ts` — compatibility shim; re-exports `ITEM_CATALOG` / `ITEM_DEFINITIONS` from `items/`. Do not add content here.
 - `mapDefinitions.ts` — grid terrain and mob placement per map; exports `MAP_DEFINITIONS`
 - `enemyGroupDefinitions.ts` — encounter group configs (race + level override); exports `ENEMY_GROUPS`
 - `shapeDefinitions.ts` — grid cell offset patterns per shape; exports `SHAPES`
@@ -54,6 +55,33 @@ Live game state in `BattleState` / `CampaignState`
   Direct casts (`"name" as SkillId`) are forbidden outside of `sid()` itself. Enforced by code review.
   `sid()` lives in `skills/skillDefinitions.ts` and is exported via `skills/index.ts`.
 
+## Item authoring (`items/`)
+- Items are authored in **groups** — the single source of truth for behavior and placement.
+  A group declares `kind` (`equipment` | `usable` | `consumable`), a `slot` for equippable groups,
+  and an `items` record keyed by item id. Group files live under `items/equipment/`, `items/usable/`,
+  and `items/consumables/`; each folder's `index.ts` exports its `*_GROUPS` array.
+- A per-item entry contains **facts only**: `name`, `buyPrice`, `battleStatBonuses` (partial; the builder
+  zero-fills), `allowedClassIds`, `useEffect`, `sprite`. It MUST NOT contain `id`, `usage`, `equipSlot`,
+  `slot`, `subclass`, or `mapStatBonuses` — `id` comes from the record key; behavior/slot come from the group.
+- `buildItemCatalog(groups)` generates `ITEM_CATALOG = { definitions, metadataById }`:
+  `definitions[id]` holds the facts; `metadataById[id]` holds generated `{ kind, slot }`. This is the
+  source for both item definitions and runtime behavior/slot metadata — `metadataById` is generated, not
+  re-authored (so it is not duplication).
+- **Kind meaning:** `equipment` = ordinary gear; `usable` = equippable future-use item placed into
+  `usable_slot`; `consumable` = backpack-only future-use item (not equippable). The `usable`/`consumable`
+  split is about *where the item lives*, not *what happens on use*.
+- **`slot` invariant** (enforced at build time, both at the type level and by runtime guards):
+  ```text
+  equipment  -> ordinary equipment slot only, never usable_slot
+  usable     -> slot must be usable_slot (reserved exclusively for kind 'usable')
+  consumable -> slot null
+  ```
+- **`useEffect` is data only** — `equipment` forbids it; `usable` and `consumable` require it. It is NOT
+  applied anywhere at runtime in this stage (no heal/revive/permanent-stat mechanics, no use/delete).
+  Mechanics will be designed later from this data shape.
+- **Acquisition data lives elsewhere** — starting inventory in `startingInventoryDefinitions.ts`; shop/loot
+  in their own future definition files. Item entries never carry acquisition data.
+
 ## Where to Modify
 - add/change a player unit or PLAYER_STARTING_IDS → `units/playerUnits.ts`
 - add/change player unit upgrade tiers → `units/playerUnitUpgradeTiers.ts`
@@ -62,7 +90,7 @@ Live game state in `BattleState` / `CampaignState`
 - add/change a damage or area matrix → `skills/matrices.ts`
 - add/change a stat or periodic HP effect → `skills/effects.ts`
 - add/change damage modifier or vampirism levels → `skills/attackAdjustments.ts`
-- add/change an item → `itemDefinitions.ts`
+- add/change an item → `items/` (the relevant group file, e.g. `items/equipment/rings.ts`)
 - add/change a map layout → `mapDefinitions.ts`
 - add/change an enemy encounter group → `enemyGroupDefinitions.ts`
 - add/change a unit grid shape → `shapeDefinitions.ts`

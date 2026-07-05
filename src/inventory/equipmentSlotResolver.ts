@@ -1,4 +1,4 @@
-import type { EquipSlot, ItemContainer, ItemDefinition } from '../shared/itemTypes';
+import type { EquipSlot, ItemContainer, ItemRuntimeMetadata } from '../shared/itemTypes';
 
 export type ConcreteEquipSlot = Exclude<EquipSlot, 'ring'>;
 
@@ -6,16 +6,16 @@ export type ConcreteEquipSlot = Exclude<EquipSlot, 'ring'>;
 export const RING_EQUIPMENT_SLOTS = ['ring_1', 'ring_2'] as const satisfies readonly ConcreteEquipSlot[];
 
 /**
- * True if `slot` is a valid equipment slot for this definition.
+ * True if `slot` is a valid equipment slot for this item's metadata.
  * Owns the 'ring' → ring_1|ring_2 rule for the whole inventory domain.
  */
-export function canDefinitionUseEquipmentSlot(
-  definition: ItemDefinition,
+export function canMetadataUseEquipmentSlot(
+  metadata: ItemRuntimeMetadata,
   slot: string,
 ): slot is ConcreteEquipSlot {
-  if (definition.equipSlot === null) return false;
-  if (definition.equipSlot === 'ring') return (RING_EQUIPMENT_SLOTS as readonly string[]).includes(slot);
-  return slot === definition.equipSlot;
+  if (metadata.slot === null) return false;
+  if (metadata.slot === 'ring') return (RING_EQUIPMENT_SLOTS as readonly string[]).includes(slot);
+  return slot === metadata.slot;
 }
 
 export type ResolveEquipSlotResult =
@@ -27,13 +27,13 @@ export type ResolveEquipSlotResult =
  * Rings take the first free of RING_EQUIPMENT_SLOTS. Pure; never mutates the container.
  */
 export function resolvePreferredEquipSlot(
-  definition: ItemDefinition,
+  metadata: ItemRuntimeMetadata,
   equipmentContainer: ItemContainer,
 ): ResolveEquipSlotResult {
-  if (definition.equipSlot === null) return { ok: false, reason: 'not_equippable' };
-  if (definition.equipSlot === 'ring') {
+  if (metadata.slot === null) return { ok: false, reason: 'not_equippable' };
+  if (metadata.slot === 'ring') {
     const free = RING_EQUIPMENT_SLOTS.find(s => equipmentContainer.slots[s] === undefined);
     return free ? { ok: true, slot: free } : { ok: false, reason: 'no_free_ring_slot' };
   }
-  return { ok: true, slot: definition.equipSlot }; // narrowed to ConcreteEquipSlot here
+  return { ok: true, slot: metadata.slot }; // narrowed to ConcreteEquipSlot here
 }

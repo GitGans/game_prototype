@@ -1,6 +1,6 @@
 import { ItemInstance, ItemContainer, CellCoord, BattleStatBonuses } from '../battle/types';
 import { PLAYER_UNITS } from '../data/units';
-import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
+import { ITEM_CATALOG, ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
 import { buildStartingInventory } from '../inventory';
 import { assertStartingEquipmentClassRestrictions } from './startingInventoryValidation';
@@ -27,7 +27,7 @@ export function createDebugBattleState(level: number): DebugBattleState {
   });
   const { itemInstances, itemContainers } = buildStartingInventory({
     playerUnitTemplateIds: PLAYER_UNITS.map(bp => bp.templateId),
-    itemDefinitions: ITEM_DEFINITIONS,
+    catalog: ITEM_CATALOG,
     startingItems: CAMPAIGN_STARTING_ITEMS,
     backpackId: 'backpack_debug',
   });

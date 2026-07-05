@@ -34,7 +34,6 @@ function makeInput(initialHp?: number): CreateUnitInstanceInput {
     statHighlightBaseStats: stats,   // equal to stats (no equipment)
     skills:               [],
     spriteSheet:          undefined,
-    activatableAbilities: [],
     initialHp,
   };
 }

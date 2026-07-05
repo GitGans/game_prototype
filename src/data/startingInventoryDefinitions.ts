@@ -25,7 +25,7 @@ export type StartingBackpackSlot =
   | "23";
 
 // Equipped placements carry no slot: the target slot is derived from the item's
-// equipSlot (rings auto-fill ring_1 then ring_2) by resolvePreferredEquipSlot.
+// metadata slot (rings auto-fill ring_1 then ring_2) by resolvePreferredEquipSlot.
 export type StartingItemPlacement =
   | { kind: "backpack"; slot: StartingBackpackSlot }
   | { kind: "equipped"; unitTemplateId: string };

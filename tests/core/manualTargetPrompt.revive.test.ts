@@ -25,7 +25,6 @@ function makeSnapshotWithSkill(skill: ActionSkillDefinition, name = 'S'): Battle
     activeEffects: [],
     rowTrait: 'front',
     templateId: 't',
-    activatableAbilities: [],
   };
 }
 

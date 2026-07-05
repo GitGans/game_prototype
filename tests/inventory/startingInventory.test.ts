@@ -1,20 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { buildStartingInventory } from "../../src/inventory";
 import type { StartingItemDefinition } from "../../src/data/startingInventoryDefinitions";
-import { def } from "./helpers";
+import { catalog } from "./helpers";
 
-const DEFS = {
-  bronze_ring: def("bronze_ring", { equipSlot: "ring" }),
-  bronze_necklace: def("bronze_necklace", { equipSlot: "necklace" }),
-  health_tonic: def("health_tonic", { equipSlot: null, usage: "consume" }),
-};
+const CAT = catalog({
+  bronze_ring: { slot: "ring" },
+  bronze_necklace: { slot: "necklace" },
+  vitality_essence: { kind: "consumable", slot: null },
+});
 
 const UNITS = ["u1", "u2"] as const;
 
 function build(startingItems: readonly StartingItemDefinition[], backpackId?: string) {
   return buildStartingInventory({
     playerUnitTemplateIds: UNITS,
-    itemDefinitions: DEFS,
+    catalog: CAT,
     startingItems,
     backpackId,
   });
@@ -97,9 +97,9 @@ describe("buildStartingInventory", () => {
     ])).toThrow(/already occupied/);
   });
 
-  it("throws when an equipped item is a consumable (equipSlot null)", () => {
+  it("throws when an equipped item is a consumable (slot null)", () => {
     expect(() => build([
-      { instanceId: "c", itemDefinitionId: "health_tonic", placement: { kind: "equipped", unitTemplateId: "u1" } },
+      { instanceId: "c", itemDefinitionId: "vitality_essence", placement: { kind: "equipped", unitTemplateId: "u1" } },
     ])).toThrow(/not equippable/);
   });
 
@@ -120,8 +120,8 @@ describe("buildStartingInventory", () => {
     const startingItems: readonly StartingItemDefinition[] = [
       { instanceId: "i0", itemDefinitionId: "bronze_ring", placement: { kind: "backpack", slot: "0" } },
     ];
-    const before = structuredClone(DEFS);
+    const before = structuredClone(CAT);
     build(startingItems);
-    expect(DEFS).toEqual(before);
+    expect(CAT).toEqual(before);
   });
 });

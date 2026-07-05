@@ -154,7 +154,6 @@ export type PhaseAction =
   // ── Item mutations (mutation-only: resolveTransition returns same ref) ──
   | { type: 'equip_item'; instanceId: string; unitTemplateId: string }
   | { type: 'unequip_item'; unitTemplateId: string; slot: string }
-  | { type: 'use_item'; instanceId: string; unitTemplateId: string }
   // ── Commerce (mutation-only) — stub, no shop phase yet ────────
   | { type: 'buy_item'; definitionId: string }
   | { type: 'sell_item'; instanceId: string }

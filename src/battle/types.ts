@@ -19,9 +19,10 @@ export type {
 } from '../shared/unitTypes';
 export { ucid } from '../shared/unitTypes';
 export type {
-  EquipSlot, BattleStatBonuses, MapStatBonuses,
-  ItemUsage, ItemUseEffectType, ItemUseEffect, ItemDefinition,
-  UnitActivatableAbility, ItemInstance, ContainerKind, ItemContainer,
+  EquipSlot, BattleStatBonuses,
+  ItemUseEffect, ItemDefinition,
+  ItemRuntimeKind, ItemRuntimeMetadata, ItemCatalog,
+  ItemInstance, ContainerKind, ItemContainer,
 } from '../shared/itemTypes';
 export type {
   UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot,
@@ -33,7 +34,6 @@ export type {
 import type { Side, UnitShape, CellCoord } from '../shared/gridTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { SpriteSheetConfig, RowTrait, UnitClassId, UnitLifeState, UnitBattleStats } from '../shared/unitTypes';
-import type { UnitActivatableAbility } from '../shared/itemTypes';
 
 export type { ActiveEffect } from '../shared/activeEffect';
 import type { ActiveEffect } from '../shared/activeEffect';
@@ -64,7 +64,6 @@ export interface Unit {
   templateId: string;
   spriteSheet?: SpriteSheetConfig;  // resolved at unit creation; undefined = no sprite
   activeEffects: ActiveEffect[]; // runtime only; max 2; ordered oldest-first
-  activatableAbilities: UnitActivatableAbility[]; // [] for enemies
 
   // UI/read-model support captured at battle creation. Equipment is fixed for the
   // whole battle, so this baseline is immutable. USED ONLY for stat color highlighting

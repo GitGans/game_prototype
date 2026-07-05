@@ -1,6 +1,5 @@
 import type { UnitBlueprint, UnitBattleStats, SpriteSheetConfig, UnitClassId } from '../shared/unitTypes';
 import type { ActionSkillDefinition }  from '../shared/skillDefinitionTypes';
-import type { UnitActivatableAbility } from '../shared/itemTypes';
 import type { Side }                   from '../shared/gridTypes';
 import type { Unit }                   from './types';
 
@@ -14,12 +13,11 @@ export interface CreateUnitInstanceInput {
   statHighlightBaseStats: UnitBattleStats;      // stats WITHOUT equipment, for color baseline only
   skills:               ActionSkillDefinition[];
   spriteSheet:          SpriteSheetConfig | undefined;
-  activatableAbilities: UnitActivatableAbility[];
   initialHp?:           number;
 }
 
 export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
-  const { blueprint: bp, id, side, level, classId, stats, statHighlightBaseStats, skills, spriteSheet, activatableAbilities, initialHp } = input;
+  const { blueprint: bp, id, side, level, classId, stats, statHighlightBaseStats, skills, spriteSheet, initialHp } = input;
   const maxHp = stats.hp;
   const hp = Math.max(1, Math.min(maxHp, initialHp ?? maxHp));
   return {
@@ -45,7 +43,6 @@ export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
     templateId:          bp.templateId,
     spriteSheet,
     activeEffects:       [],
-    activatableAbilities,
     statHighlightBaseStats,
   };
 }

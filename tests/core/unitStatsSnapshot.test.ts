@@ -12,7 +12,7 @@ const bp = {
 
 describe('buildUnitStatsSnapshot — highlight baseline semantics', () => {
   it('equipment bonus creates a positive highlight delta', () => {
-    const defs = { helm: def('helm', { equipSlot: 'helmet', battleStatBonuses: { physicalDefense: 2 } }) };
+    const defs = { helm: def('helm', { battleStatBonuses: { physicalDefense: 2 } }) };
     const insts = { i_helm: instance('i_helm', 'helm') };
     const containers = { equip_test: equipment('test', { helmet: 'i_helm' }) };
 
@@ -25,7 +25,7 @@ describe('buildUnitStatsSnapshot — highlight baseline semantics', () => {
   });
 
   it('equipment penalty creates a negative highlight delta', () => {
-    const defs = { cursed: def('cursed', { equipSlot: 'helmet', battleStatBonuses: { physicalStrength: -5 } }) };
+    const defs = { cursed: def('cursed', { battleStatBonuses: { physicalStrength: -5 } }) };
     const insts = { i_c: instance('i_c', 'cursed') };
     const containers = { equip_test: equipment('test', { helmet: 'i_c' }) };
 

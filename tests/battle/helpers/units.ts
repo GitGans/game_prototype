@@ -31,7 +31,6 @@ export function makeUnit(overrides: Partial<Unit> = {}): Unit {
     rowTrait:             "front" as const,
     templateId:           "test",
     activeEffects:        [],
-    activatableAbilities: [],
     ...overrides,
   };
   return {

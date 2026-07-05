@@ -13,7 +13,7 @@ export type EquipSlot =
   | 'belt'
   | 'boots'
   | 'artifact'
-  | 'activatable';
+  | 'usable_slot';
 
 export interface BattleStatBonuses {
   hp: number;
@@ -23,43 +23,51 @@ export interface BattleStatBonuses {
   magicalDefense: number;
 }
 
-export interface MapStatBonuses {
-  movementPoints?: number;
-  // extend as map mechanics are confirmed
-}
+/**
+ * Catalog DATA ONLY. No runtime use/apply/delete mechanics exist in this stage.
+ * A discriminated union keeps the contract honest (e.g. revive carries no amount);
+ * mechanics will be designed later from this shape.
+ */
+export type ItemUseEffect =
+  | { type: 'heal'; amount: number }
+  | { type: 'revive' }
+  | { type: 'permanent_stat_boost'; stat: keyof BattleStatBonuses; amount: number };
 
-export type ItemUsage = 'equip' | 'consume' | 'equip_and_activate';
-export type ItemUseEffectType = 'heal' | 'permanent_stat_boost';
-
-export interface ItemUseEffect {
-  type: ItemUseEffectType;
-  stat?: keyof BattleStatBonuses; // used by permanent_stat_boost
-  amount: number;
-}
-
+/**
+ * Item-specific facts only. Behavior (usable/equippable) and placement (slot) are NOT
+ * stored here — they are generated into ItemRuntimeMetadata from the authored item group.
+ */
 export interface ItemDefinition {
   id: string;
   name: string;
-  usage: ItemUsage;
-  equipSlot: EquipSlot | null;       // null = backpack-only (consumables)
-  subclass?: string;
   /**
    * Class ids allowed to equip this item.
    * Undefined or an empty array means the item has no class restriction.
    */
   allowedClassIds?: UnitClassId[];
   battleStatBonuses: BattleStatBonuses;
-  mapStatBonuses?: MapStatBonuses;
   buyPrice: number;                   // sellPrice = floor(buyPrice/4), computed
-  useEffect?: ItemUseEffect;          // required for consume + equip_and_activate
+  useEffect?: ItemUseEffect;          // data only — required for usable + consumable; never applied this stage
   sprite?: string;
 }
 
-export interface UnitActivatableAbility {
-  sourceItemDefinitionId: string;
-  name: string;
-  useEffect: ItemUseEffect;
-  usesRemaining: number; // starts at 1; set to 0 after activation
+/**
+ * Behavior + placement generated from the authored item group (the single source of truth).
+ *   equipment  → ordinary equippable gear;
+ *   usable     → equippable future-use item, placed into 'usable_slot';
+ *   consumable → backpack-only future-use item (not equippable).
+ * `useEffect` is data only for usable/consumable — no runtime use mechanics exist yet.
+ */
+export type ItemRuntimeKind = 'equipment' | 'usable' | 'consumable';
+
+export interface ItemRuntimeMetadata {
+  kind: ItemRuntimeKind;
+  slot: EquipSlot | null;             // null = not equippable (backpack-only)
+}
+
+export interface ItemCatalog {
+  definitions: Record<string, ItemDefinition>;
+  metadataById: Record<string, ItemRuntimeMetadata>;
 }
 
 export interface ItemInstance {

@@ -5,14 +5,13 @@ import { GameState } from './GameState';
 import { EventBus, Events } from './EventBus';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { PLAYER_UNITS } from '../data/units';
-import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
+import { ITEM_CATALOG, ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
 import { initSubMapState } from '../world/mapLogic';
 import { SubMapDefinition, SubMapState } from '../world/types';
 import {
   equipItem,
   unequipItem,
-  useItem,
   buildBackpackSnapshot,
   buildEquipmentSnapshot,
   buildStartingInventory,
@@ -285,14 +284,14 @@ class PhaseManagerClass {
         const backpack = buildBackpackSnapshot(
           GameState.itemContainers,
           GameState.itemInstances,
-          ITEM_DEFINITIONS,
+          ITEM_CATALOG,
         );
         const unitEquipment = phase.selectedUnitTemplateId
           ? buildEquipmentSnapshot(
               phase.selectedUnitTemplateId,
               GameState.itemContainers,
               GameState.itemInstances,
-              ITEM_DEFINITIONS,
+              ITEM_CATALOG,
             )
           : EMPTY_EQUIP_SNAPSHOT;
         const availableUnits        = this.buildUnitTabSnapshots();
@@ -331,7 +330,7 @@ class PhaseManagerClass {
         const backpack = buildBackpackSnapshot(
           ds.itemContainers,
           ds.itemInstances,
-          ITEM_DEFINITIONS,
+          ITEM_CATALOG,
           'backpack_debug',
         );
         const unitEquipment = phase.selectedUnitTemplateId
@@ -339,7 +338,7 @@ class PhaseManagerClass {
               phase.selectedUnitTemplateId,
               ds.itemContainers,
               ds.itemInstances,
-              ITEM_DEFINITIONS,
+              ITEM_CATALOG,
             )
           : EMPTY_EQUIP_SNAPSHOT;
         const availableUnits        = this.buildUnitTabSnapshots(ds.chosenUpgrades);
@@ -589,7 +588,7 @@ class PhaseManagerClass {
         });
         const inventory = buildStartingInventory({
           playerUnitTemplateIds: PLAYER_UNITS.map(bp => bp.templateId),
-          itemDefinitions: ITEM_DEFINITIONS,
+          catalog: ITEM_CATALOG,
           startingItems: CAMPAIGN_STARTING_ITEMS,
         });
         GameState.itemInstances  = inventory.itemInstances;
@@ -696,7 +695,7 @@ class PhaseManagerClass {
     // ── Item mutations — applied to EXACTLY ONE inventory state ──
     // debug_equip_screen → DebugBattleState inventory only; otherwise → GameState only.
     // No item action may "no-op through" the wrong state first (closes debug→campaign leak).
-    if (action.type === 'equip_item' || action.type === 'unequip_item' || action.type === 'use_item') {
+    if (action.type === 'equip_item' || action.type === 'unequip_item') {
       const isDebug    = prev.type === 'debug_equip_screen';
       const containers = isDebug ? this.debugState!.itemContainers : GameState.itemContainers;
       const instances  = isDebug ? this.debugState!.itemInstances  : GameState.itemInstances;
@@ -711,7 +710,7 @@ class PhaseManagerClass {
           const progression = resolveUnitProgression(bp, chosenUpgrades);
           const result = equipItem(
             action.unitTemplateId, progression.currentClassId, action.instanceId,
-            containers, instances, ITEM_DEFINITIONS,
+            containers, instances, ITEM_CATALOG,
           );
           if (result.ok) {
             if (isDebug) this.debugState!.itemContainers = result.nextContainers;
@@ -721,47 +720,14 @@ class PhaseManagerClass {
         return;
       }
 
-      if (action.type === 'unequip_item') {
-        const result = unequipItem(
-          action.unitTemplateId, action.slot as EquipSlot,
-          containers, instances, ITEM_DEFINITIONS, backpackId,
-        );
-        if (result.ok) {
-          if (isDebug) this.debugState!.itemContainers = result.nextContainers;
-          else         GameState.itemContainers        = result.nextContainers;
-        }
-        return;
-      }
-
-      // use_item
-      const result = useItem(action.instanceId, containers, instances, ITEM_DEFINITIONS);
+      // action.type === 'unequip_item'
+      const result = unequipItem(
+        action.unitTemplateId, action.slot as EquipSlot,
+        containers, instances, ITEM_CATALOG, backpackId,
+      );
       if (result.ok) {
-        if (isDebug) {
-          this.debugState!.itemContainers = result.nextContainers;
-          this.debugState!.itemInstances  = result.nextInstances;
-        } else {
-          GameState.itemContainers = result.nextContainers;
-          GameState.itemInstances  = result.nextInstances;
-        }
-        if (result.effect.type === 'permanent_stat_boost' && result.effect.stat) {
-          const stat = result.effect.stat, amount = result.effect.amount;
-          if (isDebug) {
-            const existing = this.debugState!.unitPermanentBonuses[action.unitTemplateId] ?? {};
-            this.debugState!.unitPermanentBonuses[action.unitTemplateId] = {
-              ...existing, [stat]: (existing[stat] ?? 0) + amount,
-            };
-          } else {
-            const unitState = GameState.playerUnits[action.unitTemplateId];
-            if (unitState) {
-              const existing = unitState.permanentBonuses ?? {};
-              GameState.playerUnits[action.unitTemplateId] = {
-                ...unitState,
-                permanentBonuses: { ...existing, [stat]: (existing[stat] ?? 0) + amount },
-              };
-            }
-          }
-        }
-        // 'heal' is intentionally a no-op outside battle (preserved behavior).
+        if (isDebug) this.debugState!.itemContainers = result.nextContainers;
+        else         GameState.itemContainers        = result.nextContainers;
       }
       return;
     }
@@ -1083,10 +1049,6 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
       return current;
 
     case 'unequip_item':
-      if (current.type !== 'equip_screen' && current.type !== 'debug_equip_screen') return null;
-      return current;
-
-    case 'use_item':
       if (current.type !== 'equip_screen' && current.type !== 'debug_equip_screen') return null;
       return current;
 

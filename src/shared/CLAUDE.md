@@ -16,7 +16,7 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 - `unitTypes.ts` — Unit blueprints: `UnitBlueprint`, `UnitBattleStats`, `UnitClass`, `UnitUpgradeTier`
 - `skillTypes.ts` — Combat primitive and semantic input types: `Effect`, `SkillPattern`, and semantic refs (`DamageModifierRef`, `PostDamageEffect`, `InstantEffectApplication`, `AppliedEffectMeta`) used by `combat.ts` and `skillUsePlan.ts`. Legacy block-shaped skill interfaces have been removed.
 - `skillDefinitionTypes.ts` — Active authoring contract: `ActionSkillDefinition`, action types, target policy types, matrix refs, power source types
-- `itemTypes.ts` — Item/equipment: `ItemDefinition`, `ItemInstance`, `ItemContainer`, `EquipSlot`
+- `itemTypes.ts` — Item/equipment: `ItemDefinition` (facts only — no `usage`/`equipSlot`), `ItemRuntimeMetadata` + `ItemRuntimeKind` (`equipment` | `usable` | `consumable`; generated behavior/slot), `ItemCatalog`, `ItemInstance`, `ItemContainer`, `EquipSlot` (usable slot key is `usable_slot`), `ItemUseEffect` (data-only discriminated union — not applied at runtime this stage)
 - `snapshotTypes.ts` — UI projections: `UnitStatsSnapshot`, `SkillIconSnapshot`, `BackpackSnapshot`, `EquipmentSnapshot`
 - `battleSnapshots.ts` — Battle-phase projections: `BattleUnitSnapshot`, `FieldBattleUnitSnapshot`, `BattleOccupancySnapshot` (rebuilt dynamically per phase)
 - `worldTypes.ts` — Map contracts: `SubMapDefinition`, `SubMapState`, `LayoutCell`, `MapEntityType`

@@ -1,10 +1,10 @@
-import type { ItemDefinition, ItemInstance, ItemContainer } from '../shared/itemTypes';
+import type { ItemCatalog, ItemInstance, ItemContainer } from '../shared/itemTypes';
 import type { StartingItemDefinition } from '../data/startingInventoryDefinitions';
 import { resolvePreferredEquipSlot } from './equipmentSlotResolver';
 
 export interface BuildStartingInventoryInput {
   playerUnitTemplateIds: readonly string[];
-  itemDefinitions: Record<string, ItemDefinition>;
+  catalog: ItemCatalog;
   startingItems: readonly StartingItemDefinition[];
   backpackId?: string;
 }
@@ -26,7 +26,7 @@ export interface BuildStartingInventoryResult {
  * refactor into a resolve-all-then-place pass; that would break ring slot assignment.
  */
 export function buildStartingInventory(input: BuildStartingInventoryInput): BuildStartingInventoryResult {
-  const { playerUnitTemplateIds, itemDefinitions, startingItems, backpackId = 'backpack_shared' } = input;
+  const { playerUnitTemplateIds, catalog, startingItems, backpackId = 'backpack_shared' } = input;
 
   const itemInstances: Record<string, ItemInstance> = {};
   const itemContainers: Record<string, ItemContainer> = {
@@ -42,8 +42,8 @@ export function buildStartingInventory(input: BuildStartingInventoryInput): Buil
     if (itemInstances[item.instanceId]) {
       throw new Error(`Duplicate starting item instanceId: "${item.instanceId}"`);
     }
-    const def = itemDefinitions[item.itemDefinitionId];
-    if (!def) {
+    const metadata = catalog.metadataById[item.itemDefinitionId];
+    if (!metadata) {
       throw new Error(`Starting item "${item.instanceId}" references unknown itemDefinitionId "${item.itemDefinitionId}"`);
     }
     itemInstances[item.instanceId] = { id: item.instanceId, definitionId: item.itemDefinitionId };
@@ -65,10 +65,10 @@ export function buildStartingInventory(input: BuildStartingInventoryInput): Buil
       if (!container) {
         throw new Error(`Equipped starting item "${item.instanceId}" targets unknown unit "${unitTemplateId}"`);
       }
-      const resolved = resolvePreferredEquipSlot(def, container);
+      const resolved = resolvePreferredEquipSlot(metadata, container);
       if (!resolved.ok) {
         if (resolved.reason === 'not_equippable') {
-          throw new Error(`Equipped starting item "${item.instanceId}" is not equippable (equipSlot is null)`);
+          throw new Error(`Equipped starting item "${item.instanceId}" is not equippable (slot is null)`);
         }
         // no_free_ring_slot — starting content must NOT swap (unlike equipItem)
         throw new Error(`No free ring slot for starting item "${item.instanceId}" on unit "${unitTemplateId}"`);

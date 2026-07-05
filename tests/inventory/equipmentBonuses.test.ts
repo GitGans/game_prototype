@@ -3,8 +3,8 @@ import { getEquippedBonuses } from "../../src/inventory";
 import { equipment, instance, def, zeroBonuses } from "./helpers";
 
 const defs = {
-  helm: def("helm", { equipSlot: "helmet", battleStatBonuses: { hp: 10, physicalDefense: 2 } }),
-  ring: def("ring", { equipSlot: "ring", battleStatBonuses: { magicalStrength: 5 } }),
+  helm: def("helm", { battleStatBonuses: { hp: 10, physicalDefense: 2 } }),
+  ring: def("ring", { battleStatBonuses: { magicalStrength: 5 } }),
 };
 const insts = {
   i_helm: instance("i_helm", "helm"),

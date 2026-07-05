@@ -20,7 +20,7 @@ const soldier: UnitBlueprint = {
 
 function itemDef(id: string, allowedClassIds?: string[]): ItemDefinition {
   return {
-    id, name: id, usage: "equip", equipSlot: "necklace",
+    id, name: id,
     battleStatBonuses: { hp: 0, physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0 },
     buyPrice: 100,
     ...(allowedClassIds ? { allowedClassIds: allowedClassIds.map(ucid) } : {}),

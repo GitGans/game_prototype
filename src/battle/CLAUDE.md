@@ -83,7 +83,7 @@ returned to `src/core` for phase transition or rendering
 
 ## Where to Modify
 - add/change unit stat growth / final stat resolving → `src/progression/stats/` (`unitBaseStats.ts`, `unitResolvedStats.ts`)
-- add/change item/equipment rules (equip, unequip, bonuses, item use, snapshots, pricing) → `src/inventory/`
+- add/change item/equipment rules (equip, unequip, bonuses, snapshots, pricing) → `src/inventory/`
 - change damage or healing resolution → [combat.ts](combat.ts)
 - change turn-order rules → [initiative.ts](initiative.ts)
 - change AOE or targeting patterns → [skillPatterns.ts](skillPatterns.ts), [targeting.ts](targeting.ts)
