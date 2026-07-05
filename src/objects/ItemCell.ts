@@ -4,6 +4,7 @@ import { ITEM_VISUAL_THEME } from './itemVisualTheme';
 import { ItemSlotSnapshot } from '../shared/snapshotTypes';
 import { ItemTooltip, ItemTooltipData } from './ItemTooltip';
 import { ItemIconView } from './ItemIconView';
+import { UNIT_BATTLE_STAT_KEYS, STAT_PRESENTATION, formatStatValue } from './statPresentation';
 
 export interface ItemCellConfig {
   scene: Phaser.Scene;
@@ -88,12 +89,13 @@ export class ItemCell extends Phaser.GameObjects.Container {
 
   private showTooltip(item: ItemSlotSnapshot): void {
     const def = item.definition;
-    const stats: ItemTooltipData['stats'] = [];
-    if (def.battleStatBonuses.hp              !== 0) stats.push({ label: 'HP',         value: def.battleStatBonuses.hp              });
-    if (def.battleStatBonuses.physicalStrength !== 0) stats.push({ label: 'Phys Str',   value: def.battleStatBonuses.physicalStrength });
-    if (def.battleStatBonuses.magicalStrength  !== 0) stats.push({ label: 'Magic Str',  value: def.battleStatBonuses.magicalStrength  });
-    if (def.battleStatBonuses.physicalDefense  !== 0) stats.push({ label: 'Phys Def',   value: def.battleStatBonuses.physicalDefense  });
-    if (def.battleStatBonuses.magicalDefense   !== 0) stats.push({ label: 'Magic Def',  value: def.battleStatBonuses.magicalDefense   });
+    const stats: ItemTooltipData['stats'] = UNIT_BATTLE_STAT_KEYS
+      .filter((key) => def.battleStatBonuses[key] !== 0)
+      .map((key) => ({
+        label:   STAT_PRESENTATION[key].label,
+        value:   def.battleStatBonuses[key],
+        display: formatStatValue(key, Math.abs(def.battleStatBonuses[key])),
+      }));
 
     const data: ItemTooltipData = {
       name: def.name,

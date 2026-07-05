@@ -19,7 +19,7 @@ export type {
 } from '../shared/unitTypes';
 export { ucid } from '../shared/unitTypes';
 export type {
-  EquipSlot, BattleStatBonuses,
+  EquipSlot, BattleStatBonuses, PartialBattleStatBonuses,
   ItemUseEffect, ItemDefinition,
   ItemRuntimeKind, ItemRuntimeMetadata, ItemCatalog,
   ItemInstance, ContainerKind, ItemContainer,

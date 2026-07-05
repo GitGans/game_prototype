@@ -54,27 +54,46 @@ export interface UnitClassDefinition {
   tags?: readonly string[];
 }
 
-export interface UnitProgressionStatModifiers {
-  hp?: number;
-  physicalStrength?: number;
-  magicalStrength?: number;
-  physicalDefense?: number;
-  magicalDefense?: number;
-  dodge?: number;
-  block?: number;
-  initiative?: number;
-}
+export const UNIT_BATTLE_STAT_KEYS = [
+  'hp',
+  'physicalStrength',
+  'magicalStrength',
+  'physicalDefense',
+  'magicalDefense',
+  'dodge',
+  'block',
+  'initiative',
+] as const;
 
-export interface UnitBattleStats {
-  hp: number;
-  physicalStrength: number;
-  magicalStrength: number;
-  physicalDefense: number;
-  magicalDefense: number;
-  dodge: number;
-  block: number;
-  initiative: number;
-}
+export type UnitBattleStatKey = typeof UNIT_BATTLE_STAT_KEYS[number];
+
+/**
+ * Generic full stat-value map — every canonical key present. This is the
+ * structural root type. Domain-specific full-map types (UnitBattleStats,
+ * BattleStatBonuses) are aliases of this, not separate definitions.
+ *
+ * Invariant: every additive stat system, normalized full stat map, stat
+ * bonus map, zero/default factory, aggregation helper, stat resolver,
+ * persisted sparse stat delta, display snapshot, and game-aware stat
+ * presentation must be driven by UNIT_BATTLE_STAT_KEYS. A sparse delta's
+ * missing key always means "no change" (0) — never an implicit exclusion.
+ *
+ * Scope note: this invariant does NOT extend to battle-runtime contracts —
+ * battle/types.ts Unit (current/max hp is a distinct runtime concept from
+ * resolved base hp) and battle/combat.ts EffectiveStats/StatOwner
+ * (deliberately excludes hp — active effects modify combat stats, not HP).
+ * Those are separate, intentional shapes; do not merge them into this model.
+ */
+export type UnitBattleStatMap = Record<UnitBattleStatKey, number>;
+
+/** Full resolved stat values for a unit. */
+export type UnitBattleStats = UnitBattleStatMap;
+
+/** Sparse additive stat change. Missing keys mean 0, enforced by shared/battleStatUtils.ts. */
+export type UnitBattleStatDelta = Partial<Record<UnitBattleStatKey, number>>;
+
+/** Upgrade-tier stat changes — same shape as any other additive stat delta. */
+export type UnitProgressionStatModifiers = UnitBattleStatDelta;
 
 export interface UnitUpgradeOption {
   id: UpgradeOptionId;

@@ -1,4 +1,4 @@
-import type { UnitClassId } from './unitTypes';
+import type { UnitClassId, UnitBattleStatMap, UnitBattleStatDelta } from './unitTypes';
 
 export type EquipSlot =
   | 'ring_1'
@@ -15,13 +15,15 @@ export type EquipSlot =
   | 'artifact'
   | 'usable_slot';
 
-export interface BattleStatBonuses {
-  hp: number;
-  physicalStrength: number;
-  magicalStrength: number;
-  physicalDefense: number;
-  magicalDefense: number;
-}
+/**
+ * Item-domain name for the canonical full battle-stat map (see unitTypes.ts —
+ * UnitBattleStatMap is the source of truth; this is a domain alias, not a
+ * separate type). Every canonical stat is present, default 0.
+ */
+export type BattleStatBonuses = UnitBattleStatMap;
+
+/** Sparse bonus input (authoring, equipment, permanent bonuses). */
+export type PartialBattleStatBonuses = UnitBattleStatDelta;
 
 /**
  * Catalog DATA ONLY. No runtime use/apply/delete mechanics exist in this stage.

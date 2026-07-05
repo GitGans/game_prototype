@@ -1,5 +1,5 @@
 import type { UnitBlueprint, UnitProgressionStatModifiers } from '../shared/unitTypes';
-import type { ItemContainer, ItemInstance, ItemDefinition, BattleStatBonuses } from '../shared/itemTypes';
+import type { ItemContainer, ItemInstance, ItemDefinition, PartialBattleStatBonuses } from '../shared/itemTypes';
 import type { UnitStatsSnapshot } from '../shared/snapshotTypes';
 import { getEquippedBonuses } from '../inventory';
 import { resolveUnitBattleStats } from '../progression';
@@ -7,7 +7,7 @@ import { resolveUnitBattleStats } from '../progression';
 export function buildUnitStatsSnapshot(
   blueprint:        UnitBlueprint,
   level:            number,
-  permanentBonuses: Partial<BattleStatBonuses>,
+  permanentBonuses: PartialBattleStatBonuses,
   itemContainers:   Record<string, ItemContainer>,
   itemInstances:    Record<string, ItemInstance>,
   itemDefinitions:  Record<string, ItemDefinition>,

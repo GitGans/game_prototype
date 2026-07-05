@@ -14,7 +14,7 @@ import type { UnitBlueprint, UnitRace, UpgradeOptionId } from '../shared/unitTyp
 import type { ActionSkillDefinition }      from '../shared/skillDefinitionTypes';
 import { resolveSkillDefinition }          from '../progression';
 import type { CellCoord }                 from '../shared/gridTypes';
-import type { ItemContainer, ItemInstance, BattleStatBonuses } from '../shared/itemTypes';
+import type { ItemContainer, ItemInstance, PartialBattleStatBonuses } from '../shared/itemTypes';
 import {
   isPersistentPlayerUnitAlive,
   getPersistentCurrentHp,
@@ -84,7 +84,7 @@ export function resolvePlayerMaxHpForLevel(input: {
   blueprint: UnitBlueprint;
   level: number;
   chosenUpgrades: Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>;
-  permanentBonuses: Partial<BattleStatBonuses>;
+  permanentBonuses: PartialBattleStatBonuses;
   itemContainers: Record<string, ItemContainer>;
   itemInstances: Record<string, ItemInstance>;
 }): number {

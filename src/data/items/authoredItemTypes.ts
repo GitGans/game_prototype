@@ -1,4 +1,4 @@
-import type { BattleStatBonuses, EquipSlot, ItemUseEffect } from '../../shared/itemTypes';
+import type { PartialBattleStatBonuses, EquipSlot, ItemUseEffect } from '../../shared/itemTypes';
 import type { UnitClassId } from '../../shared/unitTypes';
 
 /**
@@ -15,7 +15,7 @@ export type EquipmentAuthoredSlot = Exclude<EquipSlot, 'ring_1' | 'ring_2' | 'us
 export interface AuthoredItem {
   name: string;
   buyPrice: number;
-  battleStatBonuses?: Partial<BattleStatBonuses>; // builder zero-fills missing stats
+  battleStatBonuses?: PartialBattleStatBonuses; // builder zero-fills missing stats
   allowedClassIds?: UnitClassId[];
   useEffect?: ItemUseEffect;
   sprite?: string;

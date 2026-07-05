@@ -8,8 +8,8 @@ You receive a user request for improvement. Based on the previous analysis of th
 Write plan as a task for a new developer unfamiliar with the task, who did not participate in this dialogue.
 In the plan:
 
-1. Specify the problem we're solving, what we want to achieve, and why.
-2. Write a complete step-by-step plan for solving the problem. If anything needs clarification in the code for writing the plan, clarify it yourself; don't leave it to the developer to decide.
+1. Specify the problem we're solving, what we want to achieve, and why. Indicate that the documentation and tests are not final requirements and should be corrected during refactoring.
+2. Write a complete step-by-step plan for solving the problem. If anything needs clarification in the code for writing the plan, clarify it yourself; don't leave it to the developer to decide. In the plan, write a specific implementation option; do not leave different implementation options in the plan.
 3. Don't add manual checks in the plan.
 4. Right checks:
 

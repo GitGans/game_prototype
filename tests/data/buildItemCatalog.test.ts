@@ -19,6 +19,7 @@ describe("buildItemCatalog", () => {
     const { definitions } = buildItemCatalog(groups);
     expect(definitions.r.battleStatBonuses).toEqual({
       hp: 5, physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0,
+      dodge: 0, block: 0, initiative: 0,
     });
   });
 

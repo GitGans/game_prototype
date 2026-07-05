@@ -1,5 +1,4 @@
 import type {
-  BattleStatBonuses,
   EquipSlot,
   ItemCatalog,
   ItemDefinition,
@@ -7,14 +6,7 @@ import type {
   ItemRuntimeMetadata,
 } from '../../shared/itemTypes';
 import type { ItemGroup } from './authoredItemTypes';
-
-const ZERO_BONUSES: BattleStatBonuses = {
-  hp: 0,
-  physicalStrength: 0,
-  magicalStrength: 0,
-  physicalDefense: 0,
-  magicalDefense: 0,
-};
+import { createZeroBattleStatMap } from '../../shared/battleStatUtils';
 
 const KINDS_REQUIRING_USE_EFFECT: ReadonlySet<ItemRuntimeKind> = new Set(['usable', 'consumable']);
 
@@ -61,7 +53,7 @@ export function buildItemCatalog(groups: readonly ItemGroup[]): ItemCatalog {
         id,
         name: item.name,
         buyPrice: item.buyPrice,
-        battleStatBonuses: { ...ZERO_BONUSES, ...(item.battleStatBonuses ?? {}) },
+        battleStatBonuses: { ...createZeroBattleStatMap(), ...(item.battleStatBonuses ?? {}) },
         ...(item.allowedClassIds ? { allowedClassIds: item.allowedClassIds } : {}),
         ...(item.useEffect ? { useEffect: item.useEffect } : {}),
         ...(item.sprite ? { sprite: item.sprite } : {}),

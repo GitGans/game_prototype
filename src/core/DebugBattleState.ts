@@ -1,4 +1,4 @@
-import { ItemInstance, ItemContainer, CellCoord, BattleStatBonuses } from '../battle/types';
+import { ItemInstance, ItemContainer, CellCoord, PartialBattleStatBonuses } from '../battle/types';
 import { PLAYER_UNITS } from '../data/units';
 import { ITEM_CATALOG, ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
@@ -11,7 +11,7 @@ export interface DebugBattleState {
   campUnitIds: string[];
   itemInstances: Record<string, ItemInstance>;
   itemContainers: Record<string, ItemContainer>;
-  unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>>;
+  unitPermanentBonuses: Record<string, PartialBattleStatBonuses>;
   playerUnitPlacements: Record<string, CellCoord>;
   playerBenchIds: string[] | null;
   chosenUpgrades: Record<string, Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>>;

@@ -51,4 +51,25 @@ describe('buildUnitStatsSnapshot — highlight baseline semantics', () => {
     expect(snap.hp.value).toBe(snap.hp.highlightBase);
     expect(snap.maxHp.value).toBe(snap.maxHp.highlightBase);
   });
+
+  it('equipment bonus to dodge/block/initiative creates a positive highlight delta — previously excluded, now fixed', () => {
+    const defs = { boots: def('boots', { battleStatBonuses: { dodge: 3, block: 2, initiative: 1 } }) };
+    const insts = { i_boots: instance('i_boots', 'boots') };
+    const containers = { equip_test: equipment('test', { boots: 'i_boots' }) };
+
+    const snap = buildUnitStatsSnapshot(bp, 5, {}, containers, insts, defs, {});
+
+    expect(snap.dodge.value - snap.dodge.highlightBase).toBe(3);
+    expect(snap.block.value - snap.block.highlightBase).toBe(2);
+    expect(snap.initiative.value - snap.initiative.highlightBase).toBe(1);
+  });
+
+  it('permanent bonus to dodge/block/initiative changes value AND highlight delta — previously excluded, now fixed', () => {
+    const snap = buildUnitStatsSnapshot(bp, 5, { dodge: 2, block: 1, initiative: 3 }, {}, {}, {}, {});
+
+    expect(snap.dodge.value).toBe(snap.dodge.highlightBase);
+    expect(snap.dodge.value).toBe(7); // 5 + 2
+    expect(snap.block.value).toBe(5); // 4 + 1
+    expect(snap.initiative.value).toBe(10); // 7 + 3
+  });
 });

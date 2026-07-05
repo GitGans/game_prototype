@@ -8,7 +8,8 @@ const VAL_COL = Math.round(90  * LAYOUT_SCALE);
 
 export interface ItemTooltipData {
   name:  string;
-  stats: Array<{ label: string; value: number }>;
+  /** `display` is the unsigned formatted magnitude (e.g. "5" or "5%"); this component owns the sign. */
+  stats: Array<{ label: string; value: number; display: string }>;
   /** null = no class restriction */
   classRestriction: string | null;
   /** null = no restriction; true = allowed; false = not allowed */
@@ -34,13 +35,13 @@ export class ItemTooltip extends BaseTooltip<ItemTooltipData> {
     y += lineH;
 
     // Stat lines
-    for (const { label, value } of data.stats) {
+    for (const { label, value, display } of data.stats) {
       const color = value > 0 ? UI_THEME.color.value.positive : UI_THEME.color.value.negative;
-      const sign  = value > 0 ? "+" : "";
+      const sign  = value > 0 ? "+" : value < 0 ? "-" : "";
       this.addText(pad, y, `${label}:`, {
         fontSize: fontSize("xs"), color: UI_THEME.color.value.neutral,
       });
-      this.addText(pad + VAL_COL, y, `${sign}${value}`, {
+      this.addText(pad + VAL_COL, y, `${sign}${display}`, {
         fontSize: fontSize("xs"), color,
       });
       y += lineH;

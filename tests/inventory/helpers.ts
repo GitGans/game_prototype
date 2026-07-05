@@ -6,14 +6,14 @@ import type {
   ItemRuntimeKind,
   ItemRuntimeMetadata,
   BattleStatBonuses,
+  PartialBattleStatBonuses,
   EquipSlot,
   ItemUseEffect,
 } from "../../src/shared/itemTypes";
 import { ucid } from "../../src/shared/unitTypes";
+import { createZeroBattleStatMap } from "../../src/shared/battleStatUtils";
 
-export const zeroBonuses: BattleStatBonuses = {
-  hp: 0, physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0,
-};
+export const zeroBonuses: BattleStatBonuses = createZeroBattleStatMap();
 
 export function backpack(id: string, slots: Record<string, string> = {}): ItemContainer {
   return { id, kind: "backpack", slots: { ...slots } };
@@ -32,7 +32,7 @@ export interface DefOpts {
   kind?: ItemRuntimeKind;
   slot?: EquipSlot | null;
   allowedClassIds?: string[];
-  battleStatBonuses?: Partial<BattleStatBonuses>;
+  battleStatBonuses?: PartialBattleStatBonuses;
   buyPrice?: number;
   useEffect?: ItemUseEffect;
 }
