@@ -84,6 +84,13 @@ const RULES = [
     // inventory is a pure domain: only shared/ and data/ allowed (and local inventory/ imports)
     banned: ['battle/', 'core/', 'progression/', 'objects/', 'scenes/', 'ui/', 'world/'],
   },
+  {
+    layer: 'campaign/**',
+    dir: join(SRC, 'campaign'),
+    // campaign is a persistent-state contract: shared/, progression/, inventory/, world/ (type
+    // contracts) allowed; no battle/core/scenes/objects/ui
+    banned: ['battle/', 'core/', 'objects/', 'scenes/', 'ui/'],
+  },
 ];
 
 // Matches both `import ... from 'x'` and `export ... from 'x'`

@@ -6,3 +6,4 @@ export * from './inventorySnapshots';
 export * from './pricing';
 export * from './startingInventory';
 export * from './equipmentSlotResolver';
+export * from './inventoryState';

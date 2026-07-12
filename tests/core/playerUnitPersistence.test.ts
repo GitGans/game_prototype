@@ -10,7 +10,7 @@ import {
   type PlayerExitInput,
   type PlayerLevelUpInput,
 } from '../../src/core/playerUnitPersistence';
-import type { PlayerUnitState } from '../../src/core/GameState';
+import type { PlayerUnitState } from '../../src/progression';
 
 function unit(overrides: Partial<PlayerUnitState> = {}): PlayerUnitState {
   return {

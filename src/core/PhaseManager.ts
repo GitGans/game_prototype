@@ -1,22 +1,23 @@
 import Phaser from 'phaser';
 import { GamePhase, PhaseAction, CampUnitSnapshot, SkillIconSnapshot, UpgradeTierSnapshot, UpgradeOptionSnapshot, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT, BattleParticipant } from './phases';
-import { DebugBattleState, createDebugBattleState } from './DebugBattleState';
+import type { DebugBattleState, DebugSessionConfig } from './DebugBattleState';
+import { createDebugPlayerSession } from './debugPlayerSession';
+import { initCampaignState } from './initCampaignState';
+import { CAMPAIGN_INITIAL_STATE_DEFINITION } from '../data/campaignInitialStateDefinition';
 import { GameState } from './GameState';
 import { EventBus, Events } from './EventBus';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { PLAYER_UNITS } from '../data/units';
 import { ITEM_CATALOG, ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
-import { initSubMapState } from '../world/mapLogic';
 import { SubMapDefinition, SubMapState } from '../world/types';
+import { projectWorldMapSnapshot, applyMovePartyToCampaign } from './worldMapProjection';
 import {
   equipItem,
   unequipItem,
   buildBackpackSnapshot,
   buildEquipmentSnapshot,
-  buildStartingInventory,
 } from '../inventory';
-import { assertStartingEquipmentClassRestrictions } from './startingInventoryValidation';
 import type { EquipSlot } from '../shared/itemTypes';
 import {
   UnitTabSnapshot,
@@ -33,8 +34,8 @@ import { buildPlayerExitInputs } from './playerBattleExitProjection';
 import { resolvePlayerMaxHpForLevel } from './battleSetupProjection';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { UnitBlueprint } from '../shared/unitTypes';
+import type { PlayerUnitState } from '../progression';
 import { buildSkillIconSnapshot, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
-import { PlayerUnitState } from './GameState';
 import type { PlayerBattleSetup } from './battleSetup';
 import {
   buildNewBattleState,
@@ -74,7 +75,6 @@ function toSkillIcon(skill: ActionSkillDefinition): SkillIconSnapshot {
 class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
   private game!: Phaser.Game;
-  private debugState: DebugBattleState | null = null;
   private lastBattleTransition:     BattlePhaseActionResult | null = null;
   private pendingAutoTurnIntention: AutoTurnIntention | null       = null;
   private rngStreams: GameplayRngStreams = createDefaultGameplayRngStreams();
@@ -98,38 +98,28 @@ class PhaseManagerClass {
   }
 
   getDebugState(): DebugBattleState | null {
-    return this.debugState;
+    return GameState.getDebugState();
   }
 
   getActiveBattleSetup(): PlayerBattleSetup {
-    if (this.phase.type === 'battle' && this.phase.isDebug && this.debugState) {
+    if (this.phase.type === 'battle' && this.phase.isDebug && GameState.getDebugState()) {
       return this.buildDebugBattleSetup();
     }
+    const campaign = GameState.getCampaignState();
     return {
-      playerUnits:    GameState.playerUnits,
-      itemContainers: GameState.itemContainers,
-      itemInstances:  GameState.itemInstances,
+      playerUnits:    campaign.roster.units,
+      itemContainers: campaign.inventory.containers,
+      itemInstances:  campaign.inventory.instances,
     };
   }
 
+  /** Pure adapter — never reconstructs PlayerUnitState records. Deleted in Stage 3. */
   buildDebugBattleSetup(): PlayerBattleSetup {
-    const ds = this.debugState!;
-    const playerUnits: Record<string, PlayerUnitState> = {};
-    for (const bp of PLAYER_UNITS) {
-      playerUnits[bp.templateId] = {
-        level:            ds.level,
-        isInCamp:         ds.campUnitIds.includes(bp.templateId),
-        lastPlacement:    ds.playerUnitPlacements?.[bp.templateId] ?? null,
-        permanentBonuses: ds.unitPermanentBonuses[bp.templateId] ?? {},
-        chosenUpgrades:   ds.chosenUpgrades[bp.templateId] ?? {},
-        lifeState:        'alive',
-        currentHp:        null,
-      };
-    }
+    const ds = GameState.getDebugState()!;
     return {
-      playerUnits,
-      itemContainers: ds.itemContainers,
-      itemInstances:  ds.itemInstances,
+      playerUnits:    ds.session.roster.units,
+      itemContainers: ds.session.inventory.containers,
+      itemInstances:  ds.session.inventory.instances,
     };
   }
 
@@ -169,11 +159,12 @@ class PhaseManagerClass {
   }
 
   private buildCampUnits(): CampUnitSnapshot[] {
+    const units = GameState.getCampaignState().roster.units;
     return PLAYER_UNITS.map(bp => ({
       templateId: bp.templateId,
       name:       bp.name,
-      level:      GameState.playerUnits[bp.templateId]?.level ?? bp.level,
-      inCamp:     GameState.playerUnits[bp.templateId]?.isInCamp ?? false,
+      level:      units[bp.templateId]?.level ?? bp.level,
+      inCamp:     units[bp.templateId]?.isInCamp ?? false,
     }));
   }
 
@@ -197,7 +188,7 @@ class PhaseManagerClass {
   // `buildNewBattleState(...)` and before any placement actions can run.
   private buildBattleParticipantsFromInitialState(state: BattleState): BattleParticipant[] {
     const participants: BattleParticipant[] = [];
-    Object.entries(GameState.playerUnits).forEach(([templateId, us]) => {
+    Object.entries(GameState.getCampaignState().roster.units).forEach(([templateId, us]) => {
       if (us.isInCamp) return;
       const bp = PLAYER_UNITS.find(b => b.templateId === templateId);
       if (!bp) return;
@@ -224,7 +215,11 @@ class PhaseManagerClass {
   ): UpgradeTierSnapshot[] {
     const bp = PLAYER_UNITS.find(u => u.templateId === templateId);
     if (!bp) return [];
-    const unitState = GameState.playerUnits[templateId];
+    // buildUpgradeTiers is reachable from the debug flow before any campaign exists
+    // (MainMenu → Debug Battle skips new_game) — guard rather than call getCampaignState().
+    const unitState = GameState.hasCampaignState()
+      ? GameState.getCampaignState().roster.units[templateId]
+      : undefined;
     const level = debugLevel ?? unitState?.level ?? bp.level;
     const chosenUpgrades = debugChosenUpgrades ?? unitState?.chosenUpgrades ?? {};
     return (bp.upgradeTiers ?? []).map(tier => ({
@@ -253,9 +248,12 @@ class PhaseManagerClass {
     debugChosenUpgradesMap?: Record<string, UnitUpgradeChoices>,
   ): UnitTabSnapshot[] {
     return PLAYER_UNITS.map(bp => {
+      // Lazily short-circuits: when debugChosenUpgradesMap has an entry, the campaign lookup
+      // (which would throw if no campaign exists yet, e.g. debug flow before new_game) is
+      // never evaluated.
       const chosenUpgrades =
         debugChosenUpgradesMap?.[bp.templateId] ??
-        GameState.playerUnits[bp.templateId]?.chosenUpgrades ??
+        (GameState.hasCampaignState() ? GameState.getCampaignState().roster.units[bp.templateId]?.chosenUpgrades : undefined) ??
         {};
       const progression = resolveUnitProgression(bp, chosenUpgrades);
       return {
@@ -273,24 +271,26 @@ class PhaseManagerClass {
   private rebuildSnapshot(phase: GamePhase): GamePhase {
     switch (phase.type) {
       case 'equip_screen': {
+        // Only reachable from world_map/camp, both of which require an existing campaign.
+        const campaign  = GameState.getCampaignState();
         const bp        = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
         const unitState = phase.selectedUnitTemplateId
-          ? GameState.playerUnits[phase.selectedUnitTemplateId]
+          ? campaign.roster.units[phase.selectedUnitTemplateId]
           : undefined;
         const progression = bp && unitState
           ? resolveUnitProgression(bp, unitState.chosenUpgrades)
           : null;
 
         const backpack = buildBackpackSnapshot(
-          GameState.itemContainers,
-          GameState.itemInstances,
+          campaign.inventory.containers,
+          campaign.inventory.instances,
           ITEM_CATALOG,
         );
         const unitEquipment = phase.selectedUnitTemplateId
           ? buildEquipmentSnapshot(
               phase.selectedUnitTemplateId,
-              GameState.itemContainers,
-              GameState.itemInstances,
+              campaign.inventory.containers,
+              campaign.inventory.instances,
               ITEM_CATALOG,
             )
           : EMPTY_EQUIP_SNAPSHOT;
@@ -304,8 +304,8 @@ class PhaseManagerClass {
               bp,
               unitState.level,
               unitState.permanentBonuses,
-              GameState.itemContainers,
-              GameState.itemInstances,
+              campaign.inventory.containers,
+              campaign.inventory.instances,
               ITEM_DEFINITIONS,
               progression.statModifiers,
             )
@@ -317,31 +317,37 @@ class PhaseManagerClass {
       case 'camp':
         return { ...phase, units: this.buildCampUnits() };
       case 'debug_equip_screen': {
-        const ds         = this.debugState!;
+        // buildDebugBattleSetup() is the pure adapter — playerUnits are real PlayerUnitState
+        // records; each unit carries its own level/chosenUpgrades/isInCamp (no session-wide
+        // "ds.level" or "ds.campUnitIds" anymore).
         const bp         = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
         const debugSetup = this.buildDebugBattleSetup();
         const unitState  = phase.selectedUnitTemplateId
           ? debugSetup.playerUnits[phase.selectedUnitTemplateId]
           : undefined;
         const progression = bp && unitState
-          ? resolveUnitProgression(bp, ds.chosenUpgrades[phase.selectedUnitTemplateId] ?? {})
+          ? resolveUnitProgression(bp, unitState.chosenUpgrades)
           : null;
 
         const backpack = buildBackpackSnapshot(
-          ds.itemContainers,
-          ds.itemInstances,
+          debugSetup.itemContainers,
+          debugSetup.itemInstances,
           ITEM_CATALOG,
           'backpack_debug',
         );
         const unitEquipment = phase.selectedUnitTemplateId
           ? buildEquipmentSnapshot(
               phase.selectedUnitTemplateId,
-              ds.itemContainers,
-              ds.itemInstances,
+              debugSetup.itemContainers,
+              debugSetup.itemInstances,
               ITEM_CATALOG,
             )
           : EMPTY_EQUIP_SNAPSHOT;
-        const availableUnits        = this.buildUnitTabSnapshots(ds.chosenUpgrades);
+        const debugChosenUpgradesMap: Record<string, UnitUpgradeChoices> = {};
+        for (const [templateId, us] of Object.entries(debugSetup.playerUnits)) {
+          debugChosenUpgradesMap[templateId] = us.chosenUpgrades;
+        }
+        const availableUnits        = this.buildUnitTabSnapshots(debugChosenUpgradesMap);
         const selectedUnit          = availableUnits.find(u => u.templateId === phase.selectedUnitTemplateId) ?? null;
         const selectedUnitSpriteKey = bp && progression
           ? this.spriteKeyFromProgression(bp, progression)
@@ -349,25 +355,31 @@ class PhaseManagerClass {
         const unitStats = bp && unitState && progression
           ? buildUnitStatsSnapshot(
               bp,
-              ds.level,
+              unitState.level,
               unitState.permanentBonuses,
-              ds.itemContainers,
-              ds.itemInstances,
+              debugSetup.itemContainers,
+              debugSetup.itemInstances,
               ITEM_DEFINITIONS,
               progression.statModifiers,
             )
           : null;
         const debugLearnedSkills = progression ? this.buildProgressionSkillIcons(progression) : [];
         const debugUpgradeSkills = debugLearnedSkills.slice(1, 5);
-        return { ...phase, backpack, unitEquipment, availableUnits, selectedUnit, unitStats, campUnitIds: [...ds.campUnitIds], learnedSkills: debugLearnedSkills, upgradeSkills: debugUpgradeSkills, selectedUnitSpriteKey };
+        const campUnitIds = Object.entries(debugSetup.playerUnits)
+          .filter(([, us]) => us.isInCamp)
+          .map(([templateId]) => templateId);
+        return { ...phase, backpack, unitEquipment, availableUnits, selectedUnit, unitStats, campUnitIds, learnedSkills: debugLearnedSkills, upgradeSkills: debugUpgradeSkills, selectedUnitSpriteKey };
       }
       case 'upgrade_tree': {
         const isDebug = phase.returnPhase.type === 'debug_equip_screen';
-        const ds = isDebug ? this.debugState! : undefined;
+        // Per-unit lookup — never a session-wide "shared" level or chosenUpgrades.
+        const debugUnitState = isDebug
+          ? GameState.getDebugState()!.session.roster.units[phase.unitTemplateId]
+          : undefined;
         const upgradeTiers = this.buildUpgradeTiers(
           phase.unitTemplateId,
-          ds?.level,
-          ds?.chosenUpgrades[phase.unitTemplateId],
+          debugUnitState?.level,
+          debugUnitState?.chosenUpgrades,
         );
         return { ...phase, upgradeTiers };
       }
@@ -457,6 +469,11 @@ class PhaseManagerClass {
           previewTargetUnitId,
         };
       }
+      case 'world_map': {
+        // CampaignState.world is authoritative — mapId/partyPos/mapState here are always
+        // overwritten from it, never trusted from the incoming phase.
+        return { ...phase, ...projectWorldMapSnapshot(GameState.getCampaignState()) };
+      }
       default:
         return phase; // phases without snapshots pass through unchanged
     }
@@ -486,14 +503,18 @@ class PhaseManagerClass {
       const result = applyBattleLifecycleAction({ state: currentState, action });
 
       if (result.persistCampaignPlacements && !prev.isDebug) {
+        const units = { ...GameState.getCampaignState().roster.units };
+        let changed = false;
         for (const unit of currentState.units.values()) {
           if (unit.side !== 'player') continue;
           const deployment = currentState.deployments.get(unit.id);
           if (deployment?.kind !== 'field') continue; // bench units have no field placement to save
-          const unitState = GameState.playerUnits[unit.templateId];
+          const unitState = units[unit.templateId];
           if (!unitState) continue;
-          GameState.playerUnits[unit.templateId] = { ...unitState, lastPlacement: deployment.anchor };
+          units[unit.templateId] = { ...unitState, lastPlacement: deployment.anchor };
+          changed = true;
         }
+        if (changed) GameState.replaceCampaignRoster({ units });
       }
 
       GameState.set(result.state);
@@ -558,43 +579,17 @@ class PhaseManagerClass {
       return;
     }
 
-    // ── Campaign init ──
+    // ── Campaign init ── always creates a fresh campaign (no idempotent guards); New Game
+    // from the menu replaces any existing progress.
     if (action.type === 'new_game') {
       this.rngStreams = createDefaultGameplayRngStreams();
-      const mapId = 'test_01';
-      if (!GameState.subMapStates[mapId]) {
-        GameState.subMapStates[mapId] = initSubMapState(MAP_DEFINITIONS[mapId]);
-      }
-      // Initialize playerUnits (idempotent)
-      if (Object.keys(GameState.playerUnits).length === 0) {
-        for (const bp of PLAYER_UNITS) {
-          GameState.playerUnits[bp.templateId] = {
-            level: bp.level,
-            isInCamp: PLAYER_UNITS.indexOf(bp) >= 9, // last 3 start in camp
-            lastPlacement: null,
-            permanentBonuses: {},
-            chosenUpgrades: {},
-            lifeState: 'alive',
-            currentHp: null,
-          };
-        }
-      }
-      // Item containers init (idempotent)
-      if (!GameState.itemContainers['backpack_shared']) {
-        assertStartingEquipmentClassRestrictions({
-          playerUnits: PLAYER_UNITS,
-          itemDefinitions: ITEM_DEFINITIONS,
-          startingItems: CAMPAIGN_STARTING_ITEMS,
-        });
-        const inventory = buildStartingInventory({
-          playerUnitTemplateIds: PLAYER_UNITS.map(bp => bp.templateId),
-          catalog: ITEM_CATALOG,
-          startingItems: CAMPAIGN_STARTING_ITEMS,
-        });
-        GameState.itemInstances  = inventory.itemInstances;
-        GameState.itemContainers = inventory.itemContainers;
-      }
-      if (!GameState.money) GameState.money = 0;
+      GameState.setCampaignState(initCampaignState({
+        playerUnits: PLAYER_UNITS,
+        itemCatalog: ITEM_CATALOG,
+        startingItems: CAMPAIGN_STARTING_ITEMS,
+        mapDefinitions: MAP_DEFINITIONS,
+        initialState: CAMPAIGN_INITIAL_STATE_DEFINITION,
+      }));
     }
 
     // ── Campaign battle: initialize BattleState + snapshot participants ──
@@ -614,8 +609,7 @@ class PhaseManagerClass {
 
     // ── Debug battle: initialize BattleState + snapshot participants ──
     // Invariant: debug battles never save or replay enemy placements.
-    if (action.type === 'start_battle' && this.debugState) {
-      const ds    = this.debugState;
+    if (action.type === 'start_battle' && GameState.getDebugState()) {
       const setup = this.buildDebugBattleSetup();
 
       // Build BattleState — no race/placement persistence for debug
@@ -623,13 +617,15 @@ class PhaseManagerClass {
       const { state } = buildNewBattleState(GameState.get(), setup, action.enemyGroupId, this.rngStreams.battleSetup);
       GameState.set(state);
 
-      // Snapshot debug participants (all non-camp units; bench not tracked for debug)
+      // Snapshot debug participants (all non-camp units; bench not tracked for debug).
+      // Each unit's own level/chosenUpgrades — never a session-wide "shared" value.
       const participants: BattleParticipant[] = [];
       for (const bp of PLAYER_UNITS) {
-        if (ds.campUnitIds.includes(bp.templateId)) continue;
-        const progression = resolveUnitProgression(bp, ds.chosenUpgrades[bp.templateId] ?? {});
+        const us = setup.playerUnits[bp.templateId];
+        if (!us || us.isInCamp) continue;
+        const progression = resolveUnitProgression(bp, us.chosenUpgrades ?? {});
         const spriteKey   = this.spriteKeyFromProgression(bp, progression);
-        participants.push({ templateId: bp.templateId, name: bp.name, level: ds.level, isAlive: true, wasOnBench: false, spriteKey });
+        participants.push({ templateId: bp.templateId, name: bp.name, level: us.level, isAlive: true, wasOnBench: false, spriteKey });
       }
       GameState.battleParticipants = participants;
     }
@@ -665,57 +661,83 @@ class PhaseManagerClass {
 
     // ── Battle teardown ──
     if (action.type === 'exit_battle' && prev.type === 'battle') {
-      if (prev.isDebug && this.debugState) {
-        // Debug teardown: XP goes to DebugBattleState only — never touches GameState
+      const debugState = GameState.getDebugState();
+      if (prev.isDebug && debugState) {
+        // Debug teardown: XP goes to DebugBattleState only — never touches CampaignState.
+        // Temporary Stage 1 behavior: bump every debug unit's level by one (preserves the
+        // old shared-level visible behavior). initialConfig.level is never touched.
         if (action.outcome === 'victory') {
-          this.debugState.level += 1;
+          const units: Record<string, PlayerUnitState> = {};
+          for (const [templateId, us] of Object.entries(debugState.session.roster.units)) {
+            units[templateId] = { ...us, level: us.level + 1 };
+          }
+          GameState.replaceDebugSession({ ...debugState.session, roster: { units } });
         }
       } else {
         const exits = buildPlayerExitInputs(exitParticipants, GameState.get());
 
-        GameState.playerUnits = applyBattleExitPlayerPersistence(
-          GameState.playerUnits,
-          exits,
-        );
+        GameState.replaceCampaignRoster({
+          units: applyBattleExitPlayerPersistence(GameState.getCampaignState().roster.units, exits),
+        });
 
         if (action.outcome === 'victory') {
           this.applyVictoryLevelUp(exitParticipants);
         }
 
-        // Mark trigger entity dead on the map — victory only; defeat must leave the encounter intact
+        // Mark trigger entity dead on the map — victory only; defeat must leave the encounter intact.
+        // Immutable replacement: clone entityStates → new SubMapState → new subMapStates →
+        // new WorldState → new CampaignState. No in-place mutation of campaign records.
         // INVARIANT: action.outcome === 'victory' is required before mutating entityStates.
         if (action.outcome === 'victory' && prev.mapId && prev.triggerPos) {
           const key = `${prev.triggerPos.x},${prev.triggerPos.y}`;
-          const mapState = GameState.subMapStates[prev.mapId];
-          if (mapState) mapState.entityStates[key] = { alive: false };
+          const c   = GameState.getCampaignState();
+          const src = c.world.subMapStates[prev.mapId];
+          if (src) {
+            const nextMap = { ...src, entityStates: { ...src.entityStates, [key]: { alive: false } } };
+            GameState.setCampaignState({
+              ...c,
+              world: { ...c.world, subMapStates: { ...c.world.subMapStates, [prev.mapId]: nextMap } },
+            });
+          }
         }
       }
     }
 
     // ── Item mutations — applied to EXACTLY ONE inventory state ──
-    // debug_equip_screen → DebugBattleState inventory only; otherwise → GameState only.
-    // No item action may "no-op through" the wrong state first (closes debug→campaign leak).
+    // debug_equip_screen → DebugBattleState session inventory only; otherwise → CampaignState
+    // inventory only. No item action may "no-op through" the wrong state first (closes
+    // debug→campaign leak).
     if (action.type === 'equip_item' || action.type === 'unequip_item') {
-      const isDebug    = prev.type === 'debug_equip_screen';
-      const containers = isDebug ? this.debugState!.itemContainers : GameState.itemContainers;
-      const instances  = isDebug ? this.debugState!.itemInstances  : GameState.itemInstances;
-      const backpackId = isDebug ? 'backpack_debug' : 'backpack_shared';
+      const isDebug     = prev.type === 'debug_equip_screen';
+      const debugState  = isDebug ? GameState.getDebugState() : null;
+      const campaign    = isDebug ? null : GameState.getCampaignState();
+      const containers  = isDebug ? debugState!.session.inventory.containers : campaign!.inventory.containers;
+      const instances   = isDebug ? debugState!.session.inventory.instances  : campaign!.inventory.instances;
+      const backpackId  = isDebug ? 'backpack_debug' : 'backpack_shared';
+
+      const writeContainers = (nextContainers: typeof containers) => {
+        if (isDebug) {
+          GameState.replaceDebugSession({
+            ...debugState!.session,
+            inventory: { ...debugState!.session.inventory, containers: nextContainers },
+          });
+        } else {
+          GameState.replaceCampaignInventory({ ...campaign!.inventory, containers: nextContainers });
+        }
+      };
 
       if (action.type === 'equip_item') {
         const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
         if (bp) {
           const chosenUpgrades = isDebug
-            ? (this.debugState!.chosenUpgrades[action.unitTemplateId] ?? {})
-            : (GameState.playerUnits[action.unitTemplateId]?.chosenUpgrades ?? {});
+            ? (debugState!.session.roster.units[action.unitTemplateId]?.chosenUpgrades ?? {})
+            : (campaign!.roster.units[action.unitTemplateId]?.chosenUpgrades ?? {});
           const progression = resolveUnitProgression(bp, chosenUpgrades);
           const result = equipItem(
             action.unitTemplateId, progression.currentClassId, action.instanceId,
             containers, instances, ITEM_CATALOG,
           );
-          if (result.ok) {
-            if (isDebug) this.debugState!.itemContainers = result.nextContainers;
-            else         GameState.itemContainers        = result.nextContainers;
-          }
+          if (result.ok) writeContainers(result.nextContainers);
         }
         return;
       }
@@ -725,18 +747,18 @@ class PhaseManagerClass {
         action.unitTemplateId, action.slot as EquipSlot,
         containers, instances, ITEM_CATALOG, backpackId,
       );
-      if (result.ok) {
-        if (isDebug) this.debugState!.itemContainers = result.nextContainers;
-        else         GameState.itemContainers        = result.nextContainers;
-      }
+      if (result.ok) writeContainers(result.nextContainers);
       return;
     }
 
     // ── Camp unit toggle ──
     if (action.type === 'toggle_camp_unit') {
-      const unitState = GameState.playerUnits[action.templateId];
+      const c = GameState.getCampaignState();
+      const unitState = c.roster.units[action.templateId];
       if (unitState) {
-        GameState.playerUnits[action.templateId] = { ...unitState, isInCamp: !unitState.isInCamp };
+        GameState.replaceCampaignRoster({
+          units: { ...c.roster.units, [action.templateId]: { ...unitState, isInCamp: !unitState.isInCamp } },
+        });
       }
     }
 
@@ -744,33 +766,61 @@ class PhaseManagerClass {
     if (action.type === 'choose_upgrade') {
       const isDebugContext = prev.type === 'upgrade_tree' && prev.returnPhase.type === 'debug_equip_screen';
       if (isDebugContext) {
-        const ds = this.debugState!;
-        const existing = ds.chosenUpgrades[action.templateId] ?? {};
-        if (!existing[action.tierId]) {
-          ds.chosenUpgrades[action.templateId] = { ...existing, [action.tierId]: action.upgradeId };
+        const debugState = GameState.getDebugState()!;
+        const units = debugState.session.roster.units;
+        const us = units[action.templateId];
+        const existing = us?.chosenUpgrades ?? {};
+        if (us && !existing[action.tierId]) {
+          const nextUnit = { ...us, chosenUpgrades: { ...existing, [action.tierId]: action.upgradeId } };
+          GameState.replaceDebugSession({
+            ...debugState.session,
+            roster: { units: { ...units, [action.templateId]: nextUnit } },
+          });
         }
       } else {
-        const unitState = GameState.playerUnits[action.templateId];
+        const c = GameState.getCampaignState();
+        const unitState = c.roster.units[action.templateId];
         if (unitState && !unitState.chosenUpgrades[action.tierId]) {
-          GameState.playerUnits[action.templateId] = {
-            ...unitState,
-            chosenUpgrades: { ...unitState.chosenUpgrades, [action.tierId]: action.upgradeId },
-          };
+          GameState.replaceCampaignRoster({
+            units: {
+              ...c.roster.units,
+              [action.templateId]: {
+                ...unitState,
+                chosenUpgrades: { ...unitState.chosenUpgrades, [action.tierId]: action.upgradeId },
+              },
+            },
+          });
         }
       }
     }
 
     // ── Debug mode ──
     if (action.type === 'init_debug') {
-      this.debugState = createDebugBattleState(action.level);
+      const config: DebugSessionConfig = {
+        level: action.level,
+        startingItems: CAMPAIGN_STARTING_ITEMS,
+        initialCampUnitIds: [],
+      };
+      const session = createDebugPlayerSession({ config, playerUnits: PLAYER_UNITS, itemCatalog: ITEM_CATALOG });
+      GameState.setDebugState({ session, initialConfig: config });
       this.rngStreams = createDefaultGameplayRngStreams();
     }
 
     if (action.type === 'toggle_debug_camp') {
-      const ds = this.debugState!;
-      const idx = ds.campUnitIds.indexOf(action.templateId);
-      if (idx >= 0) ds.campUnitIds.splice(idx, 1);
-      else          ds.campUnitIds.push(action.templateId);
+      const debugState = GameState.getDebugState()!;
+      const units = debugState.session.roster.units;
+      const us = units[action.templateId];
+      if (us) {
+        GameState.replaceDebugSession({
+          ...debugState.session,
+          roster: { units: { ...units, [action.templateId]: { ...us, isInCamp: !us.isInCamp } } },
+        });
+      }
+    }
+
+    // ── move_party: writes CampaignState.world.partyPos, never the phase. ──
+    if (action.type === 'move_party') {
+      GameState.setCampaignState(applyMovePartyToCampaign(GameState.getCampaignState(), action.partyPos));
     }
 
     // ── Commerce — commented out until 'shop' phase exists ──
@@ -803,13 +853,6 @@ class PhaseManagerClass {
     // }
   }
 
-  // Mutates the world_map phase position without triggering a scene switch.
-  updateWorldMapPos(mapId: string, pos: { x: number; y: number }): void {
-    if (this.phase.type === 'world_map') {
-      this.phase = { type: 'world_map', mapId, partyPos: pos };
-    }
-  }
-
   private readonly GAME_SCENES = ['MainMenu', 'WorldMap', 'Prep', 'Game', 'BattleResults', 'EquipScreen', 'DebugLevelSelect', 'UpgradeTreeScreen', 'MapVictory'];
 
   private syncPhaserScenes(phase: GamePhase): void {
@@ -835,9 +878,10 @@ class PhaseManagerClass {
   }
 
   private applyVictoryLevelUp(exitParticipants: BattleParticipant[]): void {
+    const campaign = GameState.getCampaignState();
     const levelUps: PlayerLevelUpInput[] = [];
     for (const p of exitParticipants) {
-      const us = GameState.playerUnits[p.templateId];
+      const us = campaign.roster.units[p.templateId];
       if (!us) continue;
       const bp = PLAYER_UNITS.find(b => b.templateId === p.templateId);
       if (!bp) continue;
@@ -848,17 +892,16 @@ class PhaseManagerClass {
         level:            newLevel,
         chosenUpgrades:   us.chosenUpgrades ?? {},
         permanentBonuses: us.permanentBonuses ?? {},
-        itemContainers:   GameState.itemContainers,
-        itemInstances:    GameState.itemInstances,
+        itemContainers:   campaign.inventory.containers,
+        itemInstances:    campaign.inventory.instances,
       });
 
       levelUps.push({ templateId: p.templateId, newLevel, newMaxHp });
     }
 
-    GameState.playerUnits = applyVictoryLevelUpPersistence(
-      GameState.playerUnits,
-      levelUps,
-    );
+    GameState.replaceCampaignRoster({
+      units: applyVictoryLevelUpPersistence(GameState.getCampaignState().roster.units, levelUps),
+    });
   }
 
   private buildExitParticipants(): BattleParticipant[] {
@@ -897,7 +940,9 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
   switch (action.type) {
 
     case 'new_game':
-      return { type: 'world_map', mapId: 'test_01', partyPos: MAP_DEFINITIONS['test_01'].startPos };
+      // Placeholder — immediately superseded by rebuildSnapshot's world_map case, which reads
+      // the freshly-created CampaignState (set in applyActionSideEffects, which runs first).
+      return { type: 'world_map', mapId: '', partyPos: { x: 0, y: 0 }, mapState: { entityStates: {} } };
 
     case 'debug':
       return { type: 'debug_level_select' };
@@ -924,6 +969,10 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'toggle_debug_camp':
       if (current.type !== 'debug_equip_screen') return null;
       return current; // mutation-only → STATE_CHANGED
+
+    case 'move_party':
+      if (current.type !== 'world_map') return null;
+      return current; // mutation-only — position lives in CampaignState.world, not the phase
 
     case 'enter_battle':
       if (current.type !== 'world_map') return null;
@@ -1153,7 +1202,9 @@ function allMobsDead(mapDef: SubMapDefinition, mapState: SubMapState): boolean {
 function wouldClearMap(battlePhase: GamePhase & { type: 'battle' }): boolean {
   if (battlePhase.isDebug || !battlePhase.mapId || !battlePhase.triggerPos) return false;
   const mapDef   = MAP_DEFINITIONS[battlePhase.mapId];
-  const mapState = GameState.subMapStates[battlePhase.mapId];
+  // mapId/triggerPos are only set for campaign battles (enter_battle), which require an
+  // existing campaign — safe to call getCampaignState() unguarded here.
+  const mapState = GameState.getCampaignState().world.subMapStates[battlePhase.mapId];
   if (!mapDef || !mapState) return false;
 
   const key = `${battlePhase.triggerPos.x},${battlePhase.triggerPos.y}`;

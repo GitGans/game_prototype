@@ -1,13 +1,12 @@
 import Phaser from 'phaser';
 import { PhaseManager } from '../core/PhaseManager';
-import { GameState } from '../core/GameState';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
-import { canMove, resolveCell, initSubMapState } from '../world/mapLogic';
+import { canMove, resolveCell } from '../world/mapLogic';
 import { WORLD_MAP_VISUAL_THEME } from '../objects/worldMapVisualTheme';
 import {
   SubMapDefinition,
+  SubMapState,
   MobEntry,
-  PortalEntry,
 } from '../world/types';
 import { WorldMapControlsPanel } from '../objects/panels/WorldMapControlsPanel';
 import { WorldMapPrompt } from '../objects/WorldMapPrompt';
@@ -20,6 +19,9 @@ export class WorldMap extends Phaser.Scene {
   private partyY = 0;
   private mapId = '';
   private mapDef!: SubMapDefinition;
+  // From the phase snapshot; entityStates only change across scene restarts (battle victory
+  // switches away from and back into WorldMap, re-running create() with a fresh snapshot).
+  private mapState!: SubMapState;
 
   private cellRects: Phaser.GameObjects.Rectangle[][] = [];
   private partyMarker!: Phaser.GameObjects.Rectangle;
@@ -40,10 +42,7 @@ export class WorldMap extends Phaser.Scene {
     this.mapDef = MAP_DEFINITIONS[this.mapId];
     this.partyX = phase.partyPos.x;
     this.partyY = phase.partyPos.y;
-
-    if (!GameState.subMapStates[this.mapId]) {
-      GameState.subMapStates[this.mapId] = initSubMapState(this.mapDef);
-    }
+    this.mapState = phase.mapState;
 
     const cols = this.mapDef.layout[0].length;
     const rows = this.mapDef.layout.length;
@@ -73,7 +72,7 @@ export class WorldMap extends Phaser.Scene {
   }
 
   private buildGrid(): void {
-    const mapState = GameState.subMapStates[this.mapId];
+    const mapState = this.mapState;
     for (let row = 0; row < this.mapDef.layout.length; row++) {
       this.cellRects[row] = [];
       for (let col = 0; col < this.mapDef.layout[row].length; col++) {
@@ -123,8 +122,7 @@ export class WorldMap extends Phaser.Scene {
   private tryMove(nx: number, ny: number): void {
     if (!canMove(this.mapDef, nx, ny)) return;
 
-    const mapState = GameState.subMapStates[this.mapId];
-    const resolved = resolveCell(this.mapDef, mapState, nx, ny);
+    const resolved = resolveCell(this.mapDef, this.mapState, nx, ny);
 
     // Check for living mob BEFORE passable guard — resolveCell returns passable:false
     // for living mobs, so an early passable check would make this branch unreachable.
@@ -133,7 +131,7 @@ export class WorldMap extends Phaser.Scene {
       this.partyX = nx;
       this.partyY = ny;
       this.movePartyMarker();
-      PhaseManager.updateWorldMapPos(this.mapId, { x: nx, y: ny });
+      PhaseManager.transition({ type: 'move_party', partyPos: { x: nx, y: ny } });
       PhaseManager.transition({
         type: 'enter_battle',
         enemyGroupId: mobData.enemyGroupId,
@@ -147,11 +145,12 @@ export class WorldMap extends Phaser.Scene {
     this.partyX = nx;
     this.partyY = ny;
     this.movePartyMarker();
-    PhaseManager.updateWorldMapPos(this.mapId, { x: nx, y: ny });
+    PhaseManager.transition({ type: 'move_party', partyPos: { x: nx, y: ny } });
 
     if (resolved.entity) {
       if (resolved.entity.triggersOnEnter) {
-        this.onEnterEntity(nx, ny, resolved.entity);
+        // Portal entities trigger on enter but navigation is not implemented yet — no-op.
+        // (mob, the other triggersOnEnter type, already returned above.)
       } else {
         const label = resolved.entity.type === 'camp' ? 'Press Space to enter camp'
           : resolved.entity.type === 'shop' ? 'Press Space to enter shop'
@@ -166,8 +165,7 @@ export class WorldMap extends Phaser.Scene {
   }
 
   private tryInteract(): void {
-    const mapState = GameState.subMapStates[this.mapId];
-    const resolved = resolveCell(this.mapDef, mapState, this.partyX, this.partyY);
+    const resolved = resolveCell(this.mapDef, this.mapState, this.partyX, this.partyY);
     if (!resolved.entity || resolved.entity.triggersOnEnter) return;
 
     this.prompt.hide();
@@ -175,20 +173,6 @@ export class WorldMap extends Phaser.Scene {
       case 'camp':
         PhaseManager.transition({ type: 'enter_camp' });
         break;
-    }
-  }
-
-  private onEnterEntity(
-    _x: number,
-    _y: number,
-    entity: NonNullable<ReturnType<typeof resolveCell>['entity']>,
-  ): void {
-    if (entity.type === 'portal') {
-      const portalData = entity.data as PortalEntry;
-      if (!GameState.subMapStates[portalData.targetMapId]) {
-        GameState.subMapStates[portalData.targetMapId] =
-          initSubMapState(MAP_DEFINITIONS[portalData.targetMapId]);
-      }
     }
   }
 

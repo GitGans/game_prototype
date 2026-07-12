@@ -22,6 +22,8 @@ The system is split into layers: static content definitions, domain logic, orche
 * world/    → world-map logic and types
 * battle/   → battle domain rules (placement, combat, targeting, initiative)
 * inventory/→ pure inventory & equipment domain (containers, equip, bonuses, item use, snapshots, pricing)
+* progression/→ unit progression domain (roster state, class/upgrade resolution, stats)
+* campaign/ → persistent campaign state contract (`CampaignState`) — the only future save source
 * core/     → game orchestration: PhaseManager, GameState, phase definitions, transitions
 * objects/  → game-specific visual components (unit views, tooltips, skill bars)
 * ui/       → reusable, game-agnostic UI primitives (buttons, inputs, theme)
@@ -72,7 +74,9 @@ scene reads GamePhase and renders
 * battle   → depends on shared; no Phaser
 * world    → depends on shared; no Phaser
 * inventory→ depends on shared, data; no Phaser; no GameState; no battle/core/progression
-* core     → depends on shared, battle, world, data, inventory, progression
+* progression→ depends on shared; no battle/core/objects/scenes/ui/world
+* campaign → depends on shared, progression, inventory, world (type contracts only); no battle/core/scenes/objects/ui
+* core     → depends on shared, battle, world, data, inventory, progression, campaign
 * objects  → depends on shared, core; uses ui
 * ui       → no game knowledge; no core/battle/world imports
 * scenes   → depends on all layers; only entry point allowed to trigger PhaseManager
@@ -92,7 +96,9 @@ scene reads GamePhase and renders
 * change battle rules (combat, targeting, placement)  → battle/
 * change world-map rules                              → world/
 * add a new game screen or transition                 → core/phases.ts + core/PhaseManager.ts + scenes/
-* change persistent progression                       → core/GameState.ts
+* change the persistent campaign state shape           → campaign/campaignState.ts
+* change how a new campaign is initialized             → core/initCampaignState.ts + data/campaignInitialStateDefinition.ts
+* change runtime ownership of campaign/debug/battle state → core/GameState.ts
 * change a visual component tied to game data         → objects/
 * change a reusable UI primitive                      → ui/
 * change global styles or constants                   → ui/theme.ts (UI_THEME), core/Constants.ts

@@ -55,8 +55,11 @@ user interaction event
 PhaseManager resolves next phase and syncs scenes
 
 ## Dependencies
-- depends on: `src/core/PhaseManager`, `src/core/GameState`, `src/core/EventBus`, `src/ui/`, `src/objects/`, `src/battle/`
+- depends on: `src/core/PhaseManager`, `src/core/EventBus`, `src/ui/`, `src/objects/`, `src/battle/`
 - used by: Phaser scene registry (registered in game config); nothing imports scenes directly
+- no scene imports `src/core/GameState` directly — all render data, including world map state
+  (`WorldMap` reads `mapId`/`partyPos`/`mapState` from the `world_map` phase snapshot), comes
+  through `PhaseManager.getPhase()` / `GamePhase`
 
 ## Invariants
 - Scenes never call `this.scene.start/stop/launch` — all scene switching goes through `PhaseManager`

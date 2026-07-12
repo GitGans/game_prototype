@@ -1,4 +1,4 @@
-import type { PlayerUnitState } from './GameState';
+import type { PlayerUnitState } from '../progression';
 import type { ItemContainer, ItemInstance } from '../battle/types';
 
 export interface PlayerBattleSetup {

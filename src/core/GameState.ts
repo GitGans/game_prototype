@@ -4,9 +4,6 @@ import {
   Phase,
   UnitRace,
   CellCoord,
-  ItemInstance,
-  ItemContainer,
-  PartialBattleStatBonuses,
 } from "../battle/types";
 import {
   type TurnContext,
@@ -14,9 +11,12 @@ import {
   resetTurnContextForNewBattle,
 } from '../battle/turnResolver';
 import { BattleParticipant } from './phases';
-import type { UnitLifeState, UpgradeOptionId } from '../shared/unitTypes';
-import { SubMapState } from '../world/types';
 import { buildOccupancy } from "../battle/occupancy";
+import type { CampaignState } from '../campaign';
+import type { DebugBattleState } from './DebugBattleState';
+import type { PlayerSessionState } from './playerSessionState';
+import type { RosterState } from '../progression';
+import type { InventoryState } from '../inventory';
 
 function emptyState(): BattleState {
   return {
@@ -33,40 +33,17 @@ function emptyState(): BattleState {
   };
 }
 
-export interface PlayerUnitState {
-  level: number;
-  isInCamp: boolean;
-  lastPlacement: CellCoord | null;
-  /** Sparse additive stat bonuses. Missing stat keys mean "no bonus" (0). */
-  permanentBonuses: PartialBattleStatBonuses;
-  chosenUpgrades: Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>; // upgrade option id per tier
-  // alive+null = full HP relative to resolved max; alive+number = concrete HP; dead+0 = dead between battles.
-  lifeState: UnitLifeState;
-  currentHp: number | null;
-}
-
-export interface CampaignState {
-  money: number;
-  itemInstances: Record<string, ItemInstance>;
-  itemContainers: Record<string, ItemContainer>;
-  playerUnits: Record<string, PlayerUnitState>; // templateId → state
-  subMapStates: Record<string, SubMapState>;
-}
-
 class GameStateManager {
   private state: BattleState = emptyState();
   private battleMode: BattleMode = "manual";
   private battleTurnContext: TurnContext = createTurnContext();
+  private campaignState: CampaignState | null = null;
+  private debugState: DebugBattleState | null = null;
 
   // Survive reset() — shared across scene restarts
   lastEnemyRace: UnitRace | null = null;
   lastEnemyPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }> | null = null;
   battleParticipants: BattleParticipant[] = [];
-  playerUnits: Record<string, PlayerUnitState> = {};
-  itemInstances: Record<string, ItemInstance> = {};
-  itemContainers: Record<string, ItemContainer> = {};
-  subMapStates: Record<string, SubMapState> = {};
-  money: number = 0;
 
   get(): BattleState {
     return this.state;
@@ -80,7 +57,8 @@ class GameStateManager {
     this.state = emptyState();
     this.battleMode = "manual";
     this.battleTurnContext = resetTurnContextForNewBattle();
-    // playerUnits, lastEnemyRace, lastEnemyPlacements are intentionally NOT cleared here
+    // campaignState, debugState, lastEnemyRace, lastEnemyPlacements are intentionally NOT
+    // cleared here — reset() only tears down battle runtime, not persistent/session state.
   }
 
   setPhase(phase: Phase): void {
@@ -107,14 +85,43 @@ class GameStateManager {
     this.battleTurnContext = resetTurnContextForNewBattle();
   }
 
-  get campaign(): CampaignState {
-    return {
-      money: this.money,
-      itemInstances: this.itemInstances,
-      itemContainers: this.itemContainers,
-      playerUnits: this.playerUnits,
-      subMapStates: this.subMapStates,
-    };
+  hasCampaignState(): boolean {
+    return this.campaignState !== null;
+  }
+
+  getCampaignState(): CampaignState {
+    if (!this.campaignState) throw new Error('Campaign state is not initialized');
+    return this.campaignState;
+  }
+
+  setCampaignState(next: CampaignState): void {
+    this.campaignState = next;
+  }
+
+  replaceCampaignRoster(next: RosterState): void {
+    this.setCampaignState({ ...this.getCampaignState(), roster: next });
+  }
+
+  replaceCampaignInventory(next: InventoryState): void {
+    this.setCampaignState({ ...this.getCampaignState(), inventory: next });
+  }
+
+  getDebugState(): DebugBattleState | null {
+    return this.debugState;
+  }
+
+  setDebugState(next: DebugBattleState): void {
+    this.debugState = next;
+  }
+
+  clearDebugState(): void {
+    this.debugState = null;
+  }
+
+  replaceDebugSession(next: PlayerSessionState): void {
+    const ds = this.debugState;
+    if (!ds) throw new Error('Debug state is not initialized');
+    this.debugState = { ...ds, session: next };
   }
 }
 

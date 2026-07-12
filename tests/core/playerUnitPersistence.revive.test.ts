@@ -4,7 +4,7 @@ import { buildPlayerExitInputs } from '../../src/core/playerBattleExitProjection
 import { reviveUnitInBattle, computeReviveHp } from '../../src/battle/revive';
 import { killUnit } from '../../src/battle/lifeState';
 import { buildOccupancy } from '../../src/battle/occupancy';
-import type { PlayerUnitState } from '../../src/core/GameState';
+import type { PlayerUnitState } from '../../src/progression';
 import { makeUnit, resetUnitIdCounter } from '../battle/helpers/units';
 import { makeBattleStateFromUnits } from '../battle/helpers/battleState';
 import { coord } from '../battle/helpers/coords';

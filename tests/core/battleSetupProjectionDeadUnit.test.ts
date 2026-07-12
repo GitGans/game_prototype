@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildPlayerAutoPlacementCandidates } from '../../src/core/battleSetupProjection';
 import type { PlayerBattleSetup } from '../../src/core/battleSetup';
-import type { PlayerUnitState } from '../../src/core/GameState';
+import type { PlayerUnitState } from '../../src/progression';
 import type { UnitBlueprint, UnitClassId } from '../../src/shared/unitTypes';
 import type { SkillId } from '../../src/shared/skillDefinitionTypes';
 import { ucid } from '../../src/shared/unitTypes';

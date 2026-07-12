@@ -5,21 +5,25 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 
 ## Responsibilities
 - Own the phase state machine — validate and execute all game transitions
-- Maintain persistent campaign data (units, items, money, map progress)
-- Initialize battle state from campaign snapshot
+- Own separate runtime references for persistent campaign data, debug session data, and battle state
+- Initialize battle state from the active player session (campaign or debug)
 - Build display snapshots (bench cards, stats, upgrades) for each phase
 - Invoke progression resolvers from `src/progression/` to build battle-ready unit input
-- Isolate debug mode state from campaign saves
+- Isolate debug session state from campaign — same `RosterState`/`InventoryState` types, never shared instances
 
 ## Key Files
 - `PhaseManager.ts` — master state machine; single entry point for all transitions via `transition(action)`
 - `phases.ts` — `GamePhase` and `PhaseAction` discriminated unions; the contracts between UI and core
-- `GameState.ts` — persistent singleton holding `CampaignState` and `BattleState`
+- `GameState.ts` — runtime singleton owning three separate references: `CampaignState`, `DebugBattleState`, and battle runtime (`BattleState` + mode/turn context). Exposes only replacement methods (`setCampaignState`, `replaceCampaignRoster`, `replaceCampaignInventory`, `setDebugState`, `replaceDebugSession`, ...) — no writable flat fields.
+- `playerSessionState.ts` — `PlayerSessionState { roster, inventory }`, the core-only composition of the two player-owned domains; used by `DebugBattleState.session`
+- `initCampaignState.ts` — pure campaign factory; the only place `CampaignState` is constructed
+- `debugPlayerSession.ts` — pure debug session factory; the only place a debug `PlayerSessionState` is constructed
+- `DebugBattleState.ts` — `{ session: PlayerSessionState, initialConfig: DebugSessionConfig }`; owned by `GameState`, never placed inside `CampaignState`
+- `worldMapProjection.ts` — pure projections used by `PhaseManager`'s `world_map` phase: `projectWorldMapSnapshot` (CampaignState.world → phase snapshot) and `applyMovePartyToCampaign`. Kept outside `PhaseManager.ts` (which imports the real `phaser` package) so this logic is unit-testable without a Phaser instance.
 - `battleInitialization.ts` — battle state factory; builds auto-placed or replay battle states
 - `battleSetupProjection.ts` — builds typed placement candidates with embedded unit factory functions
 - `unitStatsSnapshot.ts` — computes base and final stats for display
 - `unitUpgradePresentation.ts` — generates upgrade text, stat lines, and skill descriptions for UI
-- `DebugBattleState.ts` — isolated state container for debug battles; never syncs to `GameState`
 - `EventBus.ts` — `STATE_CHANGED` event singleton; scenes subscribe via `sceneEvents.ts`
 - `sceneEvents.ts` — binds Phaser scene lifecycle to `STATE_CHANGED` with auto-cleanup
 - `Constants.ts` — grid layout, bench config, combat constants (visual colors removed; see `src/objects/battleVisualTheme.ts`)
@@ -48,9 +52,14 @@ Scenes re-render from new `GamePhase`
 ## Invariants
 - `resolveTransition()` must remain pure — no Phaser calls, no state mutations
 - All state mutations happen exclusively inside `applyActionSideEffects()`
-- `DebugBattleState` must never be written into `GameState`
+- `DebugBattleState` must never be placed inside `CampaignState` and must never be serialized —
+  it is stored beside campaign state in `GameState`, not inside it
+- Campaign and debug state must never share mutable `RosterState`/`InventoryState` instances,
+  even though they use the same types
 - Scenes never call `this.scene.start/stop` — only `PhaseManager` does
-- `GamePhase` is the single source of truth for every scene's render data
+- `GamePhase` is the single source of truth for every scene's render data; `WorldMap` reads
+  its map state and party position from the `world_map` phase snapshot, never from `GameState`
+  directly
 
 ## Battle Phase Boundary
 
@@ -74,5 +83,7 @@ Scenes re-render from new `GamePhase`
 - Change stat display computation → `unitStatsSnapshot.ts`
 - Change upgrade description text → `unitUpgradePresentation.ts`
 - Change grid/bench layout constants → `Constants.ts`
-- Change debug mode initial state → `DebugBattleState.ts`
+- Change debug session initial config/contracts → `DebugBattleState.ts`; change how a debug session is built → `debugPlayerSession.ts`
+- Change campaign initial content/config → `src/data/campaignInitialStateDefinition.ts`; change how a campaign is built → `initCampaignState.ts`
+- Change world_map snapshot projection or party movement → `worldMapProjection.ts`
 - Change cross-scene event wiring → `EventBus.ts` / `sceneEvents.ts`

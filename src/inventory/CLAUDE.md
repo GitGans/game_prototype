@@ -20,6 +20,7 @@ runtime item-use path in this stage — `useEffect` is catalog data only and is 
 - [equipmentSlotResolver.ts](equipmentSlotResolver.ts) — `canMetadataUseEquipmentSlot`, `resolvePreferredEquipSlot` (own the `ring` → `ring_1`/`ring_2` rule; `usable` items resolve to `usable_slot`; metadata-driven)
 - [inventorySnapshots.ts](inventorySnapshots.ts) — `buildBackpackSnapshot`, `buildEquipmentSnapshot`
 - [pricing.ts](pricing.ts) — `getSellPrice`
+- [inventoryState.ts](inventoryState.ts) — `InventoryState { instances, containers }`; `requireSharedBackpack` (structural shared-backpack invariant)
 - [index.ts](index.ts) — public API barrel
 
 ## Structural Role
@@ -49,8 +50,15 @@ runtime item-use path in this stage — `useEffect` is catalog data only and is 
   no item is removed from a container through "use". Mechanics will be added later.
 - **Backpack capacity is 24** everywhere — operations and snapshots both use `BACKPACK_SLOT_COUNT`. Do not
   reintroduce a hardcoded `10` or `24`.
-- Equipment container id is `equip_${unitTemplateId}`; default backpack id is `backpack_shared`
-  (`backpack_debug` for debug). Ring items prefer first free `ring_1`/`ring_2`, else swap `ring_1`.
+- **Every `InventoryState` has exactly one structurally identified shared backpack** —
+  `container.kind === 'backpack' && container.ownerTemplateId === undefined`. `requireSharedBackpack`
+  enforces this. The container's technical `id` (`backpack_shared` for campaign, `backpack_debug`
+  for debug) does **not** determine this — it is a stable record key only. No new domain rule may
+  branch on these ID strings; direct ID lookups remain only as a temporary Stage 1 orchestration
+  bridge in `core/PhaseManager.ts` (removed once Stage 2 routes equipment through
+  `requireSharedBackpack`).
+- Equipment container id is `equip_${unitTemplateId}`. Ring items prefer first free `ring_1`/`ring_2`,
+  else swap `ring_1`.
 
 ## Where to Modify
 - container placement / movement rules → [containerOps.ts](containerOps.ts)

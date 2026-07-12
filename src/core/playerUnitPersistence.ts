@@ -1,6 +1,6 @@
 import type { UnitLifeState } from '../shared/unitTypes';
 import type { CellCoord } from '../shared/gridTypes';
-import type { PlayerUnitState } from './GameState';
+import type { PlayerUnitState } from '../progression';
 
 export type PartialPlayerUnitState = Partial<PlayerUnitState> | undefined;
 

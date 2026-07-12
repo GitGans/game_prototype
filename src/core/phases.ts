@@ -9,6 +9,7 @@ import type { BattleUnitSnapshot, FieldBattleUnitSnapshot, BattleOccupancySnapsh
 import type { PlacementSelection, BattleState, BattleMode, Side } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
+import type { SubMapState, WorldPos } from '../shared/worldTypes';
 
 export interface CampUnitSnapshot {
   templateId: string;
@@ -57,7 +58,7 @@ export interface BattleResultUnit {
 
 export type GamePhase =
   | { type: 'main_menu' }
-  | { type: 'world_map'; mapId: string; partyPos: { x: number; y: number } }
+  | { type: 'world_map'; mapId: string; partyPos: WorldPos; mapState: SubMapState }
   | { type: 'map_victory'; mapId: string }
   | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase; mapCleared: boolean }
   | {
@@ -147,6 +148,7 @@ export type PhaseAction =
   | { type: 'exit_results' }
   | { type: 'replay' }
   | { type: 'exit_to_menu' }
+  | { type: 'move_party'; partyPos: WorldPos }
   // ── Equip screen navigation ────────────────────────────────────
   | { type: 'open_equip_screen'; unitTemplateId: string }
   | { type: 'close_equip_screen' }
