@@ -4,8 +4,8 @@ import {
   getEnemyUnitSpriteSheet,
   findEnemyUnitBlueprintWithRace,
 } from './unitSprites';
-import { ITEM_DEFINITIONS }               from '../data/itemDefinitions';
-import { getEquippedBonuses, snapshotActivatableAbilities } from '../inventory';
+import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
+import { getEquippedBonuses } from '../inventory';
 import { resolveUnitProgression, resolveUnitBattleStats } from '../progression';
 import { createUnitInstance } from '../battle/unitFactory';
 import type { PlayerBattleSetup }         from './battleSetup';
@@ -14,7 +14,7 @@ import type { UnitBlueprint, UnitRace, UpgradeOptionId } from '../shared/unitTyp
 import type { ActionSkillDefinition }      from '../shared/skillDefinitionTypes';
 import { resolveSkillDefinition }          from '../progression';
 import type { CellCoord }                 from '../shared/gridTypes';
-import type { ItemContainer, ItemInstance, BattleStatBonuses } from '../shared/itemTypes';
+import type { ItemContainer, ItemInstance, PartialBattleStatBonuses } from '../shared/itemTypes';
 import {
   isPersistentPlayerUnitAlive,
   getPersistentCurrentHp,
@@ -58,10 +58,6 @@ export function buildPlayerAutoPlacementCandidates(
         upgradeModifiers: progression.statModifiers,
         permanentBonuses: unitState?.permanentBonuses ?? {},
       });
-      const activatableAbilities = snapshotActivatableAbilities(
-        bp.templateId,
-        setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
-      );
       const initialHp = clampAliveCurrentHp(
         getPersistentCurrentHp(unitState),
         stats.hp,
@@ -78,7 +74,6 @@ export function buildPlayerAutoPlacementCandidates(
           statHighlightBaseStats,
           skills:               progression.skills,
           spriteSheet:          resolvePlayerUnitSpriteSheet(bp, progression),
-          activatableAbilities,
           initialHp,
         }),
       };
@@ -89,7 +84,7 @@ export function resolvePlayerMaxHpForLevel(input: {
   blueprint: UnitBlueprint;
   level: number;
   chosenUpgrades: Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>;
-  permanentBonuses: Partial<BattleStatBonuses>;
+  permanentBonuses: PartialBattleStatBonuses;
   itemContainers: Record<string, ItemContainer>;
   itemInstances: Record<string, ItemInstance>;
 }): number {
@@ -129,7 +124,6 @@ export function buildEnemyPlacementCandidates(
         spriteSheet:          bp.spriteFilename
           ? getEnemyUnitSpriteSheet(race, bp.spriteFilename)
           : undefined,
-        activatableAbilities: [],
       }),
     };
   };
@@ -164,7 +158,6 @@ export function buildEnemyReplayInputs(
         spriteSheet:          bp.spriteFilename
           ? getEnemyUnitSpriteSheet(bpRace, bp.spriteFilename)
           : undefined,
-        activatableAbilities: [],
       },
       anchor: saved.anchor,
     });

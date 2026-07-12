@@ -85,9 +85,20 @@ describe('resolveUnitBattleStats', () => {
     });
     expect(s.hp).toBe(150);             // 142 + 5 + 3
     expect(s.physicalDefense).toBe(12); // 10 + 2
-    expect(s.dodge).toBe(5);            // untouched
-    expect(s.block).toBe(4);            // untouched
-    expect(s.initiative).toBe(7);       // untouched
+    expect(s.dodge).toBe(5);            // no delta specified — unchanged
+    expect(s.block).toBe(4);            // no delta specified — unchanged
+    expect(s.initiative).toBe(7);       // no delta specified — unchanged
+  });
+
+  it('equipment & permanent bonuses affect dodge/block/initiative — previously excluded, now fixed', () => {
+    const s = resolveUnitBattleStats({
+      blueprint: bp, level: 5,
+      equipmentBonuses: { dodge: 3 },
+      permanentBonuses: { block: 2, initiative: 1 },
+    });
+    expect(s.dodge).toBe(8);       // 5 + 3
+    expect(s.block).toBe(6);       // 4 + 2
+    expect(s.initiative).toBe(8);  // 7 + 1
   });
 
   it('golden: full combination base+upgrade+equipment+permanent (order preserved)', () => {

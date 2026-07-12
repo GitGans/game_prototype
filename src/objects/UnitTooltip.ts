@@ -8,6 +8,8 @@ import type { SkillIconColorKind } from "../shared/snapshotTypes";
 import { buildSkillIconSnapshot } from "../core/unitUpgradePresentation";
 import type { UnitStatsSnapshot } from '../core/phases';
 import { resolveStatTone } from "../shared/statHighlight";
+import type { UnitBattleStatKey } from "../shared/unitTypes";
+import { UNIT_BATTLE_STAT_KEYS, STAT_PRESENTATION, formatStatValue } from './statPresentation';
 
 const W           = Math.round(200 * LAYOUT_SCALE);
 const SPRITE_SIZE = Math.round(64  * LAYOUT_SCALE);
@@ -28,7 +30,7 @@ function statColor(sv: StatValue): string {
   }
 }
 
-interface TooltipData {
+type TooltipData = {
   templateId:      string;
   name:            string;
   level?:          number;
@@ -36,22 +38,15 @@ interface TooltipData {
   // hover and equip); the title shows `${className}  Lvl ${level}`.
   className?:      string;
   side:            "player" | "enemy";
-  hp:              StatValue;
-  maxHp:           StatValue;
-  physicalStrength:  StatValue;
-  magicalStrength:   StatValue;
-  physicalDefense: StatValue;
-  magicalDefense:  StatValue;
-  dodge:           StatValue;
-  block:           StatValue;
-  initiative:      StatValue;
   skills: Array<{
     name:      string;
     colorKind: SkillIconColorKind;
     isActive:  boolean;
   }>;
   spriteKey?: string | null;
-}
+} & Record<UnitBattleStatKey, StatValue> & {
+  maxHp: StatValue;
+};
 
 interface BuildOptions {
   showSprite?:     boolean; // default true
@@ -164,14 +159,14 @@ export class UnitTooltip extends BaseTooltip<TooltipData> {
     }
 
     const statLines: Array<{ label: string; display: string; color: string }> = [
-      { label: "HP",         display: `${data.hp.value} / ${data.maxHp.value}`, color: statColor(data.maxHp)           },
-      { label: "Phys Str",   display: String(data.physicalStrength.value), color: statColor(data.physicalStrength)       },
-      { label: "Magic Str",  display: String(data.magicalStrength.value),  color: statColor(data.magicalStrength)        },
-      { label: "Phys Def",   display: `${data.physicalDefense.value}%`,  color: statColor(data.physicalDefense)      },
-      { label: "Magic Def",  display: `${data.magicalDefense.value}%`,   color: statColor(data.magicalDefense)       },
-      { label: "Dodge",      display: `${data.dodge.value}%`,            color: statColor(data.dodge)                },
-      { label: "Block",      display: `${data.block.value}%`,            color: statColor(data.block)                },
-      { label: "Initiative", display: String(data.initiative.value),     color: statColor(data.initiative)           },
+      { label: "HP", display: `${data.hp.value} / ${data.maxHp.value}`, color: statColor(data.maxHp) },
+      ...UNIT_BATTLE_STAT_KEYS
+        .filter((key) => key !== 'hp')
+        .map((key) => ({
+          label:   STAT_PRESENTATION[key].label,
+          display: formatStatValue(key, data[key].value),
+          color:   statColor(data[key]),
+        })),
     ];
 
     for (const { label, display, color } of statLines) {

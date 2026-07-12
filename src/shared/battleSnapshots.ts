@@ -1,7 +1,6 @@
 import type { CellCoord, UnitShape, Side }          from './gridTypes';
 import type { ActionSkillDefinition }                from './skillDefinitionTypes';
 import type { SpriteState, RowTrait, UnitLifeState } from './unitTypes';
-import type { UnitActivatableAbility }               from './itemTypes';
 import type { ActiveEffect }                         from './activeEffect';
 import type { UnitDeployment }                       from './unitDeploymentTypes';
 import type { UnitStatsSnapshot }                    from './snapshotTypes';
@@ -52,8 +51,6 @@ export interface BattleUnitSnapshot {
 
   rowTrait:   RowTrait;
   templateId: string;
-
-  activatableAbilities: readonly UnitActivatableAbility[];
 }
 
 export type FieldBattleUnitSnapshot =

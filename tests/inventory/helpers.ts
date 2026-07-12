@@ -1,9 +1,19 @@
-import type { ItemContainer, ItemInstance, ItemDefinition, BattleStatBonuses, EquipSlot, ItemUseEffect, ItemUsage } from "../../src/shared/itemTypes";
+import type {
+  ItemCatalog,
+  ItemContainer,
+  ItemInstance,
+  ItemDefinition,
+  ItemRuntimeKind,
+  ItemRuntimeMetadata,
+  BattleStatBonuses,
+  PartialBattleStatBonuses,
+  EquipSlot,
+  ItemUseEffect,
+} from "../../src/shared/itemTypes";
 import { ucid } from "../../src/shared/unitTypes";
+import { createZeroBattleStatMap } from "../../src/shared/battleStatUtils";
 
-export const zeroBonuses: BattleStatBonuses = {
-  hp: 0, physicalStrength: 0, magicalStrength: 0, physicalDefense: 0, magicalDefense: 0,
-};
+export const zeroBonuses: BattleStatBonuses = createZeroBattleStatMap();
 
 export function backpack(id: string, slots: Record<string, string> = {}): ItemContainer {
   return { id, kind: "backpack", slots: { ...slots } };
@@ -18,25 +28,52 @@ export function instance(id: string, definitionId: string): ItemInstance {
 }
 
 export interface DefOpts {
-  equipSlot?: EquipSlot | null;
-  usage?: ItemUsage;
+  /** Generated metadata fields — defaulted to an equippable helmet. `slot: null` = not equippable. */
+  kind?: ItemRuntimeKind;
+  slot?: EquipSlot | null;
   allowedClassIds?: string[];
-  battleStatBonuses?: Partial<BattleStatBonuses>;
+  battleStatBonuses?: PartialBattleStatBonuses;
   buyPrice?: number;
   useEffect?: ItemUseEffect;
 }
 
+/** Builds an item-facts definition (no behavior/slot — those live in metadata). */
 export function def(id: string, opts: DefOpts = {}): ItemDefinition {
   return {
     id,
     name: id,
-    usage: opts.usage ?? "equip",
-    equipSlot: opts.equipSlot === undefined ? "helmet" : opts.equipSlot,
     battleStatBonuses: { ...zeroBonuses, ...(opts.battleStatBonuses ?? {}) },
     buyPrice: opts.buyPrice ?? 100,
     ...(opts.allowedClassIds ? { allowedClassIds: opts.allowedClassIds.map(ucid) } : {}),
     ...(opts.useEffect ? { useEffect: opts.useEffect } : {}),
   };
+}
+
+/** Builds runtime metadata for an item; defaults to an equippable helmet. */
+export function meta(opts: DefOpts = {}): ItemRuntimeMetadata {
+  return {
+    kind: opts.kind ?? "equipment",
+    slot: opts.slot === undefined ? "helmet" : opts.slot,
+  };
+}
+
+/** Builds an ItemCatalog from one or more (id, opts) entries. */
+export function catalog(entries: Record<string, DefOpts>): ItemCatalog {
+  const definitions: Record<string, ItemDefinition> = {};
+  const metadataById: Record<string, ItemRuntimeMetadata> = {};
+  for (const [id, opts] of Object.entries(entries)) {
+    definitions[id] = def(id, opts);
+    metadataById[id] = meta(opts);
+  }
+  return { definitions, metadataById };
+}
+
+/** Wraps an existing definitions map plus per-id metadata into a catalog. */
+export function catalogFrom(
+  definitions: Record<string, ItemDefinition>,
+  metadataById: Record<string, ItemRuntimeMetadata>,
+): ItemCatalog {
+  return { definitions, metadataById };
 }
 
 /** Fills backpack slots '0'..'(n-1)' with throwaway occupant ids. */

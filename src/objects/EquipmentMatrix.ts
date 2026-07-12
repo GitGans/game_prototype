@@ -7,7 +7,7 @@ const EQUIP_MATRIX: Array<Array<string | null>> = [
   ['necklace', 'helmet',    'artifact'   ],
   ['hand_left','armor',     'hand_right' ],
   ['ring_1',   'belt',      'ring_2'     ],
-  ['gloves',   'boots',     'activatable'],
+  ['gloves',   'boots',     'usable_slot'],
 ];
 
 const SLOT_LABELS: Record<string, string> = {
@@ -22,7 +22,7 @@ const SLOT_LABELS: Record<string, string> = {
   ring_2:      'Ring',
   gloves:      'Gloves',
   boots:       'Boots',
-  activatable: 'Usable',
+  usable_slot: 'Usable',
 };
 
 export class EquipmentMatrix extends Phaser.GameObjects.Container {

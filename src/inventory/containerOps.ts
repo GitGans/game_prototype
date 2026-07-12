@@ -1,5 +1,6 @@
-import type { ItemContainer, ItemInstance, ItemDefinition } from '../shared/itemTypes';
+import type { ItemCatalog, ItemContainer, ItemInstance } from '../shared/itemTypes';
 import { BACKPACK_SLOT_COUNT } from './inventoryConstants';
+import { canMetadataUseEquipmentSlot } from './equipmentSlotResolver';
 
 // ─── Immutable slot primitive ─────────────────────────────────────────────────
 export type SlotChange = { containerId: string; slotKey: string; instanceId: string | null };
@@ -33,29 +34,28 @@ export function applySlotChanges(
 /**
  * Returns true if item can be placed into container at slotKey.
  * - backpack: slotKey must be '0'..'23' and the slot must be empty.
- * - equipment: slotKey must match the item's equipSlot and the slot must be empty.
+ * - equipment: slotKey must match the item's metadata slot and the slot must be empty.
  */
 export function canPlaceItem(
   instanceId: string,
   container: ItemContainer,
   slotKey: string,
   instances: Record<string, ItemInstance>,
-  definitions: Record<string, ItemDefinition>,
+  catalog: ItemCatalog,
 ): boolean {
   if (container.slots[slotKey] !== undefined) return false; // slot occupied
 
   const instance = instances[instanceId];
   if (!instance) return false;
-  const definition = definitions[instance.definitionId];
-  if (!definition) return false;
+  const metadata = catalog.metadataById[instance.definitionId];
+  if (!metadata) return false;
 
   if (container.kind === 'backpack') {
     const idx = parseInt(slotKey, 10);
     return Number.isInteger(idx) && idx >= 0 && idx < BACKPACK_SLOT_COUNT;
   }
   if (container.kind === 'equipment') {
-    if (definition.equipSlot === 'ring') return slotKey === 'ring_1' || slotKey === 'ring_2';
-    return definition.equipSlot === slotKey;
+    return canMetadataUseEquipmentSlot(metadata, slotKey);
   }
   return false;
 }
@@ -101,14 +101,14 @@ export function moveItem(
   toSlot: string,
   containers: Record<string, ItemContainer>,
   instances: Record<string, ItemInstance>,
-  definitions: Record<string, ItemDefinition>,
+  catalog: ItemCatalog,
 ): MoveItemResult {
   const from = containers[fromContainerId];
   if (!from) return { ok: false, reason: 'missing_from_container' };
   const to = containers[toContainerId];
   if (!to) return { ok: false, reason: 'missing_to_container' };
   if (from.slots[fromSlot] !== instanceId) return { ok: false, reason: 'source_mismatch' };
-  if (!canPlaceItem(instanceId, to, toSlot, instances, definitions)) return { ok: false, reason: 'invalid_target' };
+  if (!canPlaceItem(instanceId, to, toSlot, instances, catalog)) return { ok: false, reason: 'invalid_target' };
 
   const nextContainers = applySlotChanges(containers, [
     { containerId: fromContainerId, slotKey: fromSlot, instanceId: null },

@@ -1,14 +1,14 @@
 # inventory
 
 ## Role
-Pure inventory & equipment domain. All item-container, equip/unequip, equipment-bonus, item-use, snapshot, and
-pricing rules. No rendering, no Phaser, no GameState access, no progression resolution.
+Pure inventory & equipment domain. All item-container, equip/unequip, equipment-bonus, snapshot, and
+pricing rules. No rendering, no Phaser, no GameState access, no progression resolution. There is no
+runtime item-use path in this stage — `useEffect` is catalog data only and is never applied here.
 
 ## Responsibilities
 - Low-level item container placement and movement (`containerOps.ts`)
 - Equip / unequip / equipped-item queries with class restrictions (`equipmentOps.ts`)
 - Stat-bonus aggregation from equipped items (`equipmentBonuses.ts`)
-- Item consumption and item-use effect projection (`itemUse.ts`)
 - Inventory/equipment read-model snapshots for UI/setup (`inventorySnapshots.ts`)
 - Item economy helpers (`pricing.ts`)
 
@@ -17,8 +17,8 @@ pricing rules. No rendering, no Phaser, no GameState access, no progression reso
 - [containerOps.ts](containerOps.ts) — `canPlaceItem`, `findFreeBackpackSlot`, `findItemLocation`, `moveItem`, plus the immutable `applySlotChanges` primitive
 - [equipmentOps.ts](equipmentOps.ts) — `canUnitEquipItem`, `getEquippedItems`, `equipItem`, `unequipItem`
 - [equipmentBonuses.ts](equipmentBonuses.ts) — `getEquippedBonuses`
-- [itemUse.ts](itemUse.ts) — `useItem` (returns the effect for core to apply; never applies it)
-- [inventorySnapshots.ts](inventorySnapshots.ts) — `buildBackpackSnapshot`, `buildEquipmentSnapshot`, `snapshotActivatableAbilities`
+- [equipmentSlotResolver.ts](equipmentSlotResolver.ts) — `canMetadataUseEquipmentSlot`, `resolvePreferredEquipSlot` (own the `ring` → `ring_1`/`ring_2` rule; `usable` items resolve to `usable_slot`; metadata-driven)
+- [inventorySnapshots.ts](inventorySnapshots.ts) — `buildBackpackSnapshot`, `buildEquipmentSnapshot`
 - [pricing.ts](pricing.ts) — `getSellPrice`
 - [index.ts](index.ts) — public API barrel
 
@@ -32,6 +32,11 @@ pricing rules. No rendering, no Phaser, no GameState access, no progression reso
 - Enforced by `scripts/check-boundaries.mjs` (`inventory/**` rule).
 
 ## Invariants
+- **Catalog in, never imported:** functions that need behavior/slot metadata take an `ItemCatalog`
+  (`{ definitions, metadataById }`) as a parameter; `core` passes `ITEM_CATALOG` in. Pure fact readers
+  (`getEquippedBonuses`, `canUnitEquipItem`) still take a plain `definitions` map. Slot/behavior decisions
+  come from `metadata` (`metadata.slot` for placement, `metadata.kind` for behavior) — never from fields on
+  `ItemDefinition`. Equip eligibility is owned here via `metadata`, not by UI routing.
 - **Purity:** every operation returns new records (result objects); inputs are never mutated. The immutable
   primitive is `applySlotChanges` — it clones the top-level record, each touched container, and each touched
   `slots` object exactly once.
@@ -39,9 +44,9 @@ pricing rules. No rendering, no Phaser, no GameState access, no progression reso
   and assign the returned `nextContainers` / `nextInstances` back themselves.
 - **No progression:** equipment rules that need the current class take a resolved `classId` argument; `core`
   resolves it (via `resolveUnitProgression`) and passes it in.
-- **Effects out, not applied:** `useItem` removes the consumed item and returns `effect` (`permanent_stat_boost`
-  / `heal`). `core` applies the effect (campaign vs debug state). Inventory never mutates permanent bonuses or
-  applies heal.
+- **No item-use mechanics this stage:** there is no `useItem` / consume / apply path. `useEffect` on
+  `usable` and `consumable` definitions is catalog data only — it is never read or applied at runtime, and
+  no item is removed from a container through "use". Mechanics will be added later.
 - **Backpack capacity is 24** everywhere — operations and snapshots both use `BACKPACK_SLOT_COUNT`. Do not
   reintroduce a hardcoded `10` or `24`.
 - Equipment container id is `equip_${unitTemplateId}`; default backpack id is `backpack_shared`
@@ -51,7 +56,6 @@ pricing rules. No rendering, no Phaser, no GameState access, no progression reso
 - container placement / movement rules → [containerOps.ts](containerOps.ts)
 - equip / unequip / class restrictions → [equipmentOps.ts](equipmentOps.ts)
 - equipment stat-bonus aggregation → [equipmentBonuses.ts](equipmentBonuses.ts)
-- item consumption / item-use effects → [itemUse.ts](itemUse.ts)
 - inventory/equipment snapshots → [inventorySnapshots.ts](inventorySnapshots.ts)
 - sell price / item economy → [pricing.ts](pricing.ts)
 - backpack capacity → [inventoryConstants.ts](inventoryConstants.ts)

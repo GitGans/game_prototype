@@ -20,7 +20,7 @@ Scenes are the rendering and input layer of the game. Each scene corresponds to 
 - `controllers/BattlePresentationController.ts` — applies battle event, directive, and skill-preview presentations to Phaser objects
 - `WorldMap.ts` — keyboard-driven map navigation; triggers encounters, camps, and portals
 - `Prep.ts` — pre-battle camp screen; manages party composition and equipment access
-- `EquipScreen.ts` — unit equipment and item management; context-menu-driven equip/unequip/use
+- `EquipScreen.ts` — unit equipment and item management; click-to-equip (equipment + usable) / unequip; no item-use in this stage
 - `UpgradeTreeScreen.ts` — upgrade tier selection per unit
 - `BattleResults.ts` — post-battle summary and level-up display
 - `DebugLevelSelect.ts` — developer tool for picking a battle level directly

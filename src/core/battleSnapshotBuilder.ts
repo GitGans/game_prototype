@@ -76,8 +76,6 @@ export function buildBattleUnitSnapshot(
 
     rowTrait:    unit.rowTrait,
     templateId:  unit.templateId,
-
-    activatableAbilities: unit.activatableAbilities,
   };
   return snap;
 }

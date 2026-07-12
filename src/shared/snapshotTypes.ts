@@ -1,5 +1,5 @@
-import type { UnitClassId } from './unitTypes';
-import type { ItemDefinition } from './itemTypes';
+import type { UnitClassId, UnitBattleStatKey } from './unitTypes';
+import type { ItemDefinition, ItemRuntimeMetadata } from './itemTypes';
 
 // ─── Stat Snapshots ───────────────────────────────────────────────────────────
 
@@ -8,18 +8,17 @@ export interface UnitStatValueSnapshot {
   value:         number;  // value shown to the player: highlightBase + equipment (+ active battle effects in battle)
 }
 
-export interface UnitStatsSnapshot {
-  level:           number;
-  hp:              UnitStatValueSnapshot;
-  maxHp:           UnitStatValueSnapshot;
-  physicalStrength:  UnitStatValueSnapshot;
-  magicalStrength:   UnitStatValueSnapshot;
-  physicalDefense: UnitStatValueSnapshot;
-  magicalDefense:  UnitStatValueSnapshot;
-  dodge:           UnitStatValueSnapshot;
-  block:           UnitStatValueSnapshot;
-  initiative:      UnitStatValueSnapshot;
-}
+/**
+ * Every canonical battle stat, keyed by UnitBattleStatKey, plus the two
+ * fields that aren't part of the additive stat model: level (metadata) and
+ * maxHp (hp's ceiling — a distinct concept from hp's current value).
+ * Adding a 9th battle stat updates this automatically; no manual field to add.
+ */
+export type UnitStatsSnapshot =
+  Record<UnitBattleStatKey, UnitStatValueSnapshot> & {
+    level: number;
+    maxHp: UnitStatValueSnapshot;
+  };
 
 export type SkillIconColorKind = 'physical' | 'magical' | 'neutral';
 
@@ -37,6 +36,7 @@ export interface SkillIconSnapshot {
 export interface ItemSlotSnapshot {
   instanceId: string;
   definition: ItemDefinition;
+  metadata: ItemRuntimeMetadata;
 }
 
 export interface BackpackSnapshot {

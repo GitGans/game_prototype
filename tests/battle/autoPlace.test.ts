@@ -76,7 +76,6 @@ function makeReplayUnitInput(id: string): CreateUnitInstanceInput {
     },
     skills:               [],
     spriteSheet:          undefined,
-    activatableAbilities: [],
   };
 }
 

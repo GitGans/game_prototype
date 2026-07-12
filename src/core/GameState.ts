@@ -6,7 +6,7 @@ import {
   CellCoord,
   ItemInstance,
   ItemContainer,
-  BattleStatBonuses,
+  PartialBattleStatBonuses,
 } from "../battle/types";
 import {
   type TurnContext,
@@ -37,7 +37,8 @@ export interface PlayerUnitState {
   level: number;
   isInCamp: boolean;
   lastPlacement: CellCoord | null;
-  permanentBonuses: Partial<BattleStatBonuses>;
+  /** Sparse additive stat bonuses. Missing stat keys mean "no bonus" (0). */
+  permanentBonuses: PartialBattleStatBonuses;
   chosenUpgrades: Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>; // upgrade option id per tier
   // alive+null = full HP relative to resolved max; alive+number = concrete HP; dead+0 = dead between battles.
   lifeState: UnitLifeState;

@@ -1,36 +1,36 @@
 import { describe, it, expect } from "vitest";
 import { canUnitEquipItem, equipItem, unequipItem } from "../../src/inventory";
 import { ucid } from "../../src/shared/unitTypes";
-import { backpack, equipment, instance, def, fillBackpack } from "./helpers";
+import { backpack, equipment, instance, def, catalog, fillBackpack } from "./helpers";
 import { BACKPACK_SLOT_COUNT } from "../../src/inventory";
 
 // ─── canUnitEquipItem (ported from the former itemOps unit test) ────────────────
 describe("canUnitEquipItem", () => {
   const insts = { i1: instance("i1", "ring") };
   it("no allowedClassIds — any class is allowed", () => {
-    const defs = { ring: def("ring", { equipSlot: "ring" }) };
+    const defs = { ring: def("ring") };
     expect(canUnitEquipItem(ucid("warrior"), "i1", insts, defs)).toBe(true);
     expect(canUnitEquipItem(ucid("soldier"), "i1", insts, defs)).toBe(true);
   });
   it("allowedClassIds matches currentClassId — allowed", () => {
-    const defs = { ring: def("ring", { equipSlot: "ring", allowedClassIds: ["warrior"] }) };
+    const defs = { ring: def("ring", { allowedClassIds: ["warrior"] }) };
     expect(canUnitEquipItem(ucid("warrior"), "i1", insts, defs)).toBe(true);
   });
   it("allowedClassIds does not include currentClassId — denied (class evolution guard)", () => {
-    const defs = { ring: def("ring", { equipSlot: "ring", allowedClassIds: ["warrior"] }) };
+    const defs = { ring: def("ring", { allowedClassIds: ["warrior"] }) };
     expect(canUnitEquipItem(ucid("soldier"), "i1", insts, defs)).toBe(false);
   });
 });
 
 // ─── equipItem ──────────────────────────────────────────────────────────────────
 describe("equipItem", () => {
-  const defs = {
-    helm: def("helm", { equipSlot: "helmet" }),
-    helm2: def("helm2", { equipSlot: "helmet" }),
-    ring: def("ring", { equipSlot: "ring" }),
-    ring2: def("ring2", { equipSlot: "ring" }),
-    warriorHelm: def("warriorHelm", { equipSlot: "helmet", allowedClassIds: ["warrior"] }),
-  };
+  const defs = catalog({
+    helm: { slot: "helmet" },
+    helm2: { slot: "helmet" },
+    ring: { slot: "ring" },
+    ring2: { slot: "ring" },
+    warriorHelm: { slot: "helmet", allowedClassIds: ["warrior"] },
+  });
 
   it("simple equip returns new containers and does not mutate input", () => {
     const containers = { backpack_shared: backpack("backpack_shared", { "0": "i1" }), equip_u1: equipment("u1") };
@@ -91,7 +91,7 @@ describe("equipItem", () => {
 
 // ─── unequipItem ─────────────────────────────────────────────────────────────────
 describe("unequipItem", () => {
-  const defs = { helm: def("helm", { equipSlot: "helmet" }) };
+  const defs = catalog({ helm: { slot: "helmet" } });
 
   it("moves the equipped item to the first free backpack slot; input untouched", () => {
     const containers = { backpack_shared: backpack("backpack_shared"), equip_u1: equipment("u1", { helmet: "i1" }) };

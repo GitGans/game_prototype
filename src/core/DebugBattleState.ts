@@ -1,5 +1,9 @@
-import { ItemInstance, ItemContainer, CellCoord, BattleStatBonuses } from '../battle/types';
+import { ItemInstance, ItemContainer, CellCoord, PartialBattleStatBonuses } from '../battle/types';
 import { PLAYER_UNITS } from '../data/units';
+import { ITEM_CATALOG, ITEM_DEFINITIONS } from '../data/itemDefinitions';
+import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
+import { buildStartingInventory } from '../inventory';
+import { assertStartingEquipmentClassRestrictions } from './startingInventoryValidation';
 import type { UpgradeOptionId } from '../shared/unitTypes';
 
 export interface DebugBattleState {
@@ -7,34 +11,26 @@ export interface DebugBattleState {
   campUnitIds: string[];
   itemInstances: Record<string, ItemInstance>;
   itemContainers: Record<string, ItemContainer>;
-  unitPermanentBonuses: Record<string, Partial<BattleStatBonuses>>;
+  unitPermanentBonuses: Record<string, PartialBattleStatBonuses>;
   playerUnitPlacements: Record<string, CellCoord>;
   playerBenchIds: string[] | null;
   chosenUpgrades: Record<string, Partial<Record<5 | 10 | 15 | 20, UpgradeOptionId>>>;
 }
 
 export function createDebugBattleState(level: number): DebugBattleState {
-  const itemContainers: Record<string, ItemContainer> = {
-    backpack_debug: { id: 'backpack_debug', kind: 'backpack', slots: {} },
-  };
-  for (const bp of PLAYER_UNITS) {
-    itemContainers[`equip_${bp.templateId}`] = {
-      id: `equip_${bp.templateId}`,
-      kind: 'equipment',
-      ownerTemplateId: bp.templateId,
-      slots: {},
-    };
-  }
-  const itemInstances: Record<string, ItemInstance> = {};
-  let counter = 1;
-  const add = (slot: string, defId: string) => {
-    const id = `item_debug_${String(counter++).padStart(3, '0')}`;
-    itemInstances[id] = { id, definitionId: defId };
-    itemContainers['backpack_debug'].slots[slot] = id;
-  };
-  add('0', 'bronze_ring');
-  add('1', 'iron_ring');
-  add('2', 'bronze_necklace');
+  // Same validation as campaign new_game — debug consumes the same content list,
+  // so it must enforce the same class restrictions before building inventory.
+  assertStartingEquipmentClassRestrictions({
+    playerUnits: PLAYER_UNITS,
+    itemDefinitions: ITEM_DEFINITIONS,
+    startingItems: CAMPAIGN_STARTING_ITEMS,
+  });
+  const { itemInstances, itemContainers } = buildStartingInventory({
+    playerUnitTemplateIds: PLAYER_UNITS.map(bp => bp.templateId),
+    catalog: ITEM_CATALOG,
+    startingItems: CAMPAIGN_STARTING_ITEMS,
+    backpackId: 'backpack_debug',
+  });
   return {
     level,
     campUnitIds: [],

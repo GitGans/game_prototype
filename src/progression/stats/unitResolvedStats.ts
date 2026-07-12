@@ -1,5 +1,5 @@
 import type { UnitBlueprint, UnitBattleStats, UnitProgressionStatModifiers } from '../../shared/unitTypes';
-import type { BattleStatBonuses } from '../../shared/itemTypes';
+import type { PartialBattleStatBonuses } from '../../shared/itemTypes';
 import { computeUnitBaseStatsForLevel } from './unitBaseStats';
 import { addUpgradeModifiers, addBattleStatBonuses } from './statBonuses';
 
@@ -8,8 +8,8 @@ export interface ResolveUnitBattleStatsInput {
   level: number;
   /** All optional — default to empty (no bonus) so enemies can omit them. */
   upgradeModifiers?: UnitProgressionStatModifiers;
-  equipmentBonuses?: Partial<BattleStatBonuses>;
-  permanentBonuses?: Partial<BattleStatBonuses>;
+  equipmentBonuses?: PartialBattleStatBonuses;
+  permanentBonuses?: PartialBattleStatBonuses;
 }
 
 /**

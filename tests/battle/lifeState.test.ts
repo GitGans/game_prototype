@@ -91,14 +91,12 @@ describe("killUnit", () => {
   it("leaves other fields untouched", () => {
     const u = makeUnit({
       id: 'u-keep', templateId: 'orc_tank', maxHp: 77,
-      activatableAbilities: [],
       hp: 50, lifeState: 'alive',
     });
     const killed = killUnit(u);
     expect(killed.id).toBe('u-keep');
     expect(killed.templateId).toBe('orc_tank');
     expect(killed.maxHp).toBe(77);
-    expect(killed.activatableAbilities).toBe(u.activatableAbilities);
   });
 });
 

@@ -4,7 +4,6 @@ import { PhaseManager } from '../core/PhaseManager';
 import { EventBus, Events } from '../core/EventBus';
 import { GamePhase } from '../core/phases';
 import { ItemSlotSnapshot } from '../battle/types';
-import { ContextMenu } from '../ui/ContextMenu';
 import { UI_THEME } from '../ui/theme';
 import { ItemTooltip } from '../objects/ItemTooltip';
 import { EnemyGroupSelector } from '../objects/EnemyGroupSelector';
@@ -27,7 +26,6 @@ export class EquipScreen extends Phaser.Scene {
   private _equipPanel      : EquipmentPanel      | null = null;
   private _selectorPanel   : EnemyGroupSelector  | null = null;
   private itemTooltip!     : ItemTooltip;
-  private activeContextMenu: ContextMenu | null = null;
 
   constructor() {
     super({ key: 'EquipScreen' });
@@ -112,7 +110,7 @@ export class EquipScreen extends Phaser.Scene {
       phase,
       itemTooltip:         this.itemTooltip,
       onEquipSlotClick:    (slot, item) => this.onEquipSlotClick(slot, item),
-      onBackpackItemClick: (item, cx, cy) => this.onBackpackItemClick(item, cx, cy),
+      onBackpackItemClick: (item) => this.onBackpackItemClick(item),
       onUpgrade:           () => PhaseManager.transition({ type: 'open_upgrade_tree' }),
       onBack:              () => PhaseManager.transition({ type: 'close_equip_screen' }),
     });
@@ -146,55 +144,17 @@ export class EquipScreen extends Phaser.Scene {
 
   // ── Item interaction ───────────────────────────────────────────────────────
 
-  private onBackpackItemClick(item: ItemSlotSnapshot, cellX: number, cellY: number): void {
-    this.dismissContextMenu();
-    const def = item.definition;
-
-    if (def.usage === 'equip') {
+  private onBackpackItemClick(item: ItemSlotSnapshot): void {
+    const { metadata } = item;
+    // equipment + usable both equip; usable resolves to usable_slot via metadata.slot.
+    // consumable has no Use and no equip in this stage (mechanics not implemented yet).
+    if (metadata.kind === 'equipment' || metadata.kind === 'usable') {
       PhaseManager.transition({
         type: 'equip_item',
         instanceId: item.instanceId,
         unitTemplateId: this.getSelectedTemplateId(),
       });
-      return;
     }
-
-    const options: Array<{ label: string; onClick: () => void }> = [];
-
-    if (def.usage === 'equip_and_activate') {
-      options.push({
-        label: 'Wear',
-        onClick: () => {
-          this.dismissContextMenu();
-          PhaseManager.transition({
-            type: 'equip_item',
-            instanceId: item.instanceId,
-            unitTemplateId: this.getSelectedTemplateId(),
-          });
-        },
-      });
-    }
-
-    options.push({
-      label: 'Use',
-      onClick: () => {
-        this.dismissContextMenu();
-        PhaseManager.transition({
-          type: 'use_item',
-          instanceId: item.instanceId,
-          unitTemplateId: this.getSelectedTemplateId(),
-        });
-      },
-    });
-
-    this.activeContextMenu = new ContextMenu({
-      scene: this,
-      x: cellX,
-      y: cellY,
-      options,
-      onDismiss: () => this.dismissContextMenu(),
-    });
-    this.add.existing(this.activeContextMenu);
   }
 
   private onEquipSlotClick(slot: string, item: ItemSlotSnapshot | null): void {
@@ -205,11 +165,6 @@ export class EquipScreen extends Phaser.Scene {
         slot,
       });
     }
-  }
-
-  private dismissContextMenu(): void {
-    this.activeContextMenu?.dismiss();
-    this.activeContextMenu = null;
   }
 
   private getSelectedTemplateId(): string {

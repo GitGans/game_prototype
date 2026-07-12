@@ -1,6 +1,7 @@
-import type { EquipSlot, ItemContainer, ItemInstance, ItemDefinition } from '../shared/itemTypes';
+import type { EquipSlot, ItemCatalog, ItemContainer, ItemInstance, ItemDefinition } from '../shared/itemTypes';
 import type { UnitClassId } from '../shared/unitTypes';
 import { canPlaceItem, findFreeBackpackSlot, findItemLocation, moveItem, applySlotChanges } from './containerOps';
+import { resolvePreferredEquipSlot, type ConcreteEquipSlot } from './equipmentSlotResolver';
 
 export type EquipItemResult =
   | { ok: true; nextContainers: Record<string, ItemContainer> }
@@ -57,23 +58,30 @@ export function equipItem(
   instanceId: string,
   containers: Record<string, ItemContainer>,
   instances: Record<string, ItemInstance>,
-  definitions: Record<string, ItemDefinition>,
+  catalog: ItemCatalog,
 ): EquipItemResult {
   const instance = instances[instanceId];
   if (!instance) return { ok: false, reason: 'missing_instance' };
-  const definition = definitions[instance.definitionId];
-  if (!definition) return { ok: false, reason: 'missing_definition' };
-  if (!definition.equipSlot) return { ok: false, reason: 'not_equippable' };
-  if (!canUnitEquipItem(classId, instanceId, instances, definitions)) return { ok: false, reason: 'class_restricted' };
+  const definition = catalog.definitions[instance.definitionId];
+  const metadata = catalog.metadataById[instance.definitionId];
+  if (!definition || !metadata) return { ok: false, reason: 'missing_definition' };
+  if (metadata.slot === null) return { ok: false, reason: 'not_equippable' };
+  if (!canUnitEquipItem(classId, instanceId, instances, catalog.definitions)) return { ok: false, reason: 'class_restricted' };
 
   const equipContainerId = `equip_${unitTemplateId}`;
   const equipContainer = containers[equipContainerId];
   if (!equipContainer) return { ok: false, reason: 'missing_equip_container' };
 
-  // Rings can equip into ring_1 or ring_2; pick first free, else swap ring_1.
-  const slot: EquipSlot = definition.equipSlot === 'ring'
-    ? ((['ring_1', 'ring_2'] as EquipSlot[]).find(s => equipContainer.slots[s] === undefined) ?? 'ring_1')
-    : definition.equipSlot;
+  // Resolve target slot. Player-action semantics: full rings swap ring_1 (preserved).
+  let slot: ConcreteEquipSlot;
+  const resolved = resolvePreferredEquipSlot(metadata, equipContainer);
+  if (resolved.ok) {
+    slot = resolved.slot;
+  } else if (resolved.reason === 'no_free_ring_slot') {
+    slot = 'ring_1'; // both rings full → fall through to the existing swap path
+  } else {
+    return { ok: false, reason: 'not_equippable' };
+  }
 
   const location = findItemLocation(instanceId, containers);
   if (!location) return { ok: false, reason: 'missing_location' };
@@ -82,7 +90,7 @@ export function equipItem(
 
   if (currentlyEquipped === undefined) {
     // Simple equip — delegate to moveItem (target slot is empty).
-    return moveItem(instanceId, location.containerId, location.slotKey, equipContainerId, slot, containers, instances, definitions);
+    return moveItem(instanceId, location.containerId, location.slotKey, equipContainerId, slot, containers, instances, catalog);
   }
 
   // SWAP. Vacate both slots immutably, validate against the vacated state, then place.
@@ -91,8 +99,8 @@ export function equipItem(
     { containerId: equipContainerId,     slotKey: slot,             instanceId: null },
     { containerId: location.containerId, slotKey: location.slotKey, instanceId: null },
   ]);
-  const oldFitsSource = canPlaceItem(currentlyEquipped, vacated[location.containerId], location.slotKey, instances, definitions);
-  const newFitsEquip  = canPlaceItem(instanceId,       vacated[equipContainerId],     slot,             instances, definitions);
+  const oldFitsSource = canPlaceItem(currentlyEquipped, vacated[location.containerId], location.slotKey, instances, catalog);
+  const newFitsEquip  = canPlaceItem(instanceId,       vacated[equipContainerId],     slot,             instances, catalog);
   if (!oldFitsSource || !newFitsEquip) return { ok: false, reason: 'invalid_swap' }; // inputs untouched
 
   const nextContainers = applySlotChanges(vacated, [
@@ -111,7 +119,7 @@ export function unequipItem(
   slot: EquipSlot,
   containers: Record<string, ItemContainer>,
   instances: Record<string, ItemInstance>,
-  definitions: Record<string, ItemDefinition>,
+  catalog: ItemCatalog,
   backpackId: string = 'backpack_shared',
 ): UnequipItemResult {
   const equipContainerId = `equip_${unitTemplateId}`;
@@ -126,5 +134,5 @@ export function unequipItem(
   const freeSlot = findFreeBackpackSlot(backpack);
   if (freeSlot === null) return { ok: false, reason: 'backpack_full' };
 
-  return moveItem(instanceId, equipContainerId, slot, backpackId, freeSlot, containers, instances, definitions);
+  return moveItem(instanceId, equipContainerId, slot, backpackId, freeSlot, containers, instances, catalog);
 }
