@@ -25,6 +25,8 @@ import {
 } from '../../battle/placementState';
 import { getBenchSlotOccupant, getLivingFieldUnitEntries } from '../../battle/deployment';
 import { isAlive } from '../../battle/lifeState';
+import type { AutoTurnIntention } from '../battleRuntimeContext';
+export type { AutoTurnIntention };
 
 // ─── Battle Lifecycle Actions ─────────────────────────────────────────────────
 
@@ -137,11 +139,6 @@ const BATTLE_TURN_ACTION_TYPES = new Set<string>([
 export function isBattleTurnAction(action: PhaseAction): action is BattleTurnPhaseAction {
   return BATTLE_TURN_ACTION_TYPES.has(action.type);
 }
-
-export type AutoTurnIntention =
-  | { type: 'skip_turn';    unitId: string; skillIndex: number; reason: 'blocked_melee'; activeUnitSide: Side }
-  | { type: 'advance_turn'; unitId: string; skillIndex: number;                          activeUnitSide: Side }
-  | { type: 'use_skill';    unitId: string; skillIndex: number; target: CellCoord; activeUnitSide: Side };
 
 export type BattleAutoTurnDirective =
   | { type: 'none';          reason: 'battle_ended' | 'non_auto_mode' }

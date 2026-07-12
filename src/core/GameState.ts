@@ -1,88 +1,48 @@
-import {
-  BattleState,
-  BattleMode,
-  Phase,
-  UnitRace,
-  CellCoord,
-} from "../battle/types";
-import {
-  type TurnContext,
-  createTurnContext,
-  resetTurnContextForNewBattle,
-} from '../battle/turnResolver';
-import { BattleParticipant } from './phases';
-import { buildOccupancy } from "../battle/occupancy";
 import type { CampaignState } from '../campaign';
 import type { DebugBattleState } from './DebugBattleState';
 import type { PlayerSessionState } from './playerSessionState';
 import type { RosterState } from '../progression';
 import type { InventoryState } from '../inventory';
-
-function emptyState(): BattleState {
-  return {
-    units:              new Map(),
-    occupancy:          buildOccupancy(new Map(), new Map()),
-    roundQueue:         [],
-    phase:              'placement',
-    validTargets:       [],
-    nextPlayerId:       1,
-    placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null },
-    previewTargetCoord: null,
-    deployments:        new Map(),
-    benchSlotCount:     0,
-  };
-}
+import type { BattleState, BattleMode } from '../battle/types';
+import type { TurnContext } from '../battle/turnResolver';
+import type { BattleRuntimeContext, AutoTurnIntention } from './battleRuntimeContext';
 
 class GameStateManager {
-  private state: BattleState = emptyState();
-  private battleMode: BattleMode = "manual";
-  private battleTurnContext: TurnContext = createTurnContext();
+  private battleRuntime: BattleRuntimeContext | null = null;
   private campaignState: CampaignState | null = null;
   private debugState: DebugBattleState | null = null;
 
-  // Survive reset() — shared across scene restarts
-  lastEnemyRace: UnitRace | null = null;
-  lastEnemyPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }> | null = null;
-  battleParticipants: BattleParticipant[] = [];
-
-  get(): BattleState {
-    return this.state;
+  hasBattleRuntime(): boolean {
+    return this.battleRuntime !== null;
   }
 
-  set(next: BattleState): void {
-    this.state = next;
+  getBattleRuntime(): BattleRuntimeContext {
+    if (!this.battleRuntime) throw new Error('Battle runtime is not initialized');
+    return this.battleRuntime;
   }
 
-  reset(): void {
-    this.state = emptyState();
-    this.battleMode = "manual";
-    this.battleTurnContext = resetTurnContextForNewBattle();
-    // campaignState, debugState, lastEnemyRace, lastEnemyPlacements are intentionally NOT
-    // cleared here — reset() only tears down battle runtime, not persistent/session state.
+  setBattleRuntime(next: BattleRuntimeContext): void {
+    this.battleRuntime = next;
   }
 
-  setPhase(phase: Phase): void {
-    this.state = { ...this.state, phase };
+  resetBattleRuntime(): void {
+    this.battleRuntime = null;
   }
 
-  getBattleMode(): BattleMode {
-    return this.battleMode;
+  replaceBattleState(next: BattleState): void {
+    this.battleRuntime = { ...this.getBattleRuntime(), state: next };
   }
 
-  setBattleMode(mode: BattleMode): void {
-    this.battleMode = mode;
+  replaceBattleMode(next: BattleMode): void {
+    this.battleRuntime = { ...this.getBattleRuntime(), mode: next };
   }
 
-  getBattleTurnContext(): TurnContext {
-    return this.battleTurnContext;
+  replaceBattleTurnContext(next: TurnContext): void {
+    this.battleRuntime = { ...this.getBattleRuntime(), turnContext: next };
   }
 
-  setBattleTurnContext(context: TurnContext): void {
-    this.battleTurnContext = context;
-  }
-
-  resetBattleTurnContext(): void {
-    this.battleTurnContext = resetTurnContextForNewBattle();
+  replacePendingAutoTurnIntention(next: AutoTurnIntention | null): void {
+    this.battleRuntime = { ...this.getBattleRuntime(), pendingAutoTurnIntention: next };
   }
 
   hasCampaignState(): boolean {
@@ -107,6 +67,13 @@ class GameStateManager {
   }
 
   getDebugState(): DebugBattleState | null {
+    return this.debugState;
+  }
+
+  requireDebugState(): DebugBattleState {
+    if (!this.debugState) {
+      throw new Error('Debug state is not initialized');
+    }
     return this.debugState;
   }
 

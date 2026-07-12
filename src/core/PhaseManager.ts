@@ -1,5 +1,11 @@
 import Phaser from 'phaser';
-import { GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT, BattleParticipant } from './phases';
+import { GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
+import type { BattleParticipant, BattleRuntimeContext } from './battleRuntimeContext';
+import {
+  createEmptyBattleState,
+  createBattleRuntimeContext,
+  restartBattleRuntime,
+} from './battleRuntimeContext';
 import type { DebugBattleState, DebugSessionConfig } from './DebugBattleState';
 import { createDebugPlayerSession } from './debugPlayerSession';
 import { initCampaignState } from './initCampaignState';
@@ -12,6 +18,7 @@ import { ITEM_CATALOG } from '../data/itemDefinitions';
 import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
 import { SubMapDefinition, SubMapState } from '../world/types';
 import { projectWorldMapSnapshot, applyMovePartyToCampaign } from './worldMapProjection';
+import { resolveBattleExitRoute } from './battleExitRouting';
 import { PlayerSessionStore } from './playerSessionStore';
 import { applyEquipmentPhaseAction } from './phaseHandlers/inventoryPhaseHandler';
 import { applyCampPhaseAction } from './phaseHandlers/campPhaseHandler';
@@ -47,7 +54,6 @@ import {
   applyBattleLifecycleAction,
   setBattlePreviewTarget,
   type BattlePhaseActionResult,
-  type AutoTurnIntention,
 } from './phaseHandlers/battlePhaseHandler';
 import {
   buildBattleUnitSnapshotViews,
@@ -57,7 +63,7 @@ import {
 } from './battleSnapshotBuilder';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
-import { hasChargedThisRound } from '../battle/turnResolver';
+import { hasChargedThisRound, resetTurnContextForNewBattle } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression } from '../progression';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { resolvePlayerUnitSpriteSheet } from './unitSprites';
@@ -66,8 +72,7 @@ import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './rand
 class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
   private game!: Phaser.Game;
-  private lastBattleTransition:     BattlePhaseActionResult | null = null;
-  private pendingAutoTurnIntention: AutoTurnIntention | null       = null;
+  private lastBattleTransition: BattlePhaseActionResult | null = null;
   private rngStreams: GameplayRngStreams = createDefaultGameplayRngStreams();
 
   /** For tests only — inject deterministic RNG streams. */
@@ -93,7 +98,7 @@ class PhaseManagerClass {
   }
 
   getActiveBattleSetup(): PlayerBattleSetup {
-    if (this.phase.type === 'battle' && this.phase.isDebug && GameState.getDebugState()) {
+    if (this.phase.type === 'battle' && this.phase.sessionSource === 'debug') {
       return this.buildDebugBattleSetup();
     }
     const campaign = GameState.getCampaignState();
@@ -104,9 +109,21 @@ class PhaseManagerClass {
     };
   }
 
+  private requireBattleRuntime(
+    phase: Extract<GamePhase, { type: 'battle' }>,
+  ): BattleRuntimeContext {
+    const runtime = GameState.getBattleRuntime();
+    if (runtime.sessionSource !== phase.sessionSource) {
+      throw new Error(
+        `Battle runtime/phase sessionSource mismatch: runtime="${runtime.sessionSource}", phase="${phase.sessionSource}"`,
+      );
+    }
+    return runtime;
+  }
+
   /** Pure adapter — never reconstructs PlayerUnitState records. Deleted in Stage 3. */
   buildDebugBattleSetup(): PlayerBattleSetup {
-    const ds = GameState.getDebugState()!;
+    const ds = GameState.requireDebugState();
     return {
       playerUnits:    ds.session.roster.units,
       itemContainers: ds.session.inventory.containers,
@@ -136,6 +153,14 @@ class PhaseManagerClass {
     if (next === null) return; // invalid action for current phase
 
     this.applyActionSideEffects(action, this.phase, exitParticipants);
+
+    // Leaving the battle phase always clears the whole runtime atomically — no
+    // stale BattleRuntimeContext may survive into battle_results or any other
+    // non-battle phase. Entering, replaying, or mutating within battle never
+    // triggers this, since `next` stays 'battle' in those cases.
+    if (this.phase.type === 'battle' && next !== this.phase && next.type !== 'battle') {
+      GameState.resetBattleRuntime();
+    }
 
     if (next === this.phase) {
       // Mutation-only: rebuild snapshot in place, notify scene
@@ -209,7 +234,8 @@ class PhaseManagerClass {
         return { ...phase, unitName, upgradeTiers };
       }
       case 'battle': {
-        const battleState = GameState.get();
+        const runtime = this.requireBattleRuntime(phase);
+        const battleState = runtime.state;
 
         const { unitsById, fieldUnits, benchUnits } =
           buildBattleUnitSnapshotViews(battleState);
@@ -222,7 +248,7 @@ class PhaseManagerClass {
         const activeUnitId   = battleState.roundQueue[0] ?? null;
         const activeUnit     = activeUnitId ? (fieldById.get(activeUnitId) ?? null) : null;
 
-        const battleMode     = GameState.getBattleMode();
+        const battleMode     = runtime.mode;
         const activeUnitSide = activeUnit?.side ?? null;
 
         const manualTurnControlsVisible =
@@ -230,7 +256,7 @@ class PhaseManagerClass {
 
         const manualChargeDisabled =
           activeUnitId !== null &&
-          hasChargedThisRound(GameState.getBattleTurnContext(), activeUnitId);
+          hasChargedThisRound(runtime.turnContext, activeUnitId);
 
         let targetHighlightKind:
           | 'target'
@@ -270,10 +296,12 @@ class PhaseManagerClass {
           targetHighlightKind,
         });
 
-        // participants = battle-start snapshot; do NOT rebuild from current placement state
+        // participants = battle-start snapshot; do NOT rebuild from current placement state.
+        // Copied, not aliased: GamePhase is a render projection, never a handle onto
+        // runtime-owned mutable data.
         return {
           ...phase,
-          participants:        GameState.battleParticipants,
+          participants:        runtime.participants.map(p => ({ ...p })),
           benchUnits,
           placementSelection:  battleState.placementSelection,
           battlePhase:         battleState.phase,
@@ -309,30 +337,17 @@ class PhaseManagerClass {
   }
 
   private applyActionSideEffects(action: PhaseAction, prev: GamePhase, exitParticipants: BattleParticipant[] = []): void {
-    // ── Clear stale pending auto-turn intention on any action that disrupts battle flow ──
-    // These actions can arrive during the 200 ms DELAY_AUTO_IMPACT window between decide and apply.
-    if (
-      action.type === 'exit_battle'                       ||
-      action.type === 'replay'                            ||
-      action.type === 'battle_mark_quick_battle_complete' ||
-      action.type === 'battle_prepare_quick_battle'       ||
-      action.type === 'battle_begin_combat'               ||
-      action.type === 'battle_set_mode'
-    ) {
-      this.pendingAutoTurnIntention = null;
-    }
-
     // ── Battle lifecycle ──
     if (isBattleLifecycleAction(action) && prev.type === 'battle') {
-      const currentState = GameState.get();
-      const result = applyBattleLifecycleAction({ state: currentState, action });
+      const runtime = this.requireBattleRuntime(prev);
+      const result = applyBattleLifecycleAction({ state: runtime.state, action });
 
-      if (result.persistCampaignPlacements && !prev.isDebug) {
+      if (result.persistCampaignPlacements && runtime.sessionSource === 'campaign') {
         const units = { ...GameState.getCampaignState().roster.units };
         let changed = false;
-        for (const unit of currentState.units.values()) {
+        for (const unit of runtime.state.units.values()) {
           if (unit.side !== 'player') continue;
-          const deployment = currentState.deployments.get(unit.id);
+          const deployment = runtime.state.deployments.get(unit.id);
           if (deployment?.kind !== 'field') continue; // bench units have no field placement to save
           const unitState = units[unit.templateId];
           if (!unitState) continue;
@@ -342,19 +357,29 @@ class PhaseManagerClass {
         if (changed) GameState.replaceCampaignRoster({ units });
       }
 
-      GameState.set(result.state);
-      if (result.resetTurnContext) GameState.resetBattleTurnContext();
+      GameState.setBattleRuntime({
+        ...runtime,
+        state: result.state,
+        turnContext: result.resetTurnContext ? resetTurnContextForNewBattle() : runtime.turnContext,
+        pendingAutoTurnIntention: null,
+      });
       return;
     }
 
     // ── Battle control ──
     if (prev.type === 'battle') {
       if (action.type === 'battle_set_mode') {
-        GameState.setBattleMode(action.mode);
+        const runtime = this.requireBattleRuntime(prev);
+        GameState.setBattleRuntime({ ...runtime, mode: action.mode, pendingAutoTurnIntention: null });
         return;
       }
       if (action.type === 'battle_prepare_quick_battle') {
-        GameState.resetBattleTurnContext();
+        const runtime = this.requireBattleRuntime(prev);
+        GameState.setBattleRuntime({
+          ...runtime,
+          turnContext: resetTurnContextForNewBattle(),
+          pendingAutoTurnIntention: null,
+        });
         return;
       }
     }
@@ -363,44 +388,50 @@ class PhaseManagerClass {
     if (prev.type === 'battle' &&
         (action.type === 'battle_preview_target' || action.type === 'battle_clear_preview_target')) {
       const target = action.type === 'battle_preview_target' ? action.target : null;
-      GameState.set(setBattlePreviewTarget(GameState.get(), target));
+      const runtime = this.requireBattleRuntime(prev);
+      GameState.replaceBattleState(setBattlePreviewTarget(runtime.state, target));
       return;
     }
 
     // ── Battle turn ──
     if (isBattleTurnAction(action) && prev.type === 'battle') {
+      const runtime = this.requireBattleRuntime(prev);
       const result = applyBattleTurnAction({
-        state:                    GameState.get(),
-        context:                  GameState.getBattleTurnContext(),
+        state:                    runtime.state,
+        context:                  runtime.turnContext,
         action,
-        mode:                     GameState.getBattleMode(),
+        mode:                     runtime.mode,
         rng:                      this.rngStreams.battleResolution,
-        pendingAutoTurnIntention: this.pendingAutoTurnIntention,
+        pendingAutoTurnIntention: runtime.pendingAutoTurnIntention,
       });
 
       // Manage pending intention lifecycle:
       // decide stores it; apply clears it; everything else leaves it untouched.
+      let nextPendingIntention = runtime.pendingAutoTurnIntention;
       if (action.type === 'battle_decide_auto_turn') {
-        this.pendingAutoTurnIntention =
+        nextPendingIntention =
           result.autoTurnDirective?.type === 'intention'
             ? result.autoTurnDirective.intention
             : null;
       } else if (action.type === 'battle_apply_auto_turn') {
-        this.pendingAutoTurnIntention = null;
+        nextPendingIntention = null;
       }
 
       // Any turn action invalidates a pending preview target (skill/active unit/targets change).
-      GameState.set(setBattlePreviewTarget(result.state, null));
-      GameState.setBattleTurnContext(result.context);
+      GameState.setBattleRuntime({
+        ...runtime,
+        state: setBattlePreviewTarget(result.state, null),
+        turnContext: result.context,
+        pendingAutoTurnIntention: nextPendingIntention,
+      });
       this.lastBattleTransition = result;
       return;
     }
 
     // ── Battle placement ──
     if (isBattlePlacementAction(action) && prev.type === 'battle') {
-      const state    = GameState.get();
-      const nextState = applyBattlePlacementAction(state, action);
-      GameState.set(nextState);
+      const runtime = this.requireBattleRuntime(prev);
+      GameState.replaceBattleState(applyBattlePlacementAction(runtime.state, action));
       return;
     }
 
@@ -417,30 +448,31 @@ class PhaseManagerClass {
       }));
     }
 
-    // ── Campaign battle: initialize BattleState + snapshot participants ──
+    // ── Campaign battle: initialize BattleRuntimeContext ──
     if (action.type === 'enter_battle') {
-      // Build BattleState first so bench info is accurate for participants snapshot
-      GameState.reset();
       const setup = this.getActiveBattleSetup();
-      const { state, race, enemyPlacements } = buildNewBattleState(
-        GameState.get(), setup, action.enemyGroupId, this.rngStreams.battleSetup,
+      const emptyState = createEmptyBattleState();
+      const { state, enemyPlacements } = buildNewBattleState(
+        emptyState, setup, action.enemyGroupId, this.rngStreams.battleSetup,
       );
-      GameState.set(state);
-      GameState.lastEnemyRace       = race;
-      GameState.lastEnemyPlacements = enemyPlacements;
+      const participants = this.buildBattleParticipantsFromInitialState(state);
 
-      GameState.battleParticipants = this.buildBattleParticipantsFromInitialState(state);
+      GameState.setBattleRuntime(createBattleRuntimeContext({
+        state,
+        participants,
+        replaySetup: { enemyGroupId: action.enemyGroupId, enemyPlacements },
+        sessionSource: 'campaign',
+      }));
     }
 
-    // ── Debug battle: initialize BattleState + snapshot participants ──
-    // Invariant: debug battles never save or replay enemy placements.
-    if (action.type === 'start_battle' && GameState.getDebugState()) {
+    // ── Debug battle: initialize BattleRuntimeContext ──
+    // Invariant: debug battles never save or replay enemy placements across sessions.
+    if (action.type === 'start_battle') {
       const setup = this.buildDebugBattleSetup();
-
-      // Build BattleState — no race/placement persistence for debug
-      GameState.reset();
-      const { state } = buildNewBattleState(GameState.get(), setup, action.enemyGroupId, this.rngStreams.battleSetup);
-      GameState.set(state);
+      const emptyState = createEmptyBattleState();
+      const { state, enemyPlacements } = buildNewBattleState(
+        emptyState, setup, action.enemyGroupId, this.rngStreams.battleSetup,
+      );
 
       // Snapshot debug participants (all non-camp units; bench not tracked for debug).
       // Each unit's own level/chosenUpgrades — never a session-wide "shared" value.
@@ -452,42 +484,45 @@ class PhaseManagerClass {
         const spriteKey   = this.spriteKeyFromProgression(bp, progression);
         participants.push({ templateId: bp.templateId, name: bp.name, level: us.level, isAlive: true, wasOnBench: false, spriteKey });
       }
-      GameState.battleParticipants = participants;
+
+      GameState.setBattleRuntime(createBattleRuntimeContext({
+        state,
+        participants,
+        replaySetup: { enemyGroupId: action.enemyGroupId, enemyPlacements },
+        sessionSource: 'debug',
+      }));
     }
 
-    // ── Replay: reinitialize BattleState ──
-    if (action.type === 'replay') {
-      const phase = prev;
-      if (phase.type === 'battle') {
-        if (phase.isDebug) {
-          // Debug replay = fresh battle. Intentional: debug battles have no saved placements.
-          GameState.reset();
-          const setup = this.buildDebugBattleSetup();
-          const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId, this.rngStreams.battleSetup);
-          GameState.set(state);
-        } else {
-          const saved = GameState.lastEnemyPlacements;
-          if (saved) {
-            // Normal case: replay same enemies in same positions
-            GameState.reset();
-            const setup    = this.getActiveBattleSetup();
-            const newState = buildReplayBattleState(GameState.get(), setup, saved);
-            GameState.set(newState);
-          } else {
-            // Fallback: no saved placements, generate fresh
-            GameState.reset();
-            const setup = this.getActiveBattleSetup();
-            const { state } = buildNewBattleState(GameState.get(), setup, phase.enemyGroupId, this.rngStreams.battleSetup);
-            GameState.set(state);
-          }
-        }
+    // ── Replay: reinstall a complete BattleRuntimeContext ──
+    if (action.type === 'replay' && prev.type === 'battle') {
+      const runtime = this.requireBattleRuntime(prev);
+
+      if (runtime.sessionSource === 'debug') {
+        // Debug replay = fresh battle. Intentional: debug battles have no saved placements.
+        const setup = this.buildDebugBattleSetup();
+        const emptyState = createEmptyBattleState();
+        const { state, enemyPlacements } = buildNewBattleState(
+          emptyState, setup, runtime.replaySetup.enemyGroupId, this.rngStreams.battleSetup,
+        );
+        GameState.setBattleRuntime(restartBattleRuntime(runtime, state, {
+          enemyGroupId: runtime.replaySetup.enemyGroupId,
+          enemyPlacements,
+        }));
+      } else {
+        // Normal case: replay same enemies in same positions
+        const setup = this.getActiveBattleSetup();
+        const emptyState = createEmptyBattleState();
+        const replayState = buildReplayBattleState(emptyState, setup, runtime.replaySetup.enemyPlacements);
+        GameState.setBattleRuntime(restartBattleRuntime(runtime, replayState, runtime.replaySetup));
       }
     }
 
     // ── Battle teardown ──
     if (action.type === 'exit_battle' && prev.type === 'battle') {
-      const debugState = GameState.getDebugState();
-      if (prev.isDebug && debugState) {
+      const runtime = this.requireBattleRuntime(prev);
+      const route = resolveBattleExitRoute(runtime.sessionSource, GameState.getDebugState());
+      if (route.source === 'debug') {
+        const debugState = route.debugState;
         // Debug teardown: XP goes to DebugBattleState only — never touches CampaignState.
         // Temporary Stage 1 behavior: bump every debug unit's level by one (preserves the
         // old shared-level visible behavior). initialConfig.level is never touched.
@@ -499,7 +534,7 @@ class PhaseManagerClass {
           GameState.replaceDebugSession({ ...debugState.session, roster: { units } });
         }
       } else {
-        const exits = buildPlayerExitInputs(exitParticipants, GameState.get());
+        const exits = buildPlayerExitInputs(exitParticipants, runtime.state);
 
         GameState.replaceCampaignRoster({
           units: applyBattleExitPlayerPersistence(GameState.getCampaignState().roster.units, exits),
@@ -655,9 +690,10 @@ class PhaseManagerClass {
   private buildExitParticipants(): BattleParticipant[] {
     const phase = this.phase;
     if (phase.type !== 'battle') return [];
+    const runtime = this.requireBattleRuntime(phase);
 
     const runtimePlayerByTemplateId = new Map<string, Unit>();
-    for (const u of GameState.get().units.values()) {
+    for (const u of runtime.state.units.values()) {
       if (u.side !== 'player') continue;
       if (runtimePlayerByTemplateId.has(u.templateId)) {
         throw new Error(
@@ -668,12 +704,12 @@ class PhaseManagerClass {
       runtimePlayerByTemplateId.set(u.templateId, u);
     }
 
-    return phase.participants.map(pp => {
-      const runtime = runtimePlayerByTemplateId.get(pp.templateId);
-      if (runtime) {
+    return runtime.participants.map(pp => {
+      const runtimeUnit = runtimePlayerByTemplateId.get(pp.templateId);
+      if (runtimeUnit) {
         // Runtime state wins over wasOnBench. A bench-origin unit that was
         // moved to field during placement and then died is reported dead.
-        return { ...pp, isAlive: isAlive(runtime) };
+        return { ...pp, isAlive: isAlive(runtimeUnit) };
       }
       // Fallback: no runtime unit. Treat wasOnBench-origin participants as
       // alive (they could not have taken battle damage); otherwise dead.
@@ -725,6 +761,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
       if (current.type !== 'world_map') return null;
       return {
         type:               'battle',
+        sessionSource:      'campaign',
         enemyGroupId:       action.enemyGroupId,
         returnPhase:        current,
         triggerPos:         action.triggerPos,
@@ -769,9 +806,9 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
       if (current.type !== 'debug_equip_screen') return null;
       return {
         type:               'battle',
+        sessionSource:      'debug',
         enemyGroupId:       action.enemyGroupId,
         returnPhase:        current,
-        isDebug:            true,
         participants:       [],                                                       // filled by rebuildSnapshot
         benchUnits:         [],                                                       // filled by rebuildSnapshot
         placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
@@ -949,7 +986,7 @@ function allMobsDead(mapDef: SubMapDefinition, mapState: SubMapState): boolean {
 
 /** True if winning the current world-map battle would leave no live mobs on the map. */
 function wouldClearMap(battlePhase: GamePhase & { type: 'battle' }): boolean {
-  if (battlePhase.isDebug || !battlePhase.mapId || !battlePhase.triggerPos) return false;
+  if (battlePhase.sessionSource !== 'campaign' || !battlePhase.mapId || !battlePhase.triggerPos) return false;
   const mapDef   = MAP_DEFINITIONS[battlePhase.mapId];
   // mapId/triggerPos are only set for campaign battles (enter_battle), which require an
   // existing campaign — safe to call getCampaignState() unguarded here.

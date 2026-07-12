@@ -15,20 +15,14 @@ import {
 import type { BattleState }                     from '../battle/types';
 import type { UnitRace }                        from '../shared/unitTypes';
 import type { PlayerBattleSetup }               from './battleSetup';
-import type { CellCoord }                       from '../shared/gridTypes';
 import { getFieldUnits, requireFieldDeployment } from '../battle/deployment';
 import { isAlive } from '../battle/lifeState';
-
-export interface EnemyPlacementRecord {
-  templateId: string;
-  anchor:     CellCoord;
-  level:      number;
-}
+import type { EnemyReplayPlacement } from './battleRuntimeContext';
 
 export interface BattleInitResult {
   state:           BattleState;
   race:            UnitRace;
-  enemyPlacements: EnemyPlacementRecord[];
+  enemyPlacements: EnemyReplayPlacement[];
 }
 
 const FALLBACK_RACES: UnitRace[] = ['orc', 'demon', 'undead'];
@@ -69,7 +63,7 @@ export function buildNewBattleState(
   state = autoPlaceEnemies(state, enemyCandidates, rng);
 
   // 4. Capture placement records for replay (enemies are always field-deployed)
-  const enemyPlacements: EnemyPlacementRecord[] = [...state.units.values()]
+  const enemyPlacements: EnemyReplayPlacement[] = [...state.units.values()]
     .filter(u => u.side === 'enemy')
     .map(u => ({
       templateId: u.templateId,
@@ -87,7 +81,7 @@ export function buildNewBattleState(
 export function buildReplayBattleState(
   emptyState:      BattleState,
   setup:           PlayerBattleSetup,
-  savedPlacements: EnemyPlacementRecord[],
+  savedPlacements: EnemyReplayPlacement[],
 ): BattleState {
   const playerCandidates = buildPlayerAutoPlacementCandidates(setup);
   let state = autoPlacePlayer(emptyState, playerCandidates, BENCH_SLOTS);

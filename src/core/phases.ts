@@ -11,6 +11,7 @@ import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
 import type { SubMapState, WorldPos } from '../shared/worldTypes';
 import type { PlayerSessionSource } from './playerSessionState';
+import type { BattleParticipant } from './battleRuntimeContext';
 
 export interface CampUnitSnapshot {
   templateId: string;
@@ -36,16 +37,6 @@ export interface UpgradeTierSnapshot {
   isLocked:        boolean;
 }
 
-/** Snapshot of one player unit at moment of battle exit — pre-level-up. */
-export interface BattleParticipant {
-  templateId: string;
-  name: string;
-  level: number;       // current level BEFORE +1
-  isAlive: boolean;
-  wasOnBench: boolean;
-  spriteKey: string | null;
-}
-
 export type BattleExitOutcome = 'victory' | 'defeat';
 
 /** Display data for BattleResults scene — level already incremented. */
@@ -65,11 +56,11 @@ export type GamePhase =
   | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase; mapCleared: boolean }
   | {
       type:               'battle';
+      sessionSource:      PlayerSessionSource;
       enemyGroupId:       string;
       returnPhase:        GamePhase;
       triggerPos?:        { x: number; y: number };
       mapId?:             string;
-      isDebug?:           boolean;
       participants:       BattleParticipant[];     // battle-start snapshot; never rebuilt from current placement
       benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection

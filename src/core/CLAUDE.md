@@ -14,7 +14,9 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 ## Key Files
 - `PhaseManager.ts` — master state machine; single entry point for all transitions via `transition(action)`
 - `phases.ts` — `GamePhase` and `PhaseAction` discriminated unions; the contracts between UI and core
-- `GameState.ts` — runtime singleton owning three separate references: `CampaignState`, `DebugBattleState`, and battle runtime (`BattleState` + mode/turn context). Exposes only replacement methods (`setCampaignState`, `replaceCampaignRoster`, `replaceCampaignInventory`, `setDebugState`, `replaceDebugRoster`, `replaceDebugInventory`, ...) — no writable flat fields. `replaceDebugSession()` is a `@deprecated` migration bridge kept only for the pre-Stage-7 battle-exit persistence path; camp and upgrade no longer use it (Stage 3); scheduled for removal when Stage 7 migrates battle exit to `PlayerSessionStore`.
+- `GameState.ts` — runtime singleton owning three separate references: `CampaignState`, `DebugBattleState`, and a nullable `BattleRuntimeContext` (`battleRuntimeContext.ts`). Exposes only replacement methods (`setCampaignState`, `replaceCampaignRoster`, `replaceCampaignInventory`, `setDebugState`, `replaceDebugRoster`, `replaceDebugInventory`, `setBattleRuntime`, `replaceBattleState`, `replaceBattleMode`, `replaceBattleTurnContext`, `replacePendingAutoTurnIntention`, ...) — no writable flat fields. `getDebugState(): DebugBattleState | null` is for genuinely optional reads; `requireDebugState(): DebugBattleState` throws `'Debug state is not initialized'` and is mandatory wherever the current phase or runtime explicitly identifies the session as `debug` — an explicit `PlayerSessionSource` selects exactly one storage tree, and missing storage for that explicit source is a lifecycle error, never a silent fallback to the other tree. `replaceDebugSession()` is a `@deprecated` migration bridge kept only for the pre-Stage-7 battle-exit persistence path; camp and upgrade no longer use it (Stage 3); scheduled for removal when Stage 7 migrates battle exit to `PlayerSessionStore`.
+- `battleExitRouting.ts` — `resolveBattleExitRoute(sessionSource, debugState)`: the pure decision of which battle-exit persistence branch applies. Never returns a `'debug'` route without a real `DebugBattleState` — throws instead of letting `PhaseManager`'s exit-teardown code fall back to campaign persistence. Takes both facts as plain arguments (no `GameState`/Phaser import) so it can be unit-tested directly, the same reason `worldMapProjection.ts` exists outside `PhaseManager.ts`.
+- `battleRuntimeContext.ts` (Stage 4) — `BattleRuntimeContext`: the single owner of all mutable data for one active battle attempt (`state`, `participants`, `replaySetup`, `turnContext`, `mode`, `sessionSource`, `pendingAutoTurnIntention`). A battle phase is active if and only if `GameState`'s runtime is non-null; `runtime.sessionSource` must always equal the active battle phase's `sessionSource` — validated by `PhaseManager`'s private `requireBattleRuntime()` at every read/mutation site (snapshot rebuild, lifecycle/control/preview/turn/placement side effects, replay, exit), not only at render time. `createEmptyBattleState()`, `createBattleRuntimeContext()`, and `restartBattleRuntime()` are the only ways to produce a runtime or a fresh `BattleState`; each returns independent, non-aliased collections. `BattleRuntimeContext` is never serialized and never exposed to scenes — `GamePhase.participants` is always a copy of `runtime.participants`, never the same array reference, so render data and persistence input never alias runtime-owned mutable state. `BattleReplaySetup` stores encounter/placement reconstruction data for the current campaign/debug replay behavior — it is not a full deterministic battle snapshot.
 - `playerSessionState.ts` — `PlayerSessionSource = 'campaign' | 'debug'`, a core-only routing key (must never be imported by `inventory/`, `progression/`, `battle/`, `campaign/`, `world/`); `PlayerSessionState { roster, inventory }`, the core-only composition of the two player-owned domains; used by `DebugBattleState.session`
 - `playerSessionStore.ts` — `PlayerSessionStore`: the sole seam that resolves a `PlayerSessionSource` to campaign or debug runtime storage (`getSession`, `replaceRoster`, `replaceInventory`). Storage-only — contains no inventory/progression/validation rules.
 - `equipmentScreenSnapshot.ts` — `buildEquipmentScreenPlayerSnapshot(session, selectedUnitTemplateId)`: the one player-equipment projection shared by both `equip_screen` and `debug_equip_screen`. Takes a `PlayerSessionState` directly — never reads `GameState`, never branches on campaign/debug.
@@ -34,7 +36,7 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `EventBus.ts` — `STATE_CHANGED` event singleton; scenes subscribe via `sceneEvents.ts`
 - `sceneEvents.ts` — binds Phaser scene lifecycle to `STATE_CHANGED` with auto-cleanup
 - `Constants.ts` — grid layout, bench config, combat constants (visual colors removed; see `src/objects/battleVisualTheme.ts`)
-- `phaseHandlers/battlePhaseHandler.ts` — routes battle placement actions; delegates to `../battle/placementState`
+- `phaseHandlers/battlePhaseHandler.ts` — routes battle placement actions; delegates to `../battle/placementState`. `AutoTurnIntention` is owned by `battleRuntimeContext.ts` and re-exported here for callers that already import from this module.
 
 ## Structural Role
 `core` → game logic and state authority; all other layers read from it, none write to it directly
@@ -73,6 +75,23 @@ Scenes re-render from new `GamePhase`
 - Camp and upgrade mutation rules live only in `progression/rosterCamp.ts` and
   `progression/rosterUpgrades.ts`; `PhaseManager` and its phase handlers contain no camp or
   upgrade business rules — they only resolve a session and delegate
+- **Battle runtime ownership has exactly one owner: `GameState`'s nullable `BattleRuntimeContext`.**
+  No battle state, mode, turn context, participants, replay setup, or pending auto-turn intention
+  exists outside it. `PhaseManager` never keeps its own `pendingAutoTurnIntention` field. Every
+  compound battle-runtime change (more than one field) installs one complete replacement runtime
+  via `GameState.setBattleRuntime()` — never two sequential writes for one action
+- Battle session (`sessionSource: 'campaign' | 'debug'`) is read once from the active `battle`
+  `GamePhase`, exactly like `equip_screen`/`camp`/`upgrade_tree` — never derived from
+  `returnPhase`, debug-state presence, map metadata, or action type. A missing `DebugBattleState`
+  when `sessionSource === 'debug'` is a thrown lifecycle error, never a silent fallback to
+  campaign storage. This includes battle-exit routing: `exit_battle` branches only on
+  `resolveBattleExitRoute(runtime.sessionSource, GameState.getDebugState())`
+  (`battleExitRouting.ts`), never on a compound condition like `sessionSource === 'debug' &&
+  debugState` that could silently select the campaign branch for a debug-sourced runtime
+- Leaving the `battle` phase for any non-battle phase always clears the whole
+  `BattleRuntimeContext` (`PhaseManager.transition()`, after side effects, before snapshot
+  rebuild) — no completed or abandoned battle runtime survives into `battle_results` or any
+  later phase
 - **Active-unit membership and battle-entry party validity have exactly one owner:
   `progression/rosterCamp.ts`.** `isActiveLivingUnit()` defines active membership
   (`lifeState === 'alive' && isInCamp === false`); `getRosterPartyStatus()` defines the `1..9`
