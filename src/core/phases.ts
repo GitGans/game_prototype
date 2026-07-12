@@ -10,12 +10,14 @@ import type { PlacementSelection, BattleState, BattleMode, Side } from '../battl
 import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
 import type { SubMapState, WorldPos } from '../shared/worldTypes';
+import type { PlayerSessionSource } from './playerSessionState';
 
 export interface CampUnitSnapshot {
   templateId: string;
   name:       string;
   level:      number;
   inCamp:     boolean;
+  isAlive:    boolean;
 }
 
 export interface UpgradeOptionSnapshot {
@@ -98,7 +100,14 @@ export type GamePhase =
       previewTargetCoord:  CellCoord | null;
       previewTargetUnitId: string | null;
     }
-  | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
+  | {
+      type: 'camp';
+      sessionSource: 'campaign';
+      returnPhase: GamePhase;
+      units: CampUnitSnapshot[];
+      activeLivingUnitCount: number;
+      canStartBattle: boolean;
+    }
   | { type: 'debug_level_select' }
   | {
       type: 'debug_equip_screen';
@@ -111,6 +120,8 @@ export type GamePhase =
       unitEquipment: EquipmentSnapshot;
       unitStats: UnitStatsSnapshot | null;
       campUnitIds: string[];
+      activeLivingUnitCount: number;
+      canStartBattle: boolean;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
     }
@@ -130,6 +141,7 @@ export type GamePhase =
     }
   | {
       type: 'upgrade_tree';
+      sessionSource: PlayerSessionSource;
       unitTemplateId: string;
       unitName: string;
       returnPhase: GamePhase;
@@ -164,11 +176,10 @@ export type PhaseAction =
   | { type: 'toggle_camp_unit'; templateId: string }
   | { type: 'open_upgrade_tree' }
   | { type: 'close_upgrade_tree' }
-  | { type: 'choose_upgrade'; templateId: string; tierId: 5 | 10 | 15 | 20; upgradeId: UpgradeOptionId }
+  | { type: 'choose_upgrade'; tierId: 5 | 10 | 15 | 20; upgradeId: UpgradeOptionId }
   // ── Debug battle ──────────────────────────────────────────────
   | { type: 'init_debug'; level: number }
   | { type: 'switch_debug_unit'; templateId: string }
-  | { type: 'toggle_debug_camp'; templateId: string }
   // ── Battle placement (mutation-only: resolveTransition returns current) ──
   | { type: 'select_bench_slot';          benchIdx: number }
   | { type: 'select_field_unit';          unitId:   string }

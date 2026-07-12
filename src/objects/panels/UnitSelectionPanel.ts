@@ -94,8 +94,7 @@ export class UnitSelectionPanel extends Phaser.GameObjects.Container {
     phase:        DebugEquipScreenPhase,
     onGoToBattle: () => void,
   ): void {
-    const activeCount = phase.availableUnits.filter(u => !phase.campUnitIds.includes(u.templateId)).length;
-    const tooMany     = activeCount > 9;
+    const valid = phase.canStartBattle;
     this.add(new Button({
       scene,
       x:       w / 2,
@@ -103,8 +102,8 @@ export class UnitSelectionPanel extends Phaser.GameObjects.Container {
       w:       scaled(160),
       h:       scaled(44),
       label:   'Go to Battle →',
-      style:   tooMany ? 'danger' : 'primary',
-      onClick: tooMany ? () => {} : onGoToBattle,
+      style:   valid ? 'primary' : 'danger',
+      onClick: valid ? onGoToBattle : () => {},
     }));
   }
 

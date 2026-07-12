@@ -21,8 +21,8 @@ export class UpgradeTreeScreen extends Phaser.Scene {
       h,
       phase,
       onBack:  () => PhaseManager.transition({ type: 'close_upgrade_tree' }),
-      onChooseUpgrade: (templateId, tierId, upgradeId) =>
-        PhaseManager.transition({ type: 'choose_upgrade', templateId, tierId, upgradeId }),
+      onChooseUpgrade: (tierId, upgradeId) =>
+        PhaseManager.transition({ type: 'choose_upgrade', tierId, upgradeId }),
     });
 
     EventBus.on(Events.STATE_CHANGED, this.onStateChanged, this);

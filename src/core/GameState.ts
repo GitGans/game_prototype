@@ -118,7 +118,7 @@ class GameStateManager {
     this.debugState = null;
   }
 
-  /** @deprecated Migration bridge for camp/upgrade/battle-exit code not yet on PlayerSessionStore. Scheduled for removal in Stage 8. */
+  /** @deprecated Migration bridge used only by the pre-Stage-7 battle-exit persistence path. Camp and upgrade no longer use this (Stage 3). Remove when Stage 7 migrates battle exit to PlayerSessionStore. */
   replaceDebugSession(next: PlayerSessionState): void {
     const ds = this.debugState;
     if (!ds) throw new Error('Debug state is not initialized');

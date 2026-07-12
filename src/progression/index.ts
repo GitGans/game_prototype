@@ -4,3 +4,5 @@ export * from './unitClassResolver';
 export * from './skillResolver';
 export * from './stats';
 export * from './rosterState';
+export * from './rosterCamp';
+export * from './rosterUpgrades';

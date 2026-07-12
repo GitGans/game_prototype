@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GamePhase, PhaseAction, CampUnitSnapshot, SkillIconSnapshot, UpgradeTierSnapshot, UpgradeOptionSnapshot, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT, BattleParticipant } from './phases';
+import { GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT, BattleParticipant } from './phases';
 import type { DebugBattleState, DebugSessionConfig } from './DebugBattleState';
 import { createDebugPlayerSession } from './debugPlayerSession';
 import { initCampaignState } from './initCampaignState';
@@ -14,7 +14,11 @@ import { SubMapDefinition, SubMapState } from '../world/types';
 import { projectWorldMapSnapshot, applyMovePartyToCampaign } from './worldMapProjection';
 import { PlayerSessionStore } from './playerSessionStore';
 import { applyEquipmentPhaseAction } from './phaseHandlers/inventoryPhaseHandler';
+import { applyCampPhaseAction } from './phaseHandlers/campPhaseHandler';
+import { applyChooseUpgradePhaseAction } from './phaseHandlers/progressionPhaseHandler';
 import { buildEquipmentScreenPlayerSnapshot } from './equipmentScreenSnapshot';
+import { buildRosterCampSnapshot } from './rosterCampSnapshot';
+import { buildUpgradeTreePlayerSnapshot } from './upgradeTreeSnapshot';
 import {
   BattleState,
   Unit,
@@ -27,10 +31,8 @@ import {
 } from './playerUnitPersistence';
 import { buildPlayerExitInputs } from './playerBattleExitProjection';
 import { resolvePlayerMaxHpForLevel } from './battleSetupProjection';
-import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { UnitBlueprint } from '../shared/unitTypes';
 import type { PlayerUnitState } from '../progression';
-import { buildSkillIconSnapshot, buildUnitUpgradeStatLines } from './unitUpgradePresentation';
 import type { PlayerBattleSetup } from './battleSetup';
 import {
   buildNewBattleState,
@@ -56,15 +58,10 @@ import {
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { hasChargedThisRound } from '../battle/turnResolver';
-import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from '../progression';
-import { resolveSkillDefinition, resolveUnitClassDefinition } from '../progression';
+import { resolveUnitProgression, type ResolvedUnitProgression } from '../progression';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
-import { resolvePlayerUnitSpriteSheet, resolvePlayerUpgradeSpriteSheet } from './unitSprites';
+import { resolvePlayerUnitSpriteSheet } from './unitSprites';
 import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
-
-function toSkillIcon(skill: ActionSkillDefinition): SkillIconSnapshot {
-  return buildSkillIconSnapshot(skill);
-}
 
 class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
@@ -152,16 +149,6 @@ class PhaseManagerClass {
     this.syncPhaserScenes(this.phase);
   }
 
-  private buildCampUnits(): CampUnitSnapshot[] {
-    const units = GameState.getCampaignState().roster.units;
-    return PLAYER_UNITS.map(bp => ({
-      templateId: bp.templateId,
-      name:       bp.name,
-      level:      units[bp.templateId]?.level ?? bp.level,
-      inCamp:     units[bp.templateId]?.isInCamp ?? false,
-    }));
-  }
-
   private spriteKeyFromProgression(
     blueprint:   UnitBlueprint,
     progression: ResolvedUnitProgression,
@@ -196,42 +183,6 @@ class PhaseManagerClass {
     return participants;
   }
 
-  private buildUpgradeTiers(
-    templateId: string,
-    debugLevel?: number,
-    debugChosenUpgrades?: UnitUpgradeChoices,
-  ): UpgradeTierSnapshot[] {
-    const bp = PLAYER_UNITS.find(u => u.templateId === templateId);
-    if (!bp) return [];
-    // buildUpgradeTiers is reachable from the debug flow before any campaign exists
-    // (MainMenu → Debug Battle skips new_game) — guard rather than call getCampaignState().
-    const unitState = GameState.hasCampaignState()
-      ? GameState.getCampaignState().roster.units[templateId]
-      : undefined;
-    const level = debugLevel ?? unitState?.level ?? bp.level;
-    const chosenUpgrades = debugChosenUpgrades ?? unitState?.chosenUpgrades ?? {};
-    return (bp.upgradeTiers ?? []).map(tier => ({
-      tierId: tier.unlocksAtLevel,
-      options: tier.options.map((upg): UpgradeOptionSnapshot => {
-        const skill = resolveSkillDefinition(upg.skillId);
-        const classChangeName = upg.classId
-          ? resolveUnitClassDefinition(upg.classId).name
-          : null;
-        const previewSheet = resolvePlayerUpgradeSpriteSheet(upg);
-        return {
-          id:                    upg.id,
-          name:                  upg.name,
-          skill:                 toSkillIcon(skill),
-          statLines:             buildUnitUpgradeStatLines(upg.statModifiers ?? {}),
-          unitPreviewTextureKey: previewSheet ? getUnitSpriteTextureKey(bp.templateId, previewSheet) : null,
-          classChangeName,
-        };
-      }),
-      chosenUpgradeId: chosenUpgrades[tier.unlocksAtLevel] ?? null,
-      isLocked: level < tier.unlocksAtLevel,
-    }));
-  }
-
   // Recomputes data snapshots for phases that carry them.
   // Called after every applyActionSideEffects so GamePhase is always fresh.
   private rebuildSnapshot(phase: GamePhase): GamePhase {
@@ -241,28 +192,21 @@ class PhaseManagerClass {
         const snapshot = buildEquipmentScreenPlayerSnapshot(session, phase.selectedUnitTemplateId);
         return { ...phase, ...snapshot };
       }
-      case 'camp':
-        return { ...phase, units: this.buildCampUnits() };
+      case 'camp': {
+        const session = PlayerSessionStore.getSession(phase.sessionSource);
+        const { units, activeLivingUnitCount, canStartBattle } = buildRosterCampSnapshot(session.roster);
+        return { ...phase, units, activeLivingUnitCount, canStartBattle };
+      }
       case 'debug_equip_screen': {
         const session = PlayerSessionStore.getSession(phase.sessionSource);
-        const snapshot = buildEquipmentScreenPlayerSnapshot(session, phase.selectedUnitTemplateId);
-        const campUnitIds = Object.entries(session.roster.units)
-          .filter(([, unitState]) => unitState.isInCamp)
-          .map(([templateId]) => templateId);
-        return { ...phase, ...snapshot, campUnitIds };
+        const equipSnapshot = buildEquipmentScreenPlayerSnapshot(session, phase.selectedUnitTemplateId);
+        const { campUnitIds, activeLivingUnitCount, canStartBattle } = buildRosterCampSnapshot(session.roster);
+        return { ...phase, ...equipSnapshot, campUnitIds, activeLivingUnitCount, canStartBattle };
       }
       case 'upgrade_tree': {
-        const isDebug = phase.returnPhase.type === 'debug_equip_screen';
-        // Per-unit lookup — never a session-wide "shared" level or chosenUpgrades.
-        const debugUnitState = isDebug
-          ? GameState.getDebugState()!.session.roster.units[phase.unitTemplateId]
-          : undefined;
-        const upgradeTiers = this.buildUpgradeTiers(
-          phase.unitTemplateId,
-          debugUnitState?.level,
-          debugUnitState?.chosenUpgrades,
-        );
-        return { ...phase, upgradeTiers };
+        const session = PlayerSessionStore.getSession(phase.sessionSource);
+        const { unitName, upgradeTiers } = buildUpgradeTreePlayerSnapshot(session.roster, phase.unitTemplateId);
+        return { ...phase, unitName, upgradeTiers };
       }
       case 'battle': {
         const battleState = GameState.get();
@@ -594,45 +538,20 @@ class PhaseManagerClass {
 
     // ── Camp unit toggle ──
     if (action.type === 'toggle_camp_unit') {
-      const c = GameState.getCampaignState();
-      const unitState = c.roster.units[action.templateId];
-      if (unitState) {
-        GameState.replaceCampaignRoster({
-          units: { ...c.roster.units, [action.templateId]: { ...unitState, isInCamp: !unitState.isInCamp } },
-        });
-      }
+      if (prev.type !== 'camp' && prev.type !== 'debug_equip_screen') return;
+      applyCampPhaseAction({ source: prev.sessionSource, action });
+      return;
     }
 
     // ── Upgrade choice ──
     if (action.type === 'choose_upgrade') {
-      const isDebugContext = prev.type === 'upgrade_tree' && prev.returnPhase.type === 'debug_equip_screen';
-      if (isDebugContext) {
-        const debugState = GameState.getDebugState()!;
-        const units = debugState.session.roster.units;
-        const us = units[action.templateId];
-        const existing = us?.chosenUpgrades ?? {};
-        if (us && !existing[action.tierId]) {
-          const nextUnit = { ...us, chosenUpgrades: { ...existing, [action.tierId]: action.upgradeId } };
-          GameState.replaceDebugSession({
-            ...debugState.session,
-            roster: { units: { ...units, [action.templateId]: nextUnit } },
-          });
-        }
-      } else {
-        const c = GameState.getCampaignState();
-        const unitState = c.roster.units[action.templateId];
-        if (unitState && !unitState.chosenUpgrades[action.tierId]) {
-          GameState.replaceCampaignRoster({
-            units: {
-              ...c.roster.units,
-              [action.templateId]: {
-                ...unitState,
-                chosenUpgrades: { ...unitState.chosenUpgrades, [action.tierId]: action.upgradeId },
-              },
-            },
-          });
-        }
-      }
+      if (prev.type !== 'upgrade_tree') return;
+      applyChooseUpgradePhaseAction({
+        source: prev.sessionSource,
+        unitTemplateId: prev.unitTemplateId,
+        action,
+      });
+      return;
     }
 
     // ── Debug mode ──
@@ -645,18 +564,6 @@ class PhaseManagerClass {
       const session = createDebugPlayerSession({ config, playerUnits: PLAYER_UNITS, itemCatalog: ITEM_CATALOG });
       GameState.setDebugState({ session, initialConfig: config });
       this.rngStreams = createDefaultGameplayRngStreams();
-    }
-
-    if (action.type === 'toggle_debug_camp') {
-      const debugState = GameState.getDebugState()!;
-      const units = debugState.session.roster.units;
-      const us = units[action.templateId];
-      if (us) {
-        GameState.replaceDebugSession({
-          ...debugState.session,
-          roster: { units: { ...units, [action.templateId]: { ...us, isInCamp: !us.isInCamp } } },
-        });
-      }
     }
 
     // ── move_party: writes CampaignState.world.partyPos, never the phase. ──
@@ -800,6 +707,8 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         unitEquipment: EMPTY_EQUIP_SNAPSHOT,
         unitStats: null,
         campUnitIds: [],
+        activeLivingUnitCount: 0,
+        canStartBattle: false,
         learnedSkills: [],
         upgradeSkills: [],
       };
@@ -807,10 +716,6 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'switch_debug_unit':
       if (current.type !== 'debug_equip_screen') return null;
       return { ...current, selectedUnitTemplateId: action.templateId };
-
-    case 'toggle_debug_camp':
-      if (current.type !== 'debug_equip_screen') return null;
-      return current; // mutation-only → STATE_CHANGED
 
     case 'move_party':
       if (current.type !== 'world_map') return null;
@@ -847,7 +752,14 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
 
     case 'enter_camp':
       if (current.type !== 'world_map') return null;
-      return { type: 'camp', returnPhase: current, units: [] };
+      return {
+        type: 'camp',
+        sessionSource: 'campaign',
+        returnPhase: current,
+        units: [],
+        activeLivingUnitCount: 0,
+        canStartBattle: false,
+      };
 
     case 'exit_camp':
       if (current.type !== 'camp') return null;
@@ -947,14 +859,13 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     // ── Upgrade tree navigation ──────────────────────────────────────────────
     case 'open_upgrade_tree': {
       if (current.type !== 'equip_screen' && current.type !== 'debug_equip_screen') return null;
-      const templateId = current.selectedUnitTemplateId;
-      const bp = PLAYER_UNITS.find(u => u.templateId === templateId);
       return {
         type: 'upgrade_tree',
-        unitTemplateId: templateId,
-        unitName: bp?.name ?? '',
+        sessionSource: current.sessionSource,
+        unitTemplateId: current.selectedUnitTemplateId,
+        unitName: '',        // filled by rebuildSnapshot via buildUpgradeTreePlayerSnapshot
         returnPhase: current,
-        upgradeTiers: [], // filled by rebuildSnapshot
+        upgradeTiers: [],    // filled by rebuildSnapshot
       };
     }
 
@@ -968,14 +879,9 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
       return current; // mutation-only → rebuildSnapshot refreshes upgrade tiers
 
     // ── Camp unit toggle (mutation-only) ─────────────────────────────────────
-    case 'toggle_camp_unit': {
-      if (current.type !== 'camp') return null;
-      const unit = current.units.find(u => u.templateId === action.templateId);
-      if (!unit) return null;
-      const activeCount = current.units.filter(u => !u.inCamp).length;
-      if (!unit.inCamp && activeCount <= 1) return null; // can't bench last active unit
-      return current; // same reference → mutation-only path → STATE_CHANGED
-    }
+    case 'toggle_camp_unit':
+      if (current.type !== 'camp' && current.type !== 'debug_equip_screen') return null;
+      return current; // mutation-only → rebuildSnapshot refreshes camp/campUnitIds/activeLivingUnitCount
 
     // ── Commerce — stub until 'shop' phase exists ────────────────────────────
     case 'buy_item':

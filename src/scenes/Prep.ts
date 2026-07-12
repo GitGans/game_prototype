@@ -174,17 +174,14 @@ export class Prep extends Phaser.Scene {
 
   // ── Battle button helpers ───────────────────────────────────────────────────
 
-  private getActiveCount(): number {
-    const phase = PhaseManager.getPhase();
-    if (phase.type !== 'camp') return 0;
-    return phase.units.filter(u => !u.inCamp).length;
-  }
-
   private refreshBattleButton(): void {
     if (this._isCampMode) return;
 
-    const active = this.getActiveCount();
-    const valid  = active > 0 && active <= 9;
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'camp') return;
+
+    const active = phase.activeLivingUnitCount;
+    const valid  = phase.canStartBattle;
     const excess = active - 9;
 
     this.battleBtn.setStyle(valid ? 'primary' : 'danger');
