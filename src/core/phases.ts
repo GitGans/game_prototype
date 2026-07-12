@@ -102,6 +102,7 @@ export type GamePhase =
   | { type: 'debug_level_select' }
   | {
       type: 'debug_equip_screen';
+      sessionSource: 'debug';
       selectedUnitTemplateId: string;
       selectedUnitSpriteKey: string | null;
       selectedUnit: UnitTabSnapshot | null;
@@ -115,6 +116,7 @@ export type GamePhase =
     }
   | {
       type: 'equip_screen';
+      sessionSource: 'campaign';
       selectedUnitTemplateId: string;
       selectedUnitSpriteKey: string | null;
       selectedUnit: UnitTabSnapshot | null;

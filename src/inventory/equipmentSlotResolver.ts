@@ -5,6 +5,16 @@ export type ConcreteEquipSlot = Exclude<EquipSlot, 'ring'>;
 /** Single source of truth for which concrete slots a 'ring' item may occupy. */
 export const RING_EQUIPMENT_SLOTS = ['ring_1', 'ring_2'] as const satisfies readonly ConcreteEquipSlot[];
 
+const CONCRETE_EQUIP_SLOTS = new Set<string>([
+  'ring_1', 'ring_2', 'helmet', 'necklace', 'hand_right', 'armor',
+  'hand_left', 'gloves', 'belt', 'boots', 'artifact', 'usable_slot',
+]);
+
+/** True for actual equipment-container slot keys — rejects the item-level pseudo-slot 'ring'. */
+export function isConcreteEquipSlot(value: string): value is ConcreteEquipSlot {
+  return CONCRETE_EQUIP_SLOTS.has(value);
+}
+
 /**
  * True if `slot` is a valid equipment slot for this item's metadata.
  * Owns the 'ring' → ring_1|ring_2 rule for the whole inventory domain.

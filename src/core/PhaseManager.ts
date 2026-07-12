@@ -8,19 +8,14 @@ import { GameState } from './GameState';
 import { EventBus, Events } from './EventBus';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { PLAYER_UNITS } from '../data/units';
-import { ITEM_CATALOG, ITEM_DEFINITIONS } from '../data/itemDefinitions';
+import { ITEM_CATALOG } from '../data/itemDefinitions';
 import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
 import { SubMapDefinition, SubMapState } from '../world/types';
 import { projectWorldMapSnapshot, applyMovePartyToCampaign } from './worldMapProjection';
+import { PlayerSessionStore } from './playerSessionStore';
+import { applyEquipmentPhaseAction } from './phaseHandlers/inventoryPhaseHandler';
+import { buildEquipmentScreenPlayerSnapshot } from './equipmentScreenSnapshot';
 import {
-  equipItem,
-  unequipItem,
-  buildBackpackSnapshot,
-  buildEquipmentSnapshot,
-} from '../inventory';
-import type { EquipSlot } from '../shared/itemTypes';
-import {
-  UnitTabSnapshot,
   BattleState,
   Unit,
 } from '../battle/types';
@@ -63,7 +58,6 @@ import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import { hasChargedThisRound } from '../battle/turnResolver';
 import { resolveUnitProgression, type ResolvedUnitProgression, type UnitUpgradeChoices } from '../progression';
 import { resolveSkillDefinition, resolveUnitClassDefinition } from '../progression';
-import { buildUnitStatsSnapshot } from './unitStatsSnapshot';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { resolvePlayerUnitSpriteSheet, resolvePlayerUpgradeSpriteSheet } from './unitSprites';
 import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
@@ -168,12 +162,6 @@ class PhaseManagerClass {
     }));
   }
 
-  private buildProgressionSkillIcons(
-    progression: ResolvedUnitProgression,
-  ): SkillIconSnapshot[] {
-    return progression.skills.map(toSkillIcon);
-  }
-
   private spriteKeyFromProgression(
     blueprint:   UnitBlueprint,
     progression: ResolvedUnitProgression,
@@ -244,131 +232,24 @@ class PhaseManagerClass {
     }));
   }
 
-  private buildUnitTabSnapshots(
-    debugChosenUpgradesMap?: Record<string, UnitUpgradeChoices>,
-  ): UnitTabSnapshot[] {
-    return PLAYER_UNITS.map(bp => {
-      // Lazily short-circuits: when debugChosenUpgradesMap has an entry, the campaign lookup
-      // (which would throw if no campaign exists yet, e.g. debug flow before new_game) is
-      // never evaluated.
-      const chosenUpgrades =
-        debugChosenUpgradesMap?.[bp.templateId] ??
-        (GameState.hasCampaignState() ? GameState.getCampaignState().roster.units[bp.templateId]?.chosenUpgrades : undefined) ??
-        {};
-      const progression = resolveUnitProgression(bp, chosenUpgrades);
-      return {
-        templateId: bp.templateId,
-        name:       bp.name,
-        classId:    progression.currentClassId,
-        className:  progression.currentClass.name,
-        spriteKey:  this.spriteKeyFromProgression(bp, progression),
-      };
-    });
-  }
-
   // Recomputes data snapshots for phases that carry them.
   // Called after every applyActionSideEffects so GamePhase is always fresh.
   private rebuildSnapshot(phase: GamePhase): GamePhase {
     switch (phase.type) {
       case 'equip_screen': {
-        // Only reachable from world_map/camp, both of which require an existing campaign.
-        const campaign  = GameState.getCampaignState();
-        const bp        = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
-        const unitState = phase.selectedUnitTemplateId
-          ? campaign.roster.units[phase.selectedUnitTemplateId]
-          : undefined;
-        const progression = bp && unitState
-          ? resolveUnitProgression(bp, unitState.chosenUpgrades)
-          : null;
-
-        const backpack = buildBackpackSnapshot(
-          campaign.inventory.containers,
-          campaign.inventory.instances,
-          ITEM_CATALOG,
-        );
-        const unitEquipment = phase.selectedUnitTemplateId
-          ? buildEquipmentSnapshot(
-              phase.selectedUnitTemplateId,
-              campaign.inventory.containers,
-              campaign.inventory.instances,
-              ITEM_CATALOG,
-            )
-          : EMPTY_EQUIP_SNAPSHOT;
-        const availableUnits        = this.buildUnitTabSnapshots();
-        const selectedUnit          = availableUnits.find(u => u.templateId === phase.selectedUnitTemplateId) ?? null;
-        const selectedUnitSpriteKey = bp && progression
-          ? this.spriteKeyFromProgression(bp, progression)
-          : null;
-        const unitStats = bp && unitState && progression
-          ? buildUnitStatsSnapshot(
-              bp,
-              unitState.level,
-              unitState.permanentBonuses,
-              campaign.inventory.containers,
-              campaign.inventory.instances,
-              ITEM_DEFINITIONS,
-              progression.statModifiers,
-            )
-          : null;
-        const learnedSkills = progression ? this.buildProgressionSkillIcons(progression) : [];
-        const upgradeSkills = learnedSkills.slice(1, 5);
-        return { ...phase, backpack, unitEquipment, availableUnits, selectedUnit, unitStats, learnedSkills, upgradeSkills, selectedUnitSpriteKey };
+        const session = PlayerSessionStore.getSession(phase.sessionSource);
+        const snapshot = buildEquipmentScreenPlayerSnapshot(session, phase.selectedUnitTemplateId);
+        return { ...phase, ...snapshot };
       }
       case 'camp':
         return { ...phase, units: this.buildCampUnits() };
       case 'debug_equip_screen': {
-        // buildDebugBattleSetup() is the pure adapter — playerUnits are real PlayerUnitState
-        // records; each unit carries its own level/chosenUpgrades/isInCamp (no session-wide
-        // "ds.level" or "ds.campUnitIds" anymore).
-        const bp         = PLAYER_UNITS.find(u => u.templateId === phase.selectedUnitTemplateId);
-        const debugSetup = this.buildDebugBattleSetup();
-        const unitState  = phase.selectedUnitTemplateId
-          ? debugSetup.playerUnits[phase.selectedUnitTemplateId]
-          : undefined;
-        const progression = bp && unitState
-          ? resolveUnitProgression(bp, unitState.chosenUpgrades)
-          : null;
-
-        const backpack = buildBackpackSnapshot(
-          debugSetup.itemContainers,
-          debugSetup.itemInstances,
-          ITEM_CATALOG,
-          'backpack_debug',
-        );
-        const unitEquipment = phase.selectedUnitTemplateId
-          ? buildEquipmentSnapshot(
-              phase.selectedUnitTemplateId,
-              debugSetup.itemContainers,
-              debugSetup.itemInstances,
-              ITEM_CATALOG,
-            )
-          : EMPTY_EQUIP_SNAPSHOT;
-        const debugChosenUpgradesMap: Record<string, UnitUpgradeChoices> = {};
-        for (const [templateId, us] of Object.entries(debugSetup.playerUnits)) {
-          debugChosenUpgradesMap[templateId] = us.chosenUpgrades;
-        }
-        const availableUnits        = this.buildUnitTabSnapshots(debugChosenUpgradesMap);
-        const selectedUnit          = availableUnits.find(u => u.templateId === phase.selectedUnitTemplateId) ?? null;
-        const selectedUnitSpriteKey = bp && progression
-          ? this.spriteKeyFromProgression(bp, progression)
-          : null;
-        const unitStats = bp && unitState && progression
-          ? buildUnitStatsSnapshot(
-              bp,
-              unitState.level,
-              unitState.permanentBonuses,
-              debugSetup.itemContainers,
-              debugSetup.itemInstances,
-              ITEM_DEFINITIONS,
-              progression.statModifiers,
-            )
-          : null;
-        const debugLearnedSkills = progression ? this.buildProgressionSkillIcons(progression) : [];
-        const debugUpgradeSkills = debugLearnedSkills.slice(1, 5);
-        const campUnitIds = Object.entries(debugSetup.playerUnits)
-          .filter(([, us]) => us.isInCamp)
+        const session = PlayerSessionStore.getSession(phase.sessionSource);
+        const snapshot = buildEquipmentScreenPlayerSnapshot(session, phase.selectedUnitTemplateId);
+        const campUnitIds = Object.entries(session.roster.units)
+          .filter(([, unitState]) => unitState.isInCamp)
           .map(([templateId]) => templateId);
-        return { ...phase, backpack, unitEquipment, availableUnits, selectedUnit, unitStats, campUnitIds, learnedSkills: debugLearnedSkills, upgradeSkills: debugUpgradeSkills, selectedUnitSpriteKey };
+        return { ...phase, ...snapshot, campUnitIds };
       }
       case 'upgrade_tree': {
         const isDebug = phase.returnPhase.type === 'debug_equip_screen';
@@ -703,51 +584,11 @@ class PhaseManagerClass {
       }
     }
 
-    // ── Item mutations — applied to EXACTLY ONE inventory state ──
-    // debug_equip_screen → DebugBattleState session inventory only; otherwise → CampaignState
-    // inventory only. No item action may "no-op through" the wrong state first (closes
-    // debug→campaign leak).
+    // ── Item mutations — routed to the session identified by the current phase ──
     if (action.type === 'equip_item' || action.type === 'unequip_item') {
-      const isDebug     = prev.type === 'debug_equip_screen';
-      const debugState  = isDebug ? GameState.getDebugState() : null;
-      const campaign    = isDebug ? null : GameState.getCampaignState();
-      const containers  = isDebug ? debugState!.session.inventory.containers : campaign!.inventory.containers;
-      const instances   = isDebug ? debugState!.session.inventory.instances  : campaign!.inventory.instances;
-      const backpackId  = isDebug ? 'backpack_debug' : 'backpack_shared';
-
-      const writeContainers = (nextContainers: typeof containers) => {
-        if (isDebug) {
-          GameState.replaceDebugSession({
-            ...debugState!.session,
-            inventory: { ...debugState!.session.inventory, containers: nextContainers },
-          });
-        } else {
-          GameState.replaceCampaignInventory({ ...campaign!.inventory, containers: nextContainers });
-        }
-      };
-
-      if (action.type === 'equip_item') {
-        const bp = PLAYER_UNITS.find(u => u.templateId === action.unitTemplateId);
-        if (bp) {
-          const chosenUpgrades = isDebug
-            ? (debugState!.session.roster.units[action.unitTemplateId]?.chosenUpgrades ?? {})
-            : (campaign!.roster.units[action.unitTemplateId]?.chosenUpgrades ?? {});
-          const progression = resolveUnitProgression(bp, chosenUpgrades);
-          const result = equipItem(
-            action.unitTemplateId, progression.currentClassId, action.instanceId,
-            containers, instances, ITEM_CATALOG,
-          );
-          if (result.ok) writeContainers(result.nextContainers);
-        }
-        return;
-      }
-
-      // action.type === 'unequip_item'
-      const result = unequipItem(
-        action.unitTemplateId, action.slot as EquipSlot,
-        containers, instances, ITEM_CATALOG, backpackId,
-      );
-      if (result.ok) writeContainers(result.nextContainers);
+      if (prev.type !== 'equip_screen' && prev.type !== 'debug_equip_screen') return;
+      const source = prev.sessionSource;
+      applyEquipmentPhaseAction({ source, action });
       return;
     }
 
@@ -950,6 +791,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
     case 'init_debug':
       return {
         type: 'debug_equip_screen',
+        sessionSource: 'debug',
         selectedUnitTemplateId: '',
         selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
         selectedUnit: null,                   // filled by rebuildSnapshot
@@ -1069,6 +911,7 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
       if (current.type !== 'world_map' && current.type !== 'camp') return null;
       return {
         type: 'equip_screen',
+        sessionSource: 'campaign',
         selectedUnitTemplateId: action.unitTemplateId,
         selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
         selectedUnit: null,                   // filled by rebuildSnapshot

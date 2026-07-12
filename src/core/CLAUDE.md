@@ -14,8 +14,11 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 ## Key Files
 - `PhaseManager.ts` — master state machine; single entry point for all transitions via `transition(action)`
 - `phases.ts` — `GamePhase` and `PhaseAction` discriminated unions; the contracts between UI and core
-- `GameState.ts` — runtime singleton owning three separate references: `CampaignState`, `DebugBattleState`, and battle runtime (`BattleState` + mode/turn context). Exposes only replacement methods (`setCampaignState`, `replaceCampaignRoster`, `replaceCampaignInventory`, `setDebugState`, `replaceDebugSession`, ...) — no writable flat fields.
-- `playerSessionState.ts` — `PlayerSessionState { roster, inventory }`, the core-only composition of the two player-owned domains; used by `DebugBattleState.session`
+- `GameState.ts` — runtime singleton owning three separate references: `CampaignState`, `DebugBattleState`, and battle runtime (`BattleState` + mode/turn context). Exposes only replacement methods (`setCampaignState`, `replaceCampaignRoster`, `replaceCampaignInventory`, `setDebugState`, `replaceDebugRoster`, `replaceDebugInventory`, ...) — no writable flat fields. `replaceDebugSession()` is a `@deprecated` migration bridge kept only for camp/upgrade/battle-exit code not yet on `PlayerSessionStore`; scheduled for removal in Stage 8.
+- `playerSessionState.ts` — `PlayerSessionSource = 'campaign' | 'debug'`, a core-only routing key (must never be imported by `inventory/`, `progression/`, `battle/`, `campaign/`, `world/`); `PlayerSessionState { roster, inventory }`, the core-only composition of the two player-owned domains; used by `DebugBattleState.session`
+- `playerSessionStore.ts` — `PlayerSessionStore`: the sole seam that resolves a `PlayerSessionSource` to campaign or debug runtime storage (`getSession`, `replaceRoster`, `replaceInventory`). Storage-only — contains no inventory/progression/validation rules.
+- `equipmentScreenSnapshot.ts` — `buildEquipmentScreenPlayerSnapshot(session, selectedUnitTemplateId)`: the one player-equipment projection shared by both `equip_screen` and `debug_equip_screen`. Takes a `PlayerSessionState` directly — never reads `GameState`, never branches on campaign/debug.
+- `phaseHandlers/inventoryPhaseHandler.ts` — `applyEquipmentPhaseAction({ source, action })`: the only mutation point for `equip_item`/`unequip_item`. Resolves the session via `PlayerSessionStore`, delegates to the pure `inventory/` domain, writes back only on success. No Phaser, no phase-type/backpack-ID knowledge.
 - `initCampaignState.ts` — pure campaign factory; the only place `CampaignState` is constructed
 - `debugPlayerSession.ts` — pure debug session factory; the only place a debug `PlayerSessionState` is constructed
 - `DebugBattleState.ts` — `{ session: PlayerSessionState, initialConfig: DebugSessionConfig }`; owned by `GameState`, never placed inside `CampaignState`
@@ -56,6 +59,13 @@ Scenes re-render from new `GamePhase`
   it is stored beside campaign state in `GameState`, not inside it
 - Campaign and debug state must never share mutable `RosterState`/`InventoryState` instances,
   even though they use the same types
+- Equipment source (`PlayerSessionSource`) must be read once from the current phase's
+  `sessionSource` field — never derived from `phase.type`, `returnPhase`, debug-state presence,
+  or backpack ID
+- `PlayerSessionStore` is the only equipment path to campaign/debug storage; `equipItem`/
+  `unequipItem`/`buildBackpackSnapshot`/`buildEquipmentSnapshot` operate on `InventoryState` and
+  resolve the shared backpack structurally (`requireSharedBackpack`) — no equipment rule may
+  compare `backpack_shared`/`backpack_debug` string IDs
 - Scenes never call `this.scene.start/stop` — only `PhaseManager` does
 - `GamePhase` is the single source of truth for every scene's render data; `WorldMap` reads
   its map state and party position from the `world_map` phase snapshot, never from `GameState`
@@ -87,3 +97,6 @@ Scenes re-render from new `GamePhase`
 - Change campaign initial content/config → `src/data/campaignInitialStateDefinition.ts`; change how a campaign is built → `initCampaignState.ts`
 - Change world_map snapshot projection or party movement → `worldMapProjection.ts`
 - Change cross-scene event wiring → `EventBus.ts` / `sceneEvents.ts`
+- Change equip/unequip mutation logic → `phaseHandlers/inventoryPhaseHandler.ts`
+- Change what the equip screens render (backpack, equipment, stats, skills, sprite, unit tabs) → `equipmentScreenSnapshot.ts`
+- Change how campaign vs. debug storage is resolved for equipment → `playerSessionStore.ts`

@@ -118,10 +118,23 @@ class GameStateManager {
     this.debugState = null;
   }
 
+  /** @deprecated Migration bridge for camp/upgrade/battle-exit code not yet on PlayerSessionStore. Scheduled for removal in Stage 8. */
   replaceDebugSession(next: PlayerSessionState): void {
     const ds = this.debugState;
     if (!ds) throw new Error('Debug state is not initialized');
     this.debugState = { ...ds, session: next };
+  }
+
+  replaceDebugRoster(next: RosterState): void {
+    const ds = this.debugState;
+    if (!ds) throw new Error('Debug state is not initialized');
+    this.debugState = { ...ds, session: { ...ds.session, roster: next } };
+  }
+
+  replaceDebugInventory(next: InventoryState): void {
+    const ds = this.debugState;
+    if (!ds) throw new Error('Debug state is not initialized');
+    this.debugState = { ...ds, session: { ...ds.session, inventory: next } };
   }
 }
 

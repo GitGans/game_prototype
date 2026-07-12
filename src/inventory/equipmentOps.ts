@@ -1,14 +1,15 @@
-import type { EquipSlot, ItemCatalog, ItemContainer, ItemInstance, ItemDefinition } from '../shared/itemTypes';
+import type { ItemCatalog, ItemContainer, ItemInstance, ItemDefinition } from '../shared/itemTypes';
 import type { UnitClassId } from '../shared/unitTypes';
 import { canPlaceItem, findFreeBackpackSlot, findItemLocation, moveItem, applySlotChanges } from './containerOps';
 import { resolvePreferredEquipSlot, type ConcreteEquipSlot } from './equipmentSlotResolver';
+import { requireSharedBackpack, type InventoryState } from './inventoryState';
 
 export type EquipItemResult =
-  | { ok: true; nextContainers: Record<string, ItemContainer> }
+  | { ok: true; nextInventory: InventoryState }
   | { ok: false; reason: string };
 
 export type UnequipItemResult =
-  | { ok: true; nextContainers: Record<string, ItemContainer> }
+  | { ok: true; nextInventory: InventoryState }
   | { ok: false; reason: string };
 
 /**
@@ -56,10 +57,10 @@ export function equipItem(
   unitTemplateId: string,
   classId: UnitClassId,
   instanceId: string,
-  containers: Record<string, ItemContainer>,
-  instances: Record<string, ItemInstance>,
+  inventory: InventoryState,
   catalog: ItemCatalog,
 ): EquipItemResult {
+  const { containers, instances } = inventory;
   const instance = instances[instanceId];
   if (!instance) return { ok: false, reason: 'missing_instance' };
   const definition = catalog.definitions[instance.definitionId];
@@ -90,7 +91,9 @@ export function equipItem(
 
   if (currentlyEquipped === undefined) {
     // Simple equip — delegate to moveItem (target slot is empty).
-    return moveItem(instanceId, location.containerId, location.slotKey, equipContainerId, slot, containers, instances, catalog);
+    const result = moveItem(instanceId, location.containerId, location.slotKey, equipContainerId, slot, containers, instances, catalog);
+    if (!result.ok) return result;
+    return { ok: true, nextInventory: { instances, containers: result.nextContainers } };
   }
 
   // SWAP. Vacate both slots immutably, validate against the vacated state, then place.
@@ -107,32 +110,34 @@ export function equipItem(
     { containerId: location.containerId, slotKey: location.slotKey, instanceId: currentlyEquipped },
     { containerId: equipContainerId,     slotKey: slot,             instanceId },
   ]);
-  return { ok: true, nextContainers };
+  return { ok: true, nextInventory: { instances, containers: nextContainers } };
 }
 
 /**
  * Unequips the item in the given slot, moving it to the first free backpack slot
  * (searches all 24). Pure. Returns a reason on failure (backpack full / slot empty).
+ * The destination backpack is the structurally identified shared backpack — its
+ * technical container id does not matter.
  */
 export function unequipItem(
   unitTemplateId: string,
-  slot: EquipSlot,
-  containers: Record<string, ItemContainer>,
-  instances: Record<string, ItemInstance>,
+  slot: ConcreteEquipSlot,
+  inventory: InventoryState,
   catalog: ItemCatalog,
-  backpackId: string = 'backpack_shared',
 ): UnequipItemResult {
+  const { containers, instances } = inventory;
   const equipContainerId = `equip_${unitTemplateId}`;
   const equipContainer = containers[equipContainerId];
-  const backpack = containers[backpackId];
   if (!equipContainer) return { ok: false, reason: 'missing_equip_container' };
-  if (!backpack)       return { ok: false, reason: 'missing_backpack_container' };
 
   const instanceId = equipContainer.slots[slot];
   if (instanceId === undefined) return { ok: false, reason: 'slot_empty' };
 
+  const backpack = requireSharedBackpack(inventory);
   const freeSlot = findFreeBackpackSlot(backpack);
   if (freeSlot === null) return { ok: false, reason: 'backpack_full' };
 
-  return moveItem(instanceId, equipContainerId, slot, backpackId, freeSlot, containers, instances, catalog);
+  const result = moveItem(instanceId, equipContainerId, slot, backpack.id, freeSlot, containers, instances, catalog);
+  if (!result.ok) return result;
+  return { ok: true, nextInventory: { instances, containers: result.nextContainers } };
 }
