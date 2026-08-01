@@ -6,6 +6,7 @@ import { getRosterPartyStatus } from '../progression';
 export interface RosterCampSnapshot {
   units: CampUnitSnapshot[];
   campUnitIds: string[];
+  selectedForBattleUnitCount: number;
   activeLivingUnitCount: number;
   canStartBattle: boolean;
 }
@@ -23,7 +24,8 @@ export function buildRosterCampSnapshot(roster: RosterState): RosterCampSnapshot
   });
 
   const campUnitIds = units.filter(u => u.inCamp).map(u => u.templateId);
-  const { activeLivingUnitCount, canStartBattle } = getRosterPartyStatus(roster);
+  const { selectedForBattleUnitCount, activeLivingUnitCount, canStartBattle } =
+    getRosterPartyStatus(roster);
 
-  return { units, campUnitIds, activeLivingUnitCount, canStartBattle };
+  return { units, campUnitIds, selectedForBattleUnitCount, activeLivingUnitCount, canStartBattle };
 }

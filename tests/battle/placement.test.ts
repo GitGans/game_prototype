@@ -145,14 +145,15 @@ describe('swapFieldUnits passes deployment invariants', () => {
 describe('autoPlacePlayer sets benchSlotCount', () => {
   it('carries benchSlotCount on the returned state', () => {
     const candidate: PlayerPlacementCandidate = {
-      templateId:  'test',
-      shape:       { offsets: [{ dr: 0, dc: 0 }] },
-      rowTrait:    'front',
-      savedAnchor: null,
-      createUnit:  (id) => makeUnit({ id }),
+      templateId:       'test',
+      shape:            { offsets: [{ dr: 0, dc: 0 }] },
+      rowTrait:         'front',
+      savedAnchor:      null,
+      initialLifeState: 'alive',
+      createUnit:       (id) => makeUnit({ id }),
     };
-    const base   = emptyState();
-    const result = autoPlacePlayer(base, [candidate], 4);
-    expect(result.benchSlotCount).toBe(4);
+    const base = emptyState();
+    const { state } = autoPlacePlayer(base, [candidate], 4);
+    expect(state.benchSlotCount).toBe(4);
   });
 });

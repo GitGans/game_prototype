@@ -271,3 +271,44 @@ describe('buildBattleUnitSnapshotViews', () => {
     expect(() => buildBattleUnitSnapshotViews(state)).toThrow(/bench slot/);
   });
 });
+
+// The placement UI hit-tests through fieldUnitCells, not occupancy, so a corpse
+// must be resolvable from its cell there while staying out of living occupancy.
+describe('persistent-dead units in the battle read model', () => {
+  beforeEach(() => resetUnitIdCounter());
+
+  const anchor = { side: 'player', row: 0, col: 1 } as const;
+
+  const stateWithCorpse = () => makeBattleStateFromUnits({
+    field: [
+      { unit: makeUnit({ id: 'alive', side: 'player' }), anchor: { side: 'player', row: 0, col: 0 } },
+      { unit: makeUnit({ id: 'dead', side: 'player', lifeState: 'dead', hp: 0 }), anchor },
+    ],
+    bench: [{ unit: makeUnit({ id: 'dead-bench', side: 'player', lifeState: 'dead', hp: 0 }), slot: 0 }],
+    benchSlotCount: 3,
+  });
+
+  it('fieldUnitCells resolves a dead field unit while occupancy does not', () => {
+    const state = stateWithCorpse();
+    const cells     = buildBattleFieldUnitCellsSnapshot(state);
+    const occupancy = buildBattleOccupancySnapshot(state);
+
+    expect(cells.cellToUnitIds.get(cellKey(anchor))).toEqual(['dead']);
+    expect(occupancy.cellToUnitId.has(cellKey(anchor))).toBe(false);
+  });
+
+  it('dead units appear in fieldUnits and benchUnits with lifeState dead and hp 0', () => {
+    const { fieldUnits, benchUnits, unitsById } = buildBattleUnitSnapshotViews(stateWithCorpse());
+
+    const deadField = fieldUnits.find(u => u.id === 'dead')!;
+    expect(deadField.lifeState).toBe('dead');
+    expect(deadField.currentHp).toBe(0);
+
+    const deadBench = benchUnits[0]!;
+    expect(deadBench.id).toBe('dead-bench');
+    expect(deadBench.lifeState).toBe('dead');
+
+    expect(unitsById.get('dead')!.lifeState).toBe('dead');
+    expect(unitsById.get('dead-bench')!.lifeState).toBe('dead');
+  });
+});

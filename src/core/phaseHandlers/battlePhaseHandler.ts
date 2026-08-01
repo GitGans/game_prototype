@@ -25,6 +25,7 @@ import {
 } from '../../battle/placementState';
 import { getBenchSlotOccupant, getLivingFieldUnitEntries } from '../../battle/deployment';
 import { isAlive } from '../../battle/lifeState';
+import { canBeginCombat } from '../../battle/combatStart';
 import type { AutoTurnIntention } from '../battleRuntimeContext';
 export type { AutoTurnIntention };
 
@@ -59,7 +60,9 @@ export function applyBattleLifecycleAction(input: {
 
   switch (action.type) {
     case 'battle_begin_combat': {
-      if (state.phase !== 'placement') return { state };
+      // Subsumes the previous `state.phase !== 'placement'` guard. UI state is
+      // never trusted as validation.
+      if (!canBeginCombat(state)) return { state };
       return {
         state: {
           ...state,

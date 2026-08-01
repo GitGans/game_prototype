@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { RosterState, PlayerUnitState } from "../../src/progression/rosterState";
 import {
   isActiveLivingUnit,
+  isSelectedForBattle,
   getRosterPartyStatus,
   toggleUnitCampStatus,
 } from "../../src/progression/rosterCamp";
@@ -37,7 +38,34 @@ describe("isActiveLivingUnit", () => {
   });
 });
 
+describe("isSelectedForBattle", () => {
+  it("is true for a living, non-camp unit", () => {
+    expect(isSelectedForBattle(unit())).toBe(true);
+  });
+
+  it("is true for a DEAD non-camp unit — corpses are deployed and revivable", () => {
+    expect(isSelectedForBattle(unit({ lifeState: "dead", currentHp: 0 }))).toBe(true);
+  });
+
+  it("is false for any camped unit, alive or dead", () => {
+    expect(isSelectedForBattle(unit({ isInCamp: true }))).toBe(false);
+    expect(isSelectedForBattle(unit({ isInCamp: true, lifeState: "dead", currentHp: 0 }))).toBe(false);
+  });
+});
+
 describe("getRosterPartyStatus", () => {
+  it("counts dead non-camp units as selected for battle", () => {
+    const r = roster({
+      a: unit(),
+      b: unit({ lifeState: "dead", currentHp: 0 }),
+      c: unit({ isInCamp: true }),
+      d: unit({ isInCamp: true, lifeState: "dead", currentHp: 0 }),
+    });
+    const status = getRosterPartyStatus(r);
+    expect(status.selectedForBattleUnitCount).toBe(2);
+    expect(status.activeLivingUnitCount).toBe(1);
+  });
+
   it("excludes dead units and camped units from activeLivingUnitCount", () => {
     const r = roster({
       a: unit(),
@@ -66,6 +94,32 @@ describe("getRosterPartyStatus", () => {
     const units: Record<string, PlayerUnitState> = {};
     for (let i = 0; i < 10; i++) units[`u${i}`] = unit();
     expect(getRosterPartyStatus(roster(units)).canStartBattle).toBe(false);
+  });
+
+  it("maximum capacity counts dead selected units too", () => {
+    // 5 living + 5 dead = 10 selected, all consuming a deployment slot.
+    const units: Record<string, PlayerUnitState> = {};
+    for (let i = 0; i < 5; i++) units[`live${i}`] = unit();
+    for (let i = 0; i < 5; i++) units[`dead${i}`] = unit({ lifeState: "dead", currentHp: 0 });
+    const status = getRosterPartyStatus(roster(units));
+    expect(status.selectedForBattleUnitCount).toBe(10);
+    expect(status.activeLivingUnitCount).toBe(5);
+    expect(status.canStartBattle).toBe(false);
+  });
+
+  it("canStartBattle requires a living unit even when dead units fill the party", () => {
+    const units: Record<string, PlayerUnitState> = {};
+    for (let i = 0; i < 3; i++) units[`dead${i}`] = unit({ lifeState: "dead", currentHp: 0 });
+    const status = getRosterPartyStatus(roster(units));
+    expect(status.selectedForBattleUnitCount).toBe(3);
+    expect(status.activeLivingUnitCount).toBe(0);
+    expect(status.canStartBattle).toBe(false);
+  });
+
+  it("one living plus eight dead is a valid party", () => {
+    const units: Record<string, PlayerUnitState> = { live: unit() };
+    for (let i = 0; i < 8; i++) units[`dead${i}`] = unit({ lifeState: "dead", currentHp: 0 });
+    expect(getRosterPartyStatus(roster(units)).canStartBattle).toBe(true);
   });
 });
 

@@ -23,14 +23,16 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `phaseHandlers/inventoryPhaseHandler.ts` — `applyEquipmentPhaseAction({ source, action })`: the only mutation point for `equip_item`/`unequip_item`. Resolves the session via `PlayerSessionStore`, delegates to the pure `inventory/` domain, writes back only on success. No Phaser, no phase-type/backpack-ID knowledge.
 - `phaseHandlers/campPhaseHandler.ts` — `applyCampPhaseAction({ source, action })`: the only mutation point for `toggle_camp_unit`. Resolves the session via `PlayerSessionStore`, delegates to `progression/rosterCamp.ts`'s `toggleUnitCampStatus()`, writes back only on success. Contains no camp rules itself.
 - `phaseHandlers/progressionPhaseHandler.ts` — `applyChooseUpgradePhaseAction({ source, unitTemplateId, action })`: the only mutation point for `choose_upgrade`. Resolves the session via `PlayerSessionStore`, delegates to `progression/rosterUpgrades.ts`'s `chooseUnitUpgrade()`, writes back only on success. Contains no upgrade rules itself.
-- `rosterCampSnapshot.ts` — `buildRosterCampSnapshot(roster)`: the one camp read-model projection shared by `camp` and `debug_equip_screen`. Takes a `RosterState` directly; builds the `PLAYER_UNITS`-ordered `CampUnitSnapshot[]` display list and forwards `activeLivingUnitCount`/`canStartBattle` from `progression/rosterCamp.ts`'s `getRosterPartyStatus()` — does not recompute either.
+- `rosterCampSnapshot.ts` — `buildRosterCampSnapshot(roster)`: the one camp read-model projection shared by `camp` and `debug_equip_screen`. Takes a `RosterState` directly; builds the `PLAYER_UNITS`-ordered `CampUnitSnapshot[]` display list and forwards `selectedForBattleUnitCount`/`activeLivingUnitCount`/`canStartBattle` from `progression/rosterCamp.ts`'s `getRosterPartyStatus()` — does not recompute any of them.
 - `upgradeTreeSnapshot.ts` — `buildUpgradeTreePlayerSnapshot(roster, templateId)`: the one upgrade-tree read-model projection shared by campaign and debug. Takes a `RosterState` directly; returns the empty placeholder if the unit or blueprint is missing.
 - `initCampaignState.ts` — pure campaign factory; the only place `CampaignState` is constructed
 - `debugPlayerSession.ts` — pure debug session factory; the only place a debug `PlayerSessionState` is constructed
 - `DebugBattleState.ts` — `{ session: PlayerSessionState, initialConfig: DebugSessionConfig }`; owned by `GameState`, never placed inside `CampaignState`
-- `worldMapProjection.ts` — pure projections used by `PhaseManager`'s `world_map` phase: `projectWorldMapSnapshot` (CampaignState.world → phase snapshot) and `applyMovePartyToCampaign`. Kept outside `PhaseManager.ts` (which imports the real `phaser` package) so this logic is unit-testable without a Phaser instance.
-- `battleInitialization.ts` — battle state factory; builds auto-placed or replay battle states
-- `battleSetupProjection.ts` — builds typed placement candidates with embedded unit factory functions
+- `worldMapProjection.ts` — pure projections used by `PhaseManager`'s `world_map` phase: `projectWorldMapSnapshot` (CampaignState.world + roster party status → phase snapshot) and `applyMovePartyToCampaign`. Party status rides on the world-map snapshot so `resolveTransition` can reject `enter_battle` for an invalid party without reading roster state. Kept outside `PhaseManager.ts` (which imports the real `phaser` package) so this logic is unit-testable without a Phaser instance.
+- `battleInitialization.ts` — battle state factory; builds auto-placed or replay battle states. `buildNewBattleState()` places players first (before any enemy RNG is consumed) and returns the ordered `playerPlacements` records alongside the state
+- `battleSetupProjection.ts` — `projectPlayerBattleSetup(session)`: the one player battle-setup projection shared by campaign and debug. Takes a `PlayerSessionState` directly; never reads `GameState`, never branches on campaign/debug, never mutates the session. Projects **every** unit outside camp, alive or dead — a persistent-dead unit becomes a fully resolved candidate whose factory produces a canonical dead runtime unit. A blueprint with no roster record is skipped, never synthesized
+- `battleParticipants.ts` — `buildInitialBattleParticipants(state, placements)`: the one participant builder for campaign and debug. The placement records are the initial-deployment truth (`wasOnBench` comes from the record, never from current `state.deployments`), and `isAlive` from the battle-domain `isAlive()` — so a unit that began the battle dead is present with `isAlive: false`. Reads only `BattleState` + records
+- `battleStart.ts` — `createBattleRuntimeForSession()`: the single campaign/debug battle-start pipeline (party status → setup projection → initialization → participants → runtime). Pure composition — it returns a runtime and never installs one, never imports `GameState`, and never accepts map metadata. Throws on an invalid party, because `resolveTransition` must already have rejected the action
 - `unitStatsSnapshot.ts` — computes base and final stats for display
 - `unitUpgradePresentation.ts` — generates upgrade text, stat lines, and skill descriptions for UI
 - `EventBus.ts` — `STATE_CHANGED` event singleton; scenes subscribe via `sceneEvents.ts`
@@ -92,13 +94,29 @@ Scenes re-render from new `GamePhase`
   `BattleRuntimeContext` (`PhaseManager.transition()`, after side effects, before snapshot
   rebuild) — no completed or abandoned battle runtime survives into `battle_results` or any
   later phase
-- **Active-unit membership and battle-entry party validity have exactly one owner:
-  `progression/rosterCamp.ts`.** `isActiveLivingUnit()` defines active membership
-  (`lifeState === 'alive' && isInCamp === false`); `getRosterPartyStatus()` defines the `1..9`
-  battle-entry range as `canStartBattle`. `rosterCampSnapshot.ts` projects both values into
-  `GamePhase` without recomputing them; scenes (`Prep.ts`, `UnitSelectionPanel.ts`) consume
-  `canStartBattle` for control state and `activeLivingUnitCount` only for label text — neither
-  scene interprets the numeric range itself
+- **Battle selection and living-party validity are two different concepts, owned solely by
+  `progression/rosterCamp.ts`.**
+  `isSelectedForBattle()` (`isInCamp === false`) decides inclusion in battle setup and counts
+  toward `MAX_SELECTED_BATTLE_PARTY_SIZE` — **dead units outside camp are selected**, because they
+  receive a field or bench deployment like any other unit.
+  `isActiveLivingUnit()` (`alive && !isInCamp`) governs `MIN_LIVING_BATTLE_PARTY_SIZE` and the
+  last-living camp protection.
+  `getRosterPartyStatus()` returns both counts plus `canStartBattle`. `rosterCampSnapshot.ts` and
+  `worldMapProjection.ts` forward all three into `GamePhase` without recomputing them; scenes
+  (`Prep.ts`, `UnitSelectionPanel.ts`, `WorldMap.ts`) consume `canStartBattle` for control state and
+  the counts only for label text — no scene interprets the numeric bounds itself
+- **Battle start has exactly one path:** `enter_battle` and `start_battle` share a single
+  `applyActionSideEffects` branch that reads `sessionSource`/`enemyGroupId` from the already-resolved
+  battle phase, resolves the session through `PlayerSessionStore`, and installs the result of
+  `createBattleRuntimeForSession()` once. There are no campaign-specific or debug-specific setup
+  adapters and no divergent participant construction
+- **Party validity is enforced in `resolveTransition()`**, before any side effect runs, by reading
+  `canStartBattle` off the current `world_map` / `debug_equip_screen` phase. An invalid party can
+  therefore never partially mutate campaign or battle state, and no rejected-transition protocol is
+  needed. Reaching `createBattleRuntimeForSession()` with an invalid party is a lifecycle error
+- **`GamePhase.canBeginCombat`** is computed in `rebuildSnapshot()` from the battle-domain
+  `canBeginCombat()` and enforced independently in `applyBattleLifecycleAction`. Scenes disable the
+  begin-combat control from the boolean; they never inspect field membership or life state
 - Scenes never call `this.scene.start/stop` — only `PhaseManager` does
 - `GamePhase` is the single source of truth for every scene's render data; `WorldMap` reads
   its map state and party position from the `world_map` phase snapshot, never from `GameState`
@@ -121,6 +139,8 @@ Scenes re-render from new `GamePhase`
 - Change battle turn-flow action handling → `phaseHandlers/battlePhaseHandler.ts` and `PhaseManager.applyActionSideEffects()`
 - Change battle snapshot fields (what controllers see) → `PhaseManager.rebuildSnapshot()`
 - Change how units are initialized for battle → `battleInitialization.ts` / `battleSetupProjection.ts`
+- Change how a battle is started (campaign or debug) → `battleStart.ts`
+- Change the battle-start participant snapshot → `battleParticipants.ts`
 - Change upgrade stat/skill resolution → `src/progression/`
 - Change unit snapshot views (bench/field/lookup) → `battleSnapshotBuilder.ts` (`buildBattleUnitSnapshotViews`, the canonical battle phase read-model builder)
 - Change stat display computation → `unitStatsSnapshot.ts`

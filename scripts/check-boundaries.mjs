@@ -2,10 +2,21 @@
 // Boundary checker.
 // Run: node scripts/check-boundaries.mjs
 //
-// Catches both `import ... from 'x'` and `export ... from 'x'` patterns.
+// Every module dependency form is detected (see scripts/import-scanner.mjs):
+//   import ... from 'x'
+//   export ... from 'x'
+//   import 'x'          — side-effect import; runs the module body, binds nothing
+//   import('x')
+// Files are scanned whole, so multiline import lists are matched too.
+//
+// Import specifiers are normalized relative to the importing file before rules
+// are applied, so a rule can be written once ("core/GameState") and still catch
+// both `../core/GameState` from another layer and `./GameState` from inside
+// core/ itself.
 
 import { readFileSync, readdirSync, statSync } from 'fs';
-import { join, relative } from 'path';
+import { join, relative, dirname, resolve, sep } from 'path';
+import { findImports } from './import-scanner.mjs';
 
 const SRC = new URL('../src', import.meta.url).pathname;
 const errors = [];
@@ -23,31 +34,31 @@ const RULES = [
   {
     layer: 'shared/**',
     dir: join(SRC, 'shared'),
-    banned: ['battle/', 'core/', 'data/', 'objects/', 'scenes/', 'ui/', 'world/'],
+    banned: ['battle', 'core', 'data', 'objects', 'scenes', 'ui', 'world'],
   },
   {
     layer: 'data/**',
     dir: join(SRC, 'data'),
     // data/ → shared/ is explicitly allowed
-    banned: ['battle/', 'core/', 'objects/', 'scenes/', 'ui/', 'world/'],
+    banned: ['battle', 'core', 'objects', 'scenes', 'ui', 'world'],
   },
   {
     layer: 'battle/**',
     dir: join(SRC, 'battle'),
-    banned: ['core/'],
+    banned: ['core', 'campaign', 'phaser'],
   },
   {
     layer: 'ui/**',
     dir: join(SRC, 'ui'),
     // core/Constants (LAYOUT_SCALE) is explicitly allowed
-    banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'objects/', 'scenes/', 'battle/', 'world/'],
+    banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'objects', 'scenes', 'battle', 'world'],
   },
   {
     layer: 'objects/**',
     dir: join(SRC, 'objects'),
     // core/Constants, core/phases, core/unitSpriteKey, battle/types allowed; battle runtime modules banned
     banned: [
-      'core/GameState', 'core/PhaseManager', 'core/EventBus', 'scenes/',
+      'core/GameState', 'core/PhaseManager', 'core/EventBus', 'scenes',
       'battle/combat',
       'battle/skillRuntime',
       'battle/skillPatterns',
@@ -76,66 +87,111 @@ const RULES = [
   {
     layer: 'progression/**',
     dir: join(SRC, 'progression'),
-    banned: ['core/', 'battle/', 'objects/', 'scenes/', 'ui/', 'world/'],
+    banned: ['core', 'battle', 'objects', 'scenes', 'ui', 'world'],
   },
   {
     layer: 'inventory/**',
     dir: join(SRC, 'inventory'),
     // inventory is a pure domain: only shared/ and data/ allowed (and local inventory/ imports)
-    banned: ['battle/', 'core/', 'progression/', 'objects/', 'scenes/', 'ui/', 'world/'],
+    banned: ['battle', 'core', 'progression', 'objects', 'scenes', 'ui', 'world'],
   },
   {
     layer: 'campaign/**',
     dir: join(SRC, 'campaign'),
     // campaign is a persistent-state contract: shared/, progression/, inventory/, world/ (type
     // contracts) allowed; no battle/core/scenes/objects/ui
-    banned: ['battle/', 'core/', 'objects/', 'scenes/', 'ui/'],
+    banned: ['battle', 'core', 'objects', 'scenes', 'ui'],
   },
 ];
 
-// Matches both `import ... from 'x'` and `export ... from 'x'`
-const FROM_RE = /(?:import|export)[^'"]*from\s+['"]([^'"]+)['"]/g;
-// Matches dynamic imports: import('...')
-const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+// ─── Pure core modules ──────────────────────────────────────────────────────
+// These compose domains but must not reach runtime storage or rendering.
+// The single battle-start pipeline is the main architectural result of the
+// persistent-dead stage; without these rules it could silently regrow a
+// GameState dependency.
+const PURE_CORE_FILES = [
+  {
+    file: join(SRC, 'core', 'battleSetupProjection.ts'),
+    banned: [
+      'core/GameState', 'core/DebugBattleState', 'core/phases', 'core/PhaseManager',
+      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+    ],
+  },
+  {
+    file: join(SRC, 'core', 'battleParticipants.ts'),
+    banned: [
+      'progression', 'inventory', 'campaign',
+      'core/GameState', 'core/DebugBattleState', 'core/playerSessionStore',
+      'core/phases', 'core/PhaseManager',
+      'scenes', 'objects', 'ui', 'phaser',
+    ],
+  },
+  {
+    file: join(SRC, 'core', 'battleStart.ts'),
+    // May import the core session CONTRACT (playerSessionState) — it is the
+    // composition boundary — but never the runtime store or a rendering layer.
+    banned: [
+      'core/GameState', 'core/DebugBattleState', 'core/playerSessionStore',
+      'core/phases', 'core/PhaseManager',
+      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+    ],
+  },
+];
+
+// Relative specifiers are resolved against the importing file and expressed
+// src-relative with posix separators, so rules use one vocabulary:
+//   './GameState'        from src/core/x.ts    → core/GameState
+//   '../campaign'        from src/core/x.ts    → campaign
+//   '../../battle/types' from src/core/a/b.ts  → battle/types
+// Bare package specifiers ('phaser', 'vitest') pass through unchanged.
+function normalizeSpecifier(importerFile, spec) {
+  if (!spec.startsWith('.')) return spec;
+  return relative(SRC, resolve(dirname(importerFile), spec)).split(sep).join('/');
+}
+
+// A banned entry matches the whole normalized path or a path prefix at a
+// segment boundary. 'battle' matches 'battle/types' but not 'battleFoo';
+// 'battle/combat' matches itself but not 'battle/combatStart'.
+function isBanned(normalized, bannedEntry) {
+  const b = bannedEntry.replace(/\/+$/, '');
+  return normalized === b || normalized.startsWith(`${b}/`);
+}
 
 // ─── Visual theme isolation ────────────────────────────────────────────────
 // Domain visual theme files must not import from ui/theme.
 // Importing UI_THEME would create a layering violation and risk circular deps.
 for (const [file, content] of walkFiles(join(SRC, 'objects'))) {
   if (!file.endsWith('VisualTheme.ts')) continue;
-  const lines = content.split('\n');
-  lines.forEach((line, i) => {
-    for (const re of [FROM_RE, DYNAMIC_IMPORT_RE]) {
-      let m;
-      re.lastIndex = 0;
-      while ((m = re.exec(line)) !== null) {
-        if (m[1].includes('ui/theme')) {
-          const rel = relative(SRC, file);
-          errors.push(`  ${rel}:${i + 1}  [*VisualTheme.ts] must not import ui/theme  →  "${m[1]}"`);
-        }
-      }
+  for (const { spec, line } of findImports(content)) {
+    if (isBanned(normalizeSpecifier(file, spec), 'ui/theme')) {
+      errors.push(`  ${relative(SRC, file)}:${line}  [*VisualTheme.ts] must not import ui/theme  →  "${spec}"`);
     }
-  });
+  }
 }
 
 for (const { layer, dir, banned } of RULES) {
   for (const [file, content] of walkFiles(dir)) {
-    const lines = content.split('\n');
-    lines.forEach((line, i) => {
-      for (const re of [FROM_RE, DYNAMIC_IMPORT_RE]) {
-        let m;
-        re.lastIndex = 0;
-        while ((m = re.exec(line)) !== null) {
-          const imp = m[1];
-          for (const b of banned) {
-            if (imp.includes(b)) {
-              const rel = relative(SRC, file);
-              errors.push(`  ${rel}:${i + 1}  [${layer}] imports from ${b}  →  "${imp}"`);
-            }
-          }
+    for (const { spec, line } of findImports(content)) {
+      const normalized = normalizeSpecifier(file, spec);
+      for (const b of banned) {
+        if (isBanned(normalized, b)) {
+          errors.push(`  ${relative(SRC, file)}:${line}  [${layer}] imports from ${b}  →  "${spec}"`);
         }
       }
-    });
+    }
+  }
+}
+
+for (const { file, banned } of PURE_CORE_FILES) {
+  const content = readFileSync(file, 'utf8');
+  const rel = relative(SRC, file);
+  for (const { spec, line } of findImports(content)) {
+    const normalized = normalizeSpecifier(file, spec);
+    for (const b of banned) {
+      if (isBanned(normalized, b)) {
+        errors.push(`  ${rel}:${line}  [pure-core] must not import ${b}  →  "${spec}"`);
+      }
+    }
   }
 }
 

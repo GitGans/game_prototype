@@ -1,7 +1,9 @@
-export const LAYOUT_SCALE = Math.min(
-  window.innerWidth / 900,
-  window.innerHeight / 500,
-);
+// Falls back to the design-reference viewport when there is no `window` — this
+// module also holds gameplay constants (BENCH_SLOTS, grid dimensions) that pure
+// domain code imports, so loading it must not require a browser environment.
+export const LAYOUT_SCALE = typeof window === 'undefined'
+  ? 1
+  : Math.min(window.innerWidth / 900, window.innerHeight / 500);
 
 export const CELL_SIZE = Math.round(126 * LAYOUT_SCALE);
 export const CELL_GAP = 0;

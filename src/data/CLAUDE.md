@@ -1,9 +1,11 @@
 # data
 
 ## Role
+
 Static data layer for all game entities. Contains only read-only constant definitions — no logic, no state, no side effects.
 
 ## Responsibilities
+
 - Define all playable and enemy unit blueprints (stats, skills, upgrade tiers)
 - Define all combat skills, damage patterns, and effect matrices
 - Define equippable and consumable item configurations
@@ -12,6 +14,7 @@ Static data layer for all game entities. Contains only read-only constant defini
 - Define grid occupancy shapes for units
 
 ## Key Files
+
 - `unitDefinitions.ts` — compatibility re-export shim; do not add content here
 - `units/playerUnits.ts` — player unit blueprints; exports `PLAYER_UNITS`, `PLAYER_STARTING_IDS`; references upgrade tier definitions from `playerUnitUpgradeTiers.ts`
 - `units/playerUnitUpgradeTiers.ts` — player unit upgrade tier definitions by templateId; internal to `data/units`, not exported from the barrel
@@ -30,9 +33,11 @@ Static data layer for all game entities. Contains only read-only constant defini
 - `shapeDefinitions.ts` — grid cell offset patterns per shape; exports `SHAPES`
 
 ## Structural Role
+
 `src/data` → source-of-truth definitions consumed by `src/core`, `src/battle`, and `src/scenes`
 
 ## Data Flow
+
 Game startup / phase transition
 ↓
 `src/core` and `src/scenes` read constants from `src/data`
@@ -42,20 +47,24 @@ Runtime objects (units, skills, items) are built from these definitions
 Live game state in `BattleState` / `CampaignState`
 
 ## Dependencies
+
 - depends on: `src/shared/` (type definitions only)
 - used by: `src/core/` (PhaseManager, battleInitialization, battleSetupProjection), `src/scenes/` (Preloader, Game, WorldMap), `src/battle/` (combat, shapes)
 
 ## Invariants
+
 - All exports are `const` — no mutable state
 - No imports from `src/core`, `src/scenes`, or `src/battle` — data flows one way
 - `unitDefinitions.ts` may only import from within `src/data` (shapes, skills)
 - No runtime helper functions — all skill runtime lookups live in `src/battle/skillDefinitionRuntime.ts`
 - Adding a new entity requires only adding to the relevant constant; no registration elsewhere
+- Every blueprint in `PLAYER_UNITS` must use the `1×1` shape. Multi-cell player units are not supported and are not planned. This is a permanent product invariant, not a temporary content limitation.
 - `SkillId` references must always be created via `sid()` from `skillDefinitions.ts`.
   Direct casts (`"name" as SkillId`) are forbidden outside of `sid()` itself. Enforced by code review.
   `sid()` lives in `skills/skillDefinitions.ts` and is exported via `skills/index.ts`.
 
 ## Item authoring (`items/`)
+
 - Items are authored in **groups** — the single source of truth for behavior and placement.
   A group declares `kind` (`equipment` | `usable` | `consumable`), a `slot` for equippable groups,
   and an `items` record keyed by item id. Group files live under `items/equipment/`, `items/usable/`,
@@ -69,7 +78,7 @@ Live game state in `BattleState` / `CampaignState`
   re-authored (so it is not duplication).
 - **Kind meaning:** `equipment` = ordinary gear; `usable` = equippable future-use item placed into
   `usable_slot`; `consumable` = backpack-only future-use item (not equippable). The `usable`/`consumable`
-  split is about *where the item lives*, not *what happens on use*.
+  split is about _where the item lives_, not _what happens on use_.
 - **`slot` invariant** (enforced at build time, both at the type level and by runtime guards):
   ```text
   equipment  -> ordinary equipment slot only, never usable_slot
@@ -83,6 +92,7 @@ Live game state in `BattleState` / `CampaignState`
   in their own future definition files. Item entries never carry acquisition data.
 
 ## Where to Modify
+
 - add/change a player unit or PLAYER_STARTING_IDS → `units/playerUnits.ts`
 - add/change player unit upgrade tiers → `units/playerUnitUpgradeTiers.ts`
 - add/change an enemy unit → `units/enemyUnits.ts`

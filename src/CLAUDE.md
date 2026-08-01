@@ -89,6 +89,16 @@ scene reads GamePhase and renders
 * CampaignState and BattleState must not mix
 * UI primitives (ui/) must have zero game-domain knowledge
 * GamePhase is the single source of truth for what a scene renders
+* Roster/camp rules live only in `progression/rosterCamp.ts`, and battle selection is
+  distinct from living-party membership:
+  * every unit outside camp is **selected for battle**, alive or dead — a persistent-dead
+    unit is deployed into the next battle as a corpse and can be revived there
+  * selected-party capacity (`MAX_SELECTED_BATTLE_PARTY_SIZE = 9`) counts dead units, because
+    they consume a field or bench deployment
+  * starting a battle requires at least one **living** selected unit
+    (`MIN_LIVING_BATTLE_PARTY_SIZE = 1`); beginning combat additionally requires a living
+    player unit on the field
+  * no scene or projection re-derives these bounds — they are forwarded through GamePhase
 
 ## Where to Modify
 

@@ -1,24 +1,35 @@
 import type { RosterState, PlayerUnitState } from './rosterState';
 
-export const MIN_ACTIVE_BATTLE_PARTY_SIZE = 1;
-export const MAX_ACTIVE_BATTLE_PARTY_SIZE = 9;
+export const MIN_LIVING_BATTLE_PARTY_SIZE = 1;
+export const MAX_SELECTED_BATTLE_PARTY_SIZE = 9;
 
+// Inclusion in battle setup and selected-party capacity. Alive or dead:
+// a persistent-dead unit still consumes a field or bench deployment.
+export function isSelectedForBattle(unit: PlayerUnitState): boolean {
+  return !unit.isInCamp;
+}
+
+// Living-party minimum and last-living camp protection.
 export function isActiveLivingUnit(unit: PlayerUnitState): boolean {
-  return unit.lifeState === 'alive' && !unit.isInCamp;
+  return !unit.isInCamp && unit.lifeState === 'alive';
 }
 
 export interface RosterPartyStatus {
+  selectedForBattleUnitCount: number;
   activeLivingUnitCount: number;
   canStartBattle: boolean;
 }
 
 export function getRosterPartyStatus(roster: RosterState): RosterPartyStatus {
-  const activeLivingUnitCount = Object.values(roster.units).filter(isActiveLivingUnit).length;
+  const units = Object.values(roster.units);
+  const selectedForBattleUnitCount = units.filter(isSelectedForBattle).length;
+  const activeLivingUnitCount      = units.filter(isActiveLivingUnit).length;
   return {
+    selectedForBattleUnitCount,
     activeLivingUnitCount,
     canStartBattle:
-      activeLivingUnitCount >= MIN_ACTIVE_BATTLE_PARTY_SIZE &&
-      activeLivingUnitCount <= MAX_ACTIVE_BATTLE_PARTY_SIZE,
+      activeLivingUnitCount >= MIN_LIVING_BATTLE_PARTY_SIZE &&
+      selectedForBattleUnitCount <= MAX_SELECTED_BATTLE_PARTY_SIZE,
   };
 }
 

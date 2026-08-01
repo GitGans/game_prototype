@@ -51,7 +51,15 @@ export interface BattleResultUnit {
 
 export type GamePhase =
   | { type: 'main_menu' }
-  | { type: 'world_map'; mapId: string; partyPos: WorldPos; mapState: SubMapState }
+  | {
+      type: 'world_map';
+      mapId: string;
+      partyPos: WorldPos;
+      mapState: SubMapState;
+      selectedForBattleUnitCount: number;
+      activeLivingUnitCount: number;
+      canStartBattle: boolean;
+    }
   | { type: 'map_victory'; mapId: string }
   | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase; mapCleared: boolean }
   | {
@@ -65,6 +73,10 @@ export type GamePhase =
       benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
       battlePhase:         BattleState['phase'];
+      // Placement-phase control state: at least one LIVING player unit is
+      // field-deployed. Computed by battle/combatStart.ts; scenes read it and
+      // never recompute field membership or life state themselves.
+      canBeginCombat:      boolean;
       // Field-only narrowed view. Includes dead field units (rendered as
       // corpses by UI). Intended iteration source for any code that reads
       // anchor or does cell math.
@@ -96,6 +108,7 @@ export type GamePhase =
       sessionSource: 'campaign';
       returnPhase: GamePhase;
       units: CampUnitSnapshot[];
+      selectedForBattleUnitCount: number;
       activeLivingUnitCount: number;
       canStartBattle: boolean;
     }
@@ -111,6 +124,7 @@ export type GamePhase =
       unitEquipment: EquipmentSnapshot;
       unitStats: UnitStatsSnapshot | null;
       campUnitIds: string[];
+      selectedForBattleUnitCount: number;
       activeLivingUnitCount: number;
       canStartBattle: boolean;
       learnedSkills: SkillIconSnapshot[];

@@ -3,7 +3,6 @@ import type { Rng }                             from '../shared/random';
 import { pickOne }                              from '../shared/random';
 import { ENEMY_GROUPS }                         from '../data/enemyGroupDefinitions';
 import {
-  buildPlayerAutoPlacementCandidates,
   buildEnemyPlacementCandidates,
   buildEnemyReplayInputs,
 }                                               from './battleSetupProjection';
@@ -12,6 +11,7 @@ import {
   autoPlaceEnemies,
   replayPlaceEnemies,
 }                                               from '../battle/autoPlace';
+import type { PlayerInitialPlacement }          from '../battle/autoPlace';
 import type { BattleState }                     from '../battle/types';
 import type { UnitRace }                        from '../shared/unitTypes';
 import type { PlayerBattleSetup }               from './battleSetup';
@@ -20,9 +20,10 @@ import { isAlive } from '../battle/lifeState';
 import type { EnemyReplayPlacement } from './battleRuntimeContext';
 
 export interface BattleInitResult {
-  state:           BattleState;
-  race:            UnitRace;
-  enemyPlacements: EnemyReplayPlacement[];
+  state:            BattleState;
+  race:             UnitRace;
+  enemyPlacements:  EnemyReplayPlacement[];
+  playerPlacements: PlayerInitialPlacement[];
 }
 
 const FALLBACK_RACES: UnitRace[] = ['orc', 'demon', 'undead'];
@@ -38,9 +39,9 @@ export function buildNewBattleState(
   enemyGroupId: string,
   rng:          Rng,
 ): BattleInitResult {
-  // 1. Place player units
-  const playerCandidates = buildPlayerAutoPlacementCandidates(setup);
-  let state = autoPlacePlayer(emptyState, playerCandidates, BENCH_SLOTS);
+  // 1. Place player units — before any enemy RNG is consumed.
+  const playerResult = autoPlacePlayer(emptyState, setup, BENCH_SLOTS);
+  let state = playerResult.state;
 
   // Seed nextPlayerId from placed units so manual placement IDs don't collide.
   // Dead units stay in state.units after Stage 2, so this seed is monotonic.
@@ -50,7 +51,10 @@ export function buildNewBattleState(
   state = { ...state, nextPlayerId: maxP + 1 };
 
   // 2. Determine enemy race and level
-  // Use field-deployed player units only — bench units should not inflate enemy difficulty.
+  // Use LIVING field-deployed player units only — bench units should not inflate
+  // enemy difficulty, and corpses are not combatants. Living-first placement plus
+  // the "at least one living selected unit" entry rule guarantee a living field
+  // unit here; the `1` floor stays only as a defensive fallback.
   const group       = ENEMY_GROUPS[enemyGroupId];
   const playerMaxLv = getFieldUnits(state)
     .filter(u => u.side === 'player' && isAlive(u))
@@ -71,7 +75,7 @@ export function buildNewBattleState(
       level:      u.level,
     }));
 
-  return { state, race, enemyPlacements };
+  return { state, race, enemyPlacements, playerPlacements: playerResult.placements };
 }
 
 /**
@@ -83,8 +87,8 @@ export function buildReplayBattleState(
   setup:           PlayerBattleSetup,
   savedPlacements: EnemyReplayPlacement[],
 ): BattleState {
-  const playerCandidates = buildPlayerAutoPlacementCandidates(setup);
-  let state = autoPlacePlayer(emptyState, playerCandidates, BENCH_SLOTS);
+  const playerResult = autoPlacePlayer(emptyState, setup, BENCH_SLOTS);
+  let state = playerResult.state;
 
   const maxP = [...state.units.keys()]
     .filter(id => id.startsWith('p'))

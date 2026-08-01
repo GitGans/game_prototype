@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { PLAYER_UNITS, ENEMY_UNITS } from "../../src/data/units";
+import { SHAPES } from "../../src/data/shapeDefinitions";
 
 describe("unitDefinitions shape", () => {
   it("player blueprints store skill IDs not embedded skill objects", () => {
@@ -18,6 +19,12 @@ describe("unitDefinitions shape", () => {
           }
         }
       }
+    }
+  });
+
+  it("all player unit blueprints use the 1x1 shape", () => {
+    for (const bp of PLAYER_UNITS) {
+      expect(bp.shape).toEqual(SHAPES["1x1"]);
     }
   });
 

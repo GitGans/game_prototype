@@ -16,7 +16,9 @@ const CLEAR: PlacementSelection = {
 };
 
 // Creates a temporary BattleState with the given units removed from both
-// state.units AND state.deployments, so that buildOccupancy does not throw.
+// state.units AND state.deployments. Removing from both maps is required, not
+// merely tidy: buildOccupancy and getDeploymentBlockedCells (which canPlace
+// now uses for collision) both throw on a one-sided removal.
 // Use only for canPlace collision checks; never mutate state from this result.
 function withoutUnits(state: BattleState, unitIds: string[]): BattleState {
   const units       = new Map(state.units);

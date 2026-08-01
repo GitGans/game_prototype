@@ -127,6 +127,15 @@ export class WorldMap extends Phaser.Scene {
     // Check for living mob BEFORE passable guard — resolveCell returns passable:false
     // for living mobs, so an early passable check would make this branch unreachable.
     if (resolved.entity?.type === 'mob') {
+      // Guard before any local mutation, so a blocked encounter cannot desync
+      // the marker from CampaignState.world.partyPos. The scene reads one
+      // boolean; the party-size rules live in progression/rosterCamp.ts.
+      const phase = PhaseManager.getPhase();
+      if (phase.type !== 'world_map' || !phase.canStartBattle) {
+        this.prompt.show('Party cannot enter battle');
+        return;
+      }
+
       const mobData = resolved.entity.data as MobEntry;
       this.partyX = nx;
       this.partyY = ny;
