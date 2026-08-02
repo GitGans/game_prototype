@@ -21,8 +21,12 @@ import type { EnemyReplayPlacement } from './battleRuntimeContext';
 
 export interface BattleInitResult {
   state:            BattleState;
-  race:             UnitRace;
   enemyPlacements:  EnemyReplayPlacement[];
+  playerPlacements: PlayerInitialPlacement[];
+}
+
+export interface BattleReplayInitResult {
+  state:            BattleState;
   playerPlacements: PlayerInitialPlacement[];
 }
 
@@ -75,18 +79,21 @@ export function buildNewBattleState(
       level:      u.level,
     }));
 
-  return { state, race, enemyPlacements, playerPlacements: playerResult.placements };
+  return { state, enemyPlacements, playerPlacements: playerResult.placements };
 }
 
 /**
- * Rebuilds a BattleState for a replay: fresh player placement,
- * deterministic enemy placement from previously saved records.
+ * Rebuilds a BattleState for a replay attempt: player units are auto-placed from a
+ * freshly projected setup, enemies are restored deterministically from the captured
+ * placement records. The returned placement records are the initial-deployment truth
+ * for this attempt — participants must be rebuilt from them, never carried over from
+ * the previous attempt.
  */
 export function buildReplayBattleState(
   emptyState:      BattleState,
   setup:           PlayerBattleSetup,
   savedPlacements: EnemyReplayPlacement[],
-): BattleState {
+): BattleReplayInitResult {
   const playerResult = autoPlacePlayer(emptyState, setup, BENCH_SLOTS);
   let state = playerResult.state;
 
@@ -96,5 +103,8 @@ export function buildReplayBattleState(
   state = { ...state, nextPlayerId: maxP + 1 };
 
   const replayInputs = buildEnemyReplayInputs(savedPlacements);
-  return replayPlaceEnemies(state, replayInputs);
+  return {
+    state:            replayPlaceEnemies(state, replayInputs),
+    playerPlacements: playerResult.placements,
+  };
 }

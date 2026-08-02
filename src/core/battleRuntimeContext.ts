@@ -2,7 +2,6 @@ import { buildOccupancy } from '../battle/occupancy';
 import {
   type TurnContext,
   createTurnContext,
-  resetTurnContextForNewBattle,
 } from '../battle/turnResolver';
 import type { BattleState, BattleMode } from '../battle/types';
 import type { CellCoord, Side } from '../shared/gridTypes';
@@ -24,8 +23,12 @@ export interface EnemyReplayPlacement {
   level: number;
 }
 
+/**
+ * The captured data needed to reconstruct one encounter's enemy formation on replay.
+ * The encounter ID lives on the battle phase and is deliberately not duplicated here —
+ * replay restores the captured placements and never regenerates a group.
+ */
 export interface BattleReplaySetup {
-  enemyGroupId: string;
   enemyPlacements: EnemyReplayPlacement[];
 }
 
@@ -70,7 +73,6 @@ export function createEmptyBattleState(): BattleState {
 
 function copyReplaySetup(setup: BattleReplaySetup): BattleReplaySetup {
   return {
-    enemyGroupId: setup.enemyGroupId,
     enemyPlacements: setup.enemyPlacements.map(p => ({ ...p, anchor: { ...p.anchor } })),
   };
 }
@@ -88,28 +90,6 @@ export function createBattleRuntimeContext(input: {
     turnContext:   createTurnContext(),
     mode:          'manual',
     sessionSource: input.sessionSource,
-    pendingAutoTurnIntention: null,
-  };
-}
-
-/**
- * Replaces per-attempt mutable state while preserving the battle-start
- * participant snapshot and source. `nextReplaySetup` is required explicitly:
- * campaign replay passes back the current runtime's own replaySetup (same
- * enemies), debug replay passes a freshly generated one (new enemies).
- */
-export function restartBattleRuntime(
-  current: BattleRuntimeContext,
-  nextState: BattleState,
-  nextReplaySetup: BattleReplaySetup,
-): BattleRuntimeContext {
-  return {
-    state:         nextState,
-    participants:  current.participants.map(p => ({ ...p })),
-    replaySetup:   copyReplaySetup(nextReplaySetup),
-    turnContext:   resetTurnContextForNewBattle(),
-    mode:          'manual',
-    sessionSource: current.sessionSource,
     pendingAutoTurnIntention: null,
   };
 }

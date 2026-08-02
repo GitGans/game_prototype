@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   createEmptyBattleState,
   createBattleRuntimeContext,
-  restartBattleRuntime,
   type BattleReplaySetup,
   type BattleParticipant,
 } from "../../src/core/battleRuntimeContext";
@@ -18,7 +17,6 @@ const participant = (templateId: string): BattleParticipant => ({
 });
 
 const replaySetup = (): BattleReplaySetup => ({
-  enemyGroupId: "group_a",
   enemyPlacements: [{ templateId: "orc", anchor: coord("enemy", 0, 0), level: 3 }],
 });
 
@@ -79,56 +77,5 @@ describe("createBattleRuntimeContext", () => {
     expect(runtime.participants[0].level).toBe(1);
     expect(runtime.replaySetup.enemyPlacements[0].level).toBe(3);
     expect(runtime.replaySetup.enemyPlacements[0].anchor.row).toBe(0);
-  });
-});
-
-describe("restartBattleRuntime", () => {
-  it("preserves sessionSource, participants, and the supplied replay setup", () => {
-    const original = createBattleRuntimeContext({
-      state: createEmptyBattleState(),
-      participants: [participant("knight"), participant("mage")],
-      replaySetup: replaySetup(),
-      sessionSource: "debug",
-    });
-
-    const nextReplaySetup: BattleReplaySetup = {
-      enemyGroupId: "group_b",
-      enemyPlacements: [{ templateId: "demon", anchor: coord("enemy", 1, 1), level: 5 }],
-    };
-    const nextState = createEmptyBattleState();
-
-    const restarted = restartBattleRuntime(original, nextState, nextReplaySetup);
-
-    expect(restarted.sessionSource).toBe("debug");
-    expect(restarted.participants).toEqual(original.participants);
-    expect(restarted.participants).not.toBe(original.participants);
-    expect(restarted.replaySetup).toEqual(nextReplaySetup);
-    expect(restarted.replaySetup).not.toBe(nextReplaySetup);
-    expect(restarted.state).toBe(nextState);
-  });
-
-  it("resets mode, turn context, and pending intention", () => {
-    const original = createBattleRuntimeContext({
-      state: createEmptyBattleState(),
-      participants: [participant("knight")],
-      replaySetup: replaySetup(),
-      sessionSource: "campaign",
-    });
-    const mutated = {
-      ...original,
-      mode: "auto" as const,
-      pendingAutoTurnIntention: {
-        type: "advance_turn" as const,
-        unitId: "p1",
-        skillIndex: 0,
-        activeUnitSide: "player" as const,
-      },
-    };
-
-    const restarted = restartBattleRuntime(mutated, createEmptyBattleState(), replaySetup());
-
-    expect(restarted.mode).toBe("manual");
-    expect(restarted.pendingAutoTurnIntention).toBeNull();
-    expect(restarted.turnContext).not.toBe(mutated.turnContext);
   });
 });

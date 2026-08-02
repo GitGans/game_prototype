@@ -1,10 +1,6 @@
 import Phaser from 'phaser';
 import { GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
 import type { BattleParticipant, BattleRuntimeContext } from './battleRuntimeContext';
-import {
-  createEmptyBattleState,
-  restartBattleRuntime,
-} from './battleRuntimeContext';
 import type { DebugBattleState, DebugSessionConfig } from './DebugBattleState';
 import { createDebugPlayerSession } from './debugPlayerSession';
 import { initCampaignState } from './initCampaignState';
@@ -33,13 +29,12 @@ import {
   type PlayerLevelUpInput,
 } from './playerUnitPersistence';
 import { buildPlayerExitInputs } from './playerBattleExitProjection';
-import { resolvePlayerMaxHpForLevel, projectPlayerBattleSetup } from './battleSetupProjection';
+import { resolvePlayerMaxHpForLevel } from './battleSetupProjection';
 import type { PlayerUnitState } from '../progression';
 import {
-  buildNewBattleState,
-  buildReplayBattleState,
-} from './battleInitialization';
-import { createBattleRuntimeForSession } from './battleStart';
+  createBattleRuntimeForSession,
+  createReplayBattleRuntimeForSession,
+} from './battleStart';
 import {
   isBattlePlacementAction,
   applyBattlePlacementAction,
@@ -405,28 +400,19 @@ class PhaseManagerClass {
       }));
     }
 
-    // ── Replay: reinstall a complete BattleRuntimeContext ──
+    // ── Replay: one pipeline for campaign and debug ──
+    // The source only selects which session to read; replay policy never branches on it.
+    // Enemies come from the captured replaySetup, players are re-projected from the
+    // current session, and participants are rebuilt for this attempt. Only replaySetup
+    // and sessionSource cross the attempt boundary — nothing else from the old runtime.
     if (action.type === 'replay' && prev.type === 'battle') {
       const runtime = this.requireBattleRuntime(prev);
       const session = PlayerSessionStore.getSession(runtime.sessionSource);
-      const setup   = projectPlayerBattleSetup(session);
-
-      if (runtime.sessionSource === 'debug') {
-        // Debug replay = fresh battle. Intentional: debug battles have no saved placements.
-        const { state, enemyPlacements } = buildNewBattleState(
-          createEmptyBattleState(), setup, runtime.replaySetup.enemyGroupId, this.rngStreams.battleSetup,
-        );
-        GameState.setBattleRuntime(restartBattleRuntime(runtime, state, {
-          enemyGroupId: runtime.replaySetup.enemyGroupId,
-          enemyPlacements,
-        }));
-      } else {
-        // Normal case: replay same enemies in same positions
-        const replayState = buildReplayBattleState(
-          createEmptyBattleState(), setup, runtime.replaySetup.enemyPlacements,
-        );
-        GameState.setBattleRuntime(restartBattleRuntime(runtime, replayState, runtime.replaySetup));
-      }
+      GameState.setBattleRuntime(createReplayBattleRuntimeForSession({
+        session,
+        replaySetup:   runtime.replaySetup,
+        sessionSource: runtime.sessionSource,
+      }));
     }
 
     // ── Battle teardown ──

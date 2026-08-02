@@ -18,7 +18,6 @@ const participant = (templateId: string): BattleParticipant => ({
 });
 
 const replaySetup = (): BattleReplaySetup => ({
-  enemyGroupId: "group_a",
   enemyPlacements: [{ templateId: "orc", anchor: coord("enemy", 0, 0), level: 3 }],
 });
 
