@@ -70,7 +70,7 @@ describe('battle_begin_combat enforcement', () => {
     expect(result.state).toBe(state);
     expect(result.state.phase).toBe('placement');
     expect(result.resetTurnContext).toBeUndefined();
-    expect(result.persistCampaignPlacements).toBeUndefined();
+    expect(result.persistPlayerPlacements).toBeUndefined();
   });
 
   it('starts combat with a living player field unit', () => {
@@ -85,6 +85,7 @@ describe('battle_begin_combat enforcement', () => {
 
     expect(result.state.phase).toBe('select_target');
     expect(result.resetTurnContext).toBe(true);
+    expect(result.persistPlayerPlacements).toBe(true);
     // The queue is built from living field units only.
     expect(result.state.roundQueue).toEqual(['alive']);
   });

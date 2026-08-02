@@ -7,10 +7,14 @@ import {
   computeFieldPlayerPersistence,
   applyBattleExitPlayerPersistence,
   applyVictoryLevelUpPersistence,
+  applyFieldPlacementsToRoster,
   type PlayerExitInput,
   type PlayerLevelUpInput,
 } from '../../src/core/playerUnitPersistence';
 import type { PlayerUnitState } from '../../src/progression';
+import { makeUnit } from '../battle/helpers/units';
+import { makeBattleStateFromUnits } from '../battle/helpers/battleState';
+import { coord } from '../battle/helpers/coords';
 
 function unit(overrides: Partial<PlayerUnitState> = {}): PlayerUnitState {
   return {
@@ -217,5 +221,75 @@ describe('applyVictoryLevelUpPersistence', () => {
     applyVictoryLevelUpPersistence(map, [{ templateId: 'hero', newLevel: 2, newMaxHp: 30 }]);
     expect(map.hero).toBe(original);
     expect(map.hero.level).toBe(1);
+  });
+});
+
+describe('applyFieldPlacementsToRoster', () => {
+  const player = (id: string, templateId: string, overrides: Partial<ReturnType<typeof makeUnit>> = {}) =>
+    makeUnit({ id, templateId, side: 'player', ...overrides });
+
+  it('persists field anchors for living and dead players, and leaves bench players alone', () => {
+    const roster = {
+      units: {
+        alive:   unit(),
+        corpse:  unit({ lifeState: 'dead', currentHp: 0 }),
+        benched: unit({ lastPlacement: coord('player', 1, 2) }),
+      },
+    };
+    const state = makeBattleStateFromUnits({
+      field: [
+        { unit: player('u1', 'alive'), anchor: coord('player', 0, 0) },
+        { unit: player('u2', 'corpse', { lifeState: 'dead', hp: 0 }), anchor: coord('player', 0, 1) },
+      ],
+      bench: [{ unit: player('u3', 'benched'), slot: 0 }],
+      benchSlotCount: 3,
+    }, { phase: 'placement' });
+
+    const next = applyFieldPlacementsToRoster(roster, state);
+
+    expect(next.units.alive.lastPlacement).toEqual(coord('player', 0, 0));
+    expect(next.units.corpse.lastPlacement).toEqual(coord('player', 0, 1));
+    expect(next.units.benched.lastPlacement).toEqual(coord('player', 1, 2));
+  });
+
+  it('ignores enemy field units and leaves absent roster units untouched', () => {
+    const roster = { units: { alive: unit(), reserve: unit() } };
+    const state = makeBattleStateFromUnits({
+      field: [
+        { unit: player('u1', 'alive'), anchor: coord('player', 0, 0) },
+        { unit: makeUnit({ id: 'e1', templateId: 'reserve', side: 'enemy' }), anchor: coord('enemy', 0, 0) },
+      ],
+    }, { phase: 'placement' });
+
+    const next = applyFieldPlacementsToRoster(roster, state);
+
+    // The enemy deliberately shares the 'reserve' templateId: side, not templateId, decides.
+    expect(next.units.reserve).toBe(roster.units.reserve);
+    expect(next.units.reserve.lastPlacement).toBeNull();
+  });
+
+  it('never mutates or aliases the input roster or runtime anchors', () => {
+    const roster = { units: { alive: unit() } };
+    const before = roster.units.alive;
+    const anchor = coord('player', 1, 1);
+    const state = makeBattleStateFromUnits({
+      field: [{ unit: player('u1', 'alive'), anchor }],
+    }, { phase: 'placement' });
+
+    const next = applyFieldPlacementsToRoster(roster, state);
+
+    expect(next).not.toBe(roster);
+    expect(next.units.alive).not.toBe(before);
+    expect(before.lastPlacement).toBeNull();                  // input record untouched
+    expect(next.units.alive.lastPlacement).not.toBe(anchor);  // copied, not aliased
+    expect(state.deployments.get('u1')).toEqual({ kind: 'field', anchor });
+  });
+
+  it('throws when a field player has no roster record', () => {
+    const state = makeBattleStateFromUnits({
+      field: [{ unit: player('u1', 'ghost'), anchor: coord('player', 0, 0) }],
+    }, { phase: 'placement' });
+
+    expect(() => applyFieldPlacementsToRoster({ units: {} }, state)).toThrow(/ghost/);
   });
 });

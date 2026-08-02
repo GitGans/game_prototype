@@ -26,6 +26,9 @@ import {
 import { getBenchSlotOccupant, getLivingFieldUnitEntries } from '../../battle/deployment';
 import { isAlive } from '../../battle/lifeState';
 import { canBeginCombat } from '../../battle/combatStart';
+import type { PlayerSessionSource }     from '../playerSessionState';
+import { PlayerSessionStore }           from '../playerSessionStore';
+import { applyFieldPlacementsToRoster } from '../playerUnitPersistence';
 import type { AutoTurnIntention } from '../battleRuntimeContext';
 export type { AutoTurnIntention };
 
@@ -49,7 +52,7 @@ export function isBattleLifecycleAction(action: PhaseAction): action is BattleLi
 export type BattleLifecycleActionResult = {
   state: BattleState;
   resetTurnContext?: boolean;
-  persistCampaignPlacements?: boolean;
+  persistPlayerPlacements?: boolean;
 };
 
 export function applyBattleLifecycleAction(input: {
@@ -70,14 +73,36 @@ export function applyBattleLifecycleAction(input: {
           phase:              'select_target',
           placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null },
         },
-        resetTurnContext:          true,
-        persistCampaignPlacements: true,
+        resetTurnContext:        true,
+        persistPlayerPlacements: true,
       };
     }
 
     case 'battle_mark_quick_battle_complete':
       return { state: { ...state, phase: 'end' } };
   }
+}
+
+// ─── Application-level lifecycle (pure rule + storage routing) ────────────────
+// `applyBattleLifecycleAction` decides WHAT happens; this decides WHERE the
+// confirmed placement is stored. Placement rules live in neither.
+
+export function applyBattleLifecyclePhaseAction(input: {
+  source: PlayerSessionSource;
+  state:  BattleState;
+  action: BattleLifecycleAction;
+}): BattleLifecycleActionResult {
+  const { source, state, action } = input;
+
+  const result = applyBattleLifecycleAction({ state, action });
+
+  if (result.persistPlayerPlacements) {
+    // The pre-action state is the placement the player confirmed.
+    const session = PlayerSessionStore.getSession(source);
+    PlayerSessionStore.replaceRoster(source, applyFieldPlacementsToRoster(session.roster, state));
+  }
+
+  return result;
 }
 
 // ─── Battle Preview Target (transient manual-targeting UI state) ───────────────

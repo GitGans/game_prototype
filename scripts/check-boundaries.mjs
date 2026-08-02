@@ -210,6 +210,17 @@ const PURE_CORE_FILES = [
       'campaign', 'scenes', 'objects', 'ui', 'phaser',
     ],
   },
+  {
+    file: join(SRC, 'core', 'playerUnitPersistence.ts'),
+    // The pure owner of persistent player-unit transformations. It may see battle
+    // runtime contracts and progression roster contracts — never storage or a source key.
+    banned: [
+      'core/GameState', 'core/DebugBattleState',
+      'core/playerSessionState', 'core/playerSessionStore',
+      'core/phases', 'core/PhaseManager',
+      'campaign', 'inventory', 'scenes', 'objects', 'ui', 'phaser',
+    ],
+  },
 ];
 
 // Relative specifiers are resolved against the importing file and expressed

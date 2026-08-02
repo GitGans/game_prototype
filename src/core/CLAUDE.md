@@ -38,7 +38,8 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `EventBus.ts` — `STATE_CHANGED` event singleton; scenes subscribe via `sceneEvents.ts`
 - `sceneEvents.ts` — binds Phaser scene lifecycle to `STATE_CHANGED` with auto-cleanup
 - `Constants.ts` — grid layout, bench config, combat constants (visual colors removed; see `src/objects/battleVisualTheme.ts`)
-- `phaseHandlers/battlePhaseHandler.ts` — routes battle placement actions; delegates to `../battle/placementState`. `AutoTurnIntention` is owned by `battleRuntimeContext.ts` and re-exported here for callers that already import from this module.
+- `playerUnitPersistence.ts` — the pure owner of persistent player-unit transformations (life state, HP, level, placement). `applyFieldPlacementsToRoster(roster, state)` applies a confirmed battle placement to a roster with no knowledge of `PlayerSessionSource` or storage: field-deployed player units, **living and dead alike**, get a copied `lastPlacement`; bench and undeployed units keep theirs; a field player with no roster record is a thrown lifecycle error, never a synthesized record. Battle-exit persistence (`applyBattleExitPlayerPersistence`) also lives here and is still applied only on the campaign exit route — that asymmetry ends in the unified battle-exit stage, not here.
+- `phaseHandlers/battlePhaseHandler.ts` — battle lifecycle/turn/placement action routing (placement delegates to `../battle/placementState`), split into two explicitly separated layers. `applyBattleLifecycleAction({ state, action })` is the **pure battle-lifecycle rule**: it decides whether combat may begin and signals `persistPlayerPlacements`; it never touches storage and never branches on campaign/debug. `applyBattleLifecyclePhaseAction({ source, state, action })` is the **application seam**: it runs the pure rule and, when the signal is set, persists the pre-action placement into the session selected by `PlayerSessionStore`. It contains no placement rules of its own. `PhaseManager` calls only the application-level function. `AutoTurnIntention` is owned by `battleRuntimeContext.ts` and re-exported here for callers that already import from this module.
 
 ## Structural Role
 `core` → game logic and state authority; all other layers read from it, none write to it directly
@@ -117,6 +118,12 @@ Scenes re-render from new `GamePhase`
 - **`GamePhase.canBeginCombat`** is computed in `rebuildSnapshot()` from the battle-domain
   `canBeginCombat()` and enforced independently in `applyBattleLifecycleAction`. Scenes disable the
   begin-combat control from the boolean; they never inspect field membership or life state
+- **Confirmed-placement persistence is source-neutral.** `battle_begin_combat` runs the same pure
+  lifecycle rule and the same roster transformation for campaign and debug; only
+  `applyBattleLifecyclePhaseAction` knows the `PlayerSessionSource`, and it uses it solely to select
+  the storage tree. The **pre-action** `BattleState` is persisted, before the combat runtime is
+  installed, so a lifecycle error aborts the transition with neither roster nor runtime written.
+  Battle-**exit** persistence remains route-specific until the unified exit stage
 - Scenes never call `this.scene.start/stop` — only `PhaseManager` does
 - `GamePhase` is the single source of truth for every scene's render data; `WorldMap` reads
   its map state and party position from the `world_map` phase snapshot, never from `GameState`
@@ -137,6 +144,7 @@ Scenes re-render from new `GamePhase`
 - Add a new player action → `phases.ts` (`PhaseAction`) + `PhaseManager.ts` (`applyActionSideEffects`)
 - Change battle placement logic → `phaseHandlers/battlePhaseHandler.ts`
 - Change battle turn-flow action handling → `phaseHandlers/battlePhaseHandler.ts` and `PhaseManager.applyActionSideEffects()`
+- Change what a confirmed placement writes back to the roster → `playerUnitPersistence.ts` (`applyFieldPlacementsToRoster`); change which session it is written to → `phaseHandlers/battlePhaseHandler.ts` (`applyBattleLifecyclePhaseAction`)
 - Change battle snapshot fields (what controllers see) → `PhaseManager.rebuildSnapshot()`
 - Change how units are initialized for battle → `battleInitialization.ts` / `battleSetupProjection.ts`
 - Change how a battle is started (campaign or debug) → `battleStart.ts`

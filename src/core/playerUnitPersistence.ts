@@ -1,6 +1,7 @@
 import type { UnitLifeState } from '../shared/unitTypes';
 import type { CellCoord } from '../shared/gridTypes';
-import type { PlayerUnitState } from '../progression';
+import type { BattleState } from '../battle/types';
+import type { PlayerUnitState, RosterState } from '../progression';
 
 export type PartialPlayerUnitState = Partial<PlayerUnitState> | undefined;
 
@@ -74,6 +75,41 @@ export function applyBattleExitPlayerPersistence(
     next[e.templateId] = updated;
   }
   return next;
+}
+
+/**
+ * Confirmed-placement persistence: BattleState + RosterState → RosterState.
+ *
+ * Source-neutral by construction — the caller selects storage, this function never
+ * learns which one. Field deployments (living units AND corpses) overwrite
+ * `lastPlacement`; bench and undeployed units keep theirs.
+ */
+export function applyFieldPlacementsToRoster(
+  roster: RosterState,
+  state:  BattleState,
+): RosterState {
+  const units: Record<string, PlayerUnitState> = { ...roster.units };
+
+  for (const unit of state.units.values()) {
+    if (unit.side !== 'player') continue;
+
+    const deployment = state.deployments.get(unit.id);
+    if (deployment?.kind !== 'field') continue; // bench/undeployed: keep the previous placement
+
+    const unitState = units[unit.templateId];
+    if (!unitState) {
+      // Runtime player units are projected from the roster (battleSetupProjection never
+      // synthesizes a record), so a field player without one is a lifecycle error.
+      throw new Error(
+        `Field player unit "${unit.id}" has no roster record for templateId "${unit.templateId}"`,
+      );
+    }
+
+    // The anchor is copied: persistent state must never alias a runtime coordinate.
+    units[unit.templateId] = { ...unitState, lastPlacement: { ...deployment.anchor } };
+  }
+
+  return { units };
 }
 
 export interface PlayerLevelUpInput {

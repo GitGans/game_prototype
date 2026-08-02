@@ -46,7 +46,7 @@ import {
   isBattleTurnAction,
   applyBattleTurnAction,
   isBattleLifecycleAction,
-  applyBattleLifecycleAction,
+  applyBattleLifecyclePhaseAction,
   setBattlePreviewTarget,
   type BattlePhaseActionResult,
 } from './phaseHandlers/battlePhaseHandler';
@@ -288,22 +288,13 @@ class PhaseManagerClass {
     // ── Battle lifecycle ──
     if (isBattleLifecycleAction(action) && prev.type === 'battle') {
       const runtime = this.requireBattleRuntime(prev);
-      const result = applyBattleLifecycleAction({ state: runtime.state, action });
-
-      if (result.persistCampaignPlacements && runtime.sessionSource === 'campaign') {
-        const units = { ...GameState.getCampaignState().roster.units };
-        let changed = false;
-        for (const unit of runtime.state.units.values()) {
-          if (unit.side !== 'player') continue;
-          const deployment = runtime.state.deployments.get(unit.id);
-          if (deployment?.kind !== 'field') continue; // bench units have no field placement to save
-          const unitState = units[unit.templateId];
-          if (!unitState) continue;
-          units[unit.templateId] = { ...unitState, lastPlacement: deployment.anchor };
-          changed = true;
-        }
-        if (changed) GameState.replaceCampaignRoster({ units });
-      }
+      // Persists the confirmed (pre-action) placement into the session selected by
+      // runtime.sessionSource before the combat runtime is installed.
+      const result = applyBattleLifecyclePhaseAction({
+        source: runtime.sessionSource,
+        state:  runtime.state,
+        action,
+      });
 
       GameState.setBattleRuntime({
         ...runtime,
