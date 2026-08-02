@@ -89,6 +89,8 @@ scene reads GamePhase and renders
 * CampaignState and BattleState must not mix
 * UI primitives (ui/) must have zero game-domain knowledge
 * GamePhase is the single source of truth for what a scene renders
+* Every top-level directory under src must have a directory boundary rule or an
+  explicit, reasoned exclusion in check-boundaries.mjs
 * Roster/camp rules live only in `progression/rosterCamp.ts`, and battle selection is
   distinct from living-party membership:
   * every unit outside camp is **selected for battle**, alive or dead — a persistent-dead

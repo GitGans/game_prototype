@@ -17,6 +17,11 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative, dirname, resolve, sep } from 'path';
 import { findImports } from './import-scanner.mjs';
+import {
+  evaluateDirectoryPolicy,
+  matchesPathPrefix,
+} from './boundary-policy.mjs';
+import { findUncoveredLayers } from './layer-coverage.mjs';
 
 const SRC = new URL('../src', import.meta.url).pathname;
 const errors = [];
@@ -33,76 +38,145 @@ function* walkFiles(dir) {
 const RULES = [
   {
     layer: 'shared/**',
-    dir: join(SRC, 'shared'),
-    banned: ['battle', 'core', 'data', 'objects', 'scenes', 'ui', 'world'],
+    root: 'shared',
+    policy: {
+      kind: 'blocklist',
+      banned: ['battle', 'core', 'data', 'objects', 'scenes', 'ui', 'world'],
+    },
   },
   {
     layer: 'data/**',
-    dir: join(SRC, 'data'),
-    // data/ → shared/ is explicitly allowed
-    banned: ['battle', 'core', 'objects', 'scenes', 'ui', 'world'],
+    root: 'data',
+    policy: {
+      kind: 'blocklist',
+      // data/ → shared/ is explicitly allowed
+      banned: ['battle', 'core', 'objects', 'scenes', 'ui', 'world'],
+    },
+  },
+  {
+    layer: 'world/**',
+    root: 'world',
+    // world is a pure domain layer restricted by an allowlist, not a blocklist:
+    // it may reach only its own modules and shared/ contracts. Because this is
+    // closed rather than open, a future domain (save/, dialogue/, ...) is
+    // rejected automatically without ever editing this rule.
+    policy: {
+      kind: 'src-allowlist',
+      allowedSrcRoots: ['world', 'shared'],
+      bannedPackages: ['phaser'],
+    },
   },
   {
     layer: 'battle/**',
-    dir: join(SRC, 'battle'),
-    banned: ['core', 'campaign', 'phaser'],
+    root: 'battle',
+    policy: {
+      kind: 'blocklist',
+      banned: ['core', 'campaign', 'phaser'],
+    },
   },
   {
     layer: 'ui/**',
-    dir: join(SRC, 'ui'),
-    // core/Constants (LAYOUT_SCALE) is explicitly allowed
-    banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'objects', 'scenes', 'battle', 'world'],
+    root: 'ui',
+    policy: {
+      kind: 'blocklist',
+      // core/Constants (LAYOUT_SCALE) is explicitly allowed
+      banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'objects', 'scenes', 'battle', 'world'],
+    },
   },
   {
     layer: 'objects/**',
-    dir: join(SRC, 'objects'),
-    // core/Constants, core/phases, core/unitSpriteKey, battle/types allowed; battle runtime modules banned
-    banned: [
-      'core/GameState', 'core/PhaseManager', 'core/EventBus', 'scenes',
-      'battle/combat',
-      'battle/skillRuntime',
-      'battle/skillPatterns',
-      'battle/skillDefinitionRuntime',
-      'battle/skillPreview',
-      'battle/turnResolver',
-    ],
+    root: 'objects',
+    policy: {
+      kind: 'blocklist',
+      // core/Constants, core/phases, core/unitSpriteKey, battle/types allowed; battle runtime modules banned
+      banned: [
+        'core/GameState', 'core/PhaseManager', 'core/EventBus', 'scenes',
+        'battle/combat',
+        'battle/skillRuntime',
+        'battle/skillPatterns',
+        'battle/skillDefinitionRuntime',
+        'battle/skillPreview',
+        'battle/turnResolver',
+      ],
+    },
   },
   {
     layer: 'scenes/**',
-    dir: join(SRC, 'scenes'),
-    // Only skill preview is banned; broader scenes -> battle dependencies remain allowed in this stage
-    banned: ['battle/skillPreview'],
+    root: 'scenes',
+    policy: {
+      kind: 'blocklist',
+      // Only skill preview is banned; broader scenes -> battle dependencies remain allowed in this stage
+      banned: ['battle/skillPreview'],
+    },
   },
   {
     layer: 'core/**',
-    dir: join(SRC, 'core'),
-    banned: [
-      'ui/theme',
-      'objects/battleVisualTheme',
-      'objects/worldMapVisualTheme',
-      'objects/itemVisualTheme',
-      'objects/prepVisualTheme',
-    ],
+    root: 'core',
+    policy: {
+      kind: 'blocklist',
+      banned: [
+        'ui/theme',
+        'objects/battleVisualTheme',
+        'objects/worldMapVisualTheme',
+        'objects/itemVisualTheme',
+        'objects/prepVisualTheme',
+      ],
+    },
   },
   {
     layer: 'progression/**',
-    dir: join(SRC, 'progression'),
-    banned: ['core', 'battle', 'objects', 'scenes', 'ui', 'world'],
+    root: 'progression',
+    policy: {
+      kind: 'blocklist',
+      banned: ['core', 'battle', 'objects', 'scenes', 'ui', 'world'],
+    },
   },
   {
     layer: 'inventory/**',
-    dir: join(SRC, 'inventory'),
-    // inventory is a pure domain: only shared/ and data/ allowed (and local inventory/ imports)
-    banned: ['battle', 'core', 'progression', 'objects', 'scenes', 'ui', 'world'],
+    root: 'inventory',
+    policy: {
+      kind: 'blocklist',
+      // inventory is a pure domain: only shared/ and data/ allowed (and local inventory/ imports)
+      banned: ['battle', 'core', 'progression', 'objects', 'scenes', 'ui', 'world'],
+    },
   },
   {
     layer: 'campaign/**',
-    dir: join(SRC, 'campaign'),
-    // campaign is a persistent-state contract: shared/, progression/, inventory/, world/ (type
-    // contracts) allowed; no battle/core/scenes/objects/ui
-    banned: ['battle', 'core', 'objects', 'scenes', 'ui'],
+    root: 'campaign',
+    policy: {
+      kind: 'blocklist',
+      // campaign is a persistent-state contract: shared/, progression/, inventory/, world/ (type
+      // contracts) allowed; no battle/core/scenes/objects/ui
+      banned: ['battle', 'core', 'objects', 'scenes', 'ui'],
+    },
   },
 ];
+
+// Every current top-level directory under src/ is a real architectural
+// layer and is covered by a RULES entry — this registry stays empty for
+// now. Add an entry only when a top-level directory genuinely isn't a
+// dependency layer (generated output, fixtures, etc.), e.g.:
+//   { root: 'generated', reason: 'Build output, not a source dependency layer' }
+const LAYER_COVERAGE_EXCLUSIONS = [];
+
+function listTopLevelSourceDirectories() {
+  return readdirSync(SRC, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => entry.name);
+}
+
+const uncoveredLayers = findUncoveredLayers({
+  discoveredRoots: listTopLevelSourceDirectories(),
+  ruleRoots: RULES.map(rule => rule.root),
+  exclusions: LAYER_COVERAGE_EXCLUSIONS,
+});
+
+for (const root of uncoveredLayers) {
+  errors.push(
+    `  ${root}/**  [layer-coverage] has no directory boundary rule ` +
+    'and no explicit exclusion with an architectural reason',
+  );
+}
 
 // ─── Pure core modules ──────────────────────────────────────────────────────
 // These compose domains but must not reach runtime storage or rendering.
@@ -149,34 +223,45 @@ function normalizeSpecifier(importerFile, spec) {
   return relative(SRC, resolve(dirname(importerFile), spec)).split(sep).join('/');
 }
 
-// A banned entry matches the whole normalized path or a path prefix at a
-// segment boundary. 'battle' matches 'battle/types' but not 'battleFoo';
-// 'battle/combat' matches itself but not 'battle/combatStart'.
-function isBanned(normalized, bannedEntry) {
-  const b = bannedEntry.replace(/\/+$/, '');
-  return normalized === b || normalized.startsWith(`${b}/`);
-}
-
 // ─── Visual theme isolation ────────────────────────────────────────────────
 // Domain visual theme files must not import from ui/theme.
 // Importing UI_THEME would create a layering violation and risk circular deps.
 for (const [file, content] of walkFiles(join(SRC, 'objects'))) {
   if (!file.endsWith('VisualTheme.ts')) continue;
   for (const { spec, line } of findImports(content)) {
-    if (isBanned(normalizeSpecifier(file, spec), 'ui/theme')) {
+    if (matchesPathPrefix(normalizeSpecifier(file, spec), 'ui/theme')) {
       errors.push(`  ${relative(SRC, file)}:${line}  [*VisualTheme.ts] must not import ui/theme  →  "${spec}"`);
     }
   }
 }
 
-for (const { layer, dir, banned } of RULES) {
-  for (const [file, content] of walkFiles(dir)) {
+for (const { layer, root, policy } of RULES) {
+  for (const [file, content] of walkFiles(join(SRC, root))) {
     for (const { spec, line } of findImports(content)) {
-      const normalized = normalizeSpecifier(file, spec);
-      for (const b of banned) {
-        if (isBanned(normalized, b)) {
-          errors.push(`  ${relative(SRC, file)}:${line}  [${layer}] imports from ${b}  →  "${spec}"`);
-        }
+      const normalizedSpecifier = normalizeSpecifier(file, spec);
+      const violation = evaluateDirectoryPolicy({
+        policy,
+        normalizedSpecifier,
+        isRelativeSpecifier: spec.startsWith('.'),
+      });
+
+      if (violation === null) continue;
+
+      if (violation.kind === 'banned-path') {
+        errors.push(
+          `  ${relative(SRC, file)}:${line}  [${layer}] imports from ` +
+          `${violation.entry}  →  "${spec}"`,
+        );
+      } else if (violation.kind === 'outside-allowed-src-roots') {
+        errors.push(
+          `  ${relative(SRC, file)}:${line}  [${layer}] may import only ` +
+          `${violation.allowedSrcRoots.join(', ')} within src  →  "${spec}"`,
+        );
+      } else {
+        errors.push(
+          `  ${relative(SRC, file)}:${line}  [${layer}] must not import package ` +
+          `${violation.entry}  →  "${spec}"`,
+        );
       }
     }
   }
@@ -188,7 +273,7 @@ for (const { file, banned } of PURE_CORE_FILES) {
   for (const { spec, line } of findImports(content)) {
     const normalized = normalizeSpecifier(file, spec);
     for (const b of banned) {
-      if (isBanned(normalized, b)) {
+      if (matchesPathPrefix(normalized, b)) {
         errors.push(`  ${rel}:${line}  [pure-core] must not import ${b}  →  "${spec}"`);
       }
     }
