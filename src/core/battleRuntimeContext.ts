@@ -7,6 +7,8 @@ import type { BattleState, BattleMode } from '../battle/types';
 import type { CellCoord, Side } from '../shared/gridTypes';
 import type { PlayerSessionSource } from './playerSessionState';
 
+export type BattleExitOutcome = 'victory' | 'defeat';
+
 /** Snapshot of one player unit at the moment of battle exit — pre-level-up. */
 export interface BattleParticipant {
   templateId: string;

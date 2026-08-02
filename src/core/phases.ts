@@ -11,7 +11,8 @@ import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
 import type { SubMapState, WorldPos } from '../shared/worldTypes';
 import type { PlayerSessionSource } from './playerSessionState';
-import type { BattleParticipant } from './battleRuntimeContext';
+import type { BattleParticipant, BattleExitOutcome } from './battleRuntimeContext';
+export type { BattleExitOutcome };
 
 export interface CampUnitSnapshot {
   templateId: string;
@@ -37,13 +38,23 @@ export interface UpgradeTierSnapshot {
   isLocked:        boolean;
 }
 
-export type BattleExitOutcome = 'victory' | 'defeat';
+/**
+ * Immutable presentation metadata carried from a battle attempt into `battle_results`.
+ * Deliberately excludes `level` and `isAlive`: final level and life state always come
+ * from the roster selected by `sessionSource`.
+ */
+export interface BattleResultParticipantSeed {
+  templateId: string;
+  name:       string;
+  wasOnBench: boolean;
+  spriteKey:  string | null;
+}
 
-/** Display data for BattleResults scene — level already incremented. */
+/** Display data for BattleResults scene — rebuilt from the final stored roster. */
 export interface BattleResultUnit {
   templateId: string;
   name: string;
-  newLevel: number;    // level AFTER +1
+  newLevel: number;    // final persisted level
   isAlive: boolean;
   wasOnBench: boolean;
   spriteKey: string | null;
@@ -61,7 +72,16 @@ export type GamePhase =
       canStartBattle: boolean;
     }
   | { type: 'map_victory'; mapId: string }
-  | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase; mapCleared: boolean }
+  | {
+      type:             'battle_results';
+      sessionSource:    PlayerSessionSource;
+      // Immutable presentation metadata only. Final level and life state always come
+      // from the roster selected by `sessionSource` — never from a battle-start snapshot.
+      participantSeeds: BattleResultParticipantSeed[];
+      units:            BattleResultUnit[];   // rebuilt by rebuildSnapshot from the stored roster
+      returnPhase:      GamePhase;
+      mapCleared:       boolean;
+    }
   | {
       type:               'battle';
       sessionSource:      PlayerSessionSource;
@@ -184,6 +204,7 @@ export type PhaseAction =
   | { type: 'choose_upgrade'; tierId: 5 | 10 | 15 | 20; upgradeId: UpgradeOptionId }
   // ── Debug battle ──────────────────────────────────────────────
   | { type: 'init_debug'; level: number }
+  | { type: 'return_to_debug_level_select' }
   | { type: 'switch_debug_unit'; templateId: string }
   // ── Battle placement (mutation-only: resolveTransition returns current) ──
   | { type: 'select_bench_slot';          benchIdx: number }

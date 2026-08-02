@@ -78,9 +78,12 @@ export class UnitSelectionPanel extends Phaser.GameObjects.Container {
       });
     });
 
+    // Both may be present: go-to-battle is bottom-centered, back sits in the bottom-right
+    // corner. Debug needs a back route even when the party can no longer start a battle.
     if (isDebug && onGoToBattle) {
       this._addGoToBattleButton(scene, screenW, screenH, phase as DebugEquipScreenPhase, onGoToBattle);
-    } else if (onBack) {
+    }
+    if (onBack) {
       this._addBackButton(scene, screenW, screenH, onBack);
     }
 

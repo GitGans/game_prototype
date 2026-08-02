@@ -4,7 +4,7 @@ import {
   getPersistentCurrentHp,
   isPersistentPlayerUnitAlive,
   clampAliveCurrentHp,
-  computeFieldPlayerPersistence,
+  computeBattleExitPlayerPersistence,
   applyBattleExitPlayerPersistence,
   applyVictoryLevelUpPersistence,
   applyFieldPlacementsToRoster,
@@ -57,99 +57,48 @@ describe('playerUnitPersistence — read helpers', () => {
   });
 });
 
-describe('computeFieldPlayerPersistence', () => {
-  it('missing runtime → dead/0', () => {
-    expect(computeFieldPlayerPersistence(undefined)).toEqual({ lifeState: 'dead', currentHp: 0 });
-  });
-
+describe('computeBattleExitPlayerPersistence', () => {
   it('runtime dead → dead/0', () => {
-    expect(computeFieldPlayerPersistence({ hp: 0, maxHp: 30, lifeState: 'dead' }))
+    expect(computeBattleExitPlayerPersistence({ hp: 0, maxHp: 30, lifeState: 'dead' }))
       .toEqual({ lifeState: 'dead', currentHp: 0 });
   });
 
   it('runtime alive at full HP → alive/null', () => {
-    expect(computeFieldPlayerPersistence({ hp: 30, maxHp: 30, lifeState: 'alive' }))
+    expect(computeBattleExitPlayerPersistence({ hp: 30, maxHp: 30, lifeState: 'alive' }))
       .toEqual({ lifeState: 'alive', currentHp: null });
   });
 
   it('runtime alive injured → alive/concrete HP', () => {
-    expect(computeFieldPlayerPersistence({ hp: 12, maxHp: 30, lifeState: 'alive' }))
+    expect(computeBattleExitPlayerPersistence({ hp: 12, maxHp: 30, lifeState: 'alive' }))
       .toEqual({ lifeState: 'alive', currentHp: 12 });
   });
 
   it('hp 0 with stale alive flag is treated as dead', () => {
-    expect(computeFieldPlayerPersistence({ hp: 0, maxHp: 30, lifeState: 'alive' }))
+    expect(computeBattleExitPlayerPersistence({ hp: 0, maxHp: 30, lifeState: 'alive' }))
       .toEqual({ lifeState: 'dead', currentHp: 0 });
   });
 });
 
 describe('applyBattleExitPlayerPersistence', () => {
-  it('runtime alive full → alive/null + lastPlacement updated', () => {
-    const map = { hero: unit({ lastPlacement: null }) };
+  it('runtime alive full → alive/null, placement untouched', () => {
+    const placement = coord('player', 1, 2);
+    const map = { hero: unit({ lastPlacement: placement }) };
     const exits: PlayerExitInput[] = [{
       templateId: 'hero',
-      wasOnBench: false,
       runtime: { hp: 30, maxHp: 30, lifeState: 'alive' },
-      lastFieldPlacement: { side: 'player', row: 0, col: 0 },
     }];
     const next = applyBattleExitPlayerPersistence(map, exits);
     expect(next.hero.lifeState).toBe('alive');
     expect(next.hero.currentHp).toBe(null);
-    expect(next.hero.lastPlacement).toEqual({ side: 'player', row: 0, col: 0 });
+    // Placement is owned by applyFieldPlacementsToRoster, not by this function.
+    expect(next.hero.lastPlacement).toBe(placement);
   });
 
-  it('runtime dead → dead/0 + lastPlacement preserved when set', () => {
+  it('runtime dead → dead/0', () => {
     const map = { hero: unit() };
     const exits: PlayerExitInput[] = [{
       templateId: 'hero',
-      wasOnBench: false,
       runtime: { hp: 0, maxHp: 30, lifeState: 'dead' },
-      lastFieldPlacement: { side: 'player', row: 1, col: 2 },
-    }];
-    const next = applyBattleExitPlayerPersistence(map, exits);
-    expect(next.hero.lifeState).toBe('dead');
-    expect(next.hero.currentHp).toBe(0);
-    expect(next.hero.lastPlacement).toEqual({ side: 'player', row: 1, col: 2 });
-  });
-
-  it('bench-origin moved to field and killed: runtime dead wins over wasOnBench=true', () => {
-    // The participant was on the bench at battle start (wasOnBench=true), but
-    // mid-battle was placed on the field and killed there. The runtime snapshot
-    // reflects death and must take precedence over the wasOnBench fallback.
-    const map = { hero: unit({ lifeState: 'alive', currentHp: null }) };
-    const exits: PlayerExitInput[] = [{
-      templateId: 'hero',
-      wasOnBench: true, // started on bench
-      runtime: { hp: 0, maxHp: 30, lifeState: 'dead' }, // ... but died on the field
-      lastFieldPlacement: { side: 'player', row: 1, col: 0 },
-    }];
-    const next = applyBattleExitPlayerPersistence(map, exits);
-    expect(next.hero.lifeState).toBe('dead');
-    expect(next.hero.currentHp).toBe(0);
-    expect(next.hero.lastPlacement).toEqual({ side: 'player', row: 1, col: 0 });
-  });
-
-  it('runtime missing + wasOnBench → alive, currentHp preserved as null when absent', () => {
-    const map = { hero: unit({ currentHp: null }) };
-    const exits: PlayerExitInput[] = [{
-      templateId: 'hero',
-      wasOnBench: true,
-      runtime: undefined,
-      lastFieldPlacement: null,
-    }];
-    const next = applyBattleExitPlayerPersistence(map, exits);
-    expect(next.hero.lifeState).toBe('alive');
-    expect(next.hero.currentHp).toBe(null);
-    expect(next.hero.lastPlacement).toBe(null);
-  });
-
-  it('runtime missing + wasOnBench false → dead/0', () => {
-    const map = { hero: unit() };
-    const exits: PlayerExitInput[] = [{
-      templateId: 'hero',
-      wasOnBench: false,
-      runtime: undefined,
-      lastFieldPlacement: null,
     }];
     const next = applyBattleExitPlayerPersistence(map, exits);
     expect(next.hero.lifeState).toBe('dead');
@@ -161,9 +110,7 @@ describe('applyBattleExitPlayerPersistence', () => {
     const original = map.hero;
     const exits: PlayerExitInput[] = [{
       templateId: 'hero',
-      wasOnBench: false,
       runtime: { hp: 0, maxHp: 30, lifeState: 'dead' },
-      lastFieldPlacement: null,
     }];
     const next = applyBattleExitPlayerPersistence(map, exits);
     expect(map.hero).toBe(original);
@@ -171,14 +118,11 @@ describe('applyBattleExitPlayerPersistence', () => {
     expect(next.hero).not.toBe(original);
   });
 
-  it('skips unknown templateIds without throwing', () => {
-    const next = applyBattleExitPlayerPersistence({}, [{
+  it('throws on an exit input with no roster record', () => {
+    expect(() => applyBattleExitPlayerPersistence({}, [{
       templateId: 'unknown',
-      wasOnBench: false,
-      runtime: undefined,
-      lastFieldPlacement: null,
-    }]);
-    expect(next).toEqual({});
+      runtime: { hp: 1, maxHp: 30, lifeState: 'alive' },
+    }])).toThrow(/no roster record for templateId "unknown"/);
   });
 });
 
@@ -221,6 +165,12 @@ describe('applyVictoryLevelUpPersistence', () => {
     applyVictoryLevelUpPersistence(map, [{ templateId: 'hero', newLevel: 2, newMaxHp: 30 }]);
     expect(map.hero).toBe(original);
     expect(map.hero.level).toBe(1);
+  });
+
+  it('throws on a level-up input with no roster record', () => {
+    expect(() => applyVictoryLevelUpPersistence({}, [
+      { templateId: 'unknown', newLevel: 2, newMaxHp: 30 },
+    ])).toThrow(/no roster record for templateId "unknown"/);
   });
 });
 

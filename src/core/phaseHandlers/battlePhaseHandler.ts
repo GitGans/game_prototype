@@ -29,7 +29,12 @@ import { canBeginCombat } from '../../battle/combatStart';
 import type { PlayerSessionSource }     from '../playerSessionState';
 import { PlayerSessionStore }           from '../playerSessionStore';
 import { applyFieldPlacementsToRoster } from '../playerUnitPersistence';
-import type { AutoTurnIntention } from '../battleRuntimeContext';
+import { applyBattleResult }            from '../battleExit';
+import type {
+  AutoTurnIntention,
+  BattleRuntimeContext,
+  BattleExitOutcome,
+} from '../battleRuntimeContext';
 export type { AutoTurnIntention };
 
 // ─── Battle Lifecycle Actions ─────────────────────────────────────────────────
@@ -103,6 +108,24 @@ export function applyBattleLifecyclePhaseAction(input: {
   }
 
   return result;
+}
+
+// ─── Battle Exit ──────────────────────────────────────────────────────────────
+
+/**
+ * The only place a battle result is bound to storage. Contains no roster rules and no
+ * campaign/debug conditional: `sessionSource` selects a storage tree and nothing else.
+ * A missing debug session throws through `PlayerSessionStore`, never falling back to
+ * campaign. The next roster is fully computed before the single write.
+ */
+export function applyBattleExitPhaseAction(input: {
+  runtime: BattleRuntimeContext;
+  outcome: BattleExitOutcome;
+}): void {
+  const source  = input.runtime.sessionSource;
+  const session = PlayerSessionStore.getSession(source);
+  const next    = applyBattleResult({ runtime: input.runtime, session, outcome: input.outcome });
+  PlayerSessionStore.replaceRoster(source, next);
 }
 
 // ─── Battle Preview Target (transient manual-targeting UI state) ───────────────

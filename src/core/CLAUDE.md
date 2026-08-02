@@ -14,8 +14,9 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 ## Key Files
 - `PhaseManager.ts` — master state machine; single entry point for all transitions via `transition(action)`
 - `phases.ts` — `GamePhase` and `PhaseAction` discriminated unions; the contracts between UI and core
-- `GameState.ts` — runtime singleton owning three separate references: `CampaignState`, `DebugBattleState`, and a nullable `BattleRuntimeContext` (`battleRuntimeContext.ts`). Exposes only replacement methods (`setCampaignState`, `replaceCampaignRoster`, `replaceCampaignInventory`, `setDebugState`, `replaceDebugRoster`, `replaceDebugInventory`, `setBattleRuntime`, `replaceBattleState`, `replaceBattleMode`, `replaceBattleTurnContext`, `replacePendingAutoTurnIntention`, ...) — no writable flat fields. `getDebugState(): DebugBattleState | null` is for genuinely optional reads; `requireDebugState(): DebugBattleState` throws `'Debug state is not initialized'` and is mandatory wherever the current phase or runtime explicitly identifies the session as `debug` — an explicit `PlayerSessionSource` selects exactly one storage tree, and missing storage for that explicit source is a lifecycle error, never a silent fallback to the other tree. `replaceDebugSession()` is a `@deprecated` migration bridge kept only for the pre-Stage-8 battle-exit persistence path; camp and upgrade no longer use it (Stage 3); scheduled for removal when Stage 8 migrates battle exit to `PlayerSessionStore`.
-- `battleExitRouting.ts` — `resolveBattleExitRoute(sessionSource, debugState)`: the pure decision of which battle-exit persistence branch applies. Never returns a `'debug'` route without a real `DebugBattleState` — throws instead of letting `PhaseManager`'s exit-teardown code fall back to campaign persistence. Takes both facts as plain arguments (no `GameState`/Phaser import) so it can be unit-tested directly, the same reason `worldMapProjection.ts` exists outside `PhaseManager.ts`.
+- `GameState.ts` — runtime singleton owning three separate references: `CampaignState`, `DebugBattleState`, and a nullable `BattleRuntimeContext` (`battleRuntimeContext.ts`). Exposes only replacement methods (`setCampaignState`, `replaceCampaignRoster`, `replaceCampaignInventory`, `setDebugState`, `replaceDebugRoster`, `replaceDebugInventory`, `setBattleRuntime`, `replaceBattleState`, `replaceBattleMode`, `replaceBattleTurnContext`, `replacePendingAutoTurnIntention`, ...) — no writable flat fields. `getDebugState(): DebugBattleState | null` is for genuinely optional reads; `requireDebugState(): DebugBattleState` throws `'Debug state is not initialized'` and is mandatory wherever the current phase or runtime explicitly identifies the session as `debug` — an explicit `PlayerSessionSource` selects exactly one storage tree, and missing storage for that explicit source is a lifecycle error, never a silent fallback to the other tree.
+- `battleExit.ts` (Stage 8) — `applyBattleResult({ runtime, session, outcome }, playerBlueprints = PLAYER_UNITS): RosterState`: the single source-neutral battle-result pipeline. Placement (`applyFieldPlacementsToRoster`) → runtime HP/life (`applyBattleExitPlayerPersistence`) → victory level-up (`applyVictoryLevelUpPersistence`), all composed into one roster before the caller writes anything. Its runtime parameter is `Pick<BattleRuntimeContext, 'state' | 'participants'>` — `sessionSource`, mode, replay setup, turn context and pending intentions are out of scope **by type**, so the rules cannot branch on the source even by accident. Level-up inputs are read from the post-battle roster, never from `session.roster`: the pre-battle roster would silently revert damage, death and revive. The blueprint parameter mirrors `projectPlayerBattleSetup()` so tests inject minimal definitions.
+- `battleResultsSnapshot.ts` (Stage 8) — `buildBattleResultsSnapshot(roster, seeds)`: the result-screen read model. Level and life state come only from the final stored roster of the session named by `battle_results.sessionSource`; the seeds carry immutable presentation metadata (`templateId`, `name`, `wasOnBench`, `spriteKey`) that no longer exists once the runtime is cleared. A missing roster record is a thrown lifecycle error.
 - `battleRuntimeContext.ts` (Stage 4) — `BattleRuntimeContext`: the single owner of all mutable data for one active battle attempt (`state`, `participants`, `replaySetup`, `turnContext`, `mode`, `sessionSource`, `pendingAutoTurnIntention`). A battle phase is active if and only if `GameState`'s runtime is non-null; `runtime.sessionSource` must always equal the active battle phase's `sessionSource` — validated by `PhaseManager`'s private `requireBattleRuntime()` at every read/mutation site (snapshot rebuild, lifecycle/control/preview/turn/placement side effects, replay, exit), not only at render time. `createEmptyBattleState()` and `createBattleRuntimeContext()` are the only ways to produce a `BattleState` or a runtime; each returns independent, non-aliased collections. There is no separate restart factory — a replay builds one complete replacement runtime through the same `createBattleRuntimeContext()`. `BattleRuntimeContext` is never serialized and never exposed to scenes — `GamePhase.participants` is always a copy of `runtime.participants`, never the same array reference, so render data and persistence input never alias runtime-owned mutable state. `BattleReplaySetup` holds only the captured enemy placements needed to reconstruct the formation; the encounter ID lives on the battle phase and is not duplicated here. It is not a full deterministic battle snapshot.
 - `playerSessionState.ts` — `PlayerSessionSource = 'campaign' | 'debug'`, a core-only routing key (must never be imported by `inventory/`, `progression/`, `battle/`, `campaign/`, `world/`); `PlayerSessionState { roster, inventory }`, the core-only composition of the two player-owned domains; used by `DebugBattleState.session`
 - `playerSessionStore.ts` — `PlayerSessionStore`: the sole seam that resolves a `PlayerSessionSource` to campaign or debug runtime storage (`getSession`, `replaceRoster`, `replaceInventory`). Storage-only — contains no inventory/progression/validation rules.
@@ -38,8 +39,9 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `EventBus.ts` — `STATE_CHANGED` event singleton; scenes subscribe via `sceneEvents.ts`
 - `sceneEvents.ts` — binds Phaser scene lifecycle to `STATE_CHANGED` with auto-cleanup
 - `Constants.ts` — grid layout, bench config, combat constants (visual colors removed; see `src/objects/battleVisualTheme.ts`)
-- `playerUnitPersistence.ts` — the pure owner of persistent player-unit transformations (life state, HP, level, placement). `applyFieldPlacementsToRoster(roster, state)` applies a confirmed battle placement to a roster with no knowledge of `PlayerSessionSource` or storage: field-deployed player units, **living and dead alike**, get a copied `lastPlacement`; bench and undeployed units keep theirs; a field player with no roster record is a thrown lifecycle error, never a synthesized record. Battle-exit persistence (`applyBattleExitPlayerPersistence`) also lives here and is still applied only on the campaign exit route — that asymmetry ends in the unified battle-exit stage, not here.
-- `phaseHandlers/battlePhaseHandler.ts` — battle lifecycle/turn/placement action routing (placement delegates to `../battle/placementState`), split into two explicitly separated layers. `applyBattleLifecycleAction({ state, action })` is the **pure battle-lifecycle rule**: it decides whether combat may begin and signals `persistPlayerPlacements`; it never touches storage and never branches on campaign/debug. `applyBattleLifecyclePhaseAction({ source, state, action })` is the **application seam**: it runs the pure rule and, when the signal is set, persists the pre-action placement into the session selected by `PlayerSessionStore`. It contains no placement rules of its own. `PhaseManager` calls only the application-level function. `AutoTurnIntention` is owned by `battleRuntimeContext.ts` and re-exported here for callers that already import from this module.
+- `playerUnitPersistence.ts` — the pure owner of persistent player-unit transformations (life state, HP, level, placement), source-neutral throughout. `applyFieldPlacementsToRoster(roster, state)` is the **single placement rule** for both confirmed combat and battle exit: field-deployed player units, **living and dead alike**, get a copied `lastPlacement`; bench and undeployed units keep theirs; a field player with no roster record throws. `applyBattleExitPlayerPersistence(units, exits)` applies runtime HP/life only (placement is not its concern) and `applyVictoryLevelUpPersistence(units, levelUps)` applies levels; both treat a missing roster record as a thrown lifecycle error rather than a skipped input. `computeBattleExitPlayerPersistence(runtime)` takes a **required** runtime snapshot — there is no "missing runtime" fallback and `wasOnBench` never decides persistent HP or life state.
+- `playerBattleExitProjection.ts` — `buildPlayerExitInputs(participants, state)`: runtime → persistence projection, HP/life only. It enforces the participant/runtime one-to-one invariant (see Invariants) and throws on any deviation. Placement is not projected here.
+- `phaseHandlers/battlePhaseHandler.ts` — battle lifecycle/turn/placement action routing (placement delegates to `../battle/placementState`), split into two explicitly separated layers. `applyBattleLifecycleAction({ state, action })` is the **pure battle-lifecycle rule**: it decides whether combat may begin and signals `persistPlayerPlacements`; it never touches storage and never branches on campaign/debug. `applyBattleLifecyclePhaseAction({ source, state, action })` is the **application seam**: it runs the pure rule and, when the signal is set, persists the pre-action placement into the session selected by `PlayerSessionStore`. It contains no placement rules of its own. `PhaseManager` calls only the application-level function. `applyBattleExitPhaseAction({ runtime, outcome })` is the matching seam for battle **exit**: read `runtime.sessionSource` → `PlayerSessionStore.getSession()` → `applyBattleResult()` → `PlayerSessionStore.replaceRoster()`. It contains no roster rules and no campaign/debug conditional; a missing debug session throws through `PlayerSessionStore`. `AutoTurnIntention` is owned by `battleRuntimeContext.ts` and re-exported here for callers that already import from this module.
 
 ## Structural Role
 `core` → game logic and state authority; all other layers read from it, none write to it directly
@@ -87,10 +89,7 @@ Scenes re-render from new `GamePhase`
   `GamePhase`, exactly like `equip_screen`/`camp`/`upgrade_tree` — never derived from
   `returnPhase`, debug-state presence, map metadata, or action type. A missing `DebugBattleState`
   when `sessionSource === 'debug'` is a thrown lifecycle error, never a silent fallback to
-  campaign storage. This includes battle-exit routing: `exit_battle` branches only on
-  `resolveBattleExitRoute(runtime.sessionSource, GameState.getDebugState())`
-  (`battleExitRouting.ts`), never on a compound condition like `sessionSource === 'debug' &&
-  debugState` that could silently select the campaign branch for a debug-sourced runtime
+  campaign storage
 - Leaving the `battle` phase for any non-battle phase always clears the whole
   `BattleRuntimeContext` (`PhaseManager.transition()`, after side effects, before snapshot
   rebuild) — no completed or abandoned battle runtime survives into `battle_results` or any
@@ -122,8 +121,32 @@ Scenes re-render from new `GamePhase`
   lifecycle rule and the same roster transformation for campaign and debug; only
   `applyBattleLifecyclePhaseAction` knows the `PlayerSessionSource`, and it uses it solely to select
   the storage tree. The **pre-action** `BattleState` is persisted, before the combat runtime is
-  installed, so a lifecycle error aborts the transition with neither roster nor runtime written.
-  Battle-**exit** persistence remains route-specific until the unified exit stage
+  installed, so a lifecycle error aborts the transition with neither roster nor runtime written
+- **Battle-exit results are source-neutral (Stage 8).** `exit_battle` runs one pure pipeline
+  (`battleExit.ts`) over the runtime and the selected `PlayerSessionState`, and writes the
+  result through exactly one `PlayerSessionStore.replaceRoster()` call in
+  `applyBattleExitPhaseAction`. Equivalent campaign and debug sessions receive equivalent
+  roster changes for the same runtime and outcome: actual runtime HP and life state are
+  persisted, field deployments overwrite `lastPlacement` while bench participants keep theirs,
+  victory levels **every participant exactly once** — field, bench, dead and revived alike —
+  and defeat grants no levels. Nonparticipants, including camp units, are returned by identity.
+  Debug injury and death therefore persist across debug battles; `debug_equip_screen` →
+  `return_to_debug_level_select` → `init_debug` is the recovery route when a debug session
+  runs out of living units. The **only** `sessionSource`-keyed branch left in teardown is the
+  campaign world consequence (marking the defeated encounter). `wouldClearMap`, `mapCleared`
+  and `map_victory` remain metadata-driven, not source-driven
+- **Battle participants and runtime player units are one-to-one at exit.** Player participants
+  are persistent roster entities: death changes life state and never removes the unit from
+  `BattleState.units`, and player-side battle-only summons are not supported. Every deviation —
+  a duplicate participant or runtime `templateId`, a participant with no runtime unit, a runtime
+  player unit with no participant, a participant with no deployment — is thrown as lifecycle
+  corruption by `buildPlayerExitInputs()`. Adding summons later will require an explicit
+  persistent-vs-battle-only entity classification at this seam
+- **`battle_results` carries no dynamic battle data.** `participantSeeds` holds immutable
+  presentation metadata only (`templateId`, `name`, `wasOnBench`, `spriteKey`); final level and
+  life state are rebuilt by `rebuildSnapshot()` from the roster selected by
+  `battle_results.sessionSource`. A battle-start `level`/`isAlive` snapshot can therefore not
+  reach the result screen — it is excluded by type, not by convention
 - **Replay has exactly one policy.** `replay` runs the same pipeline for campaign and debug:
   it restores the captured enemy templates, levels and anchors from `runtime.replaySetup`, and
   re-projects player units from the **current** `PlayerSessionState`. Participants are rebuilt
@@ -159,6 +182,8 @@ Scenes re-render from new `GamePhase`
 - Change battle placement logic → `phaseHandlers/battlePhaseHandler.ts`
 - Change battle turn-flow action handling → `phaseHandlers/battlePhaseHandler.ts` and `PhaseManager.applyActionSideEffects()`
 - Change what a confirmed placement writes back to the roster → `playerUnitPersistence.ts` (`applyFieldPlacementsToRoster`); change which session it is written to → `phaseHandlers/battlePhaseHandler.ts` (`applyBattleLifecyclePhaseAction`)
+- Change what a battle result does to the roster (HP, life state, placement, level-up) → `battleExit.ts` (`applyBattleResult`); change which session it is written to → `phaseHandlers/battlePhaseHandler.ts` (`applyBattleExitPhaseAction`)
+- Change what the post-battle result screen shows → `battleResultsSnapshot.ts`
 - Change battle snapshot fields (what controllers see) → `PhaseManager.rebuildSnapshot()`
 - Change how units are initialized for battle → `battleInitialization.ts` / `battleSetupProjection.ts`
 - Change how a battle attempt is started or replayed (campaign or debug) → `battleStart.ts`

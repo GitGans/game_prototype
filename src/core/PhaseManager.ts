@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
-import type { BattleParticipant, BattleRuntimeContext } from './battleRuntimeContext';
+import type { BattleRuntimeContext } from './battleRuntimeContext';
 import type { DebugBattleState, DebugSessionConfig } from './DebugBattleState';
 import { createDebugPlayerSession } from './debugPlayerSession';
 import { initCampaignState } from './initCampaignState';
@@ -13,7 +13,6 @@ import { ITEM_CATALOG } from '../data/itemDefinitions';
 import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
 import { SubMapDefinition, SubMapState } from '../world/types';
 import { projectWorldMapSnapshot, applyMovePartyToCampaign } from './worldMapProjection';
-import { resolveBattleExitRoute } from './battleExitRouting';
 import { PlayerSessionStore } from './playerSessionStore';
 import { applyEquipmentPhaseAction } from './phaseHandlers/inventoryPhaseHandler';
 import { applyCampPhaseAction } from './phaseHandlers/campPhaseHandler';
@@ -21,16 +20,7 @@ import { applyChooseUpgradePhaseAction } from './phaseHandlers/progressionPhaseH
 import { buildEquipmentScreenPlayerSnapshot } from './equipmentScreenSnapshot';
 import { buildRosterCampSnapshot } from './rosterCampSnapshot';
 import { buildUpgradeTreePlayerSnapshot } from './upgradeTreeSnapshot';
-import { Unit } from '../battle/types';
-import { isAlive } from '../battle/lifeState';
-import {
-  applyBattleExitPlayerPersistence,
-  applyVictoryLevelUpPersistence,
-  type PlayerLevelUpInput,
-} from './playerUnitPersistence';
-import { buildPlayerExitInputs } from './playerBattleExitProjection';
-import { resolvePlayerMaxHpForLevel } from './battleSetupProjection';
-import type { PlayerUnitState } from '../progression';
+import { buildBattleResultsSnapshot } from './battleResultsSnapshot';
 import {
   createBattleRuntimeForSession,
   createReplayBattleRuntimeForSession,
@@ -42,6 +32,7 @@ import {
   applyBattleTurnAction,
   isBattleLifecycleAction,
   applyBattleLifecyclePhaseAction,
+  applyBattleExitPhaseAction,
   setBattlePreviewTarget,
   type BattlePhaseActionResult,
 } from './phaseHandlers/battlePhaseHandler';
@@ -108,17 +99,10 @@ class PhaseManagerClass {
       mapCleared = wouldClearMap(this.phase);
     }
 
-    // Derive exit participants here, outside resolveTransition, to keep it pure.
-    // Derived for both victory and defeat — Stage 5 persistence runs on both.
-    let exitParticipants: BattleParticipant[] = [];
-    if (action.type === 'exit_battle' && this.phase.type === 'battle') {
-      exitParticipants = this.buildExitParticipants();
-    }
-
-    const next = resolveTransition(this.phase, action, mapCleared, exitParticipants);
+    const next = resolveTransition(this.phase, action, mapCleared);
     if (next === null) return; // invalid action for current phase
 
-    this.applyActionSideEffects(action, this.phase, next, exitParticipants);
+    this.applyActionSideEffects(action, this.phase, next);
 
     // Leaving the battle phase always clears the whole runtime atomically — no
     // stale BattleRuntimeContext may survive into battle_results or any other
@@ -169,6 +153,15 @@ class PhaseManagerClass {
         const session = PlayerSessionStore.getSession(phase.sessionSource);
         const { unitName, upgradeTiers } = buildUpgradeTreePlayerSnapshot(session.roster, phase.unitTemplateId);
         return { ...phase, unitName, upgradeTiers };
+      }
+      case 'battle_results': {
+        // Result cards are derived from the roster the exit pipeline just wrote —
+        // never from the battle-start participant snapshot.
+        const session = PlayerSessionStore.getSession(phase.sessionSource);
+        return {
+          ...phase,
+          units: buildBattleResultsSnapshot(session.roster, phase.participantSeeds),
+        };
       }
       case 'battle': {
         const runtime = this.requireBattleRuntime(phase);
@@ -278,7 +271,6 @@ class PhaseManagerClass {
     action: PhaseAction,
     prev: GamePhase,
     next: GamePhase,
-    exitParticipants: BattleParticipant[] = [],
   ): void {
     // ── Battle lifecycle ──
     if (isBattleLifecycleAction(action) && prev.type === 'battle') {
@@ -418,45 +410,28 @@ class PhaseManagerClass {
     // ── Battle teardown ──
     if (action.type === 'exit_battle' && prev.type === 'battle') {
       const runtime = this.requireBattleRuntime(prev);
-      const route = resolveBattleExitRoute(runtime.sessionSource, GameState.getDebugState());
-      if (route.source === 'debug') {
-        const debugState = route.debugState;
-        // Debug teardown: XP goes to DebugBattleState only — never touches CampaignState.
-        // Temporary Stage 1 behavior: bump every debug unit's level by one (preserves the
-        // old shared-level visible behavior). initialConfig.level is never touched.
-        if (action.outcome === 'victory') {
-          const units: Record<string, PlayerUnitState> = {};
-          for (const [templateId, us] of Object.entries(debugState.session.roster.units)) {
-            units[templateId] = { ...us, level: us.level + 1 };
-          }
-          GameState.replaceDebugSession({ ...debugState.session, roster: { units } });
-        }
-      } else {
-        const exits = buildPlayerExitInputs(exitParticipants, runtime.state);
 
-        GameState.replaceCampaignRoster({
-          units: applyBattleExitPlayerPersistence(GameState.getCampaignState().roster.units, exits),
-        });
+      // One source-neutral roster result, one storage write. No campaign/debug branch.
+      applyBattleExitPhaseAction({ runtime, outcome: action.outcome });
 
-        if (action.outcome === 'victory') {
-          this.applyVictoryLevelUp(exitParticipants);
-        }
-
-        // Mark trigger entity dead on the map — victory only; defeat must leave the encounter intact.
-        // Immutable replacement: clone entityStates → new SubMapState → new subMapStates →
-        // new WorldState → new CampaignState. No in-place mutation of campaign records.
-        // INVARIANT: action.outcome === 'victory' is required before mutating entityStates.
-        if (action.outcome === 'victory' && prev.mapId && prev.triggerPos) {
-          const key = `${prev.triggerPos.x},${prev.triggerPos.y}`;
-          const c   = GameState.getCampaignState();
-          const src = c.world.subMapStates[prev.mapId];
-          if (src) {
-            const nextMap = { ...src, entityStates: { ...src.entityStates, [key]: { alive: false } } };
-            GameState.setCampaignState({
-              ...c,
-              world: { ...c.world, subMapStates: { ...c.world.subMapStates, [prev.mapId]: nextMap } },
-            });
-          }
+      // Campaign-only world consequence — the ONLY sessionSource-keyed branch in teardown.
+      // Mark trigger entity dead on the map: victory only; defeat must leave the encounter intact.
+      // Immutable replacement: clone entityStates → new SubMapState → new subMapStates →
+      // new WorldState → new CampaignState. No in-place mutation of campaign records.
+      if (
+        action.outcome === 'victory' &&
+        runtime.sessionSource === 'campaign' &&
+        prev.mapId && prev.triggerPos
+      ) {
+        const key = `${prev.triggerPos.x},${prev.triggerPos.y}`;
+        const c   = GameState.getCampaignState();
+        const src = c.world.subMapStates[prev.mapId];
+        if (src) {
+          const nextMap = { ...src, entityStates: { ...src.entityStates, [key]: { alive: false } } };
+          GameState.setCampaignState({
+            ...c,
+            world: { ...c.world, subMapStates: { ...c.world.subMapStates, [prev.mapId]: nextMap } },
+          });
         }
       }
     }
@@ -558,67 +533,11 @@ class PhaseManagerClass {
     sm.start(nextScene);
   }
 
-  private applyVictoryLevelUp(exitParticipants: BattleParticipant[]): void {
-    const campaign = GameState.getCampaignState();
-    const levelUps: PlayerLevelUpInput[] = [];
-    for (const p of exitParticipants) {
-      const us = campaign.roster.units[p.templateId];
-      if (!us) continue;
-      const bp = PLAYER_UNITS.find(b => b.templateId === p.templateId);
-      if (!bp) continue;
-
-      const newLevel = us.level + 1;
-      const newMaxHp = resolvePlayerMaxHpForLevel({
-        blueprint:        bp,
-        level:            newLevel,
-        chosenUpgrades:   us.chosenUpgrades ?? {},
-        permanentBonuses: us.permanentBonuses ?? {},
-        itemContainers:   campaign.inventory.containers,
-        itemInstances:    campaign.inventory.instances,
-      });
-
-      levelUps.push({ templateId: p.templateId, newLevel, newMaxHp });
-    }
-
-    GameState.replaceCampaignRoster({
-      units: applyVictoryLevelUpPersistence(GameState.getCampaignState().roster.units, levelUps),
-    });
-  }
-
-  private buildExitParticipants(): BattleParticipant[] {
-    const phase = this.phase;
-    if (phase.type !== 'battle') return [];
-    const runtime = this.requireBattleRuntime(phase);
-
-    const runtimePlayerByTemplateId = new Map<string, Unit>();
-    for (const u of runtime.state.units.values()) {
-      if (u.side !== 'player') continue;
-      if (runtimePlayerByTemplateId.has(u.templateId)) {
-        throw new Error(
-          `[Stage5] Duplicate runtime player unit for templateId="${u.templateId}". ` +
-          `Campaign roster invariant violated.`,
-        );
-      }
-      runtimePlayerByTemplateId.set(u.templateId, u);
-    }
-
-    return runtime.participants.map(pp => {
-      const runtimeUnit = runtimePlayerByTemplateId.get(pp.templateId);
-      if (runtimeUnit) {
-        // Runtime state wins over wasOnBench. A bench-origin unit that was
-        // moved to field during placement and then died is reported dead.
-        return { ...pp, isAlive: isAlive(runtimeUnit) };
-      }
-      // Fallback: no runtime unit. Treat wasOnBench-origin participants as
-      // alive (they could not have taken battle damage); otherwise dead.
-      return { ...pp, isAlive: pp.wasOnBench };
-    });
-  }
 }
 
 // ─── Pure transition logic — no Phaser imports, no GameState access ───────────
 
-export function resolveTransition(current: GamePhase, action: PhaseAction, mapCleared = false, derivedExitParticipants: BattleParticipant[] = []): GamePhase | null {
+export function resolveTransition(current: GamePhase, action: PhaseAction, mapCleared = false): GamePhase | null {
   switch (action.type) {
 
     case 'new_game':
@@ -630,9 +549,18 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
       };
 
     case 'debug':
+      // Dispatched from the main menu and from the world map's debug entry.
+      if (current.type !== 'main_menu' && current.type !== 'world_map') return null;
+      return { type: 'debug_level_select' };
+
+    case 'return_to_debug_level_select':
+      // Recovery route: a debug session whose units all died can be rebuilt from scratch.
+      if (current.type !== 'debug_equip_screen') return null;
       return { type: 'debug_level_select' };
 
     case 'init_debug':
+      // Guarded so a debug session can never be replaced while a battle runtime is live.
+      if (current.type !== 'debug_level_select') return null;
       return {
         type: 'debug_equip_screen',
         sessionSource: 'debug',
@@ -743,9 +671,17 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
       if (current.type !== 'battle') return null;
       if (action.outcome === 'defeat') return current.returnPhase;
       return {
-        type: 'battle_results',
-        units: derivedExitParticipants.map(p => ({ ...p, newLevel: p.level + 1 })),
-        returnPhase: current.returnPhase,
+        type:          'battle_results',
+        sessionSource: current.sessionSource,
+        // Immutable presentation metadata only — no initial-attempt level or life state.
+        participantSeeds: current.participants.map(p => ({
+          templateId: p.templateId,
+          name:       p.name,
+          wasOnBench: p.wasOnBench,
+          spriteKey:  p.spriteKey,
+        })),
+        units:         [],                 // filled by rebuildSnapshot from the stored roster
+        returnPhase:   current.returnPhase,
         mapCleared,
       };
 

@@ -211,6 +211,39 @@ const PURE_CORE_FILES = [
     ],
   },
   {
+    file: join(SRC, 'core', 'battleExit.ts'),
+    // The source-neutral battle-result rule. May compose battle runtime contracts,
+    // progression, the session CONTRACT and static definitions — never storage, never a
+    // source key, never phase contracts.
+    banned: [
+      'core/GameState', 'core/DebugBattleState', 'core/playerSessionStore',
+      'core/phases', 'core/PhaseManager',
+      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+    ],
+  },
+  {
+    file: join(SRC, 'core', 'playerBattleExitProjection.ts'),
+    banned: [
+      'core/GameState', 'core/DebugBattleState',
+      'core/playerSessionState', 'core/playerSessionStore',
+      'core/phases', 'core/PhaseManager',
+      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+    ],
+  },
+  {
+    file: join(SRC, 'core', 'battleResultsSnapshot.ts'),
+    // A phase snapshot builder: it may import the phase snapshot CONTRACT
+    // (BattleResultParticipantSeed / BattleResultUnit) type-only, exactly like
+    // rosterCampSnapshot.ts and upgradeTreeSnapshot.ts. It receives a roster explicitly
+    // and never resolves storage itself.
+    banned: [
+      'core/GameState', 'core/DebugBattleState',
+      'core/playerSessionState', 'core/playerSessionStore',
+      'core/PhaseManager',
+      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+    ],
+  },
+  {
     file: join(SRC, 'core', 'playerUnitPersistence.ts'),
     // The pure owner of persistent player-unit transformations. It may see battle
     // runtime contracts and progression roster contracts — never storage or a source key.

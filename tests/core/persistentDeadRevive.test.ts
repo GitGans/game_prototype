@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createBattleRuntimeForSession } from '../../src/core/battleStart';
-import { buildPlayerExitInputs } from '../../src/core/playerBattleExitProjection';
-import { applyBattleExitPlayerPersistence } from '../../src/core/playerUnitPersistence';
+import { applyBattleResult } from '../../src/core/battleExit';
 import type { PlayerSessionState } from '../../src/core/playerSessionState';
 import type { PlayerUnitState } from '../../src/progression';
 import { resolveSkillTargetsForPolicy } from '../../src/battle/targeting';
@@ -93,8 +92,12 @@ describe('persistent-dead deployment → revive → persistence', () => {
     expect(buildRoundQueue(new Map(getLivingFieldUnitEntries(revived.state)))).toContain(corpse.id);
 
     // ── 8. Battle exit persists it as alive with the restored HP ──
-    const exits = buildPlayerExitInputs(runtime.participants, revived.state);
-    const next  = applyBattleExitPlayerPersistence(makeSession().roster.units, exits);
+    // Defeat: isolates HP/life/placement persistence from victory level-ups.
+    const next = applyBattleResult({
+      runtime: { state: revived.state, participants: runtime.participants },
+      session: makeSession(),
+      outcome: 'defeat',
+    }).units;
 
     const persisted = next[CORPSE_BP.templateId];
     expect(persisted.lifeState).toBe('alive');
@@ -110,8 +113,11 @@ describe('persistent-dead deployment → revive → persistence', () => {
       rng: fixedRng(0),
     });
 
-    const exits = buildPlayerExitInputs(runtime.participants, runtime.state);
-    const next  = applyBattleExitPlayerPersistence(makeSession().roster.units, exits);
+    const next = applyBattleResult({
+      runtime: { state: runtime.state, participants: runtime.participants },
+      session: makeSession(),
+      outcome: 'defeat',
+    }).units;
 
     expect(next[CORPSE_BP.templateId].lifeState).toBe('dead');
     expect(next[CORPSE_BP.templateId].currentHp).toBe(0);
