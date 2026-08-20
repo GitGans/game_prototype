@@ -1,5 +1,5 @@
 ---
-name: exploratory-analysis
+name: code-exploration
 description: Performs exploratory analysis of the game code and studies how the part of the solution the user is asking about is structured.
 ---
 

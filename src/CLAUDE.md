@@ -22,6 +22,9 @@ The system is split into layers: static content definitions, domain logic, orche
 * world/    → world-map logic and types
 * battle/   → battle domain rules (placement, combat, targeting, initiative)
 * inventory/→ pure inventory & equipment domain (containers, equip, bonuses, item use, snapshots, pricing)
+* progression/→ unit progression domain (roster state, class/upgrade resolution, stats)
+* campaign/ → persistent campaign state contract (`CampaignState`) — the only future save source
+* save/     → future save/load boundary contract (`SaveRepository`); no implementation yet
 * core/     → game orchestration: PhaseManager, GameState, phase definitions, transitions
 * objects/  → game-specific visual components (unit views, tooltips, skill bars)
 * ui/       → reusable, game-agnostic UI primitives (buttons, inputs, theme)
@@ -72,7 +75,10 @@ scene reads GamePhase and renders
 * battle   → depends on shared; no Phaser
 * world    → depends on shared; no Phaser
 * inventory→ depends on shared, data; no Phaser; no GameState; no battle/core/progression
-* core     → depends on shared, battle, world, data, inventory, progression
+* progression→ depends on shared; no battle/core/objects/scenes/ui/world
+* campaign → depends on shared, progression, inventory, world (type contracts only); no battle/core/scenes/objects/ui; no save (one-way: save → campaign, never the reverse)
+* save     → depends only on campaign (the `CampaignState` contract) and shared; no core/battle/scenes/objects/ui/phaser. Every other layer is blocked from importing save/, except core (the future save/load orchestrator)
+* core     → depends on shared, battle, world, data, inventory, progression, campaign
 * objects  → depends on shared, core; uses ui
 * ui       → no game knowledge; no core/battle/world imports
 * scenes   → depends on all layers; only entry point allowed to trigger PhaseManager
@@ -85,6 +91,18 @@ scene reads GamePhase and renders
 * CampaignState and BattleState must not mix
 * UI primitives (ui/) must have zero game-domain knowledge
 * GamePhase is the single source of truth for what a scene renders
+* Every top-level directory under src must have a directory boundary rule or an
+  explicit, reasoned exclusion in check-boundaries.mjs
+* Roster/camp rules live only in `progression/rosterCamp.ts`, and battle selection is
+  distinct from living-party membership:
+  * every unit outside camp is **selected for battle**, alive or dead — a persistent-dead
+    unit is deployed into the next battle as a corpse and can be revived there
+  * selected-party capacity (`MAX_SELECTED_BATTLE_PARTY_SIZE = 9`) counts dead units, because
+    they consume a field or bench deployment
+  * starting a battle requires at least one **living** selected unit
+    (`MIN_LIVING_BATTLE_PARTY_SIZE = 1`); beginning combat additionally requires a living
+    player unit on the field
+  * no scene or projection re-derives these bounds — they are forwarded through GamePhase
 
 ## Where to Modify
 
@@ -92,7 +110,10 @@ scene reads GamePhase and renders
 * change battle rules (combat, targeting, placement)  → battle/
 * change world-map rules                              → world/
 * add a new game screen or transition                 → core/phases.ts + core/PhaseManager.ts + scenes/
-* change persistent progression                       → core/GameState.ts
+* change the persistent campaign state shape           → campaign/campaignState.ts
+* change the save/load boundary contract               → save/saveTypes.ts
+* change how a new campaign is initialized             → core/initCampaignState.ts + data/campaignInitialStateDefinition.ts
+* change runtime ownership of campaign/debug/battle state → core/GameState.ts
 * change a visual component tied to game data         → objects/
 * change a reusable UI primitive                      → ui/
 * change global styles or constants                   → ui/theme.ts (UI_THEME), core/Constants.ts

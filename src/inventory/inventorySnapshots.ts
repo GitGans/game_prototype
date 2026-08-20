@@ -1,16 +1,15 @@
-import type { ItemCatalog, ItemContainer, ItemInstance } from '../shared/itemTypes';
+import type { ItemCatalog } from '../shared/itemTypes';
 import type { BackpackSnapshot, EquipmentSnapshot, ItemSlotSnapshot } from '../shared/snapshotTypes';
 import { BACKPACK_SLOT_COUNT } from './inventoryConstants';
+import { requireSharedBackpack, type InventoryState } from './inventoryState';
 
 export function buildBackpackSnapshot(
-  containers: Record<string, ItemContainer>,
-  instances: Record<string, ItemInstance>,
+  inventory: InventoryState,
   catalog: ItemCatalog,
-  containerId = 'backpack_shared',
 ): BackpackSnapshot {
-  const backpack = containers[containerId];
+  const backpack = requireSharedBackpack(inventory);
+  const { instances } = inventory;
   const slots: Array<ItemSlotSnapshot | null> = Array(BACKPACK_SLOT_COUNT).fill(null);
-  if (!backpack) return { slots };
 
   for (let i = 0; i < BACKPACK_SLOT_COUNT; i++) {
     const instanceId = backpack.slots[String(i)];
@@ -25,10 +24,10 @@ export function buildBackpackSnapshot(
 
 export function buildEquipmentSnapshot(
   unitTemplateId: string,
-  containers: Record<string, ItemContainer>,
-  instances: Record<string, ItemInstance>,
+  inventory: InventoryState,
   catalog: ItemCatalog,
 ): EquipmentSnapshot {
+  const { containers, instances } = inventory;
   const equip = containers[`equip_${unitTemplateId}`];
   if (!equip) return { slots: {} };
 

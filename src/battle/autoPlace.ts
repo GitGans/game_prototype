@@ -2,7 +2,8 @@ import type { BattleState, Unit } from './types';
 import type { Rng }                              from '../shared/random';
 import { pickOne }                               from '../shared/random';
 import type { CellCoord, Col, Row, UnitShape }   from '../shared/gridTypes';
-import type { RowTrait }                         from '../shared/unitTypes';
+import type { UnitDeployment }                   from '../shared/unitDeploymentTypes';
+import type { RowTrait, UnitLifeState }          from '../shared/unitTypes';
 import { canPlace, addFieldUnit, addBenchUnit }  from './placement';
 import { getFreeBenchSlot }                      from './deployment';
 import { cellKey }                               from './field';
@@ -12,11 +13,12 @@ import type { CreateUnitInstanceInput }          from './unitFactory';
 // ─── Candidate Contracts ─────────────────────────────────────────────────────
 
 export interface PlayerPlacementCandidate {
-  templateId:  string;
-  shape:       UnitShape;
-  rowTrait:    RowTrait;
-  savedAnchor: CellCoord | null;
-  createUnit:  (id: string) => Unit; // no anchor; deployment is assigned separately
+  templateId:       string;
+  shape:            UnitShape;
+  rowTrait:         RowTrait;
+  savedAnchor:      CellCoord | null;
+  initialLifeState: UnitLifeState;    // drives living-first placement order
+  createUnit:       (id: string) => Unit; // no anchor; deployment is assigned separately
 }
 
 export interface EnemyPlacementCandidate {
@@ -41,50 +43,89 @@ export interface EnemyReplayPlacementInput {
 
 // ─── Player Placement ────────────────────────────────────────────────────────
 
+/** One player unit's deployment as chosen at battle start. */
+export interface PlayerInitialPlacement {
+  templateId: string;
+  unitId:     string;
+  deployment: UnitDeployment;
+}
+
+export interface AutoPlacePlayerResult {
+  state:      BattleState;
+  placements: PlayerInitialPlacement[];
+}
+
 export function autoPlacePlayer(
   state:          BattleState,
-  candidates:     PlayerPlacementCandidate[],
+  candidates:     readonly PlayerPlacementCandidate[],
   benchSlotCount: number,
-): BattleState {
+): AutoPlacePlayerResult {
   state = { ...state, benchSlotCount };
 
   let counter = 1;
+  const placed = new Map<string, PlayerInitialPlacement>();
 
-  const tryPlaceOnField = (c: PlayerPlacementCandidate): boolean => {
-    if (c.savedAnchor && canPlace(c.savedAnchor, c.shape, state, 'player')) {
-      state = addFieldUnit(state, c.createUnit(`p${counter++}`), c.savedAnchor);
-      return true;
-    }
+  const tryField = (c: PlayerPlacementCandidate): boolean => {
+    const anchors: CellCoord[] = [];
+    if (c.savedAnchor) anchors.push(c.savedAnchor);
     const rows: Row[] = c.rowTrait === 'front' ? [0, 1] : [1, 0];
     for (const row of rows) {
-      for (const col of [0, 1, 2] as Col[]) {
-        const anchor: CellCoord = { side: 'player', row, col };
-        if (canPlace(anchor, c.shape, state, 'player')) {
-          state = addFieldUnit(state, c.createUnit(`p${counter++}`), anchor);
-          return true;
-        }
-      }
+      for (const col of [0, 1, 2] as Col[]) anchors.push({ side: 'player', row, col });
+    }
+
+    for (const anchor of anchors) {
+      if (!canPlace(anchor, c.shape, state, 'player')) continue;
+      const unitId = `p${counter++}`;
+      state = addFieldUnit(state, c.createUnit(unitId), anchor);
+      placed.set(c.templateId, {
+        templateId: c.templateId,
+        unitId,
+        deployment: { kind: 'field', anchor: { ...anchor } },
+      });
+      return true;
     }
     return false;
   };
 
-  const tryPlaceOnBench = (c: PlayerPlacementCandidate): boolean => {
+  const tryBench = (c: PlayerPlacementCandidate): boolean => {
     const slot = getFreeBenchSlot(state);
     if (slot === null) return false;
-    const unit = c.createUnit(`p${counter++}`);
-    state = addBenchUnit(state, unit, slot);
+    const unitId = `p${counter++}`;
+    state = addBenchUnit(state, c.createUnit(unitId), slot);
+    placed.set(c.templateId, {
+      templateId: c.templateId,
+      unitId,
+      deployment: { kind: 'bench', slot },
+    });
     return true;
   };
 
-  const overflow: PlayerPlacementCandidate[] = [];
-  for (const c of candidates) {
-    if (!tryPlaceOnField(c)) overflow.push(c);
-  }
-  for (const c of overflow) {
-    if (!tryPlaceOnBench(c)) tryPlaceOnField(c);
+  // Living-first: corpses must never push a living combatant onto the bench,
+  // because combat cannot begin without a living player unit on the field.
+  const processingOrder = [
+    ...candidates.filter(c => c.initialLifeState === 'alive'),
+    ...candidates.filter(c => c.initialLifeState !== 'alive'),
+  ];
+
+  for (const c of processingOrder) {
+    if (tryField(c)) continue;
+    if (tryBench(c)) continue;
+    throw new Error(
+      `autoPlacePlayer: no field or bench slot for "${c.templateId}". ` +
+      `Player units are 1x1 and ${candidates.length} candidates were supplied; ` +
+      `party-size validation must run before battle setup.`,
+    );
   }
 
-  return state;
+  // Records follow the ORIGINAL candidate order, not the living-first
+  // processing order, so participants and battle results stay canonical.
+  const placements = candidates.map(c => {
+    const record = placed.get(c.templateId);
+    if (!record) throw new Error(`autoPlacePlayer: missing placement record for "${c.templateId}"`);
+    return record;
+  });
+
+  return { state, placements };
 }
 
 // ─── Enemy Placement ─────────────────────────────────────────────────────────

@@ -20,14 +20,14 @@ export interface UpgradeTreePanelConfig {
   h:               number;
   phase:           UpgradeTreePhase;
   onBack:          () => void;
-  onChooseUpgrade: (templateId: string, tierId: 5 | 10 | 15 | 20, upgradeId: UpgradeOptionId) => void;
+  onChooseUpgrade: (tierId: 5 | 10 | 15 | 20, upgradeId: UpgradeOptionId) => void;
 }
 
 export class UpgradeTreePanel {
   private scene:           Phaser.Scene;
   private w:               number;
   private h:               number;
-  private onChooseUpgrade: (templateId: string, tierId: 5 | 10 | 15 | 20, upgradeId: UpgradeOptionId) => void;
+  private onChooseUpgrade: (tierId: 5 | 10 | 15 | 20, upgradeId: UpgradeOptionId) => void;
   private tierContainer:   Phaser.GameObjects.Container | null = null;
 
   constructor(cfg: UpgradeTreePanelConfig) {
@@ -91,7 +91,7 @@ export class UpgradeTreePanel {
 
         const card = new UpgradeCard(
           this.scene, tierX, cardY, opt, status,
-          () => this.onChooseUpgrade(phase.unitTemplateId, tier.tierId, opt.id),
+          () => this.onChooseUpgrade(tier.tierId, opt.id),
           cardW,
           cardH,
         );

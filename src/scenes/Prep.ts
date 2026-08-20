@@ -9,6 +9,7 @@ import { EnemyGroupSelector } from "../objects/EnemyGroupSelector";
 import { CampPanel } from "../objects/panels/CampPanel";
 import { PartyPanel } from "../objects/panels/PartyPanel";
 import { PrepActionTile } from "../objects/PrepActionTile";
+import { MAX_SELECTED_BATTLE_PARTY_SIZE } from "../progression";
 
 export class Prep extends Phaser.Scene {
   private _activePanelKey: 'camp' | 'party' | 'shop' | null = null;
@@ -174,24 +175,23 @@ export class Prep extends Phaser.Scene {
 
   // ── Battle button helpers ───────────────────────────────────────────────────
 
-  private getActiveCount(): number {
-    const phase = PhaseManager.getPhase();
-    if (phase.type !== 'camp') return 0;
-    return phase.units.filter(u => !u.inCamp).length;
-  }
-
   private refreshBattleButton(): void {
     if (this._isCampMode) return;
 
-    const active = this.getActiveCount();
-    const valid  = active > 0 && active <= 9;
-    const excess = active - 9;
+    const phase = PhaseManager.getPhase();
+    if (phase.type !== 'camp') return;
+
+    const living   = phase.activeLivingUnitCount;
+    const selected = phase.selectedForBattleUnitCount;
+    const valid    = phase.canStartBattle;
+    // Capacity counts dead selected units too — they consume a deployment.
+    const excess   = selected - MAX_SELECTED_BATTLE_PARTY_SIZE;
 
     this.battleBtn.setStyle(valid ? 'primary' : 'danger');
 
     let label = "Go to Battle";
-    if (active === 0) {
-      label = "Go to Battle\n(party is empty)";
+    if (living === 0) {
+      label = "Go to Battle\n(no living units)";
     } else if (excess > 0) {
       label = `Go to Battle\n(move ${excess} to camp)`;
     }

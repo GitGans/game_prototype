@@ -1,5 +1,11 @@
 export type MapEntityType = 'mob' | 'camp' | 'portal' | 'shop';
 
+/** World-map grid position (distinct from battle-grid `CellCoord` in `gridTypes.ts`). */
+export interface WorldPos {
+  x: number;
+  y: number;
+}
+
 export type LayoutCell =
   | null
   | 'wall' | 'tree'
@@ -19,7 +25,7 @@ export interface MapEntityEntries {
 
 export interface SubMapDefinition {
   id: string;
-  startPos: { x: number; y: number };
+  startPos: WorldPos;
   layout: LayoutCell[][];
   entities: MapEntityEntries;
 }

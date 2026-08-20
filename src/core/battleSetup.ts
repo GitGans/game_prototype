@@ -1,8 +1,8 @@
-import type { PlayerUnitState } from './GameState';
-import type { ItemContainer, ItemInstance } from '../battle/types';
+import type { PlayerPlacementCandidate } from '../battle/autoPlace';
 
-export interface PlayerBattleSetup {
-  playerUnits:    Record<string, PlayerUnitState>;
-  itemContainers: Record<string, ItemContainer>;
-  itemInstances:  Record<string, ItemInstance>;
-}
+/**
+ * Short-lived, non-serializable, closure-carrying projection of one player
+ * session into battle-ready placement candidates. Never persisted, never a
+ * save source, and independent of the persistent raw records it was built from.
+ */
+export type PlayerBattleSetup = readonly PlayerPlacementCandidate[];

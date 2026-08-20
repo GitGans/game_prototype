@@ -16,10 +16,11 @@ import { resolveSkillDefinition }          from '../progression';
 import type { CellCoord }                 from '../shared/gridTypes';
 import type { ItemContainer, ItemInstance, PartialBattleStatBonuses } from '../shared/itemTypes';
 import {
-  isPersistentPlayerUnitAlive,
   getPersistentCurrentHp,
   clampAliveCurrentHp,
 } from './playerUnitPersistence';
+import { isSelectedForBattle } from '../progression';
+import type { PlayerSessionState } from './playerSessionState';
 
 function resolveEnemySkills(blueprint: UnitBlueprint, level: number): ActionSkillDefinition[] {
   return (blueprint.enemySkillUnlocks ?? [])
@@ -27,57 +28,71 @@ function resolveEnemySkills(blueprint: UnitBlueprint, level: number): ActionSkil
     .map(u => resolveSkillDefinition(u.skillId));
 }
 
-export function buildPlayerAutoPlacementCandidates(
-  setup: PlayerBattleSetup,
+/**
+ * The one player battle-setup projection, shared by campaign and debug. Takes a
+ * `PlayerSessionState` directly — it never reads `GameState`, never branches on
+ * campaign/debug, and never mutates the session.
+ *
+ * Every unit outside camp is projected, alive or dead. A persistent-dead unit
+ * yields a fully resolved candidate whose factory produces a canonical dead
+ * runtime unit; it is not filtered out.
+ */
+export function projectPlayerBattleSetup(
+  session: PlayerSessionState,
   blueprints: readonly UnitBlueprint[] = PLAYER_UNITS,
-): PlayerPlacementCandidate[] {
-  return blueprints
-    .filter(bp => {
-      const us = setup.playerUnits[bp.templateId];
-      return !us?.isInCamp && isPersistentPlayerUnitAlive(us);
-    })
-    .map(bp => {
-      const unitState = setup.playerUnits[bp.templateId];
-      // unitState must exist for every non-camp unit (initialized at new_game)
-      const level       = unitState?.level ?? bp.level;
-      const progression = resolveUnitProgression(bp, unitState?.chosenUpgrades ?? {});
-      const equipmentBonuses = getEquippedBonuses(
-        bp.templateId, setup.itemContainers, setup.itemInstances, ITEM_DEFINITIONS,
-      );
-      const stats       = resolveUnitBattleStats({
-        blueprint:        bp,
-        level,
-        upgradeModifiers: progression.statModifiers,
-        equipmentBonuses,
-        permanentBonuses: unitState?.permanentBonuses ?? {},
-      });
-      // Color baseline: identical inputs minus equipment.
-      const statHighlightBaseStats = resolveUnitBattleStats({
-        blueprint:        bp,
-        level,
-        upgradeModifiers: progression.statModifiers,
-        permanentBonuses: unitState?.permanentBonuses ?? {},
-      });
-      const initialHp = clampAliveCurrentHp(
-        getPersistentCurrentHp(unitState),
-        stats.hp,
-      );
-      return {
-        templateId:  bp.templateId,
-        shape:       bp.shape,
-        rowTrait:    bp.rowTrait,
-        savedAnchor: unitState?.lastPlacement ?? null,
-        createUnit:  (id: string) => createUnitInstance({
-          blueprint: bp, id, side: 'player', level,
-          classId:              progression.currentClassId,
-          stats,
-          statHighlightBaseStats,
-          skills:               progression.skills,
-          spriteSheet:          resolvePlayerUnitSpriteSheet(bp, progression),
-          initialHp,
-        }),
-      };
+): PlayerBattleSetup {
+  const candidates: PlayerPlacementCandidate[] = [];
+
+  for (const bp of blueprints) {
+    const unitState = session.roster.units[bp.templateId];
+    if (!unitState) continue;                      // no roster record → not in this session
+    if (!isSelectedForBattle(unitState)) continue; // in camp
+
+    const level       = unitState.level;
+    const progression = resolveUnitProgression(bp, unitState.chosenUpgrades ?? {});
+    const equipmentBonuses = getEquippedBonuses(
+      bp.templateId, session.inventory.containers, session.inventory.instances, ITEM_DEFINITIONS,
+    );
+    const stats = resolveUnitBattleStats({
+      blueprint:        bp,
+      level,
+      upgradeModifiers: progression.statModifiers,
+      equipmentBonuses,
+      permanentBonuses: unitState.permanentBonuses ?? {},
     });
+    // Color baseline: identical inputs minus equipment.
+    const statHighlightBaseStats = resolveUnitBattleStats({
+      blueprint:        bp,
+      level,
+      upgradeModifiers: progression.statModifiers,
+      permanentBonuses: unitState.permanentBonuses ?? {},
+    });
+
+    const initialLifeState = unitState.lifeState;
+    const initialHp = initialLifeState === 'alive'
+      ? clampAliveCurrentHp(getPersistentCurrentHp(unitState), stats.hp)
+      : undefined;
+
+    candidates.push({
+      templateId:  bp.templateId,
+      shape:       bp.shape,
+      rowTrait:    bp.rowTrait,
+      savedAnchor: unitState.lastPlacement ?? null,
+      initialLifeState,
+      createUnit:  (id: string) => createUnitInstance({
+        blueprint: bp, id, side: 'player', level,
+        classId:              progression.currentClassId,
+        stats,
+        statHighlightBaseStats,
+        skills:               progression.skills,
+        spriteSheet:          resolvePlayerUnitSpriteSheet(bp, progression),
+        initialLifeState,
+        ...(initialHp !== undefined ? { initialHp } : {}),
+      }),
+    });
+  }
+
+  return candidates;
 }
 
 export function resolvePlayerMaxHpForLevel(input: {

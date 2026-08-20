@@ -3,7 +3,6 @@ import type { Rng }                             from '../shared/random';
 import { pickOne }                              from '../shared/random';
 import { ENEMY_GROUPS }                         from '../data/enemyGroupDefinitions';
 import {
-  buildPlayerAutoPlacementCandidates,
   buildEnemyPlacementCandidates,
   buildEnemyReplayInputs,
 }                                               from './battleSetupProjection';
@@ -12,23 +11,23 @@ import {
   autoPlaceEnemies,
   replayPlaceEnemies,
 }                                               from '../battle/autoPlace';
+import type { PlayerInitialPlacement }          from '../battle/autoPlace';
 import type { BattleState }                     from '../battle/types';
 import type { UnitRace }                        from '../shared/unitTypes';
 import type { PlayerBattleSetup }               from './battleSetup';
-import type { CellCoord }                       from '../shared/gridTypes';
 import { getFieldUnits, requireFieldDeployment } from '../battle/deployment';
 import { isAlive } from '../battle/lifeState';
-
-export interface EnemyPlacementRecord {
-  templateId: string;
-  anchor:     CellCoord;
-  level:      number;
-}
+import type { EnemyReplayPlacement } from './battleRuntimeContext';
 
 export interface BattleInitResult {
-  state:           BattleState;
-  race:            UnitRace;
-  enemyPlacements: EnemyPlacementRecord[];
+  state:            BattleState;
+  enemyPlacements:  EnemyReplayPlacement[];
+  playerPlacements: PlayerInitialPlacement[];
+}
+
+export interface BattleReplayInitResult {
+  state:            BattleState;
+  playerPlacements: PlayerInitialPlacement[];
 }
 
 const FALLBACK_RACES: UnitRace[] = ['orc', 'demon', 'undead'];
@@ -44,9 +43,9 @@ export function buildNewBattleState(
   enemyGroupId: string,
   rng:          Rng,
 ): BattleInitResult {
-  // 1. Place player units
-  const playerCandidates = buildPlayerAutoPlacementCandidates(setup);
-  let state = autoPlacePlayer(emptyState, playerCandidates, BENCH_SLOTS);
+  // 1. Place player units — before any enemy RNG is consumed.
+  const playerResult = autoPlacePlayer(emptyState, setup, BENCH_SLOTS);
+  let state = playerResult.state;
 
   // Seed nextPlayerId from placed units so manual placement IDs don't collide.
   // Dead units stay in state.units after Stage 2, so this seed is monotonic.
@@ -56,7 +55,10 @@ export function buildNewBattleState(
   state = { ...state, nextPlayerId: maxP + 1 };
 
   // 2. Determine enemy race and level
-  // Use field-deployed player units only — bench units should not inflate enemy difficulty.
+  // Use LIVING field-deployed player units only — bench units should not inflate
+  // enemy difficulty, and corpses are not combatants. Living-first placement plus
+  // the "at least one living selected unit" entry rule guarantee a living field
+  // unit here; the `1` floor stays only as a defensive fallback.
   const group       = ENEMY_GROUPS[enemyGroupId];
   const playerMaxLv = getFieldUnits(state)
     .filter(u => u.side === 'player' && isAlive(u))
@@ -69,7 +71,7 @@ export function buildNewBattleState(
   state = autoPlaceEnemies(state, enemyCandidates, rng);
 
   // 4. Capture placement records for replay (enemies are always field-deployed)
-  const enemyPlacements: EnemyPlacementRecord[] = [...state.units.values()]
+  const enemyPlacements: EnemyReplayPlacement[] = [...state.units.values()]
     .filter(u => u.side === 'enemy')
     .map(u => ({
       templateId: u.templateId,
@@ -77,20 +79,23 @@ export function buildNewBattleState(
       level:      u.level,
     }));
 
-  return { state, race, enemyPlacements };
+  return { state, enemyPlacements, playerPlacements: playerResult.placements };
 }
 
 /**
- * Rebuilds a BattleState for a replay: fresh player placement,
- * deterministic enemy placement from previously saved records.
+ * Rebuilds a BattleState for a replay attempt: player units are auto-placed from a
+ * freshly projected setup, enemies are restored deterministically from the captured
+ * placement records. The returned placement records are the initial-deployment truth
+ * for this attempt — participants must be rebuilt from them, never carried over from
+ * the previous attempt.
  */
 export function buildReplayBattleState(
   emptyState:      BattleState,
   setup:           PlayerBattleSetup,
-  savedPlacements: EnemyPlacementRecord[],
-): BattleState {
-  const playerCandidates = buildPlayerAutoPlacementCandidates(setup);
-  let state = autoPlacePlayer(emptyState, playerCandidates, BENCH_SLOTS);
+  savedPlacements: EnemyReplayPlacement[],
+): BattleReplayInitResult {
+  const playerResult = autoPlacePlayer(emptyState, setup, BENCH_SLOTS);
+  let state = playerResult.state;
 
   const maxP = [...state.units.keys()]
     .filter(id => id.startsWith('p'))
@@ -98,5 +103,8 @@ export function buildReplayBattleState(
   state = { ...state, nextPlayerId: maxP + 1 };
 
   const replayInputs = buildEnemyReplayInputs(savedPlacements);
-  return replayPlaceEnemies(state, replayInputs);
+  return {
+    state:            replayPlaceEnemies(state, replayInputs),
+    playerPlacements: playerResult.placements,
+  };
 }

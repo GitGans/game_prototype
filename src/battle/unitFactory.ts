@@ -1,4 +1,4 @@
-import type { UnitBlueprint, UnitBattleStats, SpriteSheetConfig, UnitClassId } from '../shared/unitTypes';
+import type { UnitBlueprint, UnitBattleStats, SpriteSheetConfig, UnitClassId, UnitLifeState } from '../shared/unitTypes';
 import type { ActionSkillDefinition }  from '../shared/skillDefinitionTypes';
 import type { Side }                   from '../shared/gridTypes';
 import type { Unit }                   from './types';
@@ -14,18 +14,26 @@ export interface CreateUnitInstanceInput {
   skills:               ActionSkillDefinition[];
   spriteSheet:          SpriteSheetConfig | undefined;
   initialHp?:           number;
+  initialLifeState?:    UnitLifeState;          // defaults to 'alive'
 }
 
 export function createUnitInstance(input: CreateUnitInstanceInput): Unit {
-  const { blueprint: bp, id, side, level, classId, stats, statHighlightBaseStats, skills, spriteSheet, initialHp } = input;
-  const maxHp = stats.hp;
-  const hp = Math.max(1, Math.min(maxHp, initialHp ?? maxHp));
+  const {
+    blueprint: bp, id, side, level, classId, stats,
+    statHighlightBaseStats, skills, spriteSheet, initialHp, initialLifeState,
+  } = input;
+  const maxHp     = stats.hp;
+  const lifeState = initialLifeState ?? 'alive';
+  // Canonical dead state is hp 0; initialHp is not consulted for dead units.
+  const hp = lifeState === 'dead'
+    ? 0
+    : Math.max(1, Math.min(maxHp, initialHp ?? maxHp));
   return {
     id,
     name:                bp.name,
     hp,
     maxHp,
-    lifeState:           'alive',
+    lifeState,
     physicalStrength:    stats.physicalStrength,
     magicalStrength:     stats.magicalStrength,
     physicalDefense:     stats.physicalDefense,

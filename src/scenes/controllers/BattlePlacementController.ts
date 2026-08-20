@@ -50,6 +50,14 @@ export class BattlePlacementController {
     this.buildStartBattleButton();
   }
 
+  // Placement hit-testing resolves ALL field bodies, alive and dead.
+  // `phase.occupancy` is the living combat-blocker index and reports a corpse
+  // cell as empty. Entries are ordered living-first, and legal placement forbids
+  // overlapping deployments, so index 0 is the occupant.
+  private placementOccupantAt(phase: BattlePhase, coord: CellCoord): string | null {
+    return phase.fieldUnitCells.cellToUnitIds.get(cellKey(coord))?.[0] ?? null;
+  }
+
   handlePlacementPointerDown(coord: CellCoord): void {
     const phase = PhaseManager.getPhase();
     if (phase.type !== 'battle' || phase.battlePhase !== 'placement') return;
@@ -59,7 +67,7 @@ export class BattlePlacementController {
     const now = Date.now();
 
     if (key === this.lastClickCoordKey && now - this.lastClickTime < 300) {
-      const unitId = phase.occupancy.cellToUnitId.get(key);
+      const unitId = this.placementOccupantAt(phase, coord);
       if (unitId) {
         PhaseManager.transition({ type: 'return_field_unit_to_bench', unitId });
       }
@@ -74,7 +82,7 @@ export class BattlePlacementController {
   handlePlacementCellClick(coord: CellCoord, phase: BattlePhase): void {
     if (coord.side !== 'player') return;
     const { selectedFieldUnitId, selectedBenchUnitId } = phase.placementSelection;
-    const unitId = phase.occupancy.cellToUnitId.get(cellKey(coord));
+    const unitId = this.placementOccupantAt(phase, coord);
 
     if (selectedBenchUnitId !== null) {
       const benchIdx = phase.benchUnits.findIndex(s => s?.id === selectedBenchUnitId);
@@ -103,6 +111,9 @@ export class BattlePlacementController {
   onPlacementStateChanged(phase: BattlePhase): void {
     this.buildBenchPanel(true);
     this.applyPlacementHighlights(phase);
+    // Recomputed by the battle domain after every placement action; the
+    // controller never inspects field membership or life state itself.
+    this.startBattleBtn?.setDisabled(!phase.canBeginCombat);
   }
 
   teardownForCombat(): void {
@@ -203,6 +214,9 @@ export class BattlePlacementController {
       label: "⚔\nBattle", style: "primary", fontKey: "xl",
       onClick: () => this.deps.onStartBattle(),
     });
+
+    const phase = PhaseManager.getPhase();
+    if (phase.type === 'battle') this.startBattleBtn.setDisabled(!phase.canBeginCombat);
   }
 
   private destroyStartBattleButton(): void {

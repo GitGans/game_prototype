@@ -19,6 +19,7 @@ export interface UnitSelectionPanelConfig {
   onToggleCamp?: (templateId: string) => void;
   onGoToBattle?: () => void;
   onBack?:      () => void;
+  onResetDebugSession?: () => void;
 }
 
 const PORTRAIT_SEL = scaled(128);
@@ -28,7 +29,7 @@ export class UnitSelectionPanel extends Phaser.GameObjects.Container {
   constructor(cfg: UnitSelectionPanelConfig) {
     super(cfg.scene, 0, 0);
 
-    const { scene, screenW, screenH, phase, onSelectUnit, onToggleCamp, onGoToBattle, onBack } = cfg;
+    const { scene, screenW, screenH, phase, onSelectUnit, onToggleCamp, onGoToBattle, onBack, onResetDebugSession } = cfg;
     const isDebug = phase.type === 'debug_equip_screen';
     const units   = phase.availableUnits;
 
@@ -78,9 +79,16 @@ export class UnitSelectionPanel extends Phaser.GameObjects.Container {
       });
     });
 
+    // All three may be present: reset sits bottom-left, go-to-battle is bottom-centered, back
+    // sits in the bottom-right corner. Debug needs both a back route and a reset route even
+    // when the party can no longer start a battle (e.g. every debug unit is dead).
+    if (isDebug && onResetDebugSession) {
+      this._addResetSessionButton(scene, screenH, onResetDebugSession);
+    }
     if (isDebug && onGoToBattle) {
       this._addGoToBattleButton(scene, screenW, screenH, phase as DebugEquipScreenPhase, onGoToBattle);
-    } else if (onBack) {
+    }
+    if (onBack) {
       this._addBackButton(scene, screenW, screenH, onBack);
     }
 
@@ -94,8 +102,7 @@ export class UnitSelectionPanel extends Phaser.GameObjects.Container {
     phase:        DebugEquipScreenPhase,
     onGoToBattle: () => void,
   ): void {
-    const activeCount = phase.availableUnits.filter(u => !phase.campUnitIds.includes(u.templateId)).length;
-    const tooMany     = activeCount > 9;
+    const valid = phase.canStartBattle;
     this.add(new Button({
       scene,
       x:       w / 2,
@@ -103,8 +110,21 @@ export class UnitSelectionPanel extends Phaser.GameObjects.Container {
       w:       scaled(160),
       h:       scaled(44),
       label:   'Go to Battle →',
-      style:   tooMany ? 'danger' : 'primary',
-      onClick: tooMany ? () => {} : onGoToBattle,
+      style:   valid ? 'primary' : 'danger',
+      onClick: valid ? onGoToBattle : () => {},
+    }));
+  }
+
+  private _addResetSessionButton(scene: Phaser.Scene, h: number, onResetDebugSession: () => void): void {
+    this.add(new Button({
+      scene,
+      x:       PAD + scaled(70),
+      y:       h - scaled(36),
+      w:       scaled(140),
+      h:       scaled(44),
+      label:   'Reset Session',
+      style:   'neutral',
+      onClick: onResetDebugSession,
     }));
   }
 

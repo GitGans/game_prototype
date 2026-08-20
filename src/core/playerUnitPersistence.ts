@@ -1,6 +1,6 @@
 import type { UnitLifeState } from '../shared/unitTypes';
-import type { CellCoord } from '../shared/gridTypes';
-import type { PlayerUnitState } from './GameState';
+import type { BattleState } from '../battle/types';
+import type { PlayerUnitState, RosterState } from '../progression';
 
 export type PartialPlayerUnitState = Partial<PlayerUnitState> | undefined;
 
@@ -29,19 +29,18 @@ export interface PlayerRuntimeSnapshot {
 
 export interface PlayerExitInput {
   templateId: string;
-  wasOnBench: boolean;
-  runtime: PlayerRuntimeSnapshot | undefined;
-  lastFieldPlacement: CellCoord | null;
+  runtime: PlayerRuntimeSnapshot;      // required — no missing-runtime fallback
 }
 
-export function computeFieldPlayerPersistence(
-  runtime: PlayerRuntimeSnapshot | undefined,
+/** Runtime HP/life snapshot → persistent HP/life. Placement is handled separately. */
+export function computeBattleExitPlayerPersistence(
+  runtime: PlayerRuntimeSnapshot,
 ): { lifeState: UnitLifeState; currentHp: number | null } {
-  if (!runtime || runtime.lifeState !== 'alive' || runtime.hp <= 0) {
+  if (runtime.lifeState !== 'alive' || runtime.hp <= 0) {
     return { lifeState: 'dead', currentHp: 0 };
   }
   if (runtime.hp >= runtime.maxHp) {
-    return { lifeState: 'alive', currentHp: null };
+    return { lifeState: 'alive', currentHp: null };     // sparse "full HP" form
   }
   return {
     lifeState: 'alive',
@@ -49,31 +48,61 @@ export function computeFieldPlayerPersistence(
   };
 }
 
+/**
+ * Battle-exit HP/life persistence, source-neutral by construction. A missing roster
+ * record is a lifecycle error: runtime player units are projected from the roster, so
+ * an exit input without one means the roster changed underneath an active battle.
+ */
 export function applyBattleExitPlayerPersistence(
   playerUnits: Record<string, PlayerUnitState>,
-  exits: PlayerExitInput[],
+  exits: readonly PlayerExitInput[],
 ): Record<string, PlayerUnitState> {
   const next = { ...playerUnits };
-  for (const e of exits) {
-    const us = next[e.templateId];
-    if (!us) continue;
-
-    let updated: PlayerUnitState;
-    if (e.runtime) {
-      const { lifeState, currentHp } = computeFieldPlayerPersistence(e.runtime);
-      updated = { ...us, lifeState, currentHp };
-    } else if (e.wasOnBench) {
-      updated = { ...us, lifeState: 'alive', currentHp: us.currentHp ?? null };
-    } else {
-      updated = { ...us, lifeState: 'dead', currentHp: 0 };
+  for (const exit of exits) {
+    const unitState = next[exit.templateId];
+    if (!unitState) {
+      throw new Error(
+        `applyBattleExitPlayerPersistence: no roster record for templateId "${exit.templateId}"`,
+      );
     }
-
-    if (e.lastFieldPlacement !== null) {
-      updated = { ...updated, lastPlacement: e.lastFieldPlacement };
-    }
-    next[e.templateId] = updated;
+    next[exit.templateId] = { ...unitState, ...computeBattleExitPlayerPersistence(exit.runtime) };
   }
   return next;
+}
+
+/**
+ * Confirmed-placement persistence: BattleState + RosterState → RosterState.
+ *
+ * Source-neutral by construction — the caller selects storage, this function never
+ * learns which one. Field deployments (living units AND corpses) overwrite
+ * `lastPlacement`; bench and undeployed units keep theirs.
+ */
+export function applyFieldPlacementsToRoster(
+  roster: RosterState,
+  state:  BattleState,
+): RosterState {
+  const units: Record<string, PlayerUnitState> = { ...roster.units };
+
+  for (const unit of state.units.values()) {
+    if (unit.side !== 'player') continue;
+
+    const deployment = state.deployments.get(unit.id);
+    if (deployment?.kind !== 'field') continue; // bench/undeployed: keep the previous placement
+
+    const unitState = units[unit.templateId];
+    if (!unitState) {
+      // Runtime player units are projected from the roster (battleSetupProjection never
+      // synthesizes a record), so a field player without one is a lifecycle error.
+      throw new Error(
+        `Field player unit "${unit.id}" has no roster record for templateId "${unit.templateId}"`,
+      );
+    }
+
+    // The anchor is copied: persistent state must never alias a runtime coordinate.
+    units[unit.templateId] = { ...unitState, lastPlacement: { ...deployment.anchor } };
+  }
+
+  return { units };
 }
 
 export interface PlayerLevelUpInput {
@@ -89,7 +118,11 @@ export function applyVictoryLevelUpPersistence(
   const next = { ...playerUnits };
   for (const l of levelUps) {
     const us = next[l.templateId];
-    if (!us) continue;
+    if (!us) {
+      throw new Error(
+        `applyVictoryLevelUpPersistence: no roster record for templateId "${l.templateId}"`,
+      );
+    }
     let nextCurrentHp = us.currentHp;
     if (us.lifeState === 'alive' && nextCurrentHp !== null) {
       nextCurrentHp = Math.min(nextCurrentHp, l.newMaxHp);

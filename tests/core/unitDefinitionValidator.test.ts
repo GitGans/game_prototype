@@ -85,6 +85,38 @@ describe("validateUnitDefinitionCollections", () => {
     ).not.toThrow();
   });
 
+  // The 1x1 check is structural, not reference equality: `minimalShape` above is
+  // an equivalent standalone object, not SHAPES['1x1'], and must still be accepted.
+  it("throws when a player unit uses a multi-cell shape", () => {
+    const bad: UnitBlueprint = {
+      ...validPlayerUnit,
+      shape: { offsets: [{ dr: 0, dc: 0 }, { dr: 0, dc: 1 }] },
+    };
+    expect(() =>
+      validateUnitDefinitionCollections({
+        playerUnits: [bad],
+        enemyUnits: validEnemyUnits,
+        skills: validSkills,
+        itemDefinitions: {},
+      })
+    ).toThrow(/must use the 1x1 shape/);
+  });
+
+  it("does not constrain enemy unit shapes", () => {
+    const wideEnemy: UnitBlueprint = {
+      ...validEnemyUnit,
+      shape: { offsets: [{ dr: 0, dc: 0 }, { dr: 0, dc: 1 }] },
+    };
+    expect(() =>
+      validateUnitDefinitionCollections({
+        playerUnits: [validPlayerUnit],
+        enemyUnits: { orc: [wideEnemy], demon: [], undead: [] },
+        skills: validSkills,
+        itemDefinitions: {},
+      })
+    ).not.toThrow();
+  });
+
   it("throws when a player baseSkillId is missing from skills", () => {
     const bad: UnitBlueprint = {
       ...validPlayerUnit,

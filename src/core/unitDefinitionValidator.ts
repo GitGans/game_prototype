@@ -5,6 +5,17 @@ import { ITEM_DEFINITIONS } from '../data/itemDefinitions';
 import type { UnitBlueprint, UnitRace } from '../shared/unitTypes';
 import type { ActionSkillDefinition } from '../shared/skillDefinitionTypes';
 import type { ItemDefinition } from '../shared/itemTypes';
+import type { UnitShape } from '../shared/gridTypes';
+
+// Structural, not reference equality: the invariant is "occupies exactly one
+// cell", not "points at the SHAPES['1x1'] object".
+function isOneByOneShape(shape: UnitShape): boolean {
+  return (
+    shape.offsets.length === 1 &&
+    shape.offsets[0]?.dr === 0 &&
+    shape.offsets[0]?.dc === 0
+  );
+}
 
 export function validateUnitDefinitionCollections(input: {
   playerUnits: UnitBlueprint[];
@@ -38,6 +49,12 @@ export function validateUnitDefinitionCollections(input: {
     }
     if (!(String(bp.baseClassId) in UNIT_CLASS_DEFINITIONS)) {
       throw new Error(`Player unit "${bp.templateId}": baseClassId "${bp.baseClassId}" not in UNIT_CLASS_DEFINITIONS`);
+    }
+    // Player placement capacity (6 field + 3 bench = MAX_SELECTED_BATTLE_PARTY_SIZE)
+    // is only guaranteed while every player unit occupies exactly one cell.
+    // autoPlacePlayer() throws on placement failure and relies on this.
+    if (!isOneByOneShape(bp.shape)) {
+      throw new Error(`Player unit "${bp.templateId}" must use the 1x1 shape`);
     }
     const seenIds = new Set<string>();
     for (const tier of (bp.upgradeTiers ?? [])) {

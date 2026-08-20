@@ -76,10 +76,17 @@ export class EquipScreen extends Phaser.Scene {
           : { type: 'switch_equip_unit', templateId },
       ),
       onToggleCamp: isDebug
-        ? (templateId) => PhaseManager.transition({ type: 'toggle_debug_camp', templateId })
+        ? (templateId) => PhaseManager.transition({ type: 'toggle_camp_unit', templateId })
         : undefined,
       onGoToBattle: isDebug ? () => this.openEnemySelector() : undefined,
-      onBack: !isDebug ? () => PhaseManager.transition({ type: 'close_equip_screen' }) : undefined,
+      onBack: () => PhaseManager.transition(
+        isDebug
+          ? { type: 'return_to_debug_level_select' }
+          : { type: 'close_equip_screen' },
+      ),
+      onResetDebugSession: isDebug
+        ? () => PhaseManager.transition({ type: 'reset_debug_session' })
+        : undefined,
     });
   }
 

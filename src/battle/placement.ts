@@ -5,6 +5,37 @@ import { cellExists, cellKey } from './field';
 import { getOccupiedCells } from './shapes';
 import { buildOccupancy } from './occupancy';
 
+/**
+ * Placement collision index — every field-deployed body, alive OR dead.
+ *
+ * Deliberately different from `state.occupancy`, which is the living-only
+ * combat blocking index: a corpse must not block combat targeting, but nothing
+ * may be placed on top of it either. Keys carry `side`, so a player corpse
+ * blocks only player-side placement.
+ */
+export function getDeploymentBlockedCells(state: BattleState): Set<string> {
+  const blocked = new Set<string>();
+
+  for (const unit of state.units.values()) {
+    const deployment = state.deployments.get(unit.id);
+    if (!deployment) {
+      throw new Error(`getDeploymentBlockedCells: unit "${unit.id}" has no deployment`);
+    }
+    if (deployment.kind !== 'field') continue;
+    for (const coord of getOccupiedCells(deployment.anchor, unit.shape)) {
+      blocked.add(cellKey(coord));
+    }
+  }
+
+  for (const unitId of state.deployments.keys()) {
+    if (!state.units.has(unitId)) {
+      throw new Error(`getDeploymentBlockedCells: deployment references missing unit "${unitId}"`);
+    }
+  }
+
+  return blocked;
+}
+
 export function canPlace(
   anchor: CellCoord,
   shape: UnitShape,
@@ -14,10 +45,12 @@ export function canPlace(
   if (anchor.side !== side) return false;
   const cells = getOccupiedCells(anchor, shape);
   if (cells.length !== shape.offsets.length) return false;
+
+  const blocked = getDeploymentBlockedCells(state);
   for (const coord of cells) {
     if (coord.side !== side) return false;
     if (!cellExists(coord)) return false;
-    if (state.occupancy.cellToUnitId.has(cellKey(coord))) return false;
+    if (blocked.has(cellKey(coord))) return false;
   }
   return true;
 }

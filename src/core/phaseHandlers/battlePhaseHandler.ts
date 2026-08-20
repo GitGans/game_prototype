@@ -25,6 +25,17 @@ import {
 } from '../../battle/placementState';
 import { getBenchSlotOccupant, getLivingFieldUnitEntries } from '../../battle/deployment';
 import { isAlive } from '../../battle/lifeState';
+import { canBeginCombat } from '../../battle/combatStart';
+import type { PlayerSessionSource }     from '../playerSessionState';
+import { PlayerSessionStore }           from '../playerSessionStore';
+import { applyFieldPlacementsToRoster } from '../playerUnitPersistence';
+import { applyBattleResult }            from '../battleExit';
+import type {
+  AutoTurnIntention,
+  BattleRuntimeContext,
+  BattleExitOutcome,
+} from '../battleRuntimeContext';
+export type { AutoTurnIntention };
 
 // ─── Battle Lifecycle Actions ─────────────────────────────────────────────────
 
@@ -46,7 +57,7 @@ export function isBattleLifecycleAction(action: PhaseAction): action is BattleLi
 export type BattleLifecycleActionResult = {
   state: BattleState;
   resetTurnContext?: boolean;
-  persistCampaignPlacements?: boolean;
+  persistPlayerPlacements?: boolean;
 };
 
 export function applyBattleLifecycleAction(input: {
@@ -57,7 +68,9 @@ export function applyBattleLifecycleAction(input: {
 
   switch (action.type) {
     case 'battle_begin_combat': {
-      if (state.phase !== 'placement') return { state };
+      // Subsumes the previous `state.phase !== 'placement'` guard. UI state is
+      // never trusted as validation.
+      if (!canBeginCombat(state)) return { state };
       return {
         state: {
           ...state,
@@ -65,14 +78,54 @@ export function applyBattleLifecycleAction(input: {
           phase:              'select_target',
           placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null },
         },
-        resetTurnContext:          true,
-        persistCampaignPlacements: true,
+        resetTurnContext:        true,
+        persistPlayerPlacements: true,
       };
     }
 
     case 'battle_mark_quick_battle_complete':
       return { state: { ...state, phase: 'end' } };
   }
+}
+
+// ─── Application-level lifecycle (pure rule + storage routing) ────────────────
+// `applyBattleLifecycleAction` decides WHAT happens; this decides WHERE the
+// confirmed placement is stored. Placement rules live in neither.
+
+export function applyBattleLifecyclePhaseAction(input: {
+  source: PlayerSessionSource;
+  state:  BattleState;
+  action: BattleLifecycleAction;
+}): BattleLifecycleActionResult {
+  const { source, state, action } = input;
+
+  const result = applyBattleLifecycleAction({ state, action });
+
+  if (result.persistPlayerPlacements) {
+    // The pre-action state is the placement the player confirmed.
+    const session = PlayerSessionStore.getSession(source);
+    PlayerSessionStore.replaceRoster(source, applyFieldPlacementsToRoster(session.roster, state));
+  }
+
+  return result;
+}
+
+// ─── Battle Exit ──────────────────────────────────────────────────────────────
+
+/**
+ * The only place a battle result is bound to storage. Contains no roster rules and no
+ * campaign/debug conditional: `sessionSource` selects a storage tree and nothing else.
+ * A missing debug session throws through `PlayerSessionStore`, never falling back to
+ * campaign. The next roster is fully computed before the single write.
+ */
+export function applyBattleExitPhaseAction(input: {
+  runtime: BattleRuntimeContext;
+  outcome: BattleExitOutcome;
+}): void {
+  const source  = input.runtime.sessionSource;
+  const session = PlayerSessionStore.getSession(source);
+  const next    = applyBattleResult({ runtime: input.runtime, session, outcome: input.outcome });
+  PlayerSessionStore.replaceRoster(source, next);
 }
 
 // ─── Battle Preview Target (transient manual-targeting UI state) ───────────────
@@ -137,11 +190,6 @@ const BATTLE_TURN_ACTION_TYPES = new Set<string>([
 export function isBattleTurnAction(action: PhaseAction): action is BattleTurnPhaseAction {
   return BATTLE_TURN_ACTION_TYPES.has(action.type);
 }
-
-export type AutoTurnIntention =
-  | { type: 'skip_turn';    unitId: string; skillIndex: number; reason: 'blocked_melee'; activeUnitSide: Side }
-  | { type: 'advance_turn'; unitId: string; skillIndex: number;                          activeUnitSide: Side }
-  | { type: 'use_skill';    unitId: string; skillIndex: number; target: CellCoord; activeUnitSide: Side };
 
 export type BattleAutoTurnDirective =
   | { type: 'none';          reason: 'battle_ended' | 'non_auto_mode' }

@@ -438,7 +438,7 @@ export class Game extends Phaser.Scene {
     const outcome: BattleEndOutcome = eliminatedSide === 'enemy' ? 'victory' : 'defeat';
 
     const phase         = PhaseManager.getPhase();
-    const isDebugBattle = phase.type === 'battle' && phase.returnPhase.type === 'main_menu';
+    const isDebugBattle = phase.type === 'battle' && phase.sessionSource === 'debug';
 
     // Overlay navigation stays here as plain callbacks; the overlay does not know PhaseManager.
     const onReplay = (): void => {

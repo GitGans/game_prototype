@@ -9,12 +9,17 @@ import type { BattleUnitSnapshot, FieldBattleUnitSnapshot, BattleOccupancySnapsh
 import type { PlacementSelection, BattleState, BattleMode, Side } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
+import type { SubMapState, WorldPos } from '../shared/worldTypes';
+import type { PlayerSessionSource } from './playerSessionState';
+import type { BattleParticipant, BattleExitOutcome } from './battleRuntimeContext';
+export type { BattleExitOutcome };
 
 export interface CampUnitSnapshot {
   templateId: string;
   name:       string;
   level:      number;
   inCamp:     boolean;
+  isAlive:    boolean;
 }
 
 export interface UpgradeOptionSnapshot {
@@ -33,23 +38,23 @@ export interface UpgradeTierSnapshot {
   isLocked:        boolean;
 }
 
-/** Snapshot of one player unit at moment of battle exit — pre-level-up. */
-export interface BattleParticipant {
+/**
+ * Immutable presentation metadata carried from a battle attempt into `battle_results`.
+ * Deliberately excludes `level` and `isAlive`: final level and life state always come
+ * from the roster selected by `sessionSource`.
+ */
+export interface BattleResultParticipantSeed {
   templateId: string;
-  name: string;
-  level: number;       // current level BEFORE +1
-  isAlive: boolean;
+  name:       string;
   wasOnBench: boolean;
-  spriteKey: string | null;
+  spriteKey:  string | null;
 }
 
-export type BattleExitOutcome = 'victory' | 'defeat';
-
-/** Display data for BattleResults scene — level already incremented. */
+/** Display data for BattleResults scene — rebuilt from the final stored roster. */
 export interface BattleResultUnit {
   templateId: string;
   name: string;
-  newLevel: number;    // level AFTER +1
+  newLevel: number;    // final persisted level
   isAlive: boolean;
   wasOnBench: boolean;
   spriteKey: string | null;
@@ -57,20 +62,41 @@ export interface BattleResultUnit {
 
 export type GamePhase =
   | { type: 'main_menu' }
-  | { type: 'world_map'; mapId: string; partyPos: { x: number; y: number } }
+  | {
+      type: 'world_map';
+      mapId: string;
+      partyPos: WorldPos;
+      mapState: SubMapState;
+      selectedForBattleUnitCount: number;
+      activeLivingUnitCount: number;
+      canStartBattle: boolean;
+    }
   | { type: 'map_victory'; mapId: string }
-  | { type: 'battle_results'; units: BattleResultUnit[]; returnPhase: GamePhase; mapCleared: boolean }
+  | {
+      type:             'battle_results';
+      sessionSource:    PlayerSessionSource;
+      // Immutable presentation metadata only. Final level and life state always come
+      // from the roster selected by `sessionSource` — never from a battle-start snapshot.
+      participantSeeds: BattleResultParticipantSeed[];
+      units:            BattleResultUnit[];   // rebuilt by rebuildSnapshot from the stored roster
+      returnPhase:      GamePhase;
+      mapCleared:       boolean;
+    }
   | {
       type:               'battle';
+      sessionSource:      PlayerSessionSource;
       enemyGroupId:       string;
       returnPhase:        GamePhase;
       triggerPos?:        { x: number; y: number };
       mapId?:             string;
-      isDebug?:           boolean;
       participants:       BattleParticipant[];     // battle-start snapshot; never rebuilt from current placement
       benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
       battlePhase:         BattleState['phase'];
+      // Placement-phase control state: at least one LIVING player unit is
+      // field-deployed. Computed by battle/combatStart.ts; scenes read it and
+      // never recompute field membership or life state themselves.
+      canBeginCombat:      boolean;
       // Field-only narrowed view. Includes dead field units (rendered as
       // corpses by UI). Intended iteration source for any code that reads
       // anchor or does cell math.
@@ -97,10 +123,19 @@ export type GamePhase =
       previewTargetCoord:  CellCoord | null;
       previewTargetUnitId: string | null;
     }
-  | { type: 'camp'; returnPhase: GamePhase; units: CampUnitSnapshot[] }
+  | {
+      type: 'camp';
+      sessionSource: 'campaign';
+      returnPhase: GamePhase;
+      units: CampUnitSnapshot[];
+      selectedForBattleUnitCount: number;
+      activeLivingUnitCount: number;
+      canStartBattle: boolean;
+    }
   | { type: 'debug_level_select' }
   | {
       type: 'debug_equip_screen';
+      sessionSource: 'debug';
       selectedUnitTemplateId: string;
       selectedUnitSpriteKey: string | null;
       selectedUnit: UnitTabSnapshot | null;
@@ -109,11 +144,15 @@ export type GamePhase =
       unitEquipment: EquipmentSnapshot;
       unitStats: UnitStatsSnapshot | null;
       campUnitIds: string[];
+      selectedForBattleUnitCount: number;
+      activeLivingUnitCount: number;
+      canStartBattle: boolean;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
     }
   | {
       type: 'equip_screen';
+      sessionSource: 'campaign';
       selectedUnitTemplateId: string;
       selectedUnitSpriteKey: string | null;
       selectedUnit: UnitTabSnapshot | null;
@@ -127,6 +166,7 @@ export type GamePhase =
     }
   | {
       type: 'upgrade_tree';
+      sessionSource: PlayerSessionSource;
       unitTemplateId: string;
       unitName: string;
       returnPhase: GamePhase;
@@ -147,6 +187,7 @@ export type PhaseAction =
   | { type: 'exit_results' }
   | { type: 'replay' }
   | { type: 'exit_to_menu' }
+  | { type: 'move_party'; partyPos: WorldPos }
   // ── Equip screen navigation ────────────────────────────────────
   | { type: 'open_equip_screen'; unitTemplateId: string }
   | { type: 'close_equip_screen' }
@@ -160,11 +201,12 @@ export type PhaseAction =
   | { type: 'toggle_camp_unit'; templateId: string }
   | { type: 'open_upgrade_tree' }
   | { type: 'close_upgrade_tree' }
-  | { type: 'choose_upgrade'; templateId: string; tierId: 5 | 10 | 15 | 20; upgradeId: UpgradeOptionId }
+  | { type: 'choose_upgrade'; tierId: 5 | 10 | 15 | 20; upgradeId: UpgradeOptionId }
   // ── Debug battle ──────────────────────────────────────────────
   | { type: 'init_debug'; level: number }
+  | { type: 'reset_debug_session' }
+  | { type: 'return_to_debug_level_select' }
   | { type: 'switch_debug_unit'; templateId: string }
-  | { type: 'toggle_debug_camp'; templateId: string }
   // ── Battle placement (mutation-only: resolveTransition returns current) ──
   | { type: 'select_bench_slot';          benchIdx: number }
   | { type: 'select_field_unit';          unitId:   string }

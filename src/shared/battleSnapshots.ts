@@ -65,13 +65,15 @@ export interface BattleOccupancySnapshot {
   unitToCells:  Map<string, CellCoord[]>;  // unit id → occupied cells (copied)
 }
 
-// All field-deployed units (alive and dead, both sides). Render-only.
-// Distinct from BattleOccupancySnapshot, which is living/blocking-only.
+// All field-deployed bodies (alive and dead, both sides). Read model for corpse
+// hover and for placement hit-testing — distinct from BattleOccupancySnapshot,
+// which is the living combat-blocker index and reports a corpse cell as empty.
 //
-// cellToUnitIds is an array because dead bodies are non-blocking and
-// future resurrection / movement may temporarily overlap on a cell.
-// Ordering is deterministic: living first, then dead, preserving
-// state.units insertion order within each group. UI may pick the first.
+// Legal placement forbids overlapping deployments (canPlace rejects dead/dead
+// and dead/living overlap), so in practice each cell resolves to exactly one
+// unit. cellToUnitIds stays an array as a defensive read-model shape, not as
+// permission to overlap. Ordering is deterministic: living first, then dead,
+// preserving state.units insertion order within each group. UI may pick the first.
 export interface BattleFieldUnitCellsSnapshot {
   cellToUnitIds: Map<string, string[]>;       // cellKey → [unitId, ...]
   unitToCells:   Map<string, CellCoord[]>;    // unitId  → occupied cells (copied)

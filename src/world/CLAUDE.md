@@ -13,7 +13,7 @@ Map navigation logic for the world exploration phase. Provides movement validati
 
 ## Key Files
 - `mapLogic.ts` — core navigation functions: `canMove`, `resolveCell`, `initSubMapState`
-- `types.ts` — re-exports from `src/shared/worldTypes`, adds `ResolvedCell`, `IMPASSABLE_TERRAIN`, `ENTITY_TYPE_CONFIG`
+- `types.ts` — re-exports from `src/shared/worldTypes`, adds `ResolvedCell`, `IMPASSABLE_TERRAIN`, `ENTITY_TYPE_CONFIG`, `WorldState` (`{ currentMapId, partyPos, subMapStates }` — the persistent-campaign-location contract nested inside `CampaignState.world`)
 
 ## Structural Role
 `world/` → stateless map logic layer between data definitions and scene/core consumers
@@ -29,7 +29,11 @@ scene triggers transition or PhaseManager advances phase
 
 ## Dependencies
 - depends on: `src/shared/worldTypes` (type contracts)
-- used by: `src/scenes/WorldMap.ts` (movement + encounter handling), `src/core/PhaseManager.ts` (state init + phase transitions), `src/core/GameState.ts` (SubMapState storage)
+- used by: `src/scenes/WorldMap.ts` (movement + encounter handling, reading from the `world_map`
+  phase snapshot — never `GameState` directly), `src/core/initCampaignState.ts` (initializes a
+  `SubMapState` for every static map), `src/core/worldMapProjection.ts` /
+  `src/core/PhaseManager.ts` (state init + phase transitions), `src/campaign/` (`WorldState`
+  is nested inside `CampaignState`)
 
 ## Invariants
 - `canMove` and `resolveCell` are pure functions — no side effects, no state mutation
