@@ -27,8 +27,9 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `rosterCampSnapshot.ts` — `buildRosterCampSnapshot(roster)`: the one camp read-model projection shared by `camp` and `debug_equip_screen`. Takes a `RosterState` directly; builds the `PLAYER_UNITS`-ordered `CampUnitSnapshot[]` display list and forwards `selectedForBattleUnitCount`/`activeLivingUnitCount`/`canStartBattle` from `progression/rosterCamp.ts`'s `getRosterPartyStatus()` — does not recompute any of them.
 - `upgradeTreeSnapshot.ts` — `buildUpgradeTreePlayerSnapshot(roster, templateId)`: the one upgrade-tree read-model projection shared by campaign and debug. Takes a `RosterState` directly; returns the empty placeholder if the unit or blueprint is missing.
 - `initCampaignState.ts` — pure campaign factory; the only place `CampaignState` is constructed
-- `debugPlayerSession.ts` — pure debug session factory; the only place a debug `PlayerSessionState` is constructed
-- `DebugBattleState.ts` — `{ session: PlayerSessionState, initialConfig: DebugSessionConfig }`; owned by `GameState`, never placed inside `CampaignState`
+- `debugPlayerSession.ts` — pure debug session factory; the only place a debug `PlayerSessionState` is constructed. Must remain a pure function of `(config, playerUnits, itemCatalog)` — no RNG, no clock, no hidden `GameState` reads — because that purity is what makes `resetDebugSession()` a reproducible operation
+- `debugLifecycle.ts` (Stage 9) — the single owner of debug-session *container* lifecycle: `initializeDebugSession(config)`, `resetDebugSession()`, `clearDebugSession()`. This is a different seam from the `phaseHandlers/*` files below: those mutate the *contents* of an already-existing session, resolved via `PlayerSessionStore.getSession(source)`; `debugLifecycle.ts` creates, replaces, or destroys the *container* (`DebugBattleState` itself) and writes through `GameState.setDebugState()`/`clearDebugState()` directly. It contains no roster/inventory/progression/battle-result rules
+- `DebugBattleState.ts` — `{ session: PlayerSessionState, initialConfig: DebugSessionConfig }`; owned by `GameState`, never placed inside `CampaignState`. `initialConfig` is what `resetDebugSession()` rebuilds from
 - `worldMapProjection.ts` — pure projections used by `PhaseManager`'s `world_map` phase: `projectWorldMapSnapshot` (CampaignState.world + roster party status → phase snapshot) and `applyMovePartyToCampaign`. Party status rides on the world-map snapshot so `resolveTransition` can reject `enter_battle` for an invalid party without reading roster state. Kept outside `PhaseManager.ts` (which imports the real `phaser` package) so this logic is unit-testable without a Phaser instance.
 - `battleInitialization.ts` — battle state factory; builds auto-placed or replay battle states. `buildNewBattleState()` places players first (before any enemy RNG is consumed) and returns the ordered `playerPlacements` records alongside the state. `buildReplayBattleState()` returns `{ state, playerPlacements }` for the same reason: the replay attempt's participants must be built from *its own* placement records
 - `battleSetupProjection.ts` — `projectPlayerBattleSetup(session)`: the one player battle-setup projection shared by campaign and debug. Takes a `PlayerSessionState` directly; never reads `GameState`, never branches on campaign/debug, never mutates the session. Projects **every** unit outside camp, alive or dead — a persistent-dead unit becomes a fully resolved candidate whose factory produces a canonical dead runtime unit. A blueprint with no roster record is skipped, never synthesized
@@ -130,9 +131,12 @@ Scenes re-render from new `GamePhase`
   persisted, field deployments overwrite `lastPlacement` while bench participants keep theirs,
   victory levels **every participant exactly once** — field, bench, dead and revived alike —
   and defeat grants no levels. Nonparticipants, including camp units, are returned by identity.
-  Debug injury and death therefore persist across debug battles; `debug_equip_screen` →
-  `return_to_debug_level_select` → `init_debug` is the recovery route when a debug session
-  runs out of living units. The **only** `sessionSource`-keyed branch left in teardown is the
+  Debug injury and death therefore persist across debug battles; `reset_debug_session`
+  (dispatched from `debug_equip_screen`, restoring the session from its own `initialConfig`)
+  is the direct recovery route when a debug session runs out of living units — see the
+  debug lifecycle invariant below. `debug_equip_screen` → `return_to_debug_level_select` →
+  `init_debug` remains available for starting a *differently configured* session. The
+  **only** `sessionSource`-keyed branch left in teardown is the
   campaign world consequence (marking the defeated encounter). `wouldClearMap`, `mapCleared`
   and `map_victory` remain metadata-driven, not source-driven
 - **Battle participants and runtime player units are one-to-one at exit.** Player participants
@@ -161,6 +165,18 @@ Scenes re-render from new `GamePhase`
   longer rerolls enemies** — starting a new debug battle is the operation that creates a new
   encounter. `PhaseManager`'s replay branch contains no conditional: it resolves the session by
   `runtime.sessionSource` and installs the returned runtime once
+- **Debug session lifecycle has exactly one owner: `debugLifecycle.ts`.** `PhaseManager`
+  only decides which lifecycle operation applies (`init_debug`, `reset_debug_session`,
+  `exit_to_menu`, `new_game`) and owns the RNG/battle-runtime reset sequence around it —
+  it never reconstructs roster or inventory records itself. Every lifecycle action resets
+  gameplay RNG streams through the private `resetGameplayRngStreams()` helper (the single
+  reset point — no action inlines `createDefaultGameplayRngStreams()` itself) and
+  defensively clears any stale `BattleRuntimeContext`, because `exit_to_menu`/`new_game`
+  must dispose debug state even when dispatched from a non-battle phase (e.g. a damaged
+  `debug_equip_screen`), which the generic "leaving `battle`" teardown does not cover.
+  `reset_debug_session` is accepted only from `debug_equip_screen` and is mutation-only
+  (`resolveTransition` returns the same phase) — rejected from `battle`/`battle_results`
+  so an in-progress attempt can never lose its owning session mid-flight.
 - Scenes never call `this.scene.start/stop` — only `PhaseManager` does
 - `GamePhase` is the single source of truth for every scene's render data; `WorldMap` reads
   its map state and party position from the `world_map` phase snapshot, never from `GameState`
@@ -193,7 +209,7 @@ Scenes re-render from new `GamePhase`
 - Change stat display computation → `unitStatsSnapshot.ts`
 - Change upgrade description text → `unitUpgradePresentation.ts`
 - Change grid/bench layout constants → `Constants.ts`
-- Change debug session initial config/contracts → `DebugBattleState.ts`; change how a debug session is built → `debugPlayerSession.ts`
+- Change debug session initial config/contracts → `DebugBattleState.ts`; change how a debug session is built → `debugPlayerSession.ts`; change debug session create/reset/dispose lifecycle → `debugLifecycle.ts`; change when/how that lifecycle runs (RNG reset, runtime cleanup, which action triggers it) → `PhaseManager.applyActionSideEffects()`
 - Change campaign initial content/config → `src/data/campaignInitialStateDefinition.ts`; change how a campaign is built → `initCampaignState.ts`
 - Change world_map snapshot projection or party movement → `worldMapProjection.ts`
 - Change cross-scene event wiring → `EventBus.ts` / `sceneEvents.ts`

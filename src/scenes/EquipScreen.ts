@@ -84,6 +84,9 @@ export class EquipScreen extends Phaser.Scene {
           ? { type: 'return_to_debug_level_select' }
           : { type: 'close_equip_screen' },
       ),
+      onResetDebugSession: isDebug
+        ? () => PhaseManager.transition({ type: 'reset_debug_session' })
+        : undefined,
     });
   }
 

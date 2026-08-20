@@ -204,6 +204,7 @@ export type PhaseAction =
   | { type: 'choose_upgrade'; tierId: 5 | 10 | 15 | 20; upgradeId: UpgradeOptionId }
   // ── Debug battle ──────────────────────────────────────────────
   | { type: 'init_debug'; level: number }
+  | { type: 'reset_debug_session' }
   | { type: 'return_to_debug_level_select' }
   | { type: 'switch_debug_unit'; templateId: string }
   // ── Battle placement (mutation-only: resolveTransition returns current) ──

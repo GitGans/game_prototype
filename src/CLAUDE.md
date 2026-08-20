@@ -24,6 +24,7 @@ The system is split into layers: static content definitions, domain logic, orche
 * inventory/→ pure inventory & equipment domain (containers, equip, bonuses, item use, snapshots, pricing)
 * progression/→ unit progression domain (roster state, class/upgrade resolution, stats)
 * campaign/ → persistent campaign state contract (`CampaignState`) — the only future save source
+* save/     → future save/load boundary contract (`SaveRepository`); no implementation yet
 * core/     → game orchestration: PhaseManager, GameState, phase definitions, transitions
 * objects/  → game-specific visual components (unit views, tooltips, skill bars)
 * ui/       → reusable, game-agnostic UI primitives (buttons, inputs, theme)
@@ -75,7 +76,8 @@ scene reads GamePhase and renders
 * world    → depends on shared; no Phaser
 * inventory→ depends on shared, data; no Phaser; no GameState; no battle/core/progression
 * progression→ depends on shared; no battle/core/objects/scenes/ui/world
-* campaign → depends on shared, progression, inventory, world (type contracts only); no battle/core/scenes/objects/ui
+* campaign → depends on shared, progression, inventory, world (type contracts only); no battle/core/scenes/objects/ui; no save (one-way: save → campaign, never the reverse)
+* save     → depends only on campaign (the `CampaignState` contract) and shared; no core/battle/scenes/objects/ui/phaser. Every other layer is blocked from importing save/, except core (the future save/load orchestrator)
 * core     → depends on shared, battle, world, data, inventory, progression, campaign
 * objects  → depends on shared, core; uses ui
 * ui       → no game knowledge; no core/battle/world imports
@@ -109,6 +111,7 @@ scene reads GamePhase and renders
 * change world-map rules                              → world/
 * add a new game screen or transition                 → core/phases.ts + core/PhaseManager.ts + scenes/
 * change the persistent campaign state shape           → campaign/campaignState.ts
+* change the save/load boundary contract               → save/saveTypes.ts
 * change how a new campaign is initialized             → core/initCampaignState.ts + data/campaignInitialStateDefinition.ts
 * change runtime ownership of campaign/debug/battle state → core/GameState.ts
 * change a visual component tied to game data         → objects/

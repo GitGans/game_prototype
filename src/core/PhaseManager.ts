@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
 import type { BattleRuntimeContext } from './battleRuntimeContext';
 import type { DebugBattleState, DebugSessionConfig } from './DebugBattleState';
-import { createDebugPlayerSession } from './debugPlayerSession';
+import { initializeDebugSession, resetDebugSession, clearDebugSession } from './debugLifecycle';
 import { initCampaignState } from './initCampaignState';
 import { CAMPAIGN_INITIAL_STATE_DEFINITION } from '../data/campaignInitialStateDefinition';
 import { GameState } from './GameState';
@@ -61,6 +61,15 @@ class PhaseManagerClass {
 
   /** Resets streams to default MathRng — call after a test that injected scripted streams. */
   resetRngStreams(): void {
+    this.rngStreams = createDefaultGameplayRngStreams();
+  }
+
+  /**
+   * Single reset point for gameplay RNG streams. Called from every session/campaign
+   * lifecycle action (`init_debug`, `reset_debug_session`, `exit_to_menu`, `new_game`)
+   * so a fresh session always starts at a fresh RNG boundary.
+   */
+  private resetGameplayRngStreams(): void {
     this.rngStreams = createDefaultGameplayRngStreams();
   }
 
@@ -364,7 +373,11 @@ class PhaseManagerClass {
     // ── Campaign init ── always creates a fresh campaign (no idempotent guards); New Game
     // from the menu replaces any existing progress.
     if (action.type === 'new_game') {
-      this.rngStreams = createDefaultGameplayRngStreams();
+      clearDebugSession();
+      if (GameState.hasBattleRuntime()) {
+        GameState.resetBattleRuntime();
+      }
+      this.resetGameplayRngStreams();
       GameState.setCampaignState(initCampaignState({
         playerUnits: PLAYER_UNITS,
         itemCatalog: ITEM_CATALOG,
@@ -462,16 +475,32 @@ class PhaseManagerClass {
       return;
     }
 
-    // ── Debug mode ──
+    // ── Debug session lifecycle ──
+    // init_debug/reset_debug_session/exit_to_menu may run from a non-battle phase where a
+    // battle runtime can't be live (see resolveTransition guards), but the defensive clear
+    // keeps this branch correct even if that guard is ever loosened.
     if (action.type === 'init_debug') {
+      if (GameState.hasBattleRuntime()) GameState.resetBattleRuntime();
+      this.resetGameplayRngStreams();
       const config: DebugSessionConfig = {
         level: action.level,
         startingItems: CAMPAIGN_STARTING_ITEMS,
         initialCampUnitIds: [],
       };
-      const session = createDebugPlayerSession({ config, playerUnits: PLAYER_UNITS, itemCatalog: ITEM_CATALOG });
-      GameState.setDebugState({ session, initialConfig: config });
-      this.rngStreams = createDefaultGameplayRngStreams();
+      initializeDebugSession(config);
+    }
+
+    if (action.type === 'reset_debug_session') {
+      if (GameState.hasBattleRuntime()) GameState.resetBattleRuntime();
+      this.resetGameplayRngStreams();
+      resetDebugSession();
+      return;
+    }
+
+    if (action.type === 'exit_to_menu') {
+      clearDebugSession();
+      if (GameState.hasBattleRuntime()) GameState.resetBattleRuntime();
+      this.resetGameplayRngStreams();
     }
 
     // ── move_party: writes CampaignState.world.partyPos, never the phase. ──
@@ -578,6 +607,13 @@ export function resolveTransition(current: GamePhase, action: PhaseAction, mapCl
         learnedSkills: [],
         upgradeSkills: [],
       };
+
+    case 'reset_debug_session':
+      // Restores the current session from its own initialConfig — same config, fresh roster/
+      // inventory. Only from debug_equip_screen: an in-progress battle attempt can't have its
+      // owning session replaced, and the player must leave battle_results first.
+      if (current.type !== 'debug_equip_screen') return null;
+      return current; // mutation-only: rebuildSnapshot() re-derives the screen from the new session
 
     case 'switch_debug_unit':
       if (current.type !== 'debug_equip_screen') return null;

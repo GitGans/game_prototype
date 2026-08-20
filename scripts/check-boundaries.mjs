@@ -41,7 +41,7 @@ const RULES = [
     root: 'shared',
     policy: {
       kind: 'blocklist',
-      banned: ['battle', 'core', 'data', 'objects', 'scenes', 'ui', 'world'],
+      banned: ['battle', 'core', 'data', 'objects', 'scenes', 'ui', 'world', 'save'],
     },
   },
   {
@@ -50,7 +50,7 @@ const RULES = [
     policy: {
       kind: 'blocklist',
       // data/ → shared/ is explicitly allowed
-      banned: ['battle', 'core', 'objects', 'scenes', 'ui', 'world'],
+      banned: ['battle', 'core', 'objects', 'scenes', 'ui', 'world', 'save'],
     },
   },
   {
@@ -71,7 +71,7 @@ const RULES = [
     root: 'battle',
     policy: {
       kind: 'blocklist',
-      banned: ['core', 'campaign', 'phaser'],
+      banned: ['core', 'campaign', 'phaser', 'save'],
     },
   },
   {
@@ -80,7 +80,7 @@ const RULES = [
     policy: {
       kind: 'blocklist',
       // core/Constants (LAYOUT_SCALE) is explicitly allowed
-      banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'objects', 'scenes', 'battle', 'world'],
+      banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'objects', 'scenes', 'battle', 'world', 'save'],
     },
   },
   {
@@ -97,6 +97,7 @@ const RULES = [
         'battle/skillDefinitionRuntime',
         'battle/skillPreview',
         'battle/turnResolver',
+        'save',
       ],
     },
   },
@@ -106,7 +107,7 @@ const RULES = [
     policy: {
       kind: 'blocklist',
       // Only skill preview is banned; broader scenes -> battle dependencies remain allowed in this stage
-      banned: ['battle/skillPreview'],
+      banned: ['battle/skillPreview', 'save'],
     },
   },
   {
@@ -114,6 +115,8 @@ const RULES = [
     root: 'core',
     policy: {
       kind: 'blocklist',
+      // core is the future orchestration layer for save/load — it is the only layer
+      // allowed to import save/ (not yet exercised: no save action exists in this stage)
       banned: [
         'ui/theme',
         'objects/battleVisualTheme',
@@ -128,7 +131,7 @@ const RULES = [
     root: 'progression',
     policy: {
       kind: 'blocklist',
-      banned: ['core', 'battle', 'objects', 'scenes', 'ui', 'world'],
+      banned: ['core', 'battle', 'objects', 'scenes', 'ui', 'world', 'save'],
     },
   },
   {
@@ -137,7 +140,7 @@ const RULES = [
     policy: {
       kind: 'blocklist',
       // inventory is a pure domain: only shared/ and data/ allowed (and local inventory/ imports)
-      banned: ['battle', 'core', 'progression', 'objects', 'scenes', 'ui', 'world'],
+      banned: ['battle', 'core', 'progression', 'objects', 'scenes', 'ui', 'world', 'save'],
     },
   },
   {
@@ -146,8 +149,20 @@ const RULES = [
     policy: {
       kind: 'blocklist',
       // campaign is a persistent-state contract: shared/, progression/, inventory/, world/ (type
-      // contracts) allowed; no battle/core/scenes/objects/ui
-      banned: ['battle', 'core', 'objects', 'scenes', 'ui'],
+      // contracts) allowed; no battle/core/scenes/objects/ui. save/ is also banned here even
+      // though SaveRepository references CampaignState — the dependency is one-way (save → campaign).
+      banned: ['battle', 'core', 'objects', 'scenes', 'ui', 'save'],
+    },
+  },
+  {
+    layer: 'save/**',
+    root: 'save',
+    // Closed allowlist, same shape as world/**: save/ may reach only itself, campaign/
+    // (for the CampaignState contract) and shared/. No core/battle/rendering/Phaser.
+    policy: {
+      kind: 'src-allowlist',
+      allowedSrcRoots: ['save', 'campaign', 'shared'],
+      bannedPackages: ['phaser'],
     },
   },
 ];
