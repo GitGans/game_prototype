@@ -118,6 +118,7 @@ const RULES = [
       // core is the future orchestration layer for save/load — it is the only layer
       // allowed to import save/ (not yet exercised: no save action exists in this stage)
       banned: [
+        'phaser',
         'ui/theme',
         'objects/battleVisualTheme',
         'objects/worldMapVisualTheme',

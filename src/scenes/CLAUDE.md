@@ -11,7 +11,9 @@ Scenes are the rendering and input layer of the game. Each scene corresponds to 
 - Bootstrap and asset loading during startup
 
 ## Key Files
-- `Boot.ts` — initializes `PhaseManager`, transitions immediately to `Preloader`
+- `Boot.ts` — initializes `PhaseManager` by injecting a `PhaserSceneSynchronizer(this.game)` via `PhaseManager.init()`, transitions immediately to `Preloader`
+- `phaserSceneSynchronizer.ts` — `PhaserSceneSynchronizer`: the sole gameplay adapter implementing `core/phaseSceneSynchronizer.ts`'s `PhaseSceneSynchronizer` interface. Maps every `GamePhase.type` to a scene key via a compile-time-exhaustive `Record`, stops non-target active/paused gameplay scenes, and starts the target. Contains no phase-routing decisions, `GameState` mutations, or snapshot logic — only the mapping and the stop/start sequence. Constructed with the live `Phaser.Game` instance; uses a type-only `Phaser` import so its own unit tests never load real Phaser
+- `sceneEvents.ts` — `bindStateChanged(scene, handler, context)`: subscribes to the Phaser-free `core/EventBus`'s `STATE_CHANGED` event and auto-unsubscribes on the scene's Phaser `SHUTDOWN`/`DESTROY` lifecycle events. Phaser scene-lifecycle binding belongs here, not under `core/`
 - `Preloader.ts` — loads all sprite sheets and images, then transitions to `MainMenu`
 - `MainMenu.ts` — entry screen; routes to new game or debug flow
 - `Game.ts` — battle scene shell; creates grid/unit views, wires battle controllers, routes pointer input, refreshes views from `GamePhase`, and constructs the battle-end overlay. Battle logic lives in the three controllers below.
@@ -55,7 +57,7 @@ user interaction event
 PhaseManager resolves next phase and syncs scenes
 
 ## Dependencies
-- depends on: `src/core/PhaseManager`, `src/core/EventBus`, `src/ui/`, `src/objects/`, `src/battle/`
+- depends on: `src/core/PhaseManager`, `src/core/EventBus`, `src/core/phaseSceneSynchronizer` (the interface `PhaserSceneSynchronizer` implements), `src/ui/`, `src/objects/`, `src/battle/`
 - used by: Phaser scene registry (registered in game config); nothing imports scenes directly
 - no scene imports `src/core/GameState` directly — all render data, including world map state
   (`WorldMap` reads `mapId`/`partyPos`/`mapState` from the `world_map` phase snapshot), comes
@@ -87,4 +89,6 @@ PhaseManager resolves next phase and syncs scenes
 - change post-battle display → `BattleResults.ts`
 - change asset loading → `Preloader.ts`
 - change startup flow → `Boot.ts`
+- change the phase-to-scene mapping or which scenes get stopped/started → `phaserSceneSynchronizer.ts`
+- change scene-lifecycle event binding (auto-cleanup on shutdown/destroy) → `sceneEvents.ts`
 - change debug level picker → `DebugLevelSelect.ts`

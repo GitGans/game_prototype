@@ -57,10 +57,15 @@ resolveTransition()  →  next GamePhase  (pure, no side effects)
 ↓
 applyActionSideEffects()  →  mutate CampaignState / BattleState
 ↓
-syncPhaserScenes()  →  start scene
+PhaseSceneSynchronizer.sync(phase)  →  start scene
 ↓
 scene reads GamePhase and renders
 ```
+
+`PhaseManager` (`src/core/`) never touches Phaser directly — it delegates scene start/stop to an
+injected `PhaseSceneSynchronizer` (contract in `core/`, Phaser implementation in
+`scenes/phaserSceneSynchronizer.ts`). `core/**` must not import `phaser` at all, including
+type-only imports — enforced by `check-boundaries.mjs`.
 
 ## Entry Points
 

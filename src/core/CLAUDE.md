@@ -30,15 +30,15 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `debugPlayerSession.ts` — pure debug session factory; the only place a debug `PlayerSessionState` is constructed. Must remain a pure function of `(config, playerUnits, itemCatalog)` — no RNG, no clock, no hidden `GameState` reads — because that purity is what makes `resetDebugSession()` a reproducible operation
 - `debugLifecycle.ts` (Stage 9) — the single owner of debug-session *container* lifecycle: `initializeDebugSession(config)`, `resetDebugSession()`, `clearDebugSession()`. This is a different seam from the `phaseHandlers/*` files below: those mutate the *contents* of an already-existing session, resolved via `PlayerSessionStore.getSession(source)`; `debugLifecycle.ts` creates, replaces, or destroys the *container* (`DebugBattleState` itself) and writes through `GameState.setDebugState()`/`clearDebugState()` directly. It contains no roster/inventory/progression/battle-result rules
 - `DebugBattleState.ts` — `{ session: PlayerSessionState, initialConfig: DebugSessionConfig }`; owned by `GameState`, never placed inside `CampaignState`. `initialConfig` is what `resetDebugSession()` rebuilds from
-- `worldMapProjection.ts` — pure projections used by `PhaseManager`'s `world_map` phase: `projectWorldMapSnapshot` (CampaignState.world + roster party status → phase snapshot) and `applyMovePartyToCampaign`. Party status rides on the world-map snapshot so `resolveTransition` can reject `enter_battle` for an invalid party without reading roster state. Kept outside `PhaseManager.ts` (which imports the real `phaser` package) so this logic is unit-testable without a Phaser instance.
+- `worldMapProjection.ts` — pure projections used by `PhaseManager`'s `world_map` phase: `projectWorldMapSnapshot` (CampaignState.world + roster party status → phase snapshot) and `applyMovePartyToCampaign`. Party status rides on the world-map snapshot so `resolveTransition` can reject `enter_battle` for an invalid party without reading roster state.
 - `battleInitialization.ts` — battle state factory; builds auto-placed or replay battle states. `buildNewBattleState()` places players first (before any enemy RNG is consumed) and returns the ordered `playerPlacements` records alongside the state. `buildReplayBattleState()` returns `{ state, playerPlacements }` for the same reason: the replay attempt's participants must be built from *its own* placement records
 - `battleSetupProjection.ts` — `projectPlayerBattleSetup(session)`: the one player battle-setup projection shared by campaign and debug. Takes a `PlayerSessionState` directly; never reads `GameState`, never branches on campaign/debug, never mutates the session. Projects **every** unit outside camp, alive or dead — a persistent-dead unit becomes a fully resolved candidate whose factory produces a canonical dead runtime unit. A blueprint with no roster record is skipped, never synthesized
 - `battleParticipants.ts` — `buildInitialBattleParticipants(state, placements)`: the one participant builder for campaign and debug. The placement records are the initial-deployment truth (`wasOnBench` comes from the record, never from current `state.deployments`), and `isAlive` from the battle-domain `isAlive()` — so a unit that began the battle dead is present with `isAlive: false`. Reads only `BattleState` + records
 - `battleStart.ts` — the one owner of battle-attempt construction for campaign and debug. `createBattleRuntimeForSession()` builds a new encounter (party status → setup projection → initialization with RNG → participants → runtime); `createReplayBattleRuntimeForSession()` rebuilds an attempt (party status → setup projection → enemy restoration from the captured `replaySetup` → participants → runtime). Neither takes a `BattleRuntimeContext`: replay receives only `session`, `replaySetup` and `sessionSource`, because those are the only facts that cross an attempt boundary — the previous attempt's participants, state, mode and turn context are out of scope by construction, not by convention. Both are pure composition: they return a runtime, never install one, never import `GameState`, and never accept map metadata. Neither branches on `sessionSource`; replay additionally consumes no RNG. Both throw on an invalid party (shared `assertPartyCanStartBattle`), because `resolveTransition` must already have rejected the action
 - `unitStatsSnapshot.ts` — computes base and final stats for display
 - `unitUpgradePresentation.ts` — generates upgrade text, stat lines, and skill descriptions for UI
-- `EventBus.ts` — `STATE_CHANGED` event singleton; scenes subscribe via `sceneEvents.ts`
-- `sceneEvents.ts` — binds Phaser scene lifecycle to `STATE_CHANGED` with auto-cleanup
+- `EventBus.ts` — `STATE_CHANGED` event singleton. Phaser-independent (a small hand-rolled emitter, not `Phaser.Events.EventEmitter`); notification-only, never carries domain state, and never replaces `PhaseManager.getPhase()` as the render-data source. Scenes subscribe via `scenes/sceneEvents.ts` or call `on`/`off` directly
+- `phaseSceneSynchronizer.ts` — `PhaseSceneSynchronizer` interface (`sync(phase: GamePhase): void`); the only contract through which `PhaseManager` requests scene start/stop. No Phaser, no scene keys — the Phaser implementation (`PhaserSceneSynchronizer`, phase→scene-key mapping) lives in `scenes/phaserSceneSynchronizer.ts`, injected into `PhaseManager` via `PhaseManager.init()`
 - `Constants.ts` — grid layout, bench config, combat constants (visual colors removed; see `src/objects/battleVisualTheme.ts`)
 - `playerUnitPersistence.ts` — the pure owner of persistent player-unit transformations (life state, HP, level, placement), source-neutral throughout. `applyFieldPlacementsToRoster(roster, state)` is the **single placement rule** for both confirmed combat and battle exit: field-deployed player units, **living and dead alike**, get a copied `lastPlacement`; bench and undeployed units keep theirs; a field player with no roster record throws. `applyBattleExitPlayerPersistence(units, exits)` applies runtime HP/life only (placement is not its concern) and `applyVictoryLevelUpPersistence(units, levelUps)` applies levels; both treat a missing roster record as a thrown lifecycle error rather than a skipped input. `computeBattleExitPlayerPersistence(runtime)` takes a **required** runtime snapshot — there is no "missing runtime" fallback and `wasOnBench` never decides persistent HP or life state.
 - `playerBattleExitProjection.ts` — `buildPlayerExitInputs(participants, state)`: runtime → persistence projection, HP/life only. It enforces the participant/runtime one-to-one invariant (see Invariants) and throws on any deviation. Placement is not projected here.
@@ -56,9 +56,15 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 ↓
 `rebuildSnapshot()` — reads state, produces new `GamePhase` snapshot
 ↓
-`syncPhaserScenes()` — starts/stops scenes; emits `STATE_CHANGED`
+`PhaseSceneSynchronizer.sync(phase)` — starts/stops scenes (navigation only); `EventBus.emit(STATE_CHANGED)` on mutation-only transitions
 ↓
 Scenes re-render from new `GamePhase`
+
+`PhaseManager` never calls Phaser directly. It holds a `PhaseSceneSynchronizer` (injected via
+`init()`) and validates it is initialized **before** `applyActionSideEffects()` runs for any
+navigating transition — not only at the final `sync()` call — so a missing `init()` call aborts
+with zero state mutation rather than partially mutating `GameState`. Rejected and mutation-only
+transitions never require a scene synchronizer.
 
 ## Dependencies
 - depends on: `src/battle/` (unit factory, placement logic, auto-place), `src/inventory/` (equip/unequip, equipment bonuses, inventory snapshots), `src/data/` (unit/enemy blueprints, item definitions), `src/progression/` (unit progression and skill resolution)
@@ -193,7 +199,7 @@ Scenes re-render from new `GamePhase`
 **Not acceptable:** direct `GameState` reads in scenes, scene controllers, or battle render paths. Use `PhaseManager.getPhase()` and snapshot fields instead.
 
 ## Where to Modify
-- Add a new game screen → `phases.ts` (new `GamePhase` variant) + `PhaseManager.ts` (`resolveTransition`, `applyActionSideEffects`, `syncPhaserScenes`)
+- Add a new game screen → `phases.ts` (new `GamePhase` variant) + `PhaseManager.ts` (`resolveTransition`, `applyActionSideEffects`) + `scenes/phaserSceneSynchronizer.ts` (add the new phase's entry to `PHASE_SCENE_KEYS`; the mapping is a compile-time-exhaustive `Record<GamePhase['type'], GameplaySceneKey>`, so a missing entry is a build failure, not a silent no-op)
 - Add a new player action → `phases.ts` (`PhaseAction`) + `PhaseManager.ts` (`applyActionSideEffects`)
 - Change battle placement logic → `phaseHandlers/battlePhaseHandler.ts`
 - Change battle turn-flow action handling → `phaseHandlers/battlePhaseHandler.ts` and `PhaseManager.applyActionSideEffects()`
@@ -212,7 +218,8 @@ Scenes re-render from new `GamePhase`
 - Change debug session initial config/contracts → `DebugBattleState.ts`; change how a debug session is built → `debugPlayerSession.ts`; change debug session create/reset/dispose lifecycle → `debugLifecycle.ts`; change when/how that lifecycle runs (RNG reset, runtime cleanup, which action triggers it) → `PhaseManager.applyActionSideEffects()`
 - Change campaign initial content/config → `src/data/campaignInitialStateDefinition.ts`; change how a campaign is built → `initCampaignState.ts`
 - Change world_map snapshot projection or party movement → `worldMapProjection.ts`
-- Change cross-scene event wiring → `EventBus.ts` / `sceneEvents.ts`
+- Change cross-scene event wiring → `EventBus.ts` (Phaser-independent notification emitter) / `scenes/sceneEvents.ts` (Phaser scene-lifecycle binding)
+- Change how `PhaseManager` synchronizes Phaser scenes → `scenes/phaserSceneSynchronizer.ts` (the contract it depends on is `phaseSceneSynchronizer.ts`, which stays Phaser-free)
 - Change equip/unequip mutation logic → `phaseHandlers/inventoryPhaseHandler.ts`
 - Change what the equip screens render (backpack, equipment, stats, skills, sprite, unit tabs) → `equipmentScreenSnapshot.ts`
 - Change how campaign vs. debug storage is resolved for equipment/camp/upgrade → `playerSessionStore.ts`

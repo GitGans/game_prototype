@@ -1,5 +1,5 @@
-import Phaser from 'phaser';
 import { GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from './phases';
+import type { PhaseSceneSynchronizer } from './phaseSceneSynchronizer';
 import type { BattleRuntimeContext } from './battleRuntimeContext';
 import type { DebugBattleState, DebugSessionConfig } from './DebugBattleState';
 import { initializeDebugSession, resetDebugSession, clearDebugSession } from './debugLifecycle';
@@ -48,9 +48,9 @@ import { hasChargedThisRound, resetTurnContextForNewBattle } from '../battle/tur
 import { canBeginCombat } from '../battle/combatStart';
 import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
 
-class PhaseManagerClass {
+export class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
-  private game!: Phaser.Game;
+  private sceneSynchronizer: PhaseSceneSynchronizer | null = null;
   private lastBattleTransition: BattlePhaseActionResult | null = null;
   private rngStreams: GameplayRngStreams = createDefaultGameplayRngStreams();
 
@@ -73,8 +73,17 @@ class PhaseManagerClass {
     this.rngStreams = createDefaultGameplayRngStreams();
   }
 
-  init(game: Phaser.Game): void {
-    this.game = game;
+  init(sceneSynchronizer: PhaseSceneSynchronizer): void {
+    this.sceneSynchronizer = sceneSynchronizer;
+  }
+
+  private requireSceneSynchronizer(): PhaseSceneSynchronizer {
+    if (!this.sceneSynchronizer) {
+      throw new Error(
+        'PhaseManager.transition() called before PhaseManager.init() — no PhaseSceneSynchronizer registered.',
+      );
+    }
+    return this.sceneSynchronizer;
   }
 
   getPhase(): GamePhase {
@@ -102,15 +111,23 @@ class PhaseManagerClass {
   }
 
   transition(action: PhaseAction): void {
-    this.lastBattleTransition = null;
     let mapCleared = false;
     if (action.type === 'exit_battle' && action.outcome === 'victory' && this.phase.type === 'battle') {
       mapCleared = wouldClearMap(this.phase);
     }
 
     const next = resolveTransition(this.phase, action, mapCleared);
-    if (next === null) return; // invalid action for current phase
+    if (next === null) {
+      this.lastBattleTransition = null;
+      return; // invalid action for current phase
+    }
 
+    // Navigation precondition: fail before any side effect runs, so a missing
+    // init() call never leaves GameState (or this.lastBattleTransition) mutated
+    // while `this.phase` is stale.
+    const sceneSynchronizer = next !== this.phase ? this.requireSceneSynchronizer() : null;
+
+    this.lastBattleTransition = null;
     this.applyActionSideEffects(action, this.phase, next);
 
     // Leaving the battle phase always clears the whole runtime atomically — no
@@ -130,7 +147,7 @@ class PhaseManagerClass {
 
     // Navigation: rebuild snapshot for new phase, start scene
     this.phase = this.rebuildSnapshot(next);
-    this.syncPhaserScenes(this.phase);
+    sceneSynchronizer!.sync(this.phase);
   }
 
   // Recomputes data snapshots for phases that carry them.
@@ -536,30 +553,6 @@ class PhaseManagerClass {
     //     delete GameState.itemInstances[action.instanceId];
     //   }
     // }
-  }
-
-  private readonly GAME_SCENES = ['MainMenu', 'WorldMap', 'Prep', 'Game', 'BattleResults', 'EquipScreen', 'DebugLevelSelect', 'UpgradeTreeScreen', 'MapVictory'];
-
-  private syncPhaserScenes(phase: GamePhase): void {
-    const sm = this.game.scene;
-    let nextScene: string;
-    switch (phase.type) {
-      case 'main_menu':         nextScene = 'MainMenu';         break;
-      case 'world_map':         nextScene = 'WorldMap';         break;
-      case 'battle':            nextScene = 'Game';             break;
-      case 'camp':              nextScene = 'Prep';             break;
-      case 'battle_results':    nextScene = 'BattleResults';    break;
-      case 'equip_screen':      nextScene = 'EquipScreen';      break;
-      case 'debug_equip_screen':nextScene = 'EquipScreen';      break;
-      case 'debug_level_select':nextScene = 'DebugLevelSelect'; break;
-      case 'upgrade_tree':      nextScene = 'UpgradeTreeScreen'; break;
-      case 'map_victory':       nextScene = 'MapVictory';        break;
-      default: return;
-    }
-    for (const key of this.GAME_SCENES) {
-      if (key !== nextScene && (sm.isActive(key) || sm.isPaused(key))) sm.stop(key);
-    }
-    sm.start(nextScene);
   }
 
 }
