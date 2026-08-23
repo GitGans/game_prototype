@@ -14,156 +14,212 @@
 // both `../core/GameState` from another layer and `./GameState` from inside
 // core/ itself.
 
-import { readFileSync, readdirSync, statSync } from 'fs';
-import { join, relative, dirname, resolve, sep } from 'path';
-import { findImports } from './import-scanner.mjs';
+import { readFileSync, readdirSync, statSync } from "fs";
+import { join, relative, dirname, resolve, sep } from "path";
+import { findImports } from "./import-scanner.mjs";
 import {
   evaluateDirectoryPolicy,
   matchesPathPrefix,
-} from './boundary-policy.mjs';
-import { findUncoveredLayers } from './layer-coverage.mjs';
+} from "./boundary-policy.mjs";
+import { findUncoveredLayers } from "./layer-coverage.mjs";
+import { findPhaseManagerTypeDiscriminatorReads } from "./phase-manager-policy.mjs";
+import {
+  PHASE_MANAGER_IMPORT_POLICY,
+  PHASE_HANDLER_IMPORT_POLICIES,
+  PHASE_HANDLER_COVERAGE_EXCLUSIONS,
+  SCENES_IMPORT_POLICY,
+  SCENE_CONTROL_POLICY,
+} from "./orchestration-boundary-rules.mjs";
+import { checkPhaseHandlerCoverage } from "./phase-handler-coverage.mjs";
+import {
+  findSceneControlCalls,
+  evaluateSceneControlCalls,
+} from "./scene-control-policy.mjs";
 
-const SRC = new URL('../src', import.meta.url).pathname;
+const SRC = new URL("../src", import.meta.url).pathname;
 const errors = [];
+
+function readTargetFile(absolutePath, policyLabel) {
+  try {
+    return readFileSync(absolutePath, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      errors.push(
+        `  [${policyLabel}] boundary rule targets a missing file: ${relative(SRC, absolutePath)}`,
+      );
+      return null;
+    }
+    throw err;
+  }
+}
 
 function* walkFiles(dir) {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
-    if (statSync(full).isDirectory()) { yield* walkFiles(full); continue; }
-    if (!name.endsWith('.ts') && !name.endsWith('.tsx')) continue;
-    yield [full, readFileSync(full, 'utf8')];
+    if (statSync(full).isDirectory()) {
+      yield* walkFiles(full);
+      continue;
+    }
+    if (!name.endsWith(".ts") && !name.endsWith(".tsx")) continue;
+    yield [full, readFileSync(full, "utf8")];
   }
 }
 
 const RULES = [
   {
-    layer: 'shared/**',
-    root: 'shared',
+    layer: "shared/**",
+    root: "shared",
     policy: {
-      kind: 'blocklist',
-      banned: ['battle', 'core', 'data', 'objects', 'scenes', 'ui', 'world', 'save'],
+      kind: "blocklist",
+      banned: [
+        "battle",
+        "core",
+        "data",
+        "objects",
+        "scenes",
+        "ui",
+        "world",
+        "save",
+      ],
     },
   },
   {
-    layer: 'data/**',
-    root: 'data',
+    layer: "data/**",
+    root: "data",
     policy: {
-      kind: 'blocklist',
+      kind: "blocklist",
       // data/ → shared/ is explicitly allowed
-      banned: ['battle', 'core', 'objects', 'scenes', 'ui', 'world', 'save'],
+      banned: ["battle", "core", "objects", "scenes", "ui", "world", "save"],
     },
   },
   {
-    layer: 'world/**',
-    root: 'world',
+    layer: "world/**",
+    root: "world",
     // world is a pure domain layer restricted by an allowlist, not a blocklist:
     // it may reach only its own modules and shared/ contracts. Because this is
     // closed rather than open, a future domain (save/, dialogue/, ...) is
     // rejected automatically without ever editing this rule.
     policy: {
-      kind: 'src-allowlist',
-      allowedSrcRoots: ['world', 'shared'],
-      bannedPackages: ['phaser'],
+      kind: "src-allowlist",
+      allowedSrcRoots: ["world", "shared"],
+      bannedPackages: ["phaser"],
     },
   },
   {
-    layer: 'battle/**',
-    root: 'battle',
+    layer: "battle/**",
+    root: "battle",
     policy: {
-      kind: 'blocklist',
-      banned: ['core', 'campaign', 'phaser', 'save'],
+      kind: "blocklist",
+      banned: ["core", "campaign", "phaser", "save"],
     },
   },
   {
-    layer: 'ui/**',
-    root: 'ui',
+    layer: "ui/**",
+    root: "ui",
     policy: {
-      kind: 'blocklist',
+      kind: "blocklist",
       // core/Constants (LAYOUT_SCALE) is explicitly allowed
-      banned: ['core/GameState', 'core/PhaseManager', 'core/EventBus', 'objects', 'scenes', 'battle', 'world', 'save'],
-    },
-  },
-  {
-    layer: 'objects/**',
-    root: 'objects',
-    policy: {
-      kind: 'blocklist',
-      // core/Constants, core/phases, core/unitSpriteKey, battle/types allowed; battle runtime modules banned
       banned: [
-        'core/GameState', 'core/PhaseManager', 'core/EventBus', 'scenes',
-        'battle/combat',
-        'battle/skillRuntime',
-        'battle/skillPatterns',
-        'battle/skillDefinitionRuntime',
-        'battle/skillPreview',
-        'battle/turnResolver',
-        'save',
+        "core/GameState",
+        "core/PhaseManager",
+        "core/EventBus",
+        "objects",
+        "scenes",
+        "battle",
+        "world",
+        "save",
       ],
     },
   },
   {
-    layer: 'scenes/**',
-    root: 'scenes',
+    layer: "objects/**",
+    root: "objects",
     policy: {
-      kind: 'blocklist',
-      // Only skill preview is banned; broader scenes -> battle dependencies remain allowed in this stage
-      banned: ['battle/skillPreview', 'save'],
+      kind: "blocklist",
+      // core/Constants, core/phases, core/unitSpriteKey, battle/types allowed; battle runtime modules banned
+      banned: [
+        "core/GameState",
+        "core/PhaseManager",
+        "core/EventBus",
+        "scenes",
+        "battle/combat",
+        "battle/skillRuntime",
+        "battle/skillPatterns",
+        "battle/skillDefinitionRuntime",
+        "battle/skillPreview",
+        "battle/turnResolver",
+        "save",
+      ],
     },
   },
   {
-    layer: 'core/**',
-    root: 'core',
+    layer: "scenes/**",
+    root: "scenes",
+    policy: SCENES_IMPORT_POLICY,
+  },
+  {
+    layer: "core/**",
+    root: "core",
     policy: {
-      kind: 'blocklist',
+      kind: "blocklist",
       // core is the future orchestration layer for save/load — it is the only layer
       // allowed to import save/ (not yet exercised: no save action exists in this stage)
       banned: [
-        'phaser',
-        'ui/theme',
-        'objects/battleVisualTheme',
-        'objects/worldMapVisualTheme',
-        'objects/itemVisualTheme',
-        'objects/prepVisualTheme',
+        "phaser",
+        "ui/theme",
+        "objects/battleVisualTheme",
+        "objects/worldMapVisualTheme",
+        "objects/itemVisualTheme",
+        "objects/prepVisualTheme",
       ],
     },
   },
   {
-    layer: 'progression/**',
-    root: 'progression',
+    layer: "progression/**",
+    root: "progression",
     policy: {
-      kind: 'blocklist',
-      banned: ['core', 'battle', 'objects', 'scenes', 'ui', 'world', 'save'],
+      kind: "blocklist",
+      banned: ["core", "battle", "objects", "scenes", "ui", "world", "save"],
     },
   },
   {
-    layer: 'inventory/**',
-    root: 'inventory',
+    layer: "inventory/**",
+    root: "inventory",
     policy: {
-      kind: 'blocklist',
+      kind: "blocklist",
       // inventory is a pure domain: only shared/ and data/ allowed (and local inventory/ imports)
-      banned: ['battle', 'core', 'progression', 'objects', 'scenes', 'ui', 'world', 'save'],
+      banned: [
+        "battle",
+        "core",
+        "progression",
+        "objects",
+        "scenes",
+        "ui",
+        "world",
+        "save",
+      ],
     },
   },
   {
-    layer: 'campaign/**',
-    root: 'campaign',
+    layer: "campaign/**",
+    root: "campaign",
     policy: {
-      kind: 'blocklist',
+      kind: "blocklist",
       // campaign is a persistent-state contract: shared/, progression/, inventory/, world/ (type
       // contracts) allowed; no battle/core/scenes/objects/ui. save/ is also banned here even
       // though SaveRepository references CampaignState — the dependency is one-way (save → campaign).
-      banned: ['battle', 'core', 'objects', 'scenes', 'ui', 'save'],
+      banned: ["battle", "core", "objects", "scenes", "ui", "save"],
     },
   },
   {
-    layer: 'save/**',
-    root: 'save',
+    layer: "save/**",
+    root: "save",
     // Closed allowlist, same shape as world/**: save/ may reach only itself, campaign/
     // (for the CampaignState contract) and shared/. No core/battle/rendering/Phaser.
     policy: {
-      kind: 'src-allowlist',
-      allowedSrcRoots: ['save', 'campaign', 'shared'],
-      bannedPackages: ['phaser'],
+      kind: "src-allowlist",
+      allowedSrcRoots: ["save", "campaign", "shared"],
+      bannedPackages: ["phaser"],
     },
   },
 ];
@@ -177,20 +233,20 @@ const LAYER_COVERAGE_EXCLUSIONS = [];
 
 function listTopLevelSourceDirectories() {
   return readdirSync(SRC, { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
-    .map(entry => entry.name);
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
 }
 
 const uncoveredLayers = findUncoveredLayers({
   discoveredRoots: listTopLevelSourceDirectories(),
-  ruleRoots: RULES.map(rule => rule.root),
+  ruleRoots: RULES.map((rule) => rule.root),
   exclusions: LAYER_COVERAGE_EXCLUSIONS,
 });
 
 for (const root of uncoveredLayers) {
   errors.push(
     `  ${root}/**  [layer-coverage] has no directory boundary rule ` +
-    'and no explicit exclusion with an architectural reason',
+      "and no explicit exclusion with an architectural reason",
   );
 }
 
@@ -201,73 +257,123 @@ for (const root of uncoveredLayers) {
 // GameState dependency.
 const PURE_CORE_FILES = [
   {
-    file: join(SRC, 'core', 'battleSetupProjection.ts'),
+    file: join(SRC, "core", "battleSetupProjection.ts"),
     banned: [
-      'core/GameState', 'core/DebugBattleState', 'core/phases', 'core/PhaseManager',
-      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/phases",
+      "core/PhaseManager",
+      "campaign",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
     ],
   },
   {
-    file: join(SRC, 'core', 'battleParticipants.ts'),
+    file: join(SRC, "core", "battleParticipants.ts"),
     banned: [
-      'progression', 'inventory', 'campaign',
-      'core/GameState', 'core/DebugBattleState', 'core/playerSessionStore',
-      'core/phases', 'core/PhaseManager',
-      'scenes', 'objects', 'ui', 'phaser',
+      "progression",
+      "inventory",
+      "campaign",
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/playerSessionStore",
+      "core/phases",
+      "core/PhaseManager",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
     ],
   },
   {
-    file: join(SRC, 'core', 'battleStart.ts'),
+    file: join(SRC, "core", "battleStart.ts"),
     // May import the core session CONTRACT (playerSessionState) — it is the
     // composition boundary — but never the runtime store or a rendering layer.
     banned: [
-      'core/GameState', 'core/DebugBattleState', 'core/playerSessionStore',
-      'core/phases', 'core/PhaseManager',
-      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/playerSessionStore",
+      "core/phases",
+      "core/PhaseManager",
+      "campaign",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
     ],
   },
   {
-    file: join(SRC, 'core', 'battleExit.ts'),
+    file: join(SRC, "core", "battleExit.ts"),
     // The source-neutral battle-result rule. May compose battle runtime contracts,
     // progression, the session CONTRACT and static definitions — never storage, never a
     // source key, never phase contracts.
     banned: [
-      'core/GameState', 'core/DebugBattleState', 'core/playerSessionStore',
-      'core/phases', 'core/PhaseManager',
-      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/playerSessionStore",
+      "core/phases",
+      "core/PhaseManager",
+      "campaign",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
     ],
   },
   {
-    file: join(SRC, 'core', 'playerBattleExitProjection.ts'),
+    file: join(SRC, "core", "playerBattleExitProjection.ts"),
     banned: [
-      'core/GameState', 'core/DebugBattleState',
-      'core/playerSessionState', 'core/playerSessionStore',
-      'core/phases', 'core/PhaseManager',
-      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/playerSessionState",
+      "core/playerSessionStore",
+      "core/phases",
+      "core/PhaseManager",
+      "campaign",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
     ],
   },
   {
-    file: join(SRC, 'core', 'battleResultsSnapshot.ts'),
+    file: join(SRC, "core", "battleResultsSnapshot.ts"),
     // A phase snapshot builder: it may import the phase snapshot CONTRACT
     // (BattleResultParticipantSeed / BattleResultUnit) type-only, exactly like
     // rosterCampSnapshot.ts and upgradeTreeSnapshot.ts. It receives a roster explicitly
     // and never resolves storage itself.
     banned: [
-      'core/GameState', 'core/DebugBattleState',
-      'core/playerSessionState', 'core/playerSessionStore',
-      'core/PhaseManager',
-      'campaign', 'scenes', 'objects', 'ui', 'phaser',
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/playerSessionState",
+      "core/playerSessionStore",
+      "core/PhaseManager",
+      "campaign",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
     ],
   },
   {
-    file: join(SRC, 'core', 'playerUnitPersistence.ts'),
+    file: join(SRC, "core", "playerUnitPersistence.ts"),
     // The pure owner of persistent player-unit transformations. It may see battle
     // runtime contracts and progression roster contracts — never storage or a source key.
     banned: [
-      'core/GameState', 'core/DebugBattleState',
-      'core/playerSessionState', 'core/playerSessionStore',
-      'core/phases', 'core/PhaseManager',
-      'campaign', 'inventory', 'scenes', 'objects', 'ui', 'phaser',
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/playerSessionState",
+      "core/playerSessionStore",
+      "core/phases",
+      "core/PhaseManager",
+      "campaign",
+      "inventory",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
     ],
   },
 ];
@@ -279,18 +385,149 @@ const PURE_CORE_FILES = [
 //   '../../battle/types' from src/core/a/b.ts  → battle/types
 // Bare package specifiers ('phaser', 'vitest') pass through unchanged.
 function normalizeSpecifier(importerFile, spec) {
-  if (!spec.startsWith('.')) return spec;
-  return relative(SRC, resolve(dirname(importerFile), spec)).split(sep).join('/');
+  if (!spec.startsWith(".")) return spec;
+  return relative(SRC, resolve(dirname(importerFile), spec))
+    .split(sep)
+    .join("/");
+}
+
+// ─── Pure phase transition resolver ─────────────────────────────────────────
+// Resolver may import only phase contracts. Every other dependency is rejected.
+const PHASE_TRANSITION_RESOLVER_FILE = join(
+  SRC,
+  "core",
+  "phaseTransitionResolver.ts",
+);
+
+const PHASE_TRANSITION_RESOLVER_IMPORT_POLICY = {
+  kind: "exact-import-allowlist",
+  allowedSpecifiers: ["core/phases"],
+};
+
+{
+  const content = readTargetFile(
+    PHASE_TRANSITION_RESOLVER_FILE,
+    "phaseTransitionResolver allowlist",
+  );
+
+  for (const { spec, line } of content !== null ? findImports(content) : []) {
+    const normalizedSpecifier = normalizeSpecifier(
+      PHASE_TRANSITION_RESOLVER_FILE,
+      spec,
+    );
+
+    const violation = evaluateDirectoryPolicy({
+      policy: PHASE_TRANSITION_RESOLVER_IMPORT_POLICY,
+      normalizedSpecifier,
+      isRelativeSpecifier: spec.startsWith("."),
+    });
+
+    if (violation === null) continue;
+
+    errors.push(
+      `  core/phaseTransitionResolver.ts:${line} ` +
+        `[phaseTransitionResolver allowlist] ` +
+        `may import only core/phases  →  "${spec}"`,
+    );
+  }
+}
+
+// ─── PhaseManager import allowlist ─────────────────────────────────────────
+// PhaseManager is only the transition-pipeline coordinator. Any new dependency
+// must be an explicit orchestration dependency approved here.
+const PHASE_MANAGER_FILE = join(SRC, "core", "PhaseManager.ts");
+
+{
+  const content = readTargetFile(PHASE_MANAGER_FILE, "PhaseManager allowlist");
+
+  for (const { spec, line } of content !== null ? findImports(content) : []) {
+    const normalizedSpecifier = normalizeSpecifier(PHASE_MANAGER_FILE, spec);
+
+    const violation = evaluateDirectoryPolicy({
+      policy: PHASE_MANAGER_IMPORT_POLICY,
+      normalizedSpecifier,
+      isRelativeSpecifier: spec.startsWith("."),
+    });
+
+    if (violation === null) continue;
+
+    errors.push(
+      `  core/PhaseManager.ts:${line}  [PhaseManager allowlist] ` +
+        `may import only approved orchestration modules  →  "${spec}"`,
+    );
+  }
+}
+
+// ─── PhaseManager must not inspect phase/action discriminators ──────────────
+{
+  const content = readTargetFile(PHASE_MANAGER_FILE, "PhaseManager coordinator");
+
+  for (const violation of content !== null
+    ? findPhaseManagerTypeDiscriminatorReads(content)
+    : []) {
+    errors.push(
+      `  core/PhaseManager.ts:${violation.line} ` +
+        `[PhaseManager coordinator] must not read ${violation.form}`,
+    );
+  }
+}
+
+// ─── Phase handler import allowlists ───────────────────────────────────────
+for (const [handlerKey, policy] of Object.entries(PHASE_HANDLER_IMPORT_POLICIES)) {
+  const file = join(SRC, ...handlerKey.split("/"));
+  const content = readTargetFile(file, `${handlerKey} allowlist`);
+  if (content === null) continue;
+
+  for (const { spec, line } of findImports(content)) {
+    const normalizedSpecifier = normalizeSpecifier(file, spec);
+    const violation = evaluateDirectoryPolicy({
+      policy,
+      normalizedSpecifier,
+      isRelativeSpecifier: spec.startsWith("."),
+    });
+    if (violation === null) continue;
+
+    errors.push(
+      `  ${handlerKey}:${line}  [${handlerKey} allowlist] ` +
+        `may import only approved dependencies  →  "${spec}"`,
+    );
+  }
+}
+
+// ─── Phase handler coverage ─────────────────────────────────────────────────
+const discoveredHandlers = [...walkFiles(join(SRC, "core", "phaseHandlers"))].map(
+  ([file]) => relative(SRC, file).split(sep).join("/"),
+);
+
+for (const problem of checkPhaseHandlerCoverage({
+  discoveredHandlers,
+  policies: PHASE_HANDLER_IMPORT_POLICIES,
+  exclusions: PHASE_HANDLER_COVERAGE_EXCLUSIONS,
+})) {
+  errors.push(`  [phase-handler-coverage] ${problem}`);
+}
+
+// ─── Phaser scene-control scan ──────────────────────────────────────────────
+for (const [file, content] of walkFiles(SRC)) {
+  const relPath = relative(SRC, file).split(sep).join("/");
+  const calls = findSceneControlCalls(content, relPath);
+  if (calls.length === 0) continue;
+
+  for (const problem of evaluateSceneControlCalls(calls, SCENE_CONTROL_POLICY[relPath])) {
+    errors.push(`  ${relPath}:${problem.line}  [scene-control] ${problem.method}() ${problem.reason}`);
+  }
 }
 
 // ─── Visual theme isolation ────────────────────────────────────────────────
 // Domain visual theme files must not import from ui/theme.
 // Importing UI_THEME would create a layering violation and risk circular deps.
-for (const [file, content] of walkFiles(join(SRC, 'objects'))) {
-  if (!file.endsWith('VisualTheme.ts')) continue;
+for (const [file, content] of walkFiles(join(SRC, "objects"))) {
+  if (!file.endsWith("VisualTheme.ts")) continue;
   for (const { spec, line } of findImports(content)) {
-    if (matchesPathPrefix(normalizeSpecifier(file, spec), 'ui/theme')) {
-      errors.push(`  ${relative(SRC, file)}:${line}  [*VisualTheme.ts] must not import ui/theme  →  "${spec}"`);
+    if (matchesPathPrefix(normalizeSpecifier(file, spec), "ui/theme")) {
+      errors.push(
+        `  ${relative(SRC, file)}:${line}  [*VisualTheme.ts] must not import ui/theme  →  "${spec}"`,
+      );
     }
   }
 }
@@ -302,25 +539,25 @@ for (const { layer, root, policy } of RULES) {
       const violation = evaluateDirectoryPolicy({
         policy,
         normalizedSpecifier,
-        isRelativeSpecifier: spec.startsWith('.'),
+        isRelativeSpecifier: spec.startsWith("."),
       });
 
       if (violation === null) continue;
 
-      if (violation.kind === 'banned-path') {
+      if (violation.kind === "banned-path") {
         errors.push(
           `  ${relative(SRC, file)}:${line}  [${layer}] imports from ` +
-          `${violation.entry}  →  "${spec}"`,
+            `${violation.entry}  →  "${spec}"`,
         );
-      } else if (violation.kind === 'outside-allowed-src-roots') {
+      } else if (violation.kind === "outside-allowed-src-roots") {
         errors.push(
           `  ${relative(SRC, file)}:${line}  [${layer}] may import only ` +
-          `${violation.allowedSrcRoots.join(', ')} within src  →  "${spec}"`,
+            `${violation.allowedSrcRoots.join(", ")} within src  →  "${spec}"`,
         );
       } else {
         errors.push(
           `  ${relative(SRC, file)}:${line}  [${layer}] must not import package ` +
-          `${violation.entry}  →  "${spec}"`,
+            `${violation.entry}  →  "${spec}"`,
         );
       }
     }
@@ -328,13 +565,15 @@ for (const { layer, root, policy } of RULES) {
 }
 
 for (const { file, banned } of PURE_CORE_FILES) {
-  const content = readFileSync(file, 'utf8');
+  const content = readFileSync(file, "utf8");
   const rel = relative(SRC, file);
   for (const { spec, line } of findImports(content)) {
     const normalized = normalizeSpecifier(file, spec);
     for (const b of banned) {
       if (matchesPathPrefix(normalized, b)) {
-        errors.push(`  ${rel}:${line}  [pure-core] must not import ${b}  →  "${spec}"`);
+        errors.push(
+          `  ${rel}:${line}  [pure-core] must not import ${b}  →  "${spec}"`,
+        );
       }
     }
   }
@@ -344,27 +583,29 @@ for (const { file, banned } of PURE_CORE_FILES) {
 // Only src/core/random.ts may call Math.random(). All other battle and core
 // code must use the Rng interface injected from PhaseManager.
 const MATH_RANDOM_RE = /Math\.random\s*\(/g;
-const AMBIENT_RANDOM_DIRS = [join(SRC, 'battle'), join(SRC, 'core')];
-const AMBIENT_RANDOM_ALLOWLIST = [join(SRC, 'core', 'random.ts')];
+const AMBIENT_RANDOM_DIRS = [join(SRC, "battle"), join(SRC, "core")];
+const AMBIENT_RANDOM_ALLOWLIST = [join(SRC, "core", "random.ts")];
 
 for (const dir of AMBIENT_RANDOM_DIRS) {
   for (const [file, content] of walkFiles(dir)) {
     if (AMBIENT_RANDOM_ALLOWLIST.includes(file)) continue;
-    const lines = content.split('\n');
+    const lines = content.split("\n");
     lines.forEach((line, i) => {
       MATH_RANDOM_RE.lastIndex = 0;
       if (MATH_RANDOM_RE.test(line)) {
         const rel = relative(SRC, file);
-        errors.push(`  ${rel}:${i + 1}  [no-ambient-random] Math.random() forbidden in gameplay code — use injected Rng`);
+        errors.push(
+          `  ${rel}:${i + 1}  [no-ambient-random] Math.random() forbidden in gameplay code — use injected Rng`,
+        );
       }
     });
   }
 }
 
 if (errors.length > 0) {
-  console.error('Boundary violations found:\n');
-  errors.forEach(e => console.error(e));
+  console.error("Boundary violations found:\n");
+  errors.forEach((e) => console.error(e));
   process.exit(1);
 } else {
-  console.log('✓ All boundaries clean');
+  console.log("✓ All boundaries clean");
 }

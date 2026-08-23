@@ -15,7 +15,12 @@
       "Bash(npx vitest *)",
       "Bash(grep -i \"\\\\.ts$\")",
       "Bash(npx tsc *)",
-      "Bash(node scripts/check-boundaries.mjs)"
+      "Bash(node scripts/check-boundaries.mjs)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(grep *)",
+      "Bash(cd /workspace && npx tsc *)",
+      "Bash(cd /workspace && npx vitest *)"
     ],
     "deny": [
       "Edit(CLAUDE.md, architecture_plan.md)",

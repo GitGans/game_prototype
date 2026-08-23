@@ -31,6 +31,7 @@ Central orchestration and game state layer. Controls all game flow, manages pers
 - `debugLifecycle.ts` (Stage 9) — the single owner of debug-session *container* lifecycle: `initializeDebugSession(config)`, `resetDebugSession()`, `clearDebugSession()`. This is a different seam from the `phaseHandlers/*` files below: those mutate the *contents* of an already-existing session, resolved via `PlayerSessionStore.getSession(source)`; `debugLifecycle.ts` creates, replaces, or destroys the *container* (`DebugBattleState` itself) and writes through `GameState.setDebugState()`/`clearDebugState()` directly. It contains no roster/inventory/progression/battle-result rules
 - `DebugBattleState.ts` — `{ session: PlayerSessionState, initialConfig: DebugSessionConfig }`; owned by `GameState`, never placed inside `CampaignState`. `initialConfig` is what `resetDebugSession()` rebuilds from
 - `worldMapProjection.ts` — pure projections used by `PhaseManager`'s `world_map` phase: `projectWorldMapSnapshot` (CampaignState.world + roster party status → phase snapshot) and `applyMovePartyToCampaign`. Party status rides on the world-map snapshot so `resolveTransition` can reject `enter_battle` for an invalid party without reading roster state.
+- `phaseTransitionResolver.ts` (Stage 2 of the current `PhaseManager` decomposition) — owns pure phase routing: `resolveTransition(currentPhase, action, metadata: PhaseTransitionMetadata)`, extracted out of `PhaseManager.ts` so it can be Node/vitest-tested without Phaser. Takes derived facts (currently just `{ mapCleared: boolean }`) as an explicit `metadata` parameter instead of reading `GameState` — `PhaseManager` computes that metadata (see `PhaseManagerClass.wouldClearMap()`, which delegates the pure math to `../world/mapCompletion.ts`) and passes it in. Importable in Node with zero browser globals (`tests/core/phaseManagerNodeImport.test.ts`); enforced by a `PURE_CORE_FILES` entry in `scripts/check-boundaries.mjs` banning `phaser`, `core/GameState`, `core/PhaseManager`, and the other stateful/runtime core modules. Its own implementation imports only from `./phases`.
 - `battleInitialization.ts` — battle state factory; builds auto-placed or replay battle states. `buildNewBattleState()` places players first (before any enemy RNG is consumed) and returns the ordered `playerPlacements` records alongside the state. `buildReplayBattleState()` returns `{ state, playerPlacements }` for the same reason: the replay attempt's participants must be built from *its own* placement records
 - `battleSetupProjection.ts` — `projectPlayerBattleSetup(session)`: the one player battle-setup projection shared by campaign and debug. Takes a `PlayerSessionState` directly; never reads `GameState`, never branches on campaign/debug, never mutates the session. Projects **every** unit outside camp, alive or dead — a persistent-dead unit becomes a fully resolved candidate whose factory produces a canonical dead runtime unit. A blueprint with no roster record is skipped, never synthesized
 - `battleParticipants.ts` — `buildInitialBattleParticipants(state, placements)`: the one participant builder for campaign and debug. The placement records are the initial-deployment truth (`wasOnBench` comes from the record, never from current `state.deployments`), and `isAlive` from the battle-domain `isAlive()` — so a unit that began the battle dead is present with `isAlive: false`. Reads only `BattleState` + records
@@ -143,8 +144,10 @@ transitions never require a scene synchronizer.
   debug lifecycle invariant below. `debug_equip_screen` → `return_to_debug_level_select` →
   `init_debug` remains available for starting a *differently configured* session. The
   **only** `sessionSource`-keyed branch left in teardown is the
-  campaign world consequence (marking the defeated encounter). `wouldClearMap`, `mapCleared`
-  and `map_victory` remain metadata-driven, not source-driven
+  campaign world consequence (marking the defeated encounter). `mapCleared`
+  and `map_victory` remain metadata-driven, not source-driven — the map-clear check itself
+  (`wouldMapBeClearedAfterDefeatingMob()`) now lives in `src/world/mapCompletion.ts`, not
+  `PhaseManager.ts` (see Stage 2 of the `PhaseManager` decomposition)
 - **Battle participants and runtime player units are one-to-one at exit.** Player participants
   are persistent roster entities: death changes life state and never removes the unit from
   `BattleState.units`, and player-side battle-only summons are not supported. Every deviation —
@@ -199,7 +202,9 @@ transitions never require a scene synchronizer.
 **Not acceptable:** direct `GameState` reads in scenes, scene controllers, or battle render paths. Use `PhaseManager.getPhase()` and snapshot fields instead.
 
 ## Where to Modify
-- Add a new game screen → `phases.ts` (new `GamePhase` variant) + `PhaseManager.ts` (`resolveTransition`, `applyActionSideEffects`) + `scenes/phaserSceneSynchronizer.ts` (add the new phase's entry to `PHASE_SCENE_KEYS`; the mapping is a compile-time-exhaustive `Record<GamePhase['type'], GameplaySceneKey>`, so a missing entry is a build failure, not a silent no-op)
+- Add a new game screen → `phases.ts` (new `GamePhase` variant) + `phaseTransitionResolver.ts` (`resolveTransition`) + `PhaseManager.ts` (`applyActionSideEffects`) + `scenes/phaserSceneSynchronizer.ts` (add the new phase's entry to `PHASE_SCENE_KEYS`; the mapping is a compile-time-exhaustive `Record<GamePhase['type'], GameplaySceneKey>`, so a missing entry is a build failure, not a silent no-op)
+- Change a phase-routing rule (which transitions are valid, what the next phase looks like) → `phaseTransitionResolver.ts` (`resolveTransition`), not `PhaseManager.ts`
+- Change how `{ mapCleared }` (or future transition metadata) is computed → `PhaseManagerClass.wouldClearMap()` (`PhaseManager.ts`) for the stateful lookup, `src/world/mapCompletion.ts` for the pure map-completion rule
 - Add a new player action → `phases.ts` (`PhaseAction`) + `PhaseManager.ts` (`applyActionSideEffects`)
 - Change battle placement logic → `phaseHandlers/battlePhaseHandler.ts`
 - Change battle turn-flow action handling → `phaseHandlers/battlePhaseHandler.ts` and `PhaseManager.applyActionSideEffects()`

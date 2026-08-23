@@ -13,6 +13,7 @@ Map navigation logic for the world exploration phase. Provides movement validati
 
 ## Key Files
 - `mapLogic.ts` — core navigation functions: `canMove`, `resolveCell`, `initSubMapState`
+- `mapCompletion.ts` — `wouldMapBeClearedAfterDefeatingMob(mapDefinition, mapState, triggerPos)`: pure map-completion rule, distinct from `mapLogic.ts`'s movement/resolution logic. Answers "if this mob were defeated, would the map have no live mobs left?" by projecting a virtual `SubMapState` and delegating to `allMobsDead()`. Takes the map definition/state as explicit parameters rather than reading `GameState`, so it's usable from `PhaseManager` (which computes the caller-side `{ mapCleared }` metadata for `core/phaseTransitionResolver.ts`) without either module reading runtime state.
 - `types.ts` — re-exports from `src/shared/worldTypes`, adds `ResolvedCell`, `IMPASSABLE_TERRAIN`, `ENTITY_TYPE_CONFIG`, `WorldState` (`{ currentMapId, partyPos, subMapStates }` — the persistent-campaign-location contract nested inside `CampaignState.world`)
 
 ## Structural Role
@@ -33,10 +34,12 @@ scene triggers transition or PhaseManager advances phase
   phase snapshot — never `GameState` directly), `src/core/initCampaignState.ts` (initializes a
   `SubMapState` for every static map), `src/core/worldMapProjection.ts` /
   `src/core/PhaseManager.ts` (state init + phase transitions), `src/campaign/` (`WorldState`
-  is nested inside `CampaignState`)
+  is nested inside `CampaignState`); `mapCompletion.ts` is used by `src/core/PhaseManager.ts`
+  (`wouldClearMap()`) to compute the `{ mapCleared }` metadata passed into
+  `src/core/phaseTransitionResolver.ts`
 
 ## Invariants
-- `canMove` and `resolveCell` are pure functions — no side effects, no state mutation
+- `canMove`, `resolveCell`, and `wouldMapBeClearedAfterDefeatingMob` are pure functions — no side effects, no state mutation
 - Entity alive/dead state lives in `SubMapState`, never in the map definition itself
 - Dead entities are treated as passable empty cells
 - `ENTITY_TYPE_CONFIG` is the single source of triggering behavior per entity type
@@ -48,4 +51,5 @@ scene triggers transition or PhaseManager advances phase
 - change movement bounds or collision logic → `canMove` in `mapLogic.ts`
 - change how entities are resolved from cell data → `resolveCell` in `mapLogic.ts`
 - change initial per-map state shape → `initSubMapState` in `mapLogic.ts`
+- change the map-clear/completion rule → `mapCompletion.ts`
 - add new world-level types → `src/shared/worldTypes`, then re-export in `types.ts`

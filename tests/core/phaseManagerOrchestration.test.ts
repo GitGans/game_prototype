@@ -1,64 +1,210 @@
 import { describe, expect, it, vi } from "vitest";
-import { PhaseManagerClass } from "../../src/core/PhaseManager";
-import { GameState } from "../../src/core/GameState";
-import type { PhaseSceneSynchronizer } from "../../src/core/phaseSceneSynchronizer";
+import {
+  PhaseManagerClass,
+  type PhaseManagerDependencies,
+} from "../../src/core/PhaseManager";
+import type { GamePhase } from "../../src/core/phases";
 
-function fakeSynchronizer(): PhaseSceneSynchronizer & { sync: ReturnType<typeof vi.fn> } {
-  return { sync: vi.fn() };
+interface HarnessOptions {
+  resolve(current: GamePhase): GamePhase | null;
+  rebuiltPhase?: GamePhase;
+  effectsError?: Error;
+  snapshotError?: Error;
+  initialize?: boolean;
 }
 
-describe("PhaseManagerClass orchestration boundary", () => {
-  it("calls sync() exactly once with the rebuilt phase on a navigation transition", () => {
-    const manager = new PhaseManagerClass();
-    const sync = fakeSynchronizer();
-    manager.init(sync);
+function createHarness(options: HarnessOptions) {
+  const calls: string[] = [];
 
-    manager.transition({ type: "debug" }); // main_menu -> debug_level_select
-
-    expect(sync.sync).toHaveBeenCalledTimes(1);
-    expect(sync.sync).toHaveBeenCalledWith(manager.getPhase());
-    expect(manager.getPhase().type).toBe("debug_level_select");
+  const deriveMetadata = vi.fn(() => {
+    calls.push("metadata");
+    return { mapCleared: false };
   });
 
-  it("does not call sync() on a rejected transition", () => {
-    const manager = new PhaseManagerClass();
-    const sync = fakeSynchronizer();
-    manager.init(sync);
-
-    manager.transition({ type: "enter_camp" }); // invalid from main_menu
-
-    expect(sync.sync).not.toHaveBeenCalled();
-    expect(manager.getPhase()).toEqual({ type: "main_menu" });
+  const resolveTransition = vi.fn((current: GamePhase) => {
+    calls.push("resolve");
+    return options.resolve(current);
   });
 
-  it("does not call sync() on a mutation-only transition", () => {
-    const manager = new PhaseManagerClass();
-    const sync = fakeSynchronizer();
-    manager.init(sync);
-
-    manager.transition({ type: "debug" });
-    manager.transition({ type: "init_debug", level: 1 });
-    sync.sync.mockClear();
-
-    manager.transition({ type: "reset_debug_session" }); // mutation-only from debug_equip_screen
-
-    expect(sync.sync).not.toHaveBeenCalled();
+  const applyEffects = vi.fn(() => {
+    calls.push("effects");
+    if (options.effectsError) throw options.effectsError;
   });
 
-  it("throws before init() and causes no state mutation, even for a side-effecting action", () => {
-    // `new_game` is deliberately chosen over a no-op action like `debug`: its side effects
-    // (GameState.setCampaignState, RNG reset, clearDebugSession, resetBattleRuntime) are
-    // exactly what the preflight-ordering fix must prevent from running before the
-    // synchronizer check. A test using a non-mutating action would still pass even if the
-    // preflight check were accidentally moved back after applyActionSideEffects().
-    const manager = new PhaseManagerClass();
-    const before = manager.getPhase();
-    const hadCampaignStateBefore = GameState.hasCampaignState();
+  const rebuildSnapshot = vi.fn((phase: GamePhase) => {
+    calls.push("snapshot");
+    if (options.snapshotError) throw options.snapshotError;
+    return options.rebuiltPhase ?? phase;
+  });
 
-    expect(() => manager.transition({ type: "new_game" })).toThrow(/PhaseManager\.init/);
+  let manager!: PhaseManagerClass;
 
-    expect(manager.getPhase()).toBe(before); // no phase change
-    expect(GameState.hasCampaignState()).toBe(hadCampaignStateBefore); // no campaign was created
-    expect(manager.getLastBattleTransition()).toBeNull(); // lastBattleTransition reset didn't run either
+  const notifyPhaseChanged = vi.fn(() => {
+    calls.push("notify");
+    expect(manager.getPhase()).toBe(options.rebuiltPhase);
+  });
+
+  const dependencies: PhaseManagerDependencies = {
+    deriveMetadata,
+    resolveTransition,
+    applyEffects,
+    rebuildSnapshot,
+    notifyPhaseChanged,
+  };
+
+  manager = new PhaseManagerClass(dependencies);
+
+  const sync = vi.fn((phase: GamePhase) => {
+    calls.push("sync");
+
+    // Новая фаза должна быть установлена до уведомления сцены.
+    expect(manager.getPhase()).toBe(phase);
+  });
+
+  if (options.initialize !== false) {
+    manager.init({ sync });
+  }
+
+  return {
+    manager,
+    calls,
+    sync,
+    deriveMetadata,
+    resolveTransition,
+    applyEffects,
+    rebuildSnapshot,
+    notifyPhaseChanged,
+  };
+}
+
+describe("PhaseManager coordinator contract", () => {
+  it("stops immediately after rejected transition", () => {
+    const harness = createHarness({
+      resolve: () => null,
+    });
+
+    const originalPhase = harness.manager.getPhase();
+
+    harness.manager.transition({ type: "enter_camp" });
+
+    expect(harness.calls).toEqual(["metadata", "resolve"]);
+    expect(harness.applyEffects).not.toHaveBeenCalled();
+    expect(harness.rebuildSnapshot).not.toHaveBeenCalled();
+    expect(harness.sync).not.toHaveBeenCalled();
+    expect(harness.notifyPhaseChanged).not.toHaveBeenCalled();
+    expect(harness.manager.getPhase()).toBe(originalPhase);
+  });
+
+  it("runs navigation pipeline in the required order", () => {
+    const rebuiltPhase: GamePhase = { type: "debug_level_select" };
+
+    const harness = createHarness({
+      resolve: () => ({ type: "debug_level_select" }),
+      rebuiltPhase,
+    });
+
+    harness.manager.transition({ type: "debug" });
+
+    expect(harness.calls).toEqual([
+      "metadata",
+      "resolve",
+      "effects",
+      "snapshot",
+      "sync",
+    ]);
+
+    expect(harness.applyEffects).toHaveBeenCalledTimes(1);
+    expect(harness.rebuildSnapshot).toHaveBeenCalledTimes(1);
+    expect(harness.sync).toHaveBeenCalledTimes(1);
+    expect(harness.sync).toHaveBeenCalledWith(rebuiltPhase);
+    expect(harness.notifyPhaseChanged).not.toHaveBeenCalled();
+    expect(harness.manager.getPhase()).toBe(rebuiltPhase);
+  });
+
+  it("runs mutation-only pipeline and sends notification without scene sync", () => {
+    const rebuiltPhase: GamePhase = { type: "main_menu" };
+
+    const harness = createHarness({
+      resolve: (current) => current,
+      rebuiltPhase,
+    });
+
+    harness.manager.transition({ type: "exit_to_menu" });
+
+    expect(harness.calls).toEqual([
+      "metadata",
+      "resolve",
+      "effects",
+      "snapshot",
+      "notify",
+    ]);
+
+    expect(harness.applyEffects).toHaveBeenCalledTimes(1);
+    expect(harness.rebuildSnapshot).toHaveBeenCalledTimes(1);
+    expect(harness.notifyPhaseChanged).toHaveBeenCalledTimes(1);
+    expect(harness.sync).not.toHaveBeenCalled();
+    expect(harness.manager.getPhase()).toBe(rebuiltPhase);
+  });
+
+  it("stops the pipeline when effects throw", () => {
+    const error = new Error("effects failed");
+
+    const harness = createHarness({
+      resolve: () => ({ type: "debug_level_select" }),
+      effectsError: error,
+    });
+
+    const originalPhase = harness.manager.getPhase();
+
+    expect(() => harness.manager.transition({ type: "debug" })).toThrow(error);
+
+    expect(harness.calls).toEqual(["metadata", "resolve", "effects"]);
+
+    expect(harness.rebuildSnapshot).not.toHaveBeenCalled();
+    expect(harness.sync).not.toHaveBeenCalled();
+    expect(harness.notifyPhaseChanged).not.toHaveBeenCalled();
+    expect(harness.manager.getPhase()).toBe(originalPhase);
+  });
+
+  it("does not commit or notify when snapshot rebuild throws", () => {
+    const error = new Error("snapshot failed");
+
+    const harness = createHarness({
+      resolve: () => ({ type: "debug_level_select" }),
+      snapshotError: error,
+    });
+
+    const originalPhase = harness.manager.getPhase();
+
+    expect(() => harness.manager.transition({ type: "debug" })).toThrow(error);
+
+    expect(harness.calls).toEqual([
+      "metadata",
+      "resolve",
+      "effects",
+      "snapshot",
+    ]);
+
+    expect(harness.sync).not.toHaveBeenCalled();
+    expect(harness.notifyPhaseChanged).not.toHaveBeenCalled();
+    expect(harness.manager.getPhase()).toBe(originalPhase);
+  });
+
+  it("checks scene synchronizer before navigation effects", () => {
+    const harness = createHarness({
+      resolve: () => ({ type: "debug_level_select" }),
+      initialize: false,
+    });
+
+    const originalPhase = harness.manager.getPhase();
+
+    expect(() => harness.manager.transition({ type: "debug" })).toThrow(
+      /PhaseManager\.init/,
+    );
+
+    expect(harness.calls).toEqual(["metadata", "resolve"]);
+    expect(harness.applyEffects).not.toHaveBeenCalled();
+    expect(harness.rebuildSnapshot).not.toHaveBeenCalled();
+    expect(harness.manager.getPhase()).toBe(originalPhase);
   });
 });

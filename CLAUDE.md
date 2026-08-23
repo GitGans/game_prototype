@@ -12,8 +12,8 @@ Browser-based game with a turn-based game on a grid.
 
 ## System Structure
 
-- **Central controller — PhaseManager**
-  The only place responsible for controlling game flow and Phaser scenes (start/stop).
+- **Flow coordinator — PhaseManager**
+  Owns the gameplay transition pipeline and requests scene synchronization through `PhaseSceneSynchronizer`.
 
 - **GamePhase = screen + data**
   Each screen corresponds to exactly one `GamePhase`, which contains **all data required for rendering**.
@@ -23,8 +23,9 @@ Browser-based game with a turn-based game on a grid.
   ```
   Scene → PhaseManager.transition()
         → resolveTransition() → next GamePhase
-        → applyActionSideEffects() → mutate CampaignState
-        → syncPhaserScenes() → start scene
+        → applyActionSideEffects()
+        → rebuildSnapshot()
+        → PhaseSceneSynchronizer.sync() / notify
   ```
 
 - **Two types of state**
@@ -40,8 +41,8 @@ Browser-based game with a turn-based game on a grid.
 
 ### What must NOT be violated
 
-- ❌ **No scene control outside PhaseManager**
-  (`this.scene.start/stop/launch` is forbidden)
+- ❌ **No direct gameplay scene control outside `PhaserSceneSynchronizer`**
+  Scenes route navigation through `PhaseManager.transition()`; direct scene control is allowed only during Boot/Preloader bootstrap.
 
 - ❌ **No skipping the transition pipeline**
   no shortcuts, even for simple cases
@@ -63,6 +64,20 @@ Browser-based game with a turn-based game on a grid.
   - no Phaser
   - no state access
   - must be pure
+
+### Enforced architecture boundaries
+
+- `PhaseManager` and `phaseTransitionResolver` must be importable in Node without browser globals. Enforced by a Node smoke test.
+- Phase routing lives in `phaseTransitionResolver`: `(current phase, action, derived metadata) → next phase | rejection`.
+- `phaseTransitionResolver` must be importable in Node and must not import Phaser, runtime state, RNG, storage, scenes, or mutation handlers.
+- `PhaseManager` only runs resolver → effects → snapshot → scene sync/notification; it does not inspect action or phase types or access domain state.
+- `PhaseManager` dependencies and pipeline behavior are enforced by boundary checks and coordinator contract tests.
+- Orchestration boundary rules (`scripts/orchestration-boundary-rules.mjs`) are shared, pure-data, and imported by both `scripts/check-boundaries.mjs` and its tests — no duplicated policy literals, including the real `scenes/**` policy (`SCENES_IMPORT_POLICY`).
+- Every phase handler under `src/core/phaseHandlers/` (any nesting, `.ts` or `.tsx`) requires exactly one of an explicit `PHASE_HANDLER_IMPORT_POLICIES` entry or a reasoned, non-duplicated coverage exclusion; a new handler file without one, or with both, fails `check-boundaries.mjs`.
+- Scenes (including `scenes/controllers/**`) may not import state stores (`GameState`, `DebugBattleState`, `playerSessionStore`), phase handlers, lifecycle owners (`debugLifecycle`), or internal pipeline facades and collaborators (`phaseActionEffects`/`phaseTransitionMetadata`/`phaseSnapshotRebuilder`/`phaseTransitionResolver`/`phaseChangeNotifier`) — not even type-only.
+- Gameplay Phaser scene control (`start`/`stop`/`launch`/...) is confined to `scenes/phaserSceneSynchronizer.ts` (any target, since it resolves keys from a compile-time-exhaustive phase→scene map), plus exactly two named bootstrap edges: `Boot.ts` → `this.scene.start("Preloader")` and `Preloader.ts` → `this.scene.start("MainMenu")`, each permitted at most once. Every other file, and any other call in those two files, is scanned (dotted and element-access forms, direct and one-level lexically-scoped aliases) and rejected by `scripts/scene-control-policy.mjs`.
+- Phaser scene transitions never carry gameplay data — enforced by the argument-count rules in the same scanner.
+- These rules describe the target dependency shape ahead of the full `PhaseManager` decomposition — not a claim the codebase satisfies them everywhere yet. Known, tracked violations surfaced by `check-boundaries.mjs` are not accepted architecture.
 
 ---
 

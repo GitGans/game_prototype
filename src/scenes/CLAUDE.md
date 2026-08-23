@@ -64,16 +64,21 @@ PhaseManager resolves next phase and syncs scenes
   through `PhaseManager.getPhase()` / `GamePhase`
 
 ## Invariants
-- Scenes never call `this.scene.start/stop/launch` — all scene switching goes through `PhaseManager`
+- Scenes never call `this.scene.start/stop/launch` (or any other scene-control method, via direct or one-level-aliased `.scene` access, dotted or element-access form) — all scene switching goes through `PhaseManager`. Enforced by `scripts/scene-control-policy.mjs`, scanned over every `src/**/*.ts`/`*.tsx` file, with exactly these exceptions:
+  - `Boot.ts` — only `this.scene.start("Preloader")`, at most once
+  - `Preloader.ts` — only `this.scene.start("MainMenu")`, at most once
+  - `phaserSceneSynchronizer.ts` — `start`/`stop`, any target (it resolves the target from the compile-time-exhaustive `PHASE_SCENE_KEYS` map, so the key is not a source-level literal)
+  - every other file: no scene-control calls at all
+  - these rules describe the target dependency shape ahead of the full `PhaseManager` decomposition — not a claim the codebase already satisfies them everywhere
 - Scenes never store mutable game state — all persistent data lives in `CampaignState` / `BattleState`
 - Scenes never contain transition logic — no `if (victory) go somewhere` branches
 - Scenes never pass data directly to other scenes — `GamePhase` is the only inter-scene channel
+- Scenes (including `scenes/controllers/**`) never import `core/GameState`, `core/DebugBattleState`, `core/playerSessionStore`, `core/phaseHandlers/**`, `core/debugLifecycle`, or internal pipeline collaborators (`core/phaseActionEffects`, `core/phaseTransitionMetadata`, `core/phaseSnapshotRebuilder`, `core/phaseTransitionResolver`, `core/phaseChangeNotifier`) — not even type-only. Enforced by the `scenes/**` rule in `scripts/check-boundaries.mjs` via the shared `SCENES_IMPORT_POLICY`. `controllers/BattleTurnFlowController.ts`'s current import of a result type from `battlePhaseHandler.ts` is a known, tracked violation of this rule, not accepted architecture — a later stage must expose a neutral public contract instead
 - Scenes may compose screens; scenes must not define reusable UI behavior or visual style
 - Use objects/ widgets/panels for any interactive UI with visual state
 - Use `UI_THEME` / domain visual themes for colors; do not introduce local style literals
 - New repeated UI must not be implemented as inline `Rectangle + Text` — extract to `src/ui/` or `src/objects/`
 - Repeated visual pattern (≥2 scenes) → extract to `src/objects/` before the second use
-- Note: `Boot.ts` and `Preloader.ts` use direct `scene.start()` for bootstrap only. All gameplay scene transitions go through PhaseManager.
 
 ## Where to Modify
 - change battle scene wiring, grid layout, or unit view lifecycle → `Game.ts`

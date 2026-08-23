@@ -92,7 +92,7 @@ type-only imports — enforced by `check-boundaries.mjs`.
 
 * Scenes are stateless — they read from GamePhase and handle input only
 * All screen transitions go through PhaseManager; no scene.start/stop outside it
-* resolveTransition() must be pure — no Phaser calls, no state mutation
+* resolveTransition() (`core/phaseTransitionResolver.ts`) must be pure — no Phaser calls, no state mutation, no reading `GameState`; derived facts it needs (e.g. `mapCleared`) are passed in as explicit metadata, computed by `PhaseManager` before calling it
 * CampaignState and BattleState must not mix
 * UI primitives (ui/) must have zero game-domain knowledge
 * GamePhase is the single source of truth for what a scene renders
@@ -114,7 +114,7 @@ type-only imports — enforced by `check-boundaries.mjs`.
 * add/change game content (units, skills, items)      → data/
 * change battle rules (combat, targeting, placement)  → battle/
 * change world-map rules                              → world/
-* add a new game screen or transition                 → core/phases.ts + core/PhaseManager.ts + scenes/
+* add a new game screen or transition                 → core/phases.ts + core/phaseTransitionResolver.ts + core/PhaseManager.ts + scenes/
 * change the persistent campaign state shape           → campaign/campaignState.ts
 * change the save/load boundary contract               → save/saveTypes.ts
 * change how a new campaign is initialized             → core/initCampaignState.ts + data/campaignInitialStateDefinition.ts

@@ -5,7 +5,7 @@
 // A banned/allowed entry matches the whole normalized path or a path prefix
 // at a segment boundary: 'battle' matches 'battle/types' but not 'battleFoo'.
 export function matchesPathPrefix(normalized, entry) {
-  const prefix = entry.replace(/\/+$/, '');
+  const prefix = entry.replace(/\/+$/, "");
   return normalized === prefix || normalized.startsWith(`${prefix}/`);
 }
 
@@ -31,33 +31,46 @@ export function evaluateDirectoryPolicy({
   normalizedSpecifier,
   isRelativeSpecifier,
 }) {
-  if (policy.kind === 'blocklist') {
-    const entry = policy.banned.find(candidate =>
+  if (policy.kind === "blocklist") {
+    const entry = policy.banned.find((candidate) =>
       matchesPathPrefix(normalizedSpecifier, candidate),
     );
 
-    return entry ? { kind: 'banned-path', entry } : null;
+    return entry ? { kind: "banned-path", entry } : null;
   }
 
-  if (policy.kind === 'src-allowlist') {
+  if (policy.kind === "src-allowlist") {
     if (isRelativeSpecifier) {
-      const allowed = policy.allowedSrcRoots.some(root =>
+      const allowed = policy.allowedSrcRoots.some((root) =>
         matchesPathPrefix(normalizedSpecifier, root),
       );
 
       return allowed
         ? null
         : {
-            kind: 'outside-allowed-src-roots',
+            kind: "outside-allowed-src-roots",
             allowedSrcRoots: [...policy.allowedSrcRoots],
           };
     }
 
-    const bannedPackage = policy.bannedPackages.find(candidate =>
+    const bannedPackage = policy.bannedPackages.find((candidate) =>
       matchesPathPrefix(normalizedSpecifier, candidate),
     );
 
-    return bannedPackage ? { kind: 'banned-package', entry: bannedPackage } : null;
+    return bannedPackage
+      ? { kind: "banned-package", entry: bannedPackage }
+      : null;
+  }
+
+  if (policy.kind === "exact-import-allowlist") {
+    const allowed = policy.allowedSpecifiers.includes(normalizedSpecifier);
+
+    return allowed
+      ? null
+      : {
+          kind: "outside-exact-import-allowlist",
+          allowedSpecifiers: [...policy.allowedSpecifiers],
+        };
   }
 
   throw new Error(`Unknown directory boundary policy kind: "${policy.kind}"`);

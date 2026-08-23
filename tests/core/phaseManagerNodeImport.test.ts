@@ -6,4 +6,9 @@ describe("PhaseManager Node import boundary", () => {
       "PhaseManager",
     );
   });
+  it("imports phaseTransitionResolver without browser globals", async () => {
+    await expect(
+      import("../../src/core/phaseTransitionResolver"),
+    ).resolves.toHaveProperty("resolveTransition");
+  });
 });
