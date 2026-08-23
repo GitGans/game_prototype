@@ -53,11 +53,16 @@ user input (scene)
 ↓
 PhaseManager.transition()
 ↓
+derivePhaseTransitionMetadata()  →  stateful facts for the pure resolver
+↓
 resolveTransition()  →  next GamePhase  (pure, no side effects)
 ↓
 applyActionSideEffects()  →  mutate CampaignState / BattleState
 ↓
-PhaseSceneSynchronizer.sync(phase)  →  start scene
+rebuildPhaseSnapshot()  →  read authoritative state, produce the render snapshot
+↓
+PhaseSceneSynchronizer.sync(phase)  →  start scene   (navigation)
+notifyPhaseChanged()                →  refresh signal (mutation-only)
 ↓
 scene reads GamePhase and renders
 ```
@@ -92,7 +97,8 @@ type-only imports — enforced by `check-boundaries.mjs`.
 
 * Scenes are stateless — they read from GamePhase and handle input only
 * All screen transitions go through PhaseManager; no scene.start/stop outside it
-* resolveTransition() (`core/phaseTransitionResolver.ts`) must be pure — no Phaser calls, no state mutation, no reading `GameState`; derived facts it needs (e.g. `mapCleared`) are passed in as explicit metadata, computed by `PhaseManager` before calling it
+* resolveTransition() (`core/phaseTransitionResolver.ts`) must be pure — no Phaser calls, no state mutation, no reading `GameState`; derived facts it needs (e.g. `mapCleared`) are passed in as explicit metadata, computed by `core/phaseTransitionMetadata.ts` before `PhaseManager` calls it
+* Snapshot rebuilding belongs to `core/phaseSnapshotRebuilder.ts` (dispatch) and `core/battlePhaseSnapshot.ts` (the battle projection) — never to a scene and never to `PhaseManager` itself
 * CampaignState and BattleState must not mix
 * UI primitives (ui/) must have zero game-domain knowledge
 * GamePhase is the single source of truth for what a scene renders

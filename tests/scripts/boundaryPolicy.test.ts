@@ -8,6 +8,7 @@ import {
 import {
   PHASE_MANAGER_IMPORT_POLICY,
   SCENES_IMPORT_POLICY,
+  TRANSITION_CONTRACT_IMPORT_POLICIES,
 } from "../../scripts/orchestration-boundary-rules.mjs";
 
 describe("matchesPathPrefix", () => {
@@ -202,9 +203,137 @@ describe("SCENES_IMPORT_POLICY (real production policy)", () => {
     ).toEqual({ kind: "banned-path", entry: banned });
   });
 
-  it("rejects internal pipeline collaborators scenes must not reach", () => {
-    for (const entry of ["core/phaseTransitionResolver", "core/phaseChangeNotifier"]) {
+  // Every module a scene must not reach, pinned explicitly. The generic table above
+  // iterates whatever `policy.banned` happens to contain, so it stays green if an
+  // entry is deleted; this list is what makes a deletion fail.
+  const PROTECTED_INTERNALS = [
+    "core/GameState",
+    "core/DebugBattleState",
+    "core/playerSessionStore",
+    "core/debugLifecycle",
+    "core/phaseHandlers",
+    "core/phaseActionEffects",
+    "core/phaseTransitionMetadata",
+    "core/phaseSnapshotRebuilder",
+    "core/phaseTransitionResolver",
+    "core/phaseChangeNotifier",
+    "core/phaseEffectsResult",
+    "core/battleRuntimeContext",
+    "core/battleRuntimeAccess",
+    "core/battlePhaseSnapshot",
+    "core/battleSnapshotBuilder",
+    "core/battleResultsSnapshot",
+    "core/equipmentScreenSnapshot",
+    "core/unitStatsSnapshot",
+    "core/rosterCampSnapshot",
+    "core/upgradeTreeSnapshot",
+    "core/worldMapProjection",
+  ];
+
+  it.each(PROTECTED_INTERNALS)(
+    "bans %s in the production policy and rejects it through the evaluator",
+    (entry: string) => {
       expect(policy.banned).toContain(entry);
+      expect(
+        evaluateDirectoryPolicy({
+          policy,
+          normalizedSpecifier: entry,
+          isRelativeSpecifier: true,
+        }),
+      ).toEqual({ kind: "banned-path", entry });
+    },
+  );
+
+  // These derive transient presentation models from committed GamePhase data or
+  // call-scoped transition feedback. They resolve no authoritative state and build
+  // no part of the committed snapshot, so scenes import them by design — see
+  // scenes/controllers/BattleTurnFlowController.ts and BattlePresentationController.ts.
+  // Banning them would break the scene layer, so pin them as permitted.
+  it("keeps the scene-facing presentation adapters importable", () => {
+    for (const entry of ["core/battleDirectiveProjection", "core/battleSkillPreviewProjection"]) {
+      expect(policy.banned).not.toContain(entry);
+      expect(
+        evaluateDirectoryPolicy({
+          policy,
+          normalizedSpecifier: entry,
+          isRelativeSpecifier: true,
+        }),
+      ).toBeNull();
     }
   });
+
+  // The public/internal split is itself a rule: banning a public contract would
+  // break the scene layer. The internal half is pinned by PROTECTED_INTERNALS above.
+  it("leaves the public transition contracts importable by scenes", () => {
+    for (const entry of ["core/phaseTransitionResult", "core/battleActionFeedback"]) {
+      expect(policy.banned).not.toContain(entry);
+    }
+  });
+
+  it("bans battleRuntimeAccess as its own entry, not via the battleRuntimeContext prefix", () => {
+    expect(matchesPathPrefix("core/battleRuntimeAccess", "core/battleRuntimeContext")).toBe(false);
+  });
+});
+
+describe("TRANSITION_CONTRACT_IMPORT_POLICIES", () => {
+  /**
+   * Pinned exactly, not spot-checked.
+   *
+   * A rejection-only test does not stay closed: appending
+   * "core/phaseHandlers/battlePhaseHandler" to one of these allowlists would leave
+   * a "rejects core/GameState" assertion green while re-opening the boundary. This
+   * assertion makes weakening any contract boundary require a visible test edit.
+   */
+  it("pins the complete allowlist of every transition contract module", () => {
+    expect(TRANSITION_CONTRACT_IMPORT_POLICIES).toEqual({
+      "core/battleActionFeedback.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["shared/gridTypes", "battle/battleEvents"],
+      },
+      "core/phaseTransitionResult.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["core/battleActionFeedback"],
+      },
+      "core/phaseEffectsResult.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["core/battleActionFeedback"],
+      },
+    });
+  });
+
+  // Separate concern from the pin above: that the evaluator actually enforces it.
+  const contractEntries = Object.entries(
+    TRANSITION_CONTRACT_IMPORT_POLICIES as Record<string, { allowedSpecifiers: string[] }>,
+  );
+
+  it.each(contractEntries)(
+    "%s rejects a stateful dependency",
+    (_key: string, contractPolicy: { allowedSpecifiers: string[] }) => {
+      expect(
+        evaluateDirectoryPolicy({
+          policy: contractPolicy,
+          normalizedSpecifier: "core/GameState",
+          isRelativeSpecifier: true,
+        }),
+      ).toEqual({
+        kind: "outside-exact-import-allowlist",
+        allowedSpecifiers: contractPolicy.allowedSpecifiers,
+      });
+    },
+  );
+
+  it.each(contractEntries)(
+    "%s accepts each of its own approved specifiers",
+    (_key: string, contractPolicy: { allowedSpecifiers: string[] }) => {
+      for (const allowed of contractPolicy.allowedSpecifiers) {
+        expect(
+          evaluateDirectoryPolicy({
+            policy: contractPolicy,
+            normalizedSpecifier: allowed,
+            isRelativeSpecifier: true,
+          }),
+        ).toBeNull();
+      }
+    },
+  );
 });

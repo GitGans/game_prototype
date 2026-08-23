@@ -1,27 +1,24 @@
 import { GamePhase, PhaseAction } from './phases';
 import type { PhaseSceneSynchronizer } from './phaseSceneSynchronizer';
-import type { BattleRuntimeContext } from './battleRuntimeContext';
 import type { DebugBattleState, DebugSessionConfig } from './DebugBattleState';
 import { initializeDebugSession, resetDebugSession, clearDebugSession } from './debugLifecycle';
 import { initCampaignState } from './initCampaignState';
 import { CAMPAIGN_INITIAL_STATE_DEFINITION } from '../data/campaignInitialStateDefinition';
 import { GameState } from './GameState';
-import { EventBus, Events } from './EventBus';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { PLAYER_UNITS } from '../data/units';
 import { ITEM_CATALOG } from '../data/itemDefinitions';
 import { CAMPAIGN_STARTING_ITEMS } from '../data/startingInventoryDefinitions';
-import { projectWorldMapSnapshot, applyMovePartyToCampaign } from './worldMapProjection';
-import { wouldMapBeClearedAfterDefeatingMob } from '../world/mapCompletion';
+import { applyMovePartyToCampaign } from './worldMapProjection';
 import { resolveTransition } from './phaseTransitionResolver';
+import { derivePhaseTransitionMetadata } from './phaseTransitionMetadata';
+import { rebuildPhaseSnapshot } from './phaseSnapshotRebuilder';
+import { notifyPhaseChanged } from './phaseChangeNotifier';
+import { requireBattleRuntimeForPhase } from './battleRuntimeAccess';
 import { PlayerSessionStore } from './playerSessionStore';
 import { applyEquipmentPhaseAction } from './phaseHandlers/inventoryPhaseHandler';
 import { applyCampPhaseAction } from './phaseHandlers/campPhaseHandler';
 import { applyChooseUpgradePhaseAction } from './phaseHandlers/progressionPhaseHandler';
-import { buildEquipmentScreenPlayerSnapshot } from './equipmentScreenSnapshot';
-import { buildRosterCampSnapshot } from './rosterCampSnapshot';
-import { buildUpgradeTreePlayerSnapshot } from './upgradeTreeSnapshot';
-import { buildBattleResultsSnapshot } from './battleResultsSnapshot';
 import {
   createBattleRuntimeForSession,
   createReplayBattleRuntimeForSession,
@@ -35,24 +32,16 @@ import {
   applyBattleLifecyclePhaseAction,
   applyBattleExitPhaseAction,
   setBattlePreviewTarget,
-  type BattlePhaseActionResult,
+  projectBattleActionFeedback,
 } from './phaseHandlers/battlePhaseHandler';
-import {
-  buildBattleUnitSnapshotViews,
-  buildBattleOccupancySnapshot,
-  buildBattleFieldUnitCellsSnapshot,
-  projectPreviewTarget,
-} from './battleSnapshotBuilder';
-import { getActiveSkill } from '../battle/skillRuntime';
-import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
-import { hasChargedThisRound, resetTurnContextForNewBattle } from '../battle/turnResolver';
-import { canBeginCombat } from '../battle/combatStart';
+import type { PhaseTransitionResult } from './phaseTransitionResult';
+import { type PhaseEffectsResult, NO_PHASE_EFFECTS } from './phaseEffectsResult';
+import { resetTurnContextForNewBattle } from '../battle/turnResolver';
 import { createDefaultGameplayRngStreams, type GameplayRngStreams } from './random';
 
 export class PhaseManagerClass {
   private phase: GamePhase = { type: 'main_menu' };
   private sceneSynchronizer: PhaseSceneSynchronizer | null = null;
-  private lastBattleTransition: BattlePhaseActionResult | null = null;
   private rngStreams: GameplayRngStreams = createDefaultGameplayRngStreams();
 
   /** For tests only — inject deterministic RNG streams. */
@@ -95,224 +84,59 @@ export class PhaseManagerClass {
     return GameState.getDebugState();
   }
 
-  private requireBattleRuntime(
-    phase: Extract<GamePhase, { type: 'battle' }>,
-  ): BattleRuntimeContext {
-    const runtime = GameState.getBattleRuntime();
-    if (runtime.sessionSource !== phase.sessionSource) {
-      throw new Error(
-        `Battle runtime/phase sessionSource mismatch: runtime="${runtime.sessionSource}", phase="${phase.sessionSource}"`,
-      );
-    }
-    return runtime;
-  }
+  transition(action: PhaseAction): PhaseTransitionResult {
+    const previousPhase = this.phase;
 
-  getLastBattleTransition(): BattlePhaseActionResult | null {
-    return this.lastBattleTransition;
-  }
+    const metadata = derivePhaseTransitionMetadata(previousPhase, action);
 
-  /** True if winning the current world-map battle would leave no live mobs on the map. */
-  private wouldClearMap(battlePhase: GamePhase & { type: 'battle' }): boolean {
-    if (battlePhase.sessionSource !== 'campaign' || !battlePhase.mapId || !battlePhase.triggerPos) return false;
-    const mapDef = MAP_DEFINITIONS[battlePhase.mapId];
-    // mapId/triggerPos are only set for campaign battles (enter_battle), which require an
-    // existing campaign — safe to call getCampaignState() unguarded here.
-    const mapState = GameState.getCampaignState().world.subMapStates[battlePhase.mapId];
-    if (!mapDef || !mapState) return false;
-    return wouldMapBeClearedAfterDefeatingMob(mapDef, mapState, battlePhase.triggerPos);
-  }
-
-  transition(action: PhaseAction): void {
-    let mapCleared = false;
-    if (action.type === 'exit_battle' && action.outcome === 'victory' && this.phase.type === 'battle') {
-      mapCleared = this.wouldClearMap(this.phase);
-    }
-
-    const next = resolveTransition(this.phase, action, { mapCleared });
+    const next = resolveTransition(previousPhase, action, metadata);
     if (next === null) {
-      this.lastBattleTransition = null;
-      return; // invalid action for current phase
+      return { status: 'rejected' }; // invalid action for current phase
     }
+
+    // Reference identity, captured before any rebuild. Two traps this guards against:
+    //  - rebuildPhaseSnapshot() returns a NEW object for mutation-only battle actions, so
+    //    classifying after the rebuild would misreport every in-battle mutation;
+    //  - `replay` resolves to `{ ...currentPhase }` — a COPY — so it is a navigation
+    //    even though its phase type stays 'battle'. Never compare `.type` here.
+    const transitionType: 'navigation' | 'mutation' =
+      next === previousPhase ? 'mutation' : 'navigation';
 
     // Navigation precondition: fail before any side effect runs, so a missing
-    // init() call never leaves GameState (or this.lastBattleTransition) mutated
-    // while `this.phase` is stale.
-    const sceneSynchronizer = next !== this.phase ? this.requireSceneSynchronizer() : null;
+    // init() call never leaves GameState mutated while `this.phase` is stale.
+    const sceneSynchronizer = transitionType === 'navigation' ? this.requireSceneSynchronizer() : null;
 
-    this.lastBattleTransition = null;
-    this.applyActionSideEffects(action, this.phase, next);
+    const effects = this.applyActionSideEffects(action, previousPhase, next);
 
     // Leaving the battle phase always clears the whole runtime atomically — no
     // stale BattleRuntimeContext may survive into battle_results or any other
     // non-battle phase. Entering, replaying, or mutating within battle never
     // triggers this, since `next` stays 'battle' in those cases.
-    if (this.phase.type === 'battle' && next !== this.phase && next.type !== 'battle') {
+    if (previousPhase.type === 'battle' && transitionType === 'navigation' && next.type !== 'battle') {
       GameState.resetBattleRuntime();
     }
 
-    if (next === this.phase) {
+    if (transitionType === 'mutation') {
       // Mutation-only: rebuild snapshot in place, notify scene
-      this.phase = this.rebuildSnapshot(this.phase);
-      EventBus.emit(Events.STATE_CHANGED);
-      return;
+      this.phase = rebuildPhaseSnapshot(previousPhase);
+      notifyPhaseChanged();
+    } else {
+      // Navigation: rebuild snapshot for new phase, start scene
+      this.phase = rebuildPhaseSnapshot(next);
+      sceneSynchronizer!.sync(this.phase);
     }
 
-    // Navigation: rebuild snapshot for new phase, start scene
-    this.phase = this.rebuildSnapshot(next);
-    sceneSynchronizer!.sync(this.phase);
-  }
-
-  // Recomputes data snapshots for phases that carry them.
-  // Called after every applyActionSideEffects so GamePhase is always fresh.
-  private rebuildSnapshot(phase: GamePhase): GamePhase {
-    switch (phase.type) {
-      case 'equip_screen': {
-        const session = PlayerSessionStore.getSession(phase.sessionSource);
-        const snapshot = buildEquipmentScreenPlayerSnapshot(session, phase.selectedUnitTemplateId);
-        return { ...phase, ...snapshot };
-      }
-      case 'camp': {
-        const session = PlayerSessionStore.getSession(phase.sessionSource);
-        const { units, selectedForBattleUnitCount, activeLivingUnitCount, canStartBattle } =
-          buildRosterCampSnapshot(session.roster);
-        return { ...phase, units, selectedForBattleUnitCount, activeLivingUnitCount, canStartBattle };
-      }
-      case 'debug_equip_screen': {
-        const session = PlayerSessionStore.getSession(phase.sessionSource);
-        const equipSnapshot = buildEquipmentScreenPlayerSnapshot(session, phase.selectedUnitTemplateId);
-        const { campUnitIds, selectedForBattleUnitCount, activeLivingUnitCount, canStartBattle } =
-          buildRosterCampSnapshot(session.roster);
-        return {
-          ...phase, ...equipSnapshot, campUnitIds,
-          selectedForBattleUnitCount, activeLivingUnitCount, canStartBattle,
-        };
-      }
-      case 'upgrade_tree': {
-        const session = PlayerSessionStore.getSession(phase.sessionSource);
-        const { unitName, upgradeTiers } = buildUpgradeTreePlayerSnapshot(session.roster, phase.unitTemplateId);
-        return { ...phase, unitName, upgradeTiers };
-      }
-      case 'battle_results': {
-        // Result cards are derived from the roster the exit pipeline just wrote —
-        // never from the battle-start participant snapshot.
-        const session = PlayerSessionStore.getSession(phase.sessionSource);
-        return {
-          ...phase,
-          units: buildBattleResultsSnapshot(session.roster, phase.participantSeeds),
-        };
-      }
-      case 'battle': {
-        const runtime = this.requireBattleRuntime(phase);
-        const battleState = runtime.state;
-
-        const { unitsById, fieldUnits, benchUnits } =
-          buildBattleUnitSnapshotViews(battleState);
-        const occupancy      = buildBattleOccupancySnapshot(battleState);
-        const fieldUnitCells = buildBattleFieldUnitCellsSnapshot(battleState);
-
-        // roundQueue is field-only by invariant — look up via fieldUnits to
-        // preserve FieldBattleUnitSnapshot typing for activeUnit.
-        const fieldById      = new Map(fieldUnits.map(u => [u.id, u]));
-        const activeUnitId   = battleState.roundQueue[0] ?? null;
-        const activeUnit     = activeUnitId ? (fieldById.get(activeUnitId) ?? null) : null;
-
-        const battleMode     = runtime.mode;
-        const activeUnitSide = activeUnit?.side ?? null;
-
-        const manualTurnControlsVisible =
-          battleMode === 'manual' && activeUnitSide === 'player';
-
-        const manualChargeDisabled =
-          activeUnitId !== null &&
-          hasChargedThisRound(runtime.turnContext, activeUnitId);
-
-        let targetHighlightKind:
-          | 'target'
-          | 'heal_target'
-          | 'revive_target'
-          | 'none' = 'none';
-        if (activeUnit && battleState.validTargets.length > 0) {
-          const activeSkill = getActiveSkill(activeUnit);
-          const activePlan  = compileSkillUsePlan(activeSkill);
-          const policy      = activePlan.targetPolicy;
-          switch (policy.type) {
-            case 'enemy_melee':
-            case 'enemy_ranged':
-              targetHighlightKind = 'target';
-              break;
-            case 'alive_friendly':
-            case 'self':
-              targetHighlightKind = 'heal_target';
-              break;
-            case 'dead_friendly':
-              targetHighlightKind = 'revive_target';
-              break;
-            default: {
-              const _exhaustive: never = policy;
-              targetHighlightKind = _exhaustive;
-            }
-          }
-        }
-
-        const { previewTargetCoord, previewTargetUnitId } = projectPreviewTarget({
-          battlePhase:         battleState.phase,
-          previewTargetCoord:  battleState.previewTargetCoord,
-          validTargets:        battleState.validTargets,
-          hasActiveUnit:       activeUnit !== null,
-          fieldUnitCells,
-          unitsById,
-          targetHighlightKind,
-        });
-
-        // participants = battle-start snapshot; do NOT rebuild from current placement state.
-        // Copied, not aliased: GamePhase is a render projection, never a handle onto
-        // runtime-owned mutable data.
-        return {
-          ...phase,
-          participants:        runtime.participants.map(p => ({ ...p })),
-          benchUnits,
-          placementSelection:  battleState.placementSelection,
-          battlePhase:         battleState.phase,
-          canBeginCombat:      canBeginCombat(battleState),
-          fieldUnits,
-          unitsById,
-          occupancy,
-          fieldUnitCells,
-          roundQueue:          [...battleState.roundQueue],
-          activeUnitId,
-          activeUnit,
-          battleMode,
-          activeUnitSide,
-          manualTurnControlsVisible,
-          manualChargeDisabled,
-          validTargets:        battleState.validTargets.map(c => ({ ...c })),
-          targetHighlightKind,
-          previewTargetCoord,
-          previewTargetUnitId,
-        };
-      }
-      case 'world_map': {
-        // CampaignState.world is authoritative — mapId/partyPos/mapState here are always
-        // overwritten from it, never trusted from the incoming phase.
-        return { ...phase, ...projectWorldMapSnapshot(GameState.getCampaignState()) };
-      }
-      default:
-        return phase; // phases without snapshots pass through unchanged
-    }
-  }
-
-  refreshSnapshot(): void {
-    this.phase = this.rebuildSnapshot(this.phase);
+    return { status: 'applied', battleFeedback: effects.battleFeedback };
   }
 
   private applyActionSideEffects(
     action: PhaseAction,
     prev: GamePhase,
     next: GamePhase,
-  ): void {
+  ): PhaseEffectsResult {
     // ── Battle lifecycle ──
     if (isBattleLifecycleAction(action) && prev.type === 'battle') {
-      const runtime = this.requireBattleRuntime(prev);
+      const runtime = requireBattleRuntimeForPhase(prev);
       // Persists the confirmed (pre-action) placement into the session selected by
       // runtime.sessionSource before the combat runtime is installed.
       const result = applyBattleLifecyclePhaseAction({
@@ -327,24 +151,24 @@ export class PhaseManagerClass {
         turnContext: result.resetTurnContext ? resetTurnContextForNewBattle() : runtime.turnContext,
         pendingAutoTurnIntention: null,
       });
-      return;
+      return NO_PHASE_EFFECTS;
     }
 
     // ── Battle control ──
     if (prev.type === 'battle') {
       if (action.type === 'battle_set_mode') {
-        const runtime = this.requireBattleRuntime(prev);
+        const runtime = requireBattleRuntimeForPhase(prev);
         GameState.setBattleRuntime({ ...runtime, mode: action.mode, pendingAutoTurnIntention: null });
-        return;
+        return NO_PHASE_EFFECTS;
       }
       if (action.type === 'battle_prepare_quick_battle') {
-        const runtime = this.requireBattleRuntime(prev);
+        const runtime = requireBattleRuntimeForPhase(prev);
         GameState.setBattleRuntime({
           ...runtime,
           turnContext: resetTurnContextForNewBattle(),
           pendingAutoTurnIntention: null,
         });
-        return;
+        return NO_PHASE_EFFECTS;
       }
     }
 
@@ -352,14 +176,14 @@ export class PhaseManagerClass {
     if (prev.type === 'battle' &&
         (action.type === 'battle_preview_target' || action.type === 'battle_clear_preview_target')) {
       const target = action.type === 'battle_preview_target' ? action.target : null;
-      const runtime = this.requireBattleRuntime(prev);
+      const runtime = requireBattleRuntimeForPhase(prev);
       GameState.replaceBattleState(setBattlePreviewTarget(runtime.state, target));
-      return;
+      return NO_PHASE_EFFECTS;
     }
 
     // ── Battle turn ──
     if (isBattleTurnAction(action) && prev.type === 'battle') {
-      const runtime = this.requireBattleRuntime(prev);
+      const runtime = requireBattleRuntimeForPhase(prev);
       const result = applyBattleTurnAction({
         state:                    runtime.state,
         context:                  runtime.turnContext,
@@ -388,15 +212,14 @@ export class PhaseManagerClass {
         turnContext: result.context,
         pendingAutoTurnIntention: nextPendingIntention,
       });
-      this.lastBattleTransition = result;
-      return;
+      return { battleFeedback: projectBattleActionFeedback(result) };
     }
 
     // ── Battle placement ──
     if (isBattlePlacementAction(action) && prev.type === 'battle') {
-      const runtime = this.requireBattleRuntime(prev);
+      const runtime = requireBattleRuntimeForPhase(prev);
       GameState.replaceBattleState(applyBattlePlacementAction(runtime.state, action));
-      return;
+      return NO_PHASE_EFFECTS;
     }
 
     // ── Campaign init ── always creates a fresh campaign (no idempotent guards); New Game
@@ -440,7 +263,7 @@ export class PhaseManagerClass {
     // current session, and participants are rebuilt for this attempt. Only replaySetup
     // and sessionSource cross the attempt boundary — nothing else from the old runtime.
     if (action.type === 'replay' && prev.type === 'battle') {
-      const runtime = this.requireBattleRuntime(prev);
+      const runtime = requireBattleRuntimeForPhase(prev);
       const session = PlayerSessionStore.getSession(runtime.sessionSource);
       GameState.setBattleRuntime(createReplayBattleRuntimeForSession({
         session,
@@ -451,7 +274,7 @@ export class PhaseManagerClass {
 
     // ── Battle teardown ──
     if (action.type === 'exit_battle' && prev.type === 'battle') {
-      const runtime = this.requireBattleRuntime(prev);
+      const runtime = requireBattleRuntimeForPhase(prev);
 
       // One source-neutral roster result, one storage write. No campaign/debug branch.
       applyBattleExitPhaseAction({ runtime, outcome: action.outcome });
@@ -480,28 +303,28 @@ export class PhaseManagerClass {
 
     // ── Item mutations — routed to the session identified by the current phase ──
     if (action.type === 'equip_item' || action.type === 'unequip_item') {
-      if (prev.type !== 'equip_screen' && prev.type !== 'debug_equip_screen') return;
+      if (prev.type !== 'equip_screen' && prev.type !== 'debug_equip_screen') return NO_PHASE_EFFECTS;
       const source = prev.sessionSource;
       applyEquipmentPhaseAction({ source, action });
-      return;
+      return NO_PHASE_EFFECTS;
     }
 
     // ── Camp unit toggle ──
     if (action.type === 'toggle_camp_unit') {
-      if (prev.type !== 'camp' && prev.type !== 'debug_equip_screen') return;
+      if (prev.type !== 'camp' && prev.type !== 'debug_equip_screen') return NO_PHASE_EFFECTS;
       applyCampPhaseAction({ source: prev.sessionSource, action });
-      return;
+      return NO_PHASE_EFFECTS;
     }
 
     // ── Upgrade choice ──
     if (action.type === 'choose_upgrade') {
-      if (prev.type !== 'upgrade_tree') return;
+      if (prev.type !== 'upgrade_tree') return NO_PHASE_EFFECTS;
       applyChooseUpgradePhaseAction({
         source: prev.sessionSource,
         unitTemplateId: prev.unitTemplateId,
         action,
       });
-      return;
+      return NO_PHASE_EFFECTS;
     }
 
     // ── Debug session lifecycle ──
@@ -523,7 +346,7 @@ export class PhaseManagerClass {
       if (GameState.hasBattleRuntime()) GameState.resetBattleRuntime();
       this.resetGameplayRngStreams();
       resetDebugSession();
-      return;
+      return NO_PHASE_EFFECTS;
     }
 
     if (action.type === 'exit_to_menu') {
@@ -536,6 +359,11 @@ export class PhaseManagerClass {
     if (action.type === 'move_party') {
       GameState.setCampaignState(applyMovePartyToCampaign(GameState.getCampaignState(), action.partyPos));
     }
+
+    // Fall-through tail for lifecycle actions that intentionally do not early-return
+    // (new_game, enter_battle/start_battle, replay, exit_battle, init_debug, exit_to_menu,
+    // move_party). None of them produces transient feedback.
+    return NO_PHASE_EFFECTS;
 
     // ── Commerce — commented out until 'shop' phase exists ──
     // if (action.type === 'buy_item') {

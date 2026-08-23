@@ -14,6 +14,8 @@ export const PHASE_MANAGER_IMPORT_POLICY = {
     "core/phaseSnapshotRebuilder",
     "core/phaseSceneSynchronizer",
     "core/phaseChangeNotifier",
+    "core/phaseTransitionResult",
+    "core/phaseEffectsResult",
   ],
 };
 
@@ -47,6 +49,7 @@ export const PHASE_HANDLER_IMPORT_POLICIES = {
       "core/playerUnitPersistence",
       "core/battleExit",
       "core/battleRuntimeContext",
+      "core/battleActionFeedback",
     ],
   },
   "core/phaseHandlers/campPhaseHandler.ts": {
@@ -96,17 +99,47 @@ export const PHASE_HANDLER_COVERAGE_EXCLUSIONS = [];
 // `phaseChangeNotifier` are included alongside the mutation/state modules:
 // a scene that reaches either could make routing decisions or emit phase
 // change notifications itself, bypassing `PhaseManager.transition()` entirely.
+//
+// The read side follows one rule, stated by authority rather than by name:
+// scenes never import runtime access, or modules that build the committed
+// GamePhase snapshot from authoritative state — including internal snapshot
+// helpers like unitStatsSnapshot, since banning only the composing module
+// leaves the same bypass one level down. worldMapProjection is listed for a
+// stronger reason still: it also exports applyMovePartyToCampaign, a campaign
+// state mutation.
+//
+// This is deliberately NOT "no projection modules". `battleDirectiveProjection`
+// and `battleSkillPreviewProjection` are scene-facing presentation adapters:
+// they derive transient presentation models from committed GamePhase data or
+// call-scoped transition feedback, resolve no authoritative state, and build no
+// part of the committed snapshot. Scenes import them today, by design. Do not
+// add them here.
 export const SCENE_PIPELINE_BANNED_IMPORTS = [
+  // state stores and lifecycle owners
   "core/GameState",
   "core/DebugBattleState",
   "core/playerSessionStore",
+  "core/debugLifecycle",
+  // mutation handlers and pipeline internals
   "core/phaseHandlers",
   "core/phaseActionEffects",
   "core/phaseTransitionMetadata",
   "core/phaseSnapshotRebuilder",
   "core/phaseTransitionResolver",
   "core/phaseChangeNotifier",
-  "core/debugLifecycle",
+  "core/phaseEffectsResult",
+  // battle runtime and its access seam
+  "core/battleRuntimeContext",
+  "core/battleRuntimeAccess",
+  // builders of the committed GamePhase snapshot, and their internal helpers
+  "core/battlePhaseSnapshot",
+  "core/battleSnapshotBuilder",
+  "core/battleResultsSnapshot",
+  "core/equipmentScreenSnapshot",
+  "core/unitStatsSnapshot",
+  "core/rosterCampSnapshot",
+  "core/upgradeTreeSnapshot",
+  "core/worldMapProjection",
 ];
 
 // The complete, real scenes/** policy — the single object both the checker and
@@ -116,6 +149,30 @@ export const SCENE_PIPELINE_BANNED_IMPORTS = [
 export const SCENES_IMPORT_POLICY = {
   kind: "blocklist",
   banned: ["battle/skillPreview", "save", ...SCENE_PIPELINE_BANNED_IMPORTS],
+};
+
+// Public/internal transition contracts. Deliberately tiny, fail-closed allowlists:
+// these are the modules scenes are *encouraged* to import, so a stateful dependency
+// added here would silently re-open every boundary this stage closes. Adding any
+// specifier requires an explicit review — and tests/scripts/boundaryPolicy.test.ts
+// pins this object exactly, so weakening a contract boundary cannot pass unnoticed.
+//
+// Note battleActionFeedback does NOT list battle/turnResolver: it declares its own
+// narrowed BattleTurnDirectiveFeedback precisely so no internal directive type
+// (with its BattleState-aliasing `validTargets`) can leak in by widening.
+export const TRANSITION_CONTRACT_IMPORT_POLICIES = {
+  "core/battleActionFeedback.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["shared/gridTypes", "battle/battleEvents"],
+  },
+  "core/phaseTransitionResult.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["core/battleActionFeedback"],
+  },
+  "core/phaseEffectsResult.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["core/battleActionFeedback"],
+  },
 };
 
 // Exact Phaser scene-control permissions, consumed by scripts/scene-control-policy.mjs.

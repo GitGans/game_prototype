@@ -78,7 +78,7 @@ export type GamePhase =
       // Immutable presentation metadata only. Final level and life state always come
       // from the roster selected by `sessionSource` — never from a battle-start snapshot.
       participantSeeds: BattleResultParticipantSeed[];
-      units:            BattleResultUnit[];   // rebuilt by rebuildSnapshot from the stored roster
+      units:            BattleResultUnit[];   // rebuilt by rebuildPhaseSnapshot from the stored roster
       returnPhase:      GamePhase;
       mapCleared:       boolean;
     }
@@ -90,7 +90,7 @@ export type GamePhase =
       triggerPos?:        { x: number; y: number };
       mapId?:             string;
       participants:       BattleParticipant[];     // battle-start snapshot; never rebuilt from current placement
-      benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
+      benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildPhaseSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
       battlePhase:         BattleState['phase'];
       // Placement-phase control state: at least one LIVING player unit is
@@ -238,6 +238,6 @@ export type PhaseAction =
   | { type: 'battle_clear_preview_target' };
 
 // Empty snapshots used by resolveTransition as placeholders —
-// rebuildSnapshot fills them with real data after side effects run.
+// rebuildPhaseSnapshot fills them with real data after side effects run.
 export const EMPTY_BACKPACK_SNAPSHOT: BackpackSnapshot = { slots: Array(24).fill(null) };
 export const EMPTY_EQUIP_SNAPSHOT: EquipmentSnapshot = { slots: {} };

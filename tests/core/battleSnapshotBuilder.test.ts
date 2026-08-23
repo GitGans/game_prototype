@@ -311,4 +311,85 @@ describe('persistent-dead units in the battle read model', () => {
     expect(unitsById.get('dead')!.lifeState).toBe('dead');
     expect(unitsById.get('dead-bench')!.lifeState).toBe('dead');
   });
+
+  // ── Value isolation (Substage 3B) ─────────────────────────────────────────
+  //
+  // GamePhase is a render projection, never a handle onto runtime-owned mutable data.
+  // These tests simulate a scene writing through the snapshot: the casts are the point,
+  // because `readonly` stops TypeScript but not a running scene.
+  describe('value isolation — the snapshot cannot write back', () => {
+    const effect = () => ({
+      effectDisplayName: 'Slow',
+      effect: { id: 'slow', effectTone: 'negative' as const, dodgeBonus: -5 },
+      remainingRounds: 2,
+      periodicHp: { direction: 'damage' as const, amountPerTurn: 3 },
+    });
+
+    function snapshotOf(unit: ReturnType<typeof makeUnit>) {
+      const anchor = { side: 'player' as const, row: 0 as const, col: 0 as const };
+      const state = makeBattleStateFromUnits({ field: [{ unit, anchor }] });
+      return buildBattleUnitSnapshot(unit, state.deployments.get(unit.id)!);
+    }
+
+    it('does not share the shape registry entry', () => {
+      // Two units of the same shape share ONE registry object at runtime.
+      const shared = { offsets: [{ dr: 0, dc: 0 }] };
+      const unit = makeUnit({ id: 'u1', shape: shared });
+      const snap = snapshotOf(unit);
+
+      expect(snap.shape).not.toBe(shared);
+      expect(snap.shape.offsets).not.toBe(shared.offsets);
+      expect(snap.shape.offsets[0]).not.toBe(shared.offsets[0]);
+
+      (snap.shape.offsets[0] as { dr: number }).dr = 99;
+      snap.shape.offsets.push({ dr: 5, dc: 5 });
+
+      expect(shared).toEqual({ offsets: [{ dr: 0, dc: 0 }] });
+      expect(unit.shape).toEqual({ offsets: [{ dr: 0, dc: 0 }] });
+    });
+
+    it('does not share activeEffects at any mutable depth', () => {
+      const unit = makeUnit({ id: 'u1', activeEffects: [effect()] });
+      const snap = snapshotOf(unit);
+
+      expect(snap.activeEffects).not.toBe(unit.activeEffects);
+      expect(snap.activeEffects[0]).not.toBe(unit.activeEffects[0]);
+      expect(snap.activeEffects[0].effect).not.toBe(unit.activeEffects[0].effect);
+      expect(snap.activeEffects[0].periodicHp).not.toBe(unit.activeEffects[0].periodicHp);
+
+      const ae = snap.activeEffects[0] as {
+        remainingRounds: number;
+        effect: { dodgeBonus?: number };
+        periodicHp?: { amountPerTurn: number };
+      };
+      ae.remainingRounds = 99;
+      ae.effect.dodgeBonus = 99;
+      ae.periodicHp!.amountPerTurn = 99;
+      (snap.activeEffects as unknown as unknown[]).pop();
+
+      expect(unit.activeEffects).toEqual([effect()]);
+    });
+
+    it('omits periodicHp entirely for a stat-only effect', () => {
+      const unit = makeUnit({
+        id: 'u1',
+        activeEffects: [{ ...effect(), periodicHp: undefined }],
+      });
+      const snap = snapshotOf(unit);
+
+      expect('periodicHp' in snap.activeEffects[0]).toBe(false);
+    });
+
+    it('copies the skills array while sharing the static definitions', () => {
+      const unit = makeUnit({ id: 'u1' });
+      const snap = snapshotOf(unit);
+
+      expect(snap.skills).not.toBe(unit.skills);
+      // Static content from the SKILLS registry is deliberately shared by reference.
+      expect(snap.skills[0]).toBe(unit.skills[0]);
+
+      (snap.skills as unknown as unknown[]).pop();
+      expect(unit.skills).toHaveLength(1);
+    });
+  });
 });

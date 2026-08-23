@@ -29,6 +29,7 @@ import {
   PHASE_HANDLER_COVERAGE_EXCLUSIONS,
   SCENES_IMPORT_POLICY,
   SCENE_CONTROL_POLICY,
+  TRANSITION_CONTRACT_IMPORT_POLICIES,
 } from "./orchestration-boundary-rules.mjs";
 import { checkPhaseHandlerCoverage } from "./phase-handler-coverage.mjs";
 import {
@@ -490,6 +491,32 @@ for (const [handlerKey, policy] of Object.entries(PHASE_HANDLER_IMPORT_POLICIES)
     errors.push(
       `  ${handlerKey}:${line}  [${handlerKey} allowlist] ` +
         `may import only approved dependencies  →  "${spec}"`,
+    );
+  }
+}
+
+// ─── Transition contract import allowlists ─────────────────────────────────
+// The public/internal transition contracts (battleActionFeedback,
+// phaseTransitionResult, phaseEffectsResult) are fail-closed: anything not
+// explicitly approved — GameState, stores, handlers, RNG, Phaser — is rejected
+// without needing to be enumerated.
+for (const [contractKey, policy] of Object.entries(TRANSITION_CONTRACT_IMPORT_POLICIES)) {
+  const file = join(SRC, ...contractKey.split("/"));
+  const content = readTargetFile(file, `${contractKey} allowlist`);
+  if (content === null) continue;
+
+  for (const { spec, line } of findImports(content)) {
+    const normalizedSpecifier = normalizeSpecifier(file, spec);
+    const violation = evaluateDirectoryPolicy({
+      policy,
+      normalizedSpecifier,
+      isRelativeSpecifier: spec.startsWith("."),
+    });
+    if (violation === null) continue;
+
+    errors.push(
+      `  ${contractKey}:${line}  [${contractKey} allowlist] ` +
+        `transition contracts may import only approved dependencies  →  "${spec}"`,
     );
   }
 }

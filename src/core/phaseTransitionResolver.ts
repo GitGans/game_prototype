@@ -13,7 +13,7 @@ type BattlePhase = Extract<GamePhase, { type: 'battle' }>;
 type EquipScreenPhase = Extract<GamePhase, { type: 'equip_screen' }>;
 
 function buildNewGameWorldMapPlaceholder(): WorldMapPhase {
-  // Placeholder — immediately superseded by rebuildSnapshot's world_map case, which reads
+  // Placeholder — immediately superseded by rebuildPhaseSnapshot()'s world_map case, which reads
   // the freshly-created CampaignState (set in applyActionSideEffects, which runs first).
   return {
     type: 'world_map', mapId: '', partyPos: { x: 0, y: 0 }, mapState: { entityStates: {} },
@@ -26,8 +26,8 @@ function buildDebugEquipScreenPlaceholder(): DebugEquipScreenPhase {
     type: 'debug_equip_screen',
     sessionSource: 'debug',
     selectedUnitTemplateId: '',
-    selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
-    selectedUnit: null,                   // filled by rebuildSnapshot
+    selectedUnitSpriteKey: null,          // filled by rebuildPhaseSnapshot
+    selectedUnit: null,                   // filled by rebuildPhaseSnapshot
     availableUnits: [],
     backpack: EMPTY_BACKPACK_SNAPSHOT,
     unitEquipment: EMPTY_EQUIP_SNAPSHOT,
@@ -47,11 +47,11 @@ function buildBattlePlaceholder(
   return {
     type: 'battle',
     ...params,
-    participants:       [],                                                       // filled by rebuildSnapshot
-    benchUnits:         [],                                                       // filled by rebuildSnapshot
-    placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildSnapshot
+    participants:       [],                                                       // filled by rebuildPhaseSnapshot
+    benchUnits:         [],                                                       // filled by rebuildPhaseSnapshot
+    placementSelection: { selectedBenchUnitId: null, selectedFieldUnitId: null }, // filled by rebuildPhaseSnapshot
     battlePhase:         'placement',
-    canBeginCombat:      false,                                                   // filled by rebuildSnapshot
+    canBeginCombat:      false,                                                   // filled by rebuildPhaseSnapshot
     fieldUnits:          [],
     unitsById:           new Map(),
     occupancy:           { cellToUnitId: new Map(), unitToCells: new Map() },
@@ -59,10 +59,10 @@ function buildBattlePlaceholder(
     roundQueue:          [],
     activeUnitId:        null,
     activeUnit:          null,
-    battleMode:               'manual',                                           // filled by rebuildSnapshot
-    activeUnitSide:           null,                                               // filled by rebuildSnapshot
-    manualTurnControlsVisible: false,                                             // filled by rebuildSnapshot
-    manualChargeDisabled:     false,                                              // filled by rebuildSnapshot
+    battleMode:               'manual',                                           // filled by rebuildPhaseSnapshot
+    activeUnitSide:           null,                                               // filled by rebuildPhaseSnapshot
+    manualTurnControlsVisible: false,                                             // filled by rebuildPhaseSnapshot
+    manualChargeDisabled:     false,                                              // filled by rebuildPhaseSnapshot
     validTargets:        [],
     targetHighlightKind: 'none',
     previewTargetCoord:  null,
@@ -77,14 +77,14 @@ function buildEquipScreenPlaceholder(
     type: 'equip_screen',
     sessionSource: 'campaign',
     ...params,
-    selectedUnitSpriteKey: null,          // filled by rebuildSnapshot
-    selectedUnit: null,                   // filled by rebuildSnapshot
-    backpack: EMPTY_BACKPACK_SNAPSHOT,    // filled by rebuildSnapshot
-    unitEquipment: EMPTY_EQUIP_SNAPSHOT,  // filled by rebuildSnapshot
-    availableUnits: [],                   // filled by rebuildSnapshot
-    unitStats: null,                      // filled by rebuildSnapshot
-    learnedSkills: [],                    // filled by rebuildSnapshot
-    upgradeSkills: [],                    // filled by rebuildSnapshot
+    selectedUnitSpriteKey: null,          // filled by rebuildPhaseSnapshot
+    selectedUnit: null,                   // filled by rebuildPhaseSnapshot
+    backpack: EMPTY_BACKPACK_SNAPSHOT,    // filled by rebuildPhaseSnapshot
+    unitEquipment: EMPTY_EQUIP_SNAPSHOT,  // filled by rebuildPhaseSnapshot
+    availableUnits: [],                   // filled by rebuildPhaseSnapshot
+    unitStats: null,                      // filled by rebuildPhaseSnapshot
+    learnedSkills: [],                    // filled by rebuildPhaseSnapshot
+    upgradeSkills: [],                    // filled by rebuildPhaseSnapshot
   };
 }
 
@@ -94,8 +94,8 @@ function buildUpgradeTreePlaceholder(
   return {
     type: 'upgrade_tree',
     ...params,
-    unitName: '',        // filled by rebuildSnapshot via buildUpgradeTreePlayerSnapshot
-    upgradeTiers: [],    // filled by rebuildSnapshot
+    unitName: '',        // filled by rebuildPhaseSnapshot via buildUpgradeTreePlayerSnapshot
+    upgradeTiers: [],    // filled by rebuildPhaseSnapshot
   };
 }
 
@@ -129,7 +129,7 @@ export function resolveTransition(
       // inventory. Only from debug_equip_screen: an in-progress battle attempt can't have its
       // owning session replaced, and the player must leave battle_results first.
       if (currentPhase.type !== 'debug_equip_screen') return null;
-      return currentPhase; // mutation-only: rebuildSnapshot() re-derives the screen from the new session
+      return currentPhase; // mutation-only: rebuildPhaseSnapshot() re-derives the screen from the new session
 
     case 'switch_debug_unit':
       if (currentPhase.type !== 'debug_equip_screen') return null;
@@ -192,7 +192,7 @@ export function resolveTransition(
           wasOnBench: p.wasOnBench,
           spriteKey:  p.spriteKey,
         })),
-        units:         [],                 // filled by rebuildSnapshot from the stored roster
+        units:         [],                 // filled by rebuildPhaseSnapshot from the stored roster
         returnPhase:   currentPhase.returnPhase,
         mapCleared:    metadata.mapCleared,
       };
@@ -227,10 +227,10 @@ export function resolveTransition(
 
     case 'switch_equip_unit':
       if (currentPhase.type !== 'equip_screen') return null;
-      // Returns new object → triggers rebuildSnapshot for new unit's equipment
+      // Returns new object → triggers rebuildPhaseSnapshot for new unit's equipment
       return { ...currentPhase, selectedUnitTemplateId: action.templateId };
 
-    // ── Mutation-only — return same reference → rebuildSnapshot + STATE_CHANGED ──
+    // ── Mutation-only — return same reference → rebuildPhaseSnapshot + STATE_CHANGED ──
 
     case 'equip_item':
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
@@ -257,12 +257,12 @@ export function resolveTransition(
     // ── Upgrade choice (mutation-only) ───────────────────────────────────────
     case 'choose_upgrade':
       if (currentPhase.type !== 'upgrade_tree') return null;
-      return currentPhase; // mutation-only → rebuildSnapshot refreshes upgrade tiers
+      return currentPhase; // mutation-only → rebuildPhaseSnapshot refreshes upgrade tiers
 
     // ── Camp unit toggle (mutation-only) ─────────────────────────────────────
     case 'toggle_camp_unit':
       if (currentPhase.type !== 'camp' && currentPhase.type !== 'debug_equip_screen') return null;
-      return currentPhase; // mutation-only → rebuildSnapshot refreshes camp/campUnitIds/activeLivingUnitCount
+      return currentPhase; // mutation-only → rebuildPhaseSnapshot refreshes camp/campUnitIds/activeLivingUnitCount
 
     // ── Commerce — stub until 'shop' phase exists ────────────────────────────
     case 'buy_item':
@@ -292,7 +292,7 @@ export function resolveTransition(
     case 'return_field_unit_to_bench':
     case 'swap_field_units':
       if (currentPhase.type !== 'battle') return null;
-      return currentPhase; // applyActionSideEffects mutates BattleState; rebuildSnapshot refreshes phase
+      return currentPhase; // applyActionSideEffects mutates BattleState; rebuildPhaseSnapshot refreshes phase
 
     // ── Battle turn (mutation-only) ───────────────────────────────────────
     case 'battle_start_turn':
@@ -305,12 +305,12 @@ export function resolveTransition(
     case 'battle_decide_auto_turn':
     case 'battle_apply_auto_turn':
       if (currentPhase.type !== 'battle') return null;
-      return currentPhase; // applyActionSideEffects mutates state; rebuildSnapshot refreshes phase
+      return currentPhase; // applyActionSideEffects mutates state; rebuildPhaseSnapshot refreshes phase
 
     // ── Battle preview target (mutation-only) ──────────────────────────────
     case 'battle_preview_target':
     case 'battle_clear_preview_target':
       if (currentPhase.type !== 'battle') return null;
-      return currentPhase; // applyActionSideEffects mutates BattleState; rebuildSnapshot refreshes phase
+      return currentPhase; // applyActionSideEffects mutates BattleState; rebuildPhaseSnapshot refreshes phase
   }
 }

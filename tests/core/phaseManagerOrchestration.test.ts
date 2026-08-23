@@ -29,6 +29,7 @@ function createHarness(options: HarnessOptions) {
   const applyEffects = vi.fn(() => {
     calls.push("effects");
     if (options.effectsError) throw options.effectsError;
+    return { battleFeedback: null };
   });
 
   const rebuildSnapshot = vi.fn((phase: GamePhase) => {
@@ -85,8 +86,9 @@ describe("PhaseManager coordinator contract", () => {
 
     const originalPhase = harness.manager.getPhase();
 
-    harness.manager.transition({ type: "enter_camp" });
+    const result = harness.manager.transition({ type: "enter_camp" });
 
+    expect(result).toEqual({ status: "rejected" });
     expect(harness.calls).toEqual(["metadata", "resolve"]);
     expect(harness.applyEffects).not.toHaveBeenCalled();
     expect(harness.rebuildSnapshot).not.toHaveBeenCalled();
@@ -103,8 +105,9 @@ describe("PhaseManager coordinator contract", () => {
       rebuiltPhase,
     });
 
-    harness.manager.transition({ type: "debug" });
+    const result = harness.manager.transition({ type: "debug" });
 
+    expect(result).toEqual({ status: "applied", battleFeedback: null });
     expect(harness.calls).toEqual([
       "metadata",
       "resolve",
@@ -129,8 +132,9 @@ describe("PhaseManager coordinator contract", () => {
       rebuiltPhase,
     });
 
-    harness.manager.transition({ type: "exit_to_menu" });
+    const result = harness.manager.transition({ type: "exit_to_menu" });
 
+    expect(result).toEqual({ status: "applied", battleFeedback: null });
     expect(harness.calls).toEqual([
       "metadata",
       "resolve",
