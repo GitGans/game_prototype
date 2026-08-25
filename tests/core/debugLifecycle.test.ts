@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { GameState } from "../../src/core/GameState";
-import { initializeDebugSession, resetDebugSession, clearDebugSession } from "../../src/core/debugLifecycle";
+import {
+  initializeDebugSession,
+  initializeDebugSessionForLevel,
+  resetDebugSession,
+  clearDebugSession,
+} from "../../src/core/debugLifecycle";
 import { initCampaignState } from "../../src/core/initCampaignState";
 import { PLAYER_UNITS } from "../../src/data/units";
 import { ITEM_CATALOG } from "../../src/data/itemDefinitions";
@@ -43,6 +48,47 @@ describe("debugLifecycle", () => {
       for (const bp of PLAYER_UNITS) {
         expect(state.session.roster.units[bp.templateId].level).toBe(7);
       }
+    });
+  });
+
+  describe("initializeDebugSessionForLevel", () => {
+    // The production entry point used by `phaseActionEffects`. It exists so the default config
+    // shape lives here rather than in the effects facade, so what it defaults TO is the
+    // contract worth pinning.
+    it("builds the production config for the requested level", () => {
+      initializeDebugSessionForLevel(7);
+
+      const state = GameState.requireDebugState();
+      expect(state.initialConfig).toEqual({
+        level: 7,
+        startingItems: CAMPAIGN_STARTING_ITEMS,
+        initialCampUnitIds: [],
+      });
+      for (const bp of PLAYER_UNITS) {
+        expect(state.session.roster.units[bp.templateId].level).toBe(7);
+      }
+    });
+
+    it("produces the same session as the explicit-config entry point", () => {
+      initializeDebugSessionForLevel(3);
+      const viaLevel = GameState.requireDebugState();
+
+      clearDebugSession();
+      initializeDebugSession(config({ level: 3 }));
+      const viaConfig = GameState.requireDebugState();
+
+      expect(viaLevel.initialConfig).toEqual(viaConfig.initialConfig);
+      expect(viaLevel.session.roster).toEqual(viaConfig.session.roster);
+    });
+
+    it("starts with an empty camp, so a fresh debug party is every unit", () => {
+      // Load-bearing for the debug battle-entry flow: PLAYER_UNITS exceeds
+      // MAX_SELECTED_BATTLE_PARTY_SIZE, so a fresh session cannot start a battle until the
+      // player camps someone. Tests rely on that (see DEBUG_BATTLE_CAMP_UNIT_IDS).
+      initializeDebugSessionForLevel(1);
+
+      const roster = GameState.requireDebugState().session.roster;
+      expect(Object.values(roster.units).every((u) => !u.isInCamp)).toBe(true);
     });
   });
 

@@ -1,5 +1,5 @@
 import type { GamePhase, PhaseAction } from './phases';
-import type { PhaseTransitionMetadata } from './phaseTransitionResolver';
+import type { PhaseTransitionMetadata } from './phaseTransitionMetadataContract';
 import { GameState } from './GameState';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { wouldMapBeClearedAfterDefeatingMob } from '../world/mapCompletion';

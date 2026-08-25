@@ -57,7 +57,7 @@ derivePhaseTransitionMetadata()  →  stateful facts for the pure resolver
 ↓
 resolveTransition()  →  next GamePhase  (pure, no side effects)
 ↓
-applyActionSideEffects()  →  mutate CampaignState / BattleState
+phaseActionEffects.apply()  →  mutate CampaignState / BattleState, run lifecycle sequences
 ↓
 rebuildPhaseSnapshot()  →  read authoritative state, produce the render snapshot
 ↓
@@ -67,10 +67,17 @@ notifyPhaseChanged()                →  refresh signal (mutation-only)
 scene reads GamePhase and renders
 ```
 
+Every step above is an **injected** collaborator: `PhaseManagerClass` requires a
+`PhaseManagerDependencies` set and constructs none of them itself. `createProductionPhaseManager()`
+(`core/PhaseManager.ts`) is the single production composition path — it wires the five real
+collaborators and builds a fresh `phaseActionEffects` controller per manager, so no two managers
+share a gameplay RNG pair. The exported `PhaseManager` singleton comes from that factory.
+
 `PhaseManager` (`src/core/`) never touches Phaser directly — it delegates scene start/stop to an
 injected `PhaseSceneSynchronizer` (contract in `core/`, Phaser implementation in
-`scenes/phaserSceneSynchronizer.ts`). `core/**` must not import `phaser` at all, including
-type-only imports — enforced by `check-boundaries.mjs`.
+`scenes/phaserSceneSynchronizer.ts`), supplied separately through `init()` because scene control
+only exists after Phaser boots. `core/**` must not import `phaser` at all, including type-only
+imports — enforced by `check-boundaries.mjs`.
 
 ## Entry Points
 
@@ -120,7 +127,7 @@ type-only imports — enforced by `check-boundaries.mjs`.
 * add/change game content (units, skills, items)      → data/
 * change battle rules (combat, targeting, placement)  → battle/
 * change world-map rules                              → world/
-* add a new game screen or transition                 → core/phases.ts + core/phaseTransitionResolver.ts + core/PhaseManager.ts + scenes/
+* add a new game screen or transition                 → core/phases.ts + core/phaseTransitionResolver.ts + core/phaseActionEffects.ts + scenes/ (not core/PhaseManager.ts — the coordinator is action-agnostic)
 * change the persistent campaign state shape           → campaign/campaignState.ts
 * change the save/load boundary contract               → save/saveTypes.ts
 * change how a new campaign is initialized             → core/initCampaignState.ts + data/campaignInitialStateDefinition.ts

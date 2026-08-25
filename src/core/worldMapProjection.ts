@@ -12,6 +12,9 @@ export interface WorldMapSnapshot {
 }
 
 /**
+ * Read-only world projection. This module builds the committed `world_map` snapshot and nothing
+ * else — campaign-world *write* transformations live in `campaignWorldTransitions.ts`.
+ *
  * Projects `CampaignState.world` onto a `world_map` phase snapshot. Pure — takes the campaign
  * as a parameter rather than reading `GameState`, and lives outside `PhaseManager.ts` (which
  * imports the real `phaser` package, unusable in this project's Node-environment tests) so it
@@ -37,14 +40,4 @@ export function projectWorldMapSnapshot(campaign: CampaignState): WorldMapSnapsh
     activeLivingUnitCount,
     canStartBattle,
   };
-}
-
-/**
- * Pure: returns a new CampaignState with `world.partyPos` replaced by a clone of `partyPos`.
- * Clones rather than storing the reference: `partyPos` is caller-owned (PhaseAction is a
- * public API boundary) — storing it directly would let campaign state alias an object the
- * caller could still mutate afterward (e.g. a reused scratch coordinate object).
- */
-export function applyMovePartyToCampaign(campaign: CampaignState, partyPos: WorldPos): CampaignState {
-  return { ...campaign, world: { ...campaign.world, partyPos: { ...partyPos } } };
 }

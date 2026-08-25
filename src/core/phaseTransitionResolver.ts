@@ -2,10 +2,7 @@ import {
   GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT,
   type UpgradeTreePhase,
 } from './phases';
-
-export interface PhaseTransitionMetadata {
-  mapCleared: boolean;
-}
+import type { PhaseTransitionMetadata } from './phaseTransitionMetadataContract';
 
 type WorldMapPhase = Extract<GamePhase, { type: 'world_map' }>;
 type DebugEquipScreenPhase = Extract<GamePhase, { type: 'debug_equip_screen' }>;
@@ -14,7 +11,7 @@ type EquipScreenPhase = Extract<GamePhase, { type: 'equip_screen' }>;
 
 function buildNewGameWorldMapPlaceholder(): WorldMapPhase {
   // Placeholder — immediately superseded by rebuildPhaseSnapshot()'s world_map case, which reads
-  // the freshly-created CampaignState (set in applyActionSideEffects, which runs first).
+  // the freshly-created CampaignState (set by phaseActionEffects, which runs first).
   return {
     type: 'world_map', mapId: '', partyPos: { x: 0, y: 0 }, mapState: { entityStates: {} },
     selectedForBattleUnitCount: 0, activeLivingUnitCount: 0, canStartBattle: false,
@@ -292,7 +289,7 @@ export function resolveTransition(
     case 'return_field_unit_to_bench':
     case 'swap_field_units':
       if (currentPhase.type !== 'battle') return null;
-      return currentPhase; // applyActionSideEffects mutates BattleState; rebuildPhaseSnapshot refreshes phase
+      return currentPhase; // phaseActionEffects mutates BattleState; rebuildPhaseSnapshot refreshes phase
 
     // ── Battle turn (mutation-only) ───────────────────────────────────────
     case 'battle_start_turn':
@@ -305,12 +302,12 @@ export function resolveTransition(
     case 'battle_decide_auto_turn':
     case 'battle_apply_auto_turn':
       if (currentPhase.type !== 'battle') return null;
-      return currentPhase; // applyActionSideEffects mutates state; rebuildPhaseSnapshot refreshes phase
+      return currentPhase; // phaseActionEffects mutates state; rebuildPhaseSnapshot refreshes phase
 
     // ── Battle preview target (mutation-only) ──────────────────────────────
     case 'battle_preview_target':
     case 'battle_clear_preview_target':
       if (currentPhase.type !== 'battle') return null;
-      return currentPhase; // applyActionSideEffects mutates BattleState; rebuildPhaseSnapshot refreshes phase
+      return currentPhase; // phaseActionEffects mutates BattleState; rebuildPhaseSnapshot refreshes phase
   }
 }

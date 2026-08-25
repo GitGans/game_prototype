@@ -15,22 +15,28 @@
 // core/ itself.
 
 import { readFileSync, readdirSync, statSync } from "fs";
-import { join, relative, dirname, resolve, sep } from "path";
+import { join, relative, sep } from "path";
 import { findImports } from "./import-scanner.mjs";
+import { normalizeSpecifier as normalizeAgainstSrc } from "./import-specifier.mjs";
 import {
   evaluateDirectoryPolicy,
   matchesPathPrefix,
 } from "./boundary-policy.mjs";
 import { findUncoveredLayers } from "./layer-coverage.mjs";
-import { findPhaseManagerTypeDiscriminatorReads } from "./phase-manager-policy.mjs";
+import { evaluatePhaseManagerPolicy } from "./phase-manager-policy.mjs";
 import {
+  PHASE_TRANSITION_RESOLVER_IMPORT_POLICY,
   PHASE_MANAGER_IMPORT_POLICY,
+  PHASE_MANAGER_PUBLIC_API,
   PHASE_HANDLER_IMPORT_POLICIES,
   PHASE_HANDLER_COVERAGE_EXCLUSIONS,
   SCENES_IMPORT_POLICY,
   SCENE_CONTROL_POLICY,
   TRANSITION_CONTRACT_IMPORT_POLICIES,
+  ORCHESTRATION_COLLABORATOR_REGISTRY,
+  ORCHESTRATION_REGISTRY_COMPILATION,
 } from "./orchestration-boundary-rules.mjs";
+import { compareFacadeImports } from "./orchestration-collaborator-policy.mjs";
 import { checkPhaseHandlerCoverage } from "./phase-handler-coverage.mjs";
 import {
   findSceneControlCalls,
@@ -258,6 +264,27 @@ for (const root of uncoveredLayers) {
 // GameState dependency.
 const PURE_CORE_FILES = [
   {
+    // Campaign-world write transformations: (CampaignState, ...) => CampaignState, total and
+    // storage-free. May import the `campaign` and `world` type contracts it transforms, but
+    // never a store, a runtime, the phase unions, or a rendering layer — installing the result
+    // is the caller's job (phaseHandlers/worldPhaseHandler.ts).
+    file: join(SRC, "core", "campaignWorldTransitions.ts"),
+    banned: [
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/playerSessionStore",
+      "core/battleRuntimeContext",
+      "core/battleRuntimeAccess",
+      "core/phases",
+      "core/PhaseManager",
+      "core/phaseActionEffects",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
+    ],
+  },
+  {
     file: join(SRC, "core", "battleSetupProjection.ts"),
     banned: [
       "core/GameState",
@@ -385,25 +412,23 @@ const PURE_CORE_FILES = [
 //   '../campaign'        from src/core/x.ts    → campaign
 //   '../../battle/types' from src/core/a/b.ts  → battle/types
 // Bare package specifiers ('phaser', 'vitest') pass through unchanged.
+//
+// The rule itself lives in scripts/import-specifier.mjs so the tests that enforce
+// the same boundaries share one implementation with this checker: two normalizations
+// that disagreed about a single import would let a test pass while this failed.
 function normalizeSpecifier(importerFile, spec) {
-  if (!spec.startsWith(".")) return spec;
-  return relative(SRC, resolve(dirname(importerFile), spec))
-    .split(sep)
-    .join("/");
+  return normalizeAgainstSrc({ srcRoot: SRC, importerFile, specifier: spec });
 }
 
 // ─── Pure phase transition resolver ─────────────────────────────────────────
-// Resolver may import only phase contracts. Every other dependency is rejected.
+// Resolver may import only phase contracts and the neutral metadata contract. Every other
+// dependency is rejected. The policy itself lives in orchestration-boundary-rules.mjs so it
+// is pinned by tests like every sibling allowlist.
 const PHASE_TRANSITION_RESOLVER_FILE = join(
   SRC,
   "core",
   "phaseTransitionResolver.ts",
 );
-
-const PHASE_TRANSITION_RESOLVER_IMPORT_POLICY = {
-  kind: "exact-import-allowlist",
-  allowedSpecifiers: ["core/phases"],
-};
 
 {
   const content = readTargetFile(
@@ -428,7 +453,7 @@ const PHASE_TRANSITION_RESOLVER_IMPORT_POLICY = {
     errors.push(
       `  core/phaseTransitionResolver.ts:${line} ` +
         `[phaseTransitionResolver allowlist] ` +
-        `may import only core/phases  →  "${spec}"`,
+        `may import only ${violation.allowedSpecifiers.join(", ")}  →  "${spec}"`,
     );
   }
 }
@@ -459,16 +484,20 @@ const PHASE_MANAGER_FILE = join(SRC, "core", "PhaseManager.ts");
   }
 }
 
-// ─── PhaseManager must not inspect phase/action discriminators ──────────────
+// ─── PhaseManager source policy (coordinator + public API) ─────────────────
+// One call site for every PhaseManager source rule: it must inspect no phase/action
+// discriminator, and its public surface must stay within PHASE_MANAGER_PUBLIC_API.
 {
-  const content = readTargetFile(PHASE_MANAGER_FILE, "PhaseManager coordinator");
+  const content = readTargetFile(PHASE_MANAGER_FILE, "PhaseManager policy");
 
   for (const violation of content !== null
-    ? findPhaseManagerTypeDiscriminatorReads(content)
+    ? evaluatePhaseManagerPolicy({
+        sourceText: content,
+        allowedPublicMembers: PHASE_MANAGER_PUBLIC_API,
+      })
     : []) {
     errors.push(
-      `  core/PhaseManager.ts:${violation.line} ` +
-        `[PhaseManager coordinator] must not read ${violation.form}`,
+      `  core/PhaseManager.ts:${violation.line} [${violation.rule}] ${violation.message}`,
     );
   }
 }
@@ -517,6 +546,65 @@ for (const [contractKey, policy] of Object.entries(TRANSITION_CONTRACT_IMPORT_PO
     errors.push(
       `  ${contractKey}:${line}  [${contractKey} allowlist] ` +
         `transition contracts may import only approved dependencies  →  "${spec}"`,
+    );
+  }
+}
+
+// ─── Orchestration facade collaborator registry ────────────────────────────
+// The three facades beneath PhaseManager are closed the same way PhaseManager is, but with a
+// classified registry rather than a bare list: every import is one reviewed collaborator EDGE,
+// and the facade's kind bounds which roles it may register at all.
+//
+// Both directions are enforced. An exact allowlist alone catches a NEW unregistered import but
+// not a STALE registration left behind after an import is deleted — a dormant licence for that
+// dependency to return without review — so the two are reported as distinct violations.
+//
+// Compilation never throws: a malformed registry surfaces here as ordinary boundary violations
+// with no enforceable policies behind them, failing the build loudly rather than quietly
+// scanning against a partial allowlist.
+const { problems: registryProblems, policies: facadeImportPolicies } =
+  ORCHESTRATION_REGISTRY_COMPILATION;
+
+for (const problem of registryProblems) {
+  errors.push(`  [orchestration-collaborators] ${problem}`);
+}
+
+for (const [facadeKey, policy] of Object.entries(facadeImportPolicies)) {
+  const file = join(SRC, ...facadeKey.split("/"));
+  const content = readTargetFile(file, `${facadeKey} collaborators`);
+  if (content === null) continue;
+
+  const discoveredSpecifiers = [];
+
+  for (const { spec, line } of findImports(content)) {
+    const normalizedSpecifier = normalizeSpecifier(file, spec);
+    discoveredSpecifiers.push(normalizedSpecifier);
+
+    const violation = evaluateDirectoryPolicy({
+      policy,
+      normalizedSpecifier,
+      isRelativeSpecifier: spec.startsWith("."),
+    });
+    if (violation === null) continue;
+
+    errors.push(
+      `  ${facadeKey}:${line}  [${facadeKey} collaborators] unregistered collaborator — ` +
+        `add an explicit role in ORCHESTRATION_COLLABORATOR_REGISTRY  →  "${spec}"`,
+    );
+  }
+
+  // Unregistered imports are reported above WITH line numbers; only the set-level half is
+  // taken from here, so no violation is printed twice.
+  const { stale } = compareFacadeImports({
+    facadeKey,
+    discoveredSpecifiers,
+    registry: ORCHESTRATION_COLLABORATOR_REGISTRY,
+  });
+
+  for (const specifier of stale) {
+    errors.push(
+      `  ${facadeKey}  [${facadeKey} collaborators] registered collaborator is no longer ` +
+        `imported: "${specifier}" — remove it rather than leaving a dormant permission`,
     );
   }
 }

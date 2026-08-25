@@ -1,6 +1,25 @@
-// Pure-data orchestration boundary policies shared by scripts/check-boundaries.mjs
-// and its tests. No fs, no process access — scripts/boundary-policy.mjs evaluates
-// these against normalized import specifiers.
+// Pure-data orchestration boundary policies — plus one pure compilation — shared by
+// scripts/check-boundaries.mjs and its tests. No fs, no process access:
+// scripts/boundary-policy.mjs evaluates these against normalized import specifiers, and
+// scripts/orchestration-collaborator-policy.mjs compiles the collaborator registry at the
+// bottom of this file into the same policy shape.
+
+import { compileCollaboratorRegistry } from "./orchestration-collaborator-policy.mjs";
+
+// The pure router may see phase contracts and the neutral metadata contract — nothing else.
+// Its purity is load-bearing rather than merely a checker rule (Node-importable with zero
+// browser globals, no state, no RNG), so unlike the other pipeline allowlists this one is
+// pinned by tests/scripts/boundaryPolicy.test.ts instead of living as a local literal inside
+// the executable checker.
+//
+// core/phaseTransitionMetadataContract is the type-only module PhaseTransitionMetadata moved
+// to in Stage 4A. The type could not stay declared here: phaseTransitionMetadata.ts would then
+// have to import this module, and a module-level allowlist cannot distinguish "may name the
+// type" from "may call resolveTransition".
+export const PHASE_TRANSITION_RESOLVER_IMPORT_POLICY = {
+  kind: "exact-import-allowlist",
+  allowedSpecifiers: ["core/phases", "core/phaseTransitionMetadataContract"],
+};
 
 // PhaseManager is only the transition-pipeline coordinator. Any new dependency
 // must be an explicit orchestration dependency approved here.
@@ -10,6 +29,7 @@ export const PHASE_MANAGER_IMPORT_POLICY = {
     "core/phases",
     "core/phaseTransitionResolver",
     "core/phaseTransitionMetadata",
+    "core/phaseTransitionMetadataContract",
     "core/phaseActionEffects",
     "core/phaseSnapshotRebuilder",
     "core/phaseSceneSynchronizer",
@@ -18,6 +38,14 @@ export const PHASE_MANAGER_IMPORT_POLICY = {
     "core/phaseEffectsResult",
   ],
 };
+
+// PhaseManager's entire public surface. `init` is the scene-synchronizer injection seam,
+// `getPhase` the single render-data source, and `transition` the single entry point for every
+// state change. Anything else — a stored PhaseEffectsResult, a classification getter, an RNG
+// reset, a debug accessor, an index signature — is a re-opened boundary, so this list is pinned
+// exactly by tests/scripts/boundaryPolicy.test.ts. The constructor is allowed independently: it
+// is required for dependency injection and is not itself a member.
+export const PHASE_MANAGER_PUBLIC_API = ["init", "getPhase", "transition"];
 
 // Every current phase handler's exact, reviewed dependency set, keyed by full
 // source-relative path (including extension) so a handler in a subdirectory or
@@ -73,6 +101,16 @@ export const PHASE_HANDLER_IMPORT_POLICIES = {
       "inventory",
     ],
   },
+  "core/phaseHandlers/worldPhaseHandler.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/GameState",
+      "core/phases",
+      "core/battleRuntimeContext",
+      "core/battleRuntimeAccess",
+      "core/campaignWorldTransitions",
+    ],
+  },
   "core/phaseHandlers/progressionPhaseHandler.ts": {
     kind: "exact-import-allowlist",
     allowedSpecifiers: [
@@ -104,9 +142,16 @@ export const PHASE_HANDLER_COVERAGE_EXCLUSIONS = [];
 // scenes never import runtime access, or modules that build the committed
 // GamePhase snapshot from authoritative state — including internal snapshot
 // helpers like unitStatsSnapshot, since banning only the composing module
-// leaves the same bypass one level down. worldMapProjection is listed for a
-// stronger reason still: it also exports applyMovePartyToCampaign, a campaign
-// state mutation.
+// leaves the same bypass one level down. worldMapProjection is banned under
+// exactly that rule: it builds the committed world_map snapshot.
+//
+// The write side is banned by the same authority argument: campaignLifecycle,
+// campaignWorldTransitions and battlePhaseEffects own campaign creation,
+// campaign-world transformations and battle runtime installation/disposal.
+// campaignWorldTransitions is pure and touches no store, but a scene holding
+// `(CampaignState, ...) => CampaignState` has half of a state mutation and needs
+// only GameState — already banned — to complete it; there is no rendering reason
+// for a scene to import a campaign transformation at all.
 //
 // This is deliberately NOT "no projection modules". `battleDirectiveProjection`
 // and `battleSkillPreviewProjection` are scene-facing presentation adapters:
@@ -120,12 +165,19 @@ export const SCENE_PIPELINE_BANNED_IMPORTS = [
   "core/DebugBattleState",
   "core/playerSessionStore",
   "core/debugLifecycle",
+  "core/campaignLifecycle",
   // mutation handlers and pipeline internals
   "core/phaseHandlers",
+  "core/battlePhaseEffects",
+  "core/campaignWorldTransitions",
   "core/phaseActionEffects",
   "core/phaseTransitionMetadata",
   "core/phaseSnapshotRebuilder",
   "core/phaseTransitionResolver",
+  // Banned for symmetry with phaseEffectsResult: an internal pipeline contract with no
+  // scene-facing purpose. NOT because naming the type would grant a scene routing authority
+  // — it would not; resolveTransition is what is banned, and it stays banned just above.
+  "core/phaseTransitionMetadataContract",
   "core/phaseChangeNotifier",
   "core/phaseEffectsResult",
   // battle runtime and its access seam
@@ -173,6 +225,14 @@ export const TRANSITION_CONTRACT_IMPORT_POLICIES = {
     kind: "exact-import-allowlist",
     allowedSpecifiers: ["core/battleActionFeedback"],
   },
+  // The neutral contract between metadata derivation, the resolver and the coordinator.
+  // Its allowlist is EMPTY and must stay empty: the whole point of the module is that both a
+  // GameState-reading deriver and a pure router can depend on it without depending on each
+  // other. One import here would make it a shared dependency of both and re-open that edge.
+  "core/phaseTransitionMetadataContract.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [],
+  },
 };
 
 // Exact Phaser scene-control permissions, consumed by scripts/scene-control-policy.mjs.
@@ -192,3 +252,85 @@ export const SCENE_CONTROL_POLICY = {
   "scenes/Preloader.ts": { calls: [{ method: "start", target: "MainMenu" }] },
   "scenes/phaserSceneSynchronizer.ts": { methods: ["start", "stop"] },
 };
+
+// ─── Orchestration facade collaborator registry (Stage 4A) ──────────────────
+//
+// The three orchestration facades beneath PhaseManager and their complete, classified
+// dependency sets. PhaseManager itself has been closed since Stage 3; these three had only
+// the broad core/** blocklist, so any of them could acquire GameState, a data catalogue or a
+// lifecycle owner without one reviewable line changing in scripts/.
+//
+// Each entry classifies an EDGE, not a module: core/GameState is a legitimate
+// `authoritative-state-reader` for the snapshot and metadata facades and is forbidden outright
+// for the effects facade. A global per-module label could not express that.
+//
+// Registered set and actual imports must match EXACTLY, in BOTH directions — see
+// compareFacadeImports(). A subset-only allowlist would let a removed dependency leave a
+// dormant permission behind, which is how a facade regrows authority without review.
+//
+// Collaborators are grouped by role, groups in FACADE_KIND_ROLES order, sorted within a group,
+// so a reviewer can see at a glance whether a facade just gained another state reader.
+export const ORCHESTRATION_COLLABORATOR_REGISTRY = {
+  // The write side's dispatcher. It sequences owners and touches no store, no catalogue and
+  // neither half of the read side — which is exactly what the `effects` role set encodes:
+  // authoritative-state-reader, metadata-* and snapshot-projection are unavailable to it, so
+  // acquiring one is a facade-kind change, not an added line.
+  "core/phaseActionEffects.ts": {
+    kind: "effects",
+    collaborators: [
+      { specifier: "core/phaseEffectsResult", role: "neutral-contract" },
+      { specifier: "core/phases", role: "neutral-contract" },
+      { specifier: "core/battlePhaseEffects", role: "effects-owner" },
+      { specifier: "core/campaignLifecycle", role: "effects-owner" },
+      { specifier: "core/debugLifecycle", role: "effects-owner" },
+      { specifier: "core/phaseHandlers/campPhaseHandler", role: "effects-owner" },
+      { specifier: "core/phaseHandlers/inventoryPhaseHandler", role: "effects-owner" },
+      { specifier: "core/phaseHandlers/progressionPhaseHandler", role: "effects-owner" },
+      { specifier: "core/phaseHandlers/worldPhaseHandler", role: "effects-owner" },
+      // The per-manager gameplay RNG pair the facade owns in a factory closure.
+      { specifier: "core/random", role: "effects-infrastructure" },
+    ],
+  },
+
+  // Derives the stateful facts the pure resolver must not read itself. It reads campaign state
+  // and static map data; it may never register an effects owner or a snapshot projection.
+  // core/phaseTransitionResolver is deliberately absent: the shared type moved to
+  // phaseTransitionMetadataContract precisely so this facade cannot reach the router.
+  "core/phaseTransitionMetadata.ts": {
+    kind: "metadata",
+    collaborators: [
+      { specifier: "core/phaseTransitionMetadataContract", role: "neutral-contract" },
+      { specifier: "core/phases", role: "neutral-contract" },
+      { specifier: "core/GameState", role: "authoritative-state-reader" },
+      { specifier: "data/mapDefinitions", role: "metadata-source" },
+      { specifier: "world/mapCompletion", role: "metadata-rule" },
+    ],
+  },
+
+  // Dispatches authoritative state to render snapshots. Reads state, delegates every formula
+  // to a projection module, mutates nothing — no lifecycle owner and no effects facade.
+  "core/phaseSnapshotRebuilder.ts": {
+    kind: "snapshot",
+    collaborators: [
+      { specifier: "core/phases", role: "neutral-contract" },
+      { specifier: "core/GameState", role: "authoritative-state-reader" },
+      { specifier: "core/battleRuntimeAccess", role: "authoritative-state-reader" },
+      { specifier: "core/playerSessionStore", role: "authoritative-state-reader" },
+      { specifier: "core/battlePhaseSnapshot", role: "snapshot-projection" },
+      { specifier: "core/battleResultsSnapshot", role: "snapshot-projection" },
+      { specifier: "core/equipmentScreenSnapshot", role: "snapshot-projection" },
+      { specifier: "core/rosterCampSnapshot", role: "snapshot-projection" },
+      { specifier: "core/upgradeTreeSnapshot", role: "snapshot-projection" },
+      { specifier: "core/worldMapProjection", role: "snapshot-projection" },
+    ],
+  },
+};
+
+// Compiled, never hand-maintained. Both check-boundaries.mjs and boundaryPolicy.test.ts consume
+// this one result, so the registry and the enforced allowlists cannot describe different
+// architectures. `.policies` is empty whenever `.problems` is non-empty: a broken registry
+// yields no enforceable policy rather than a partial one, and fails the build through the
+// checker's own diagnostics instead of throwing during module initialization.
+export const ORCHESTRATION_REGISTRY_COMPILATION = compileCollaboratorRegistry(
+  ORCHESTRATION_COLLABORATOR_REGISTRY,
+);

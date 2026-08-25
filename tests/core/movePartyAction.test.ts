@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyMovePartyToCampaign } from "../../src/core/worldMapProjection";
+import { applyMovePartyToCampaign } from "../../src/core/campaignWorldTransitions";
 import { initCampaignState } from "../../src/core/initCampaignState";
 import { PLAYER_UNITS } from "../../src/data/units";
 import { ITEM_CATALOG } from "../../src/data/itemDefinitions";
@@ -7,10 +7,11 @@ import { CAMPAIGN_STARTING_ITEMS } from "../../src/data/startingInventoryDefinit
 import { MAP_DEFINITIONS } from "../../src/data/mapDefinitions";
 import { CAMPAIGN_INITIAL_STATE_DEFINITION } from "../../src/data/campaignInitialStateDefinition";
 
-// applyMovePartyToCampaign is the pure function behind PhaseManager's `move_party` side
-// effect (applyActionSideEffects calls it and stores the result via GameState.setCampaignState).
-// It lives outside PhaseManager.ts (which imports the real 'phaser' package, unusable under
-// this project's Node-environment tests), so the state-update logic is unit-testable directly.
+// applyMovePartyToCampaign is the pure function behind the `move_party` side effect:
+// phaseHandlers/worldPhaseHandler.ts calls it and stores the result via
+// GameState.setCampaignState(). It lives in core/campaignWorldTransitions.ts — the write-side
+// counterpart to the read-only worldMapProjection.ts — so the transformation is unit-testable
+// with no store and no Phaser involved.
 
 function buildCampaign() {
   return initCampaignState({

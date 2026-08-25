@@ -13,7 +13,7 @@ import { projectWorldMapSnapshot } from './worldMapProjection';
  * Recomputes the data snapshot for one phase from authoritative state.
  *
  * Read-only: it resolves state through `GameState` / `PlayerSessionStore` and delegates every
- * formula to a projection module. Called after `applyActionSideEffects` and after battle
+ * formula to a projection module. Called after `phaseActionEffects.apply()` and after battle
  * teardown, so it always observes post-effect state.
  *
  * The switch is exhaustive by construction — a new `GamePhase` variant is a compile error

@@ -1,7 +1,7 @@
 import type { BattleActionFeedback } from './battleActionFeedback';
 
 /**
- * Transient output of one `applyActionSideEffects()` call.
+ * Transient output of one `phaseActionEffects.apply()` call.
  *
  * Internal to the transition pipeline — never stored on the coordinator, never
  * exposed to scenes. Carries only information that cannot be recovered from

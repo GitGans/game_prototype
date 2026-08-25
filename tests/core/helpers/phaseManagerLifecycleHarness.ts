@@ -1,5 +1,8 @@
 import { vi, expect } from 'vitest';
-import { PhaseManagerClass } from '../../../src/core/PhaseManager';
+import {
+  createProductionPhaseManager,
+  type PhaseManagerClass,
+} from '../../../src/core/PhaseManager';
 import { GameState } from '../../../src/core/GameState';
 import type { PhaseSceneSynchronizer } from '../../../src/core/phaseSceneSynchronizer';
 import type { GamePhase } from '../../../src/core/phases';
@@ -56,7 +59,10 @@ export function createLifecycleHarness(): LifecycleHarness {
   });
   const fakeSynchronizer: PhaseSceneSynchronizer = { sync };
 
-  const manager = new PhaseManagerClass();
+  // The same composition path as the exported production singleton, so these
+  // characterization tests exercise real wiring — while still getting a fresh
+  // manager AND a fresh effects controller (hence a fresh RNG pair) per harness.
+  const manager = createProductionPhaseManager();
   manager.init(fakeSynchronizer);
 
   const harness: LifecycleHarness = {
