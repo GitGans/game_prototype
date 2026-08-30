@@ -666,7 +666,7 @@ export function resolveProbabilityEffects(
   pattern: SkillPattern,
   targetAnchor: CellCoord,
   state: BattleState,
-  roundQueue: string[],
+  roundQueue: readonly string[],
   rng: Rng,
 ): {
   events: ProbabilityEffectEvent[];

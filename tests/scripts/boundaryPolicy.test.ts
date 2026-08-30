@@ -15,6 +15,10 @@ import {
   TRANSITION_CONTRACT_IMPORT_POLICIES,
   ORCHESTRATION_COLLABORATOR_REGISTRY,
   ORCHESTRATION_REGISTRY_COMPILATION,
+  RUNTIME_OWNERSHIP_IMPORT_POLICIES,
+  RESTRICTED_IMPORT_TARGETS,
+  GAME_STATE_FIELDS,
+  GAME_STATE_PUBLIC_API,
 } from "../../scripts/orchestration-boundary-rules.mjs";
 // @ts-expect-error — plain .mjs tooling module, intentionally untyped
 import {
@@ -314,6 +318,8 @@ describe("SCENES_IMPORT_POLICY (real production policy)", () => {
     "core/phaseEffectsResult",
     "core/battleRuntimeContext",
     "core/battleRuntimeAccess",
+    "core/battleRuntimeStorage",
+    "core/battleRuntimeWriteAccess",
     "core/battlePhaseSnapshot",
     "core/battleSnapshotBuilder",
     "core/battleResultsSnapshot",
@@ -678,4 +684,144 @@ describe("ORCHESTRATION_COLLABORATOR_REGISTRY against the real facade sources", 
       ).toEqual({ unregistered: [], stale: [] });
     },
   );
+});
+
+// ─── Stage 4B: battle-runtime read/write ownership ──────────────────────────
+
+describe("runtime ownership import allowlists", () => {
+  /**
+   * The exact outbound dependency set of GameState and the battle-runtime triad.
+   *
+   * Pinned literally rather than derived: GameState's four specifiers ARE the statement
+   * "campaign and debug containers only", and the write gateway's two ARE the statement
+   * "it may not acquire a read". Deriving either from the source would make the test agree
+   * with whatever the source happens to do.
+   */
+  it("pins the exact allowlists", () => {
+    expect(RUNTIME_OWNERSHIP_IMPORT_POLICIES).toEqual({
+      "core/GameState.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "campaign",
+          "core/DebugBattleState",
+          "inventory",
+          "progression",
+        ],
+      },
+      "core/battleRuntimeStorage.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["core/battleRuntimeContext"],
+      },
+      "core/battleRuntimeAccess.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "core/battleRuntimeContext",
+          "core/battleRuntimeStorage",
+          "core/phases",
+        ],
+      },
+      "core/battleRuntimeWriteAccess.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "core/battleRuntimeContext",
+          "core/battleRuntimeStorage",
+        ],
+      },
+    });
+  });
+
+  it("rejects GameState importing battle runtime again", () => {
+    expect(
+      evaluateDirectoryPolicy({
+        policy: RUNTIME_OWNERSHIP_IMPORT_POLICIES["core/GameState.ts"],
+        normalizedSpecifier: "core/battleRuntimeContext",
+        isRelativeSpecifier: true,
+      }),
+    ).toMatchObject({ kind: "outside-exact-import-allowlist" });
+  });
+
+  it("rejects the write gateway acquiring a read", () => {
+    expect(
+      evaluateDirectoryPolicy({
+        policy: RUNTIME_OWNERSHIP_IMPORT_POLICIES["core/battleRuntimeWriteAccess.ts"],
+        normalizedSpecifier: "core/battleRuntimeAccess",
+        isRelativeSpecifier: true,
+      }),
+    ).toMatchObject({ kind: "outside-exact-import-allowlist" });
+  });
+
+  it("rejects storage acquiring any rule dependency", () => {
+    for (const specifier of ["core/phases", "core/GameState", "core/playerSessionState"]) {
+      expect(
+        evaluateDirectoryPolicy({
+          policy: RUNTIME_OWNERSHIP_IMPORT_POLICIES["core/battleRuntimeStorage.ts"],
+          normalizedSpecifier: specifier,
+          isRelativeSpecifier: true,
+        }),
+      ).toMatchObject({ kind: "outside-exact-import-allowlist" });
+    }
+  });
+
+  /**
+   * Real-source parity, in BOTH directions, using the same scanner and normalization as the
+   * checker. An allowlist alone catches a new unregistered import but not a stale entry left
+   * behind after one is deleted — a dormant permission for that dependency to return.
+   */
+  const SRC = new URL("../../src/", import.meta.url);
+
+  it.each(Object.keys(RUNTIME_OWNERSHIP_IMPORT_POLICIES))(
+    "%s imports exactly its allowed specifiers",
+    (fileKey: string) => {
+      const importerFile = new URL(fileKey, SRC).pathname;
+      const policy = RUNTIME_OWNERSHIP_IMPORT_POLICIES[fileKey];
+
+      const discovered = [...findImports(readFileSync(importerFile, "utf8"))].map(
+        ({ spec }: { spec: string }) =>
+          normalizeSpecifier({ srcRoot: SRC.pathname, importerFile, specifier: spec }),
+      );
+
+      const violations = discovered.filter(
+        (normalizedSpecifier: string) =>
+          evaluateDirectoryPolicy({
+            policy,
+            normalizedSpecifier,
+            isRelativeSpecifier: true,
+          }) !== null,
+      );
+      expect(violations).toEqual([]);
+
+      const stale = policy.allowedSpecifiers.filter(
+        (specifier: string) => !discovered.includes(specifier),
+      );
+      expect(stale).toEqual([]);
+    },
+  );
+});
+
+describe("GameState ownership registries", () => {
+  it("pins the exact stored-field list", () => {
+    expect(GAME_STATE_FIELDS).toEqual(["campaignState", "debugState"]);
+  });
+
+  it("pins the exact public surface", () => {
+    expect(GAME_STATE_PUBLIC_API).toEqual([
+      "clearDebugState",
+      "getCampaignState",
+      "getDebugState",
+      "hasCampaignState",
+      "replaceCampaignInventory",
+      "replaceCampaignRoster",
+      "replaceDebugInventory",
+      "replaceDebugRoster",
+      "requireDebugState",
+      "setCampaignState",
+      "setDebugState",
+    ]);
+  });
+
+  it("registers no battle-runtime member in either dimension", () => {
+    for (const name of [...GAME_STATE_FIELDS, ...GAME_STATE_PUBLIC_API]) {
+      expect(name.toLowerCase()).not.toContain("battle");
+    }
+  });
 });

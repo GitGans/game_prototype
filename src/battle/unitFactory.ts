@@ -11,7 +11,7 @@ export interface CreateUnitInstanceInput {
   classId:              UnitClassId;
   stats:                UnitBattleStats;        // runtime combat stats (incl. equipment)
   statHighlightBaseStats: UnitBattleStats;      // stats WITHOUT equipment, for color baseline only
-  skills:               ActionSkillDefinition[];
+  skills:               readonly ActionSkillDefinition[];
   spriteSheet:          SpriteSheetConfig | undefined;
   initialHp?:           number;
   initialLifeState?:    UnitLifeState;          // defaults to 'alive'

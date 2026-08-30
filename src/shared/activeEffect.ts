@@ -3,18 +3,22 @@ import type { Effect } from './skillTypes';
 export type PeriodicHpDirection = 'heal' | 'damage';
 
 export interface PeriodicHp {
-  direction: PeriodicHpDirection;
-  amountPerTurn: number;
+  readonly direction: PeriodicHpDirection;
+  readonly amountPerTurn: number;
 }
 
+// Runtime-owned and read-only through the battle-runtime read gateway: effects are
+// replaced (`{ ...ae, remainingRounds: next }`), never patched in place. `Effect` is a
+// flat record, so `Readonly<Effect>` is a complete read-only view of it — the global
+// `Effect` authoring contract deliberately stays mutable.
 export interface ActiveEffect {
-  effectDisplayName: string;
-  effect: Effect;
-  remainingRounds: number;
+  readonly effectDisplayName: string;
+  readonly effect: Readonly<Effect>;
+  readonly remainingRounds: number;
 
   // Present only when the skill applies periodic HP. Absent for stat-only effects.
   // effect.effectTone is presentation/classification metadata only — not a runtime direction source.
-  periodicHp?: PeriodicHp;
+  readonly periodicHp?: PeriodicHp;
 }
 
 /**

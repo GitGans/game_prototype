@@ -1,5 +1,5 @@
 import type { CellCoord } from './gridTypes';
 
 export type UnitDeployment =
-  | { kind: 'field'; anchor: CellCoord }
-  | { kind: 'bench'; slot: number };
+  | { readonly kind: 'field'; readonly anchor: CellCoord }
+  | { readonly kind: 'bench'; readonly slot: number };

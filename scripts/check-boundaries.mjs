@@ -35,8 +35,20 @@ import {
   TRANSITION_CONTRACT_IMPORT_POLICIES,
   ORCHESTRATION_COLLABORATOR_REGISTRY,
   ORCHESTRATION_REGISTRY_COMPILATION,
+  RUNTIME_OWNERSHIP_IMPORT_POLICIES,
+  RESTRICTED_IMPORT_TARGETS,
+  RUNTIME_OWNERSHIP_EXPORT_COMPILATION,
+  GAME_STATE_FIELDS,
+  GAME_STATE_PUBLIC_API,
 } from "./orchestration-boundary-rules.mjs";
 import { compareFacadeImports } from "./orchestration-collaborator-policy.mjs";
+import {
+  compileRestrictedImportTargets,
+  evaluateObservedImport,
+  findStaleImporterPermissions,
+} from "./restricted-import-targets.mjs";
+import { evaluateStateOwnershipPolicy } from "./state-ownership-policy.mjs";
+import { evaluateModuleExportPolicy } from "./module-export-policy.mjs";
 import { checkPhaseHandlerCoverage } from "./phase-handler-coverage.mjs";
 import {
   findSceneControlCalls,
@@ -606,6 +618,116 @@ for (const [facadeKey, policy] of Object.entries(facadeImportPolicies)) {
       `  ${facadeKey}  [${facadeKey} collaborators] registered collaborator is no longer ` +
         `imported: "${specifier}" — remove it rather than leaving a dormant permission`,
     );
+  }
+}
+
+// ─── Stage 4B: runtime ownership import allowlists ──────────────────────────
+// GameState may hold only campaign/debug containers; storage stays rule-free; each gateway
+// keeps its single responsibility. Same loop shape as every sibling allowlist above.
+for (const [fileKey, policy] of Object.entries(RUNTIME_OWNERSHIP_IMPORT_POLICIES)) {
+  const file = join(SRC, ...fileKey.split("/"));
+  const content = readTargetFile(file, `${fileKey} allowlist`);
+  if (content === null) continue;
+
+  for (const { spec, line } of findImports(content)) {
+    const normalizedSpecifier = normalizeSpecifier(file, spec);
+    const violation = evaluateDirectoryPolicy({
+      policy,
+      normalizedSpecifier,
+      isRelativeSpecifier: spec.startsWith("."),
+    });
+    if (violation === null) continue;
+
+    errors.push(
+      `  ${fileKey}:${line}  [${fileKey} allowlist] ` +
+        `runtime ownership modules may import only approved dependencies  →  "${spec}"`,
+    );
+  }
+}
+
+// ─── Stage 4B: restricted import targets (importer direction) ───────────────
+// Who may import a capability module, as opposed to what it may import. Compiles fail-closed:
+// a malformed registry yields NO enforceable targets and reports its own problems, so a broken
+// rule can never read as a satisfied one.
+{
+  const { problems, targets } = compileRestrictedImportTargets(RESTRICTED_IMPORT_TARGETS);
+
+  for (const problem of problems) {
+    errors.push(`  [restricted import targets] ${problem}`);
+  }
+
+  const observedEdges = [];
+
+  for (const [file, content] of walkFiles(SRC)) {
+    const importerKey = relative(SRC, file).split(sep).join("/");
+
+    for (const { spec, line } of findImports(content)) {
+      const normalizedSpecifier = normalizeSpecifier(file, spec);
+      observedEdges.push({ importerKey, normalizedSpecifier });
+
+      const violation = evaluateObservedImport({ importerKey, normalizedSpecifier, targets });
+      if (violation === null) continue;
+
+      errors.push(
+        `  ${importerKey}:${line}  [restricted import target] ${violation.reason} ` +
+          `May be imported only by ` +
+          `${[...targets[violation.target].allowedImporters].join(", ")}  →  "${spec}"`,
+      );
+    }
+  }
+
+  for (const { target, importer } of findStaleImporterPermissions({ targets, observedEdges })) {
+    errors.push(
+      `  [restricted import target] stale permission: "${importer}" no longer imports ` +
+        `"${target}" — remove it rather than leaving a dormant permission`,
+    );
+  }
+}
+
+// ─── Stage 4B: GameState ownership (stored fields + public API) ─────────────
+{
+  const file = join(SRC, "core", "GameState.ts");
+  const content = readTargetFile(file, "GameState ownership policy");
+
+  if (content !== null) {
+    for (const problem of evaluateStateOwnershipPolicy({
+      sourceText: content,
+      className: "GameStateManager",
+      fileName: "GameState.ts",
+      allowedFields: GAME_STATE_FIELDS,
+      allowedPublicApi: GAME_STATE_PUBLIC_API,
+    })) {
+      errors.push(`  core/GameState.ts  [GameState ownership] ${problem}`);
+    }
+  }
+}
+
+// ─── Stage 4B: runtime-ownership export surfaces ────────────────────────────
+// Complements RESTRICTED_IMPORT_TARGETS: that controls WHO may import a restricted capability,
+// this controls WHAT the permitted importers may expose publicly. Without both directions, an
+// allowed importer can re-export the capability and every other module picks it up through an
+// unrestricted specifier.
+{
+  const { problems, policies } = RUNTIME_OWNERSHIP_EXPORT_COMPILATION;
+
+  for (const problem of problems) {
+    errors.push(`  [runtime ownership export surface] ${problem}`);
+  }
+
+  for (const [fileKey, expectedExports] of Object.entries(policies)) {
+    const file = join(SRC, ...fileKey.split("/"));
+    // readTargetFile, not readFileSync: a moved or deleted protected module must become a
+    // diagnosed violation rather than a silent skip.
+    const content = readTargetFile(file, "runtime ownership export surface");
+    if (content === null) continue;
+
+    for (const problem of evaluateModuleExportPolicy({
+      sourceText: content,
+      fileName: fileKey,
+      expectedExports,
+    })) {
+      errors.push(`  ${fileKey}  [runtime ownership export surface] ${problem}`);
+    }
   }
 }
 

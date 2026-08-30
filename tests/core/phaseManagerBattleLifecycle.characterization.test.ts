@@ -7,11 +7,14 @@ import phasesSource from '../../src/core/phases.ts?raw';
 import {
   createLifecycleHarness,
   resetGameStateBetweenTests,
+  requireInstalledRuntime,
+  hasInstalledRuntime,
   projectEnemyPlacements,
   ORC_PATROL_ENEMY_GROUP_ID,
   ORC_PATROL_TRIGGER_POS,
 } from './helpers/phaseManagerLifecycleHarness';
 import { GameState } from '../../src/core/GameState';
+import { writeBattleRuntimeSlot } from '../../src/core/battleRuntimeStorage';
 import { resolveTransition } from '../../src/core/phaseTransitionResolver';
 import type { PhaseAction, GamePhase } from '../../src/core/phases';
 import type { UpgradeOptionId } from '../../src/shared/unitTypes';
@@ -182,12 +185,12 @@ describe('PhaseManager battle runtime lifecycle', () => {
         h.startNewCampaign();
         h.openDebugSession(1);
         h.startDebugBattle(ORC_PATROL_ENEMY_GROUP_ID);
-        expect(GameState.hasBattleRuntime()).toBe(true);
+        expect(hasInstalledRuntime()).toBe(true);
 
         h.manager.transition(action);
 
         expect(
-          GameState.hasBattleRuntime(),
+          hasInstalledRuntime(),
           `action "${action.type}" left a battle runtime installed after leaving battle`,
         ).toBe(false);
 
@@ -202,7 +205,7 @@ describe('PhaseManager battle runtime lifecycle', () => {
       h.startNewCampaign();
       h.startCampaignBattle(ORC_PATROL_ENEMY_GROUP_ID, ORC_PATROL_TRIGGER_POS);
 
-      expect(GameState.getBattleRuntime().sessionSource).toBe('campaign');
+      expect(requireInstalledRuntime().sessionSource).toBe('campaign');
     });
 
     it('debug battle entry installs a runtime with sessionSource "debug"', () => {
@@ -211,21 +214,21 @@ describe('PhaseManager battle runtime lifecycle', () => {
       h.openDebugSession(1);
       h.startDebugBattle(ORC_PATROL_ENEMY_GROUP_ID);
 
-      expect(GameState.getBattleRuntime().sessionSource).toBe('debug');
+      expect(requireInstalledRuntime().sessionSource).toBe('debug');
     });
 
     it('a rejected action neither replaces nor clears the active runtime', () => {
       const h = createLifecycleHarness();
       h.startNewCampaign();
       h.startCampaignBattle(ORC_PATROL_ENEMY_GROUP_ID, ORC_PATROL_TRIGGER_POS);
-      const runtimeBefore = GameState.getBattleRuntime();
+      const runtimeBefore = requireInstalledRuntime();
       const phaseBefore = h.manager.getPhase();
 
       // 'enter_camp' is only accepted from world_map, so it is rejected here.
       h.manager.transition({ type: 'enter_camp' });
 
       expect(h.manager.getPhase()).toBe(phaseBefore);
-      expect(GameState.getBattleRuntime()).toBe(runtimeBefore);
+      expect(requireInstalledRuntime()).toBe(runtimeBefore);
     });
 
     it('a mutation-only battle action updates runtime content without removing it', () => {
@@ -235,8 +238,8 @@ describe('PhaseManager battle runtime lifecycle', () => {
 
       h.manager.transition({ type: 'battle_set_mode', mode: 'auto' });
 
-      expect(GameState.hasBattleRuntime()).toBe(true);
-      expect(GameState.getBattleRuntime().mode).toBe('auto');
+      expect(hasInstalledRuntime()).toBe(true);
+      expect(requireInstalledRuntime().mode).toBe('auto');
       expect(h.manager.getPhase().type).toBe('battle');
     });
   });
@@ -253,12 +256,12 @@ describe('PhaseManager battle runtime lifecycle', () => {
           h.startDebugBattle(ORC_PATROL_ENEMY_GROUP_ID);
         }
 
-        const before = GameState.getBattleRuntime();
+        const before = requireInstalledRuntime();
         const placementsBefore = projectEnemyPlacements(before);
 
         h.manager.transition({ type: 'replay' });
 
-        const after = GameState.getBattleRuntime();
+        const after = requireInstalledRuntime();
 
         // Still a battle, and a genuinely new attempt.
         expect(h.manager.getPhase().type).toBe('battle');
@@ -285,8 +288,8 @@ describe('PhaseManager battle runtime lifecycle', () => {
 
       // Direct GameState mutation is used ONLY to build this corruption
       // fixture; the behavior under test is still driven through transition().
-      const runtime = GameState.getBattleRuntime();
-      GameState.setBattleRuntime({ ...runtime, sessionSource: 'debug' });
+      const runtime = requireInstalledRuntime();
+      writeBattleRuntimeSlot({ ...runtime, sessionSource: 'debug' });
 
       const campaignBefore = GameState.getCampaignState();
       const debugBefore = GameState.getDebugState();

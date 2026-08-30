@@ -23,8 +23,8 @@
       "Bash(cd /workspace && npx vitest *)"
     ],
     "deny": [
-      "Edit(CLAUDE.md, architecture_plan.md)",
-      "Write(CLAUDE.md, architecture_plan.md)"
+      "Edit(CLAUDE.md, /workspace/CLAUDE.md, architecture_plan.md)",
+      "Write(CLAUDE.md, /workspace/CLAUDE.md, architecture_plan.md)"
     ]
   }
 }

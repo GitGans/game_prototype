@@ -2,47 +2,19 @@ import type { CampaignState } from '../campaign';
 import type { DebugBattleState } from './DebugBattleState';
 import type { RosterState } from '../progression';
 import type { InventoryState } from '../inventory';
-import type { BattleState, BattleMode } from '../battle/types';
-import type { TurnContext } from '../battle/turnResolver';
-import type { BattleRuntimeContext, AutoTurnIntention } from './battleRuntimeContext';
 
+/**
+ * Campaign and debug persistent containers. NOT the battle runtime — the active battle attempt
+ * lives in `battleRuntimeStorage` behind its read/write gateways, so no module gains the ability
+ * to replace a battle attempt merely by importing GameState.
+ *
+ * Both surfaces are closed policies, not incidental properties of this file: `GAME_STATE_FIELDS`
+ * pins what it stores and `GAME_STATE_PUBLIC_API` pins what it exposes
+ * (scripts/orchestration-boundary-rules.mjs).
+ */
 class GameStateManager {
-  private battleRuntime: BattleRuntimeContext | null = null;
   private campaignState: CampaignState | null = null;
   private debugState: DebugBattleState | null = null;
-
-  hasBattleRuntime(): boolean {
-    return this.battleRuntime !== null;
-  }
-
-  getBattleRuntime(): BattleRuntimeContext {
-    if (!this.battleRuntime) throw new Error('Battle runtime is not initialized');
-    return this.battleRuntime;
-  }
-
-  setBattleRuntime(next: BattleRuntimeContext): void {
-    this.battleRuntime = next;
-  }
-
-  resetBattleRuntime(): void {
-    this.battleRuntime = null;
-  }
-
-  replaceBattleState(next: BattleState): void {
-    this.battleRuntime = { ...this.getBattleRuntime(), state: next };
-  }
-
-  replaceBattleMode(next: BattleMode): void {
-    this.battleRuntime = { ...this.getBattleRuntime(), mode: next };
-  }
-
-  replaceBattleTurnContext(next: TurnContext): void {
-    this.battleRuntime = { ...this.getBattleRuntime(), turnContext: next };
-  }
-
-  replacePendingAutoTurnIntention(next: AutoTurnIntention | null): void {
-    this.battleRuntime = { ...this.getBattleRuntime(), pendingAutoTurnIntention: next };
-  }
 
   hasCampaignState(): boolean {
     return this.campaignState !== null;

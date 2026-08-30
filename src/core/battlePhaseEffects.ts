@@ -1,7 +1,7 @@
 import type { GamePhase, PhaseAction } from './phases';
-import { GameState } from './GameState';
 import { PlayerSessionStore } from './playerSessionStore';
 import { requireBattleRuntimeForPhase } from './battleRuntimeAccess';
+import { installBattleRuntime, clearBattleRuntime } from './battleRuntimeWriteAccess';
 import type { BattleExitOutcome } from './battleRuntimeContext';
 import {
   createBattleRuntimeForSession,
@@ -27,7 +27,12 @@ import {
 
 /**
  * The application-level owner of battle runtime reads and writes: it resolves the active
- * `BattleRuntimeContext`, delegates every rule, and installs the result through `GameState`.
+ * `BattleRuntimeContext`, delegates every rule, and installs the result through
+ * `battleRuntimeWriteAccess`.
+ *
+ * This is the ONE production module holding the battle-runtime write capability — importing
+ * `battleRuntimeWriteAccess` is that authority, and `RESTRICTED_IMPORT_TARGETS` grants it here
+ * and nowhere else.
  *
  * Pure battle rules are NOT here — they live in `phaseHandlers/battlePhaseHandler` (lifecycle,
  * turn, placement), `battleStart` (attempt construction) and the `battle/` domain. This module
@@ -65,8 +70,8 @@ export type BattleRuntimeMutationAction =
  * The runtime is resolved once, up front: every branch below resolved it as its first act
  * before this was hoisted, so the throw-on-mismatch happens at exactly the same point.
  *
- * Every compound change installs ONE complete replacement runtime via `setBattleRuntime()` —
- * never two sequential writes for a single action.
+ * Every change installs ONE complete replacement runtime via `installBattleRuntime()` — never
+ * two sequential writes for a single action, and never a field-specific write.
  */
 export function applyBattleRuntimeMutation(input: {
   previousPhase: BattlePhase;
@@ -86,7 +91,7 @@ export function applyBattleRuntimeMutation(input: {
       action,
     });
 
-    GameState.setBattleRuntime({
+    installBattleRuntime({
       ...runtime,
       state: result.state,
       turnContext: result.resetTurnContext ? resetTurnContextForNewBattle() : runtime.turnContext,
@@ -97,11 +102,11 @@ export function applyBattleRuntimeMutation(input: {
 
   // ── Battle control ──
   if (action.type === 'battle_set_mode') {
-    GameState.setBattleRuntime({ ...runtime, mode: action.mode, pendingAutoTurnIntention: null });
+    installBattleRuntime({ ...runtime, mode: action.mode, pendingAutoTurnIntention: null });
     return NO_PHASE_EFFECTS;
   }
   if (action.type === 'battle_prepare_quick_battle') {
-    GameState.setBattleRuntime({
+    installBattleRuntime({
       ...runtime,
       turnContext: resetTurnContextForNewBattle(),
       pendingAutoTurnIntention: null,
@@ -112,7 +117,7 @@ export function applyBattleRuntimeMutation(input: {
   // ── Battle preview target ──
   if (action.type === 'battle_preview_target' || action.type === 'battle_clear_preview_target') {
     const target = action.type === 'battle_preview_target' ? action.target : null;
-    GameState.replaceBattleState(setBattlePreviewTarget(runtime.state, target));
+    installBattleRuntime({ ...runtime, state: setBattlePreviewTarget(runtime.state, target) });
     return NO_PHASE_EFFECTS;
   }
 
@@ -142,7 +147,7 @@ export function applyBattleRuntimeMutation(input: {
     }
 
     // Any turn action invalidates a pending preview target (skill/active unit/targets change).
-    GameState.setBattleRuntime({
+    installBattleRuntime({
       ...runtime,
       state: setBattlePreviewTarget(result.state, null),
       turnContext: result.context,
@@ -153,7 +158,7 @@ export function applyBattleRuntimeMutation(input: {
 
   // ── Battle placement ──
   if (isBattlePlacementAction(action)) {
-    GameState.replaceBattleState(applyBattlePlacementAction(runtime.state, action));
+    installBattleRuntime({ ...runtime, state: applyBattlePlacementAction(runtime.state, action) });
     return NO_PHASE_EFFECTS;
   }
 
@@ -183,7 +188,7 @@ export function startBattleRuntime(input: {
   }
 
   const session = PlayerSessionStore.getSession(resolvedPhase.sessionSource);
-  GameState.setBattleRuntime(createBattleRuntimeForSession({
+  installBattleRuntime(createBattleRuntimeForSession({
     session,
     sessionSource: resolvedPhase.sessionSource,
     enemyGroupId:  resolvedPhase.enemyGroupId,
@@ -203,7 +208,7 @@ export function startBattleRuntime(input: {
 export function replayBattleRuntime(previousPhase: BattlePhase): void {
   const runtime = requireBattleRuntimeForPhase(previousPhase);
   const session = PlayerSessionStore.getSession(runtime.sessionSource);
-  GameState.setBattleRuntime(createReplayBattleRuntimeForSession({
+  installBattleRuntime(createReplayBattleRuntimeForSession({
     session,
     replaySetup:   runtime.replaySetup,
     sessionSource: runtime.sessionSource,
@@ -229,11 +234,13 @@ export function applyBattleExitRosterEffect(input: {
  * Explicit session-boundary disposal, used only by session lifecycle actions (`new_game`,
  * `init_debug`, `reset_debug_session`, `exit_to_menu`). Those may run from a non-battle phase
  * that the generic finalizer below does not cover, so they dispose the runtime themselves.
+ *
+ * Kept as a named intent operation rather than inlining `clearBattleRuntime()` at each call
+ * site: "dispose whatever attempt the previous session left behind" and "tear down on leaving
+ * the battle phase" are different reasons to clear, and `phaseActionEffects` should name which.
  */
 export function clearBattleRuntimeIfPresent(): void {
-  if (GameState.hasBattleRuntime()) {
-    GameState.resetBattleRuntime();
-  }
+  clearBattleRuntime();          // idempotent — the hasBattleRuntime() guard is no longer needed
 }
 
 /**
@@ -257,6 +264,6 @@ export function teardownBattleRuntimeAfterTransition(
   resolvedPhase: GamePhase,
 ): void {
   if (previousPhase.type === 'battle' && resolvedPhase.type !== 'battle') {
-    GameState.resetBattleRuntime();
+    clearBattleRuntime();
   }
 }

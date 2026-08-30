@@ -31,18 +31,19 @@ function cloneShape(shape: UnitShape): UnitShape {
   return { offsets: shape.offsets.map(o => ({ ...o })) };
 }
 
-// activeEffects is runtime-owned and mutable at every depth. `Effect` is a flat record, so
-// a shallow copy of it is a complete copy. <=2 effects per unit.
+// activeEffects is runtime-owned. It is readonly by type through the battle-runtime read
+// gateway, but `readonly` is erased at runtime, so this deep copy remains the actual value
+// isolation guarantee for scenes — the two are complementary, not redundant.
+// `Effect` is a flat record, so a shallow copy of it is a complete copy. <=2 effects per unit.
 function cloneActiveEffect(ae: ActiveEffect): ActiveEffect {
-  const copy: ActiveEffect = {
+  return {
     effectDisplayName: ae.effectDisplayName,
     effect:            { ...ae.effect },
     remainingRounds:   ae.remainingRounds,
+    // Optional by contract — spread only when present, so the copy keeps the same key shape
+    // instead of gaining an explicit `periodicHp: undefined`.
+    ...(ae.periodicHp ? { periodicHp: { ...ae.periodicHp } } : {}),
   };
-  // Optional by contract — assign only when present, so the copy keeps the same key shape
-  // instead of gaining an explicit `periodicHp: undefined`.
-  if (ae.periodicHp) copy.periodicHp = { ...ae.periodicHp };
-  return copy;
 }
 
 /**
@@ -262,7 +263,7 @@ export function buildBattleFieldUnitCellsSnapshot(
 export function projectPreviewTarget(input: {
   battlePhase:         BattleState['phase'];
   previewTargetCoord:  CellCoord | null;
-  validTargets:        CellCoord[];
+  validTargets:        readonly CellCoord[];  // runtime-owned; inspected only
   hasActiveUnit:       boolean;
   fieldUnitCells:      BattleFieldUnitCellsSnapshot;
   unitsById:           Map<string, BattleUnitSnapshot>;

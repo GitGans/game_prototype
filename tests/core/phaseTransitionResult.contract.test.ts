@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createLifecycleHarness,
   resetGameStateBetweenTests,
+  requireInstalledRuntime,
   DEMON_PATROL_ENEMY_GROUP_ID,
   ORC_PATROL_ENEMY_GROUP_ID,
   ORC_PATROL_TRIGGER_POS,
@@ -202,7 +203,7 @@ describe("PhaseManager.transition() public result", () => {
     expect(directive?.type).toBe("intention");
     if (directive?.type !== "intention") return;
 
-    const pending = GameState.getBattleRuntime().pendingAutoTurnIntention;
+    const pending = requireInstalledRuntime().pendingAutoTurnIntention;
     expect(pending).not.toBeNull();
     expect(directive.intention).not.toBe(pending);
     expect(directive.intention.unitId).toBe(pending!.unitId);
@@ -213,7 +214,7 @@ describe("PhaseManager.transition() public result", () => {
     harness.startDebugBattle(DEMON_PATROL_ENEMY_GROUP_ID);
 
     const phaseBefore = harness.manager.getPhase();
-    const runtimeBefore = GameState.getBattleRuntime();
+    const runtimeBefore = requireInstalledRuntime();
     const syncsBefore = harness.sync.mock.calls.length;
     stateChangedCount = 0;
 
@@ -227,7 +228,7 @@ describe("PhaseManager.transition() public result", () => {
     expect(stateChangedCount).toBe(0);
     expect(harness.manager.getPhase().type).toBe("battle");
     expect(harness.manager.getPhase()).not.toBe(phaseBefore);
-    expect(GameState.getBattleRuntime()).not.toBe(runtimeBefore);
+    expect(requireInstalledRuntime()).not.toBe(runtimeBefore);
   });
 
   it("returns applied with null feedback for a campaign world action", () => {

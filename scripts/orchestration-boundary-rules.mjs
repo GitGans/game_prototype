@@ -5,6 +5,7 @@
 // bottom of this file into the same policy shape.
 
 import { compileCollaboratorRegistry } from "./orchestration-collaborator-policy.mjs";
+import { compileModuleExportPolicies } from "./module-export-policy.mjs";
 
 // The pure router may see phase contracts and the neutral metadata contract — nothing else.
 // Its purity is load-bearing rather than merely a checker rule (Node-importable with zero
@@ -180,9 +181,11 @@ export const SCENE_PIPELINE_BANNED_IMPORTS = [
   "core/phaseTransitionMetadataContract",
   "core/phaseChangeNotifier",
   "core/phaseEffectsResult",
-  // battle runtime and its access seam
+  // battle runtime, its storage cell and both access gateways
   "core/battleRuntimeContext",
   "core/battleRuntimeAccess",
+  "core/battleRuntimeStorage",
+  "core/battleRuntimeWriteAccess",
   // builders of the committed GamePhase snapshot, and their internal helpers
   "core/battlePhaseSnapshot",
   "core/battleSnapshotBuilder",
@@ -333,4 +336,166 @@ export const ORCHESTRATION_COLLABORATOR_REGISTRY = {
 // checker's own diagnostics instead of throwing during module initialization.
 export const ORCHESTRATION_REGISTRY_COMPILATION = compileCollaboratorRegistry(
   ORCHESTRATION_COLLABORATOR_REGISTRY,
+);
+
+// ─── Stage 4B: battle-runtime read/write ownership ──────────────────────────
+
+/**
+ * Outbound ownership policies for the battle-runtime triad and GameState.
+ *
+ * GameState is pinned so battle runtime — or any other domain runtime — cannot return to it:
+ * the four allowed specifiers are exactly the campaign/debug container types it holds.
+ * The triad is pinned so storage stays rule-free and each gateway keeps its single
+ * responsibility — the write gateway, in particular, may not acquire a read.
+ */
+export const RUNTIME_OWNERSHIP_IMPORT_POLICIES = {
+  "core/GameState.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "campaign",
+      "core/DebugBattleState",
+      "inventory",
+      "progression",
+    ],
+  },
+  "core/battleRuntimeStorage.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["core/battleRuntimeContext"],
+  },
+  "core/battleRuntimeAccess.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/battleRuntimeContext",
+      "core/battleRuntimeStorage",
+      "core/phases",
+    ],
+  },
+  "core/battleRuntimeWriteAccess.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/battleRuntimeContext",
+      "core/battleRuntimeStorage",
+    ],
+  },
+};
+
+/**
+ * The complete private-state surface of GameStateManager. An allowlist, not a blocklist:
+ * re-adding `battleRuntime` — or any new domain runtime — must be a visible policy change,
+ * not a silent field declaration.
+ */
+export const GAME_STATE_FIELDS = ["campaignState", "debugState"];
+
+/**
+ * The complete PUBLIC surface of GameStateManager: campaign and debug container access only.
+ *
+ * The field list stops a new stored field; this stops a new exposed CAPABILITY — including one
+ * backed by module-local storage that no field registry could see. Together they make
+ * "GameState owns campaign and debug containers only" mechanically enforceable rather than a
+ * convention held up by review.
+ */
+export const GAME_STATE_PUBLIC_API = [
+  "clearDebugState",
+  "getCampaignState",
+  "getDebugState",
+  "hasCampaignState",
+  "replaceCampaignInventory",
+  "replaceCampaignRoster",
+  "replaceDebugInventory",
+  "replaceDebugRoster",
+  "requireDebugState",
+  "setCampaignState",
+  "setDebugState",
+];
+
+/**
+ * Inbound (importer-direction) restrictions: WHO may import a module, as opposed to what a
+ * module may import. Capability modules need this direction — an outbound allowlist on
+ * battleRuntimeWriteAccess constrains what it depends on, not who may pick up the authority
+ * to replace a battle attempt.
+ *
+ * KEY CONVENTION — the two halves are deliberately asymmetric, and both are validated:
+ *   keys             = normalized, EXTENSIONLESS specifiers (what normalizeSpecifier yields)
+ *   allowedImporters = src-relative paths WITH .ts/.tsx  (what the file walk yields)
+ * Each is correct for the value it is compared against. Adding ".ts" to a key to "fix the
+ * inconsistency" would make it match nothing — a restricted target that silently stops being
+ * restricted, i.e. a fail-OPEN hole. validateRestrictedImportTargets rejects both mistakes.
+ *
+ * `allowedImporters` must be sorted and duplicate-free so registry diffs stay reviewable.
+ */
+export const RESTRICTED_IMPORT_TARGETS = {
+  "core/battleRuntimeStorage": {
+    reason: "Internal battle-runtime storage cell.",
+    allowedImporters: [
+      "core/battleRuntimeAccess.ts",
+      "core/battleRuntimeWriteAccess.ts",
+    ],
+  },
+  "core/battleRuntimeWriteAccess": {
+    reason: "Battle-runtime write capability owned by battlePhaseEffects.",
+    allowedImporters: ["core/battlePhaseEffects.ts"],
+  },
+};
+
+/**
+ * The exact public export surface of every module holding restricted battle-runtime authority.
+ *
+ * RESTRICTED_IMPORT_TARGETS above says who may PICK the authority up; this says what the
+ * permitted holders may HAND ON. Without it, an allowed importer can re-export a restricted
+ * capability under any name — including an approved one — and every other module reaches it
+ * through an unrestricted specifier while the import checker stays green. battleRuntimeAccess
+ * is the sharp case: it may legitimately import storage, so nothing but this closes that path.
+ *
+ * Entries are the REVIEWED expected surface, written by hand. They are deliberately not derived
+ * from the source (that would agree with any change) nor from imports (an export surface is a
+ * different decision from a dependency list).
+ *
+ * Shape: an ARRAY of { name, kind }, not a { name: kind } map — an object literal silently
+ * deduplicates a repeated key, which would make the duplicate-registration check unreachable.
+ * Sorted by name, so a diff shows exactly one added or removed line.
+ * Kinds: "function" | "type-alias" — see scripts/module-export-policy.mjs.
+ */
+export const RUNTIME_OWNERSHIP_EXPORT_POLICIES = {
+  "core/battleRuntimeStorage.ts": [
+    { name: "clearBattleRuntimeSlot", kind: "function" },
+    { name: "readBattleRuntimeSlot", kind: "function" },
+    { name: "writeBattleRuntimeSlot", kind: "function" },
+  ],
+  "core/battleRuntimeAccess.ts": [
+    { name: "requireBattleRuntimeForPhase", kind: "function" },
+  ],
+  "core/battleRuntimeWriteAccess.ts": [
+    { name: "clearBattleRuntime", kind: "function" },
+    { name: "installBattleRuntime", kind: "function" },
+  ],
+  "core/battlePhaseEffects.ts": [
+    { name: "BattleRuntimeMutationAction", kind: "type-alias" },
+    { name: "applyBattleExitRosterEffect", kind: "function" },
+    { name: "applyBattleRuntimeMutation", kind: "function" },
+    { name: "clearBattleRuntimeIfPresent", kind: "function" },
+    { name: "replayBattleRuntime", kind: "function" },
+    { name: "startBattleRuntime", kind: "function" },
+    { name: "teardownBattleRuntimeAfterTransition", kind: "function" },
+  ],
+};
+
+/**
+ * Which modules MUST have a pinned export surface: every restricted target, plus every module
+ * permitted to import one. That is precisely the set holding restricted authority, so the
+ * closure argument is derived rather than asserted by four hand-written keys — adding a
+ * restricted target or a permitted importer automatically requires a reviewed export surface.
+ * The same obligation checkPhaseHandlerCoverage imposes on core/phaseHandlers/**.
+ *
+ * Only the coverage obligation is derived; the export NAMES stay hand-reviewed above.
+ */
+export const RUNTIME_OWNERSHIP_EXPORT_COVERAGE = [
+  ...new Set([
+    ...Object.keys(RESTRICTED_IMPORT_TARGETS).map((target) => `${target}.ts`),
+    ...Object.values(RESTRICTED_IMPORT_TARGETS).flatMap((entry) => entry.allowedImporters),
+  ]),
+].sort();
+
+export const RUNTIME_OWNERSHIP_EXPORT_COMPILATION = compileModuleExportPolicies(
+  RUNTIME_OWNERSHIP_EXPORT_POLICIES,
+  RUNTIME_OWNERSHIP_EXPORT_COVERAGE,
 );

@@ -25,11 +25,13 @@ export type SpriteState = 'idle' | 'attack' | 'death';
 // depend on battle/. Do not move it.
 export type UnitLifeState = 'alive' | 'dead';
 
+// Static value contract resolved at unit creation. Factories may build ordinary
+// mutable arrays and return them as this readonly contract.
 export interface SpriteSheetConfig {
-  path: string;
-  frameWidth: number;
-  frameHeight: number;
-  states: SpriteState[];
+  readonly path: string;
+  readonly frameWidth: number;
+  readonly frameHeight: number;
+  readonly states: readonly SpriteState[];
 }
 
 export type RowTrait = 'front' | 'back';

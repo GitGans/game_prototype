@@ -4,6 +4,10 @@ import {
   type PhaseManagerClass,
 } from '../../../src/core/PhaseManager';
 import { GameState } from '../../../src/core/GameState';
+import {
+  readBattleRuntimeSlot,
+  clearBattleRuntimeSlot,
+} from '../../../src/core/battleRuntimeStorage';
 import type { PhaseSceneSynchronizer } from '../../../src/core/phaseSceneSynchronizer';
 import type { GamePhase } from '../../../src/core/phases';
 import type { WorldPos } from '../../../src/shared/worldTypes';
@@ -138,14 +142,35 @@ export function createLifecycleHarness(): LifecycleHarness {
 }
 
 export function resetGameStateBetweenTests(): void {
-  GameState.resetBattleRuntime();
+  clearBattleRuntimeSlot();
   GameState.clearDebugState();
+}
+
+/** True when a battle attempt is currently installed. */
+export function hasInstalledRuntime(): boolean {
+  return readBattleRuntimeSlot() !== null;
+}
+
+/**
+ * The installed runtime, asserted present — the test-side counterpart of the production
+ * validated read `requireBattleRuntimeForPhase()`. Keeps suites free of `!` and turns a
+ * missing runtime into a named failure instead of a `null` property access.
+ *
+ * Suites that mock the module graph (see phaseManagerRngLifecycle) must reach the runtime
+ * through this helper rather than a static storage import: storage is a module-level
+ * singleton, so after `vi.resetModules()` a statically imported copy is a *different* cell
+ * than the one the dynamically imported manager writes into.
+ */
+export function requireInstalledRuntime(): BattleRuntimeContext {
+  const runtime = readBattleRuntimeSlot();
+  if (!runtime) throw new Error('test expected an installed battle runtime');
+  return runtime;
 }
 
 /**
  * Content-comparable projection of enemy deployment: template id + CellCoord
  * anchor, stably sorted. Reads the canonical replaySetup source, so callers
- * pass GameState.getBattleRuntime() — never a GamePhase.
+ * pass requireInstalledRuntime() — never a GamePhase.
  */
 export function projectEnemyPlacements(
   runtime: BattleRuntimeContext,

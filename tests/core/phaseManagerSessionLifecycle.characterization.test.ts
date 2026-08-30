@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach } from "vitest";
 import {
   createLifecycleHarness,
   resetGameStateBetweenTests,
+  requireInstalledRuntime,
+  hasInstalledRuntime,
   ORC_PATROL_ENEMY_GROUP_ID,
   ORC_PATROL_TRIGGER_POS,
   DEBUG_MUTATION_PROBE_UNIT_ID,
@@ -28,12 +30,12 @@ describe("PhaseManager session lifecycle", () => {
     h.openDebugSession(1);
     h.startDebugBattle(ORC_PATROL_ENEMY_GROUP_ID);
     expect(GameState.getDebugState()).not.toBeNull();
-    expect(GameState.hasBattleRuntime()).toBe(true);
+    expect(hasInstalledRuntime()).toBe(true);
 
     h.startNewCampaign();
 
     expect(GameState.getDebugState()).toBeNull();
-    expect(GameState.hasBattleRuntime()).toBe(false);
+    expect(hasInstalledRuntime()).toBe(false);
     expect(GameState.hasCampaignState()).toBe(true);
     expect(GameState.getCampaignState()).not.toBe(campaignBefore);
   });
@@ -228,14 +230,14 @@ describe("PhaseManager session lifecycle", () => {
 
     const phaseBefore = h.manager.getPhase();
     const debugBefore = GameState.getDebugState();
-    const runtimeBefore = GameState.getBattleRuntime();
+    const runtimeBefore = requireInstalledRuntime();
     const syncCallsBefore = h.sync.mock.calls.length;
 
     h.manager.transition({ type: "reset_debug_session" });
 
     expect(h.manager.getPhase()).toBe(phaseBefore);
     expect(GameState.getDebugState()).toBe(debugBefore);
-    expect(GameState.getBattleRuntime()).toBe(runtimeBefore);
+    expect(requireInstalledRuntime()).toBe(runtimeBefore);
     expect(h.sync.mock.calls.length).toBe(syncCallsBefore);
   });
 
@@ -258,12 +260,12 @@ describe("PhaseManager session lifecycle", () => {
     h.startNewCampaign();
     h.openDebugSession(1);
     h.startDebugBattle(ORC_PATROL_ENEMY_GROUP_ID);
-    expect(GameState.hasBattleRuntime()).toBe(true);
+    expect(hasInstalledRuntime()).toBe(true);
 
     h.manager.transition({ type: "exit_to_menu" });
 
     expect(GameState.getDebugState()).toBeNull();
-    expect(GameState.hasBattleRuntime()).toBe(false);
+    expect(hasInstalledRuntime()).toBe(false);
   });
 
   // Contract 8
@@ -284,7 +286,7 @@ describe("PhaseManager session lifecycle", () => {
     h.startNewCampaign();
 
     expect(GameState.getDebugState()).toBeNull();
-    expect(GameState.hasBattleRuntime()).toBe(false);
+    expect(hasInstalledRuntime()).toBe(false);
 
     const freshCampaign = GameState.getCampaignState();
     expect(freshCampaign).not.toBe(progressedCampaign);

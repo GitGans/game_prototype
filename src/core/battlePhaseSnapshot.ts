@@ -1,4 +1,5 @@
 import type { GamePhase } from './phases';
+import type { CellCoord } from '../shared/gridTypes';
 import type { BattleRuntimeContext } from './battleRuntimeContext';
 import {
   buildBattleUnitSnapshotViews,
@@ -91,7 +92,9 @@ export function buildBattlePhaseSnapshot(
 
 function resolveTargetHighlightKind(
   activeUnit: BattlePhase['activeUnit'],
-  validTargets: BattlePhase['validTargets'],
+  // Read-only: this receives the runtime-owned `BattleState.validTargets`, not the
+  // snapshot's copied array. Inspected only, never stored.
+  validTargets: readonly CellCoord[],
 ): BattlePhase['targetHighlightKind'] {
   if (!activeUnit || validTargets.length === 0) return 'none';
 

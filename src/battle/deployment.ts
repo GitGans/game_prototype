@@ -92,7 +92,7 @@ export function getFreeBenchSlot(state: BattleState): number | null {
 // Returns a new deployments map with the entry for unitId removed.
 // Use when removing a single known unit from state.units.
 export function removeDeployment(
-  deployments: Map<string, UnitDeployment>,
+  deployments: ReadonlyMap<string, UnitDeployment>,
   unitId: string,
 ): Map<string, UnitDeployment> {
   const next = new Map(deployments);
@@ -104,8 +104,8 @@ export function removeDeployment(
 // NOT for ordinary combat death: combat keeps dead units in state.units with
 // `lifeState:'dead'` and preserved deployment via killUnit().
 export function retainDeploymentsForUnits(
-  deployments: Map<string, UnitDeployment>,
-  units: Map<string, Unit>,
+  deployments: ReadonlyMap<string, UnitDeployment>,
+  units: ReadonlyMap<string, Unit>,
 ): Map<string, UnitDeployment> {
   const next = new Map<string, UnitDeployment>();
   for (const [unitId, deployment] of deployments) {

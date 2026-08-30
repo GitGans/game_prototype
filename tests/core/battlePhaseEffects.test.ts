@@ -13,6 +13,8 @@ import { makeBattlePhase, makeWorldMapPhase } from './helpers/phaseFixtures';
 import {
   createLifecycleHarness,
   resetGameStateBetweenTests,
+  requireInstalledRuntime,
+  hasInstalledRuntime,
   projectEnemyPlacements,
   ORC_PATROL_ENEMY_GROUP_ID,
   ORC_PATROL_TRIGGER_POS,
@@ -61,7 +63,7 @@ describe('startBattleRuntime', () => {
       actionType: 'enter_battle',
     });
 
-    const runtime = GameState.getBattleRuntime();
+    const runtime = requireInstalledRuntime();
     expect(runtime).not.toBeNull();
     expect(runtime!.sessionSource).toBe('campaign');
     expect(runtime!.state.units.size).toBeGreaterThan(0);
@@ -83,7 +85,7 @@ describe('startBattleRuntime', () => {
 
     // A ScriptedRng throws on exhaustion, so reaching here at all proves the stream was the
     // one consumed; a placement check proves it actually reached enemy setup.
-    expect(projectEnemyPlacements(GameState.getBattleRuntime()!).length).toBeGreaterThan(0);
+    expect(projectEnemyPlacements(requireInstalledRuntime()).length).toBeGreaterThan(0);
   });
 
   it('throws a lifecycle error when the action did not resolve to a battle phase', () => {
@@ -98,12 +100,12 @@ describe('startBattleRuntime', () => {
 describe('replayBattleRuntime', () => {
   it('installs an independent runtime that restores the captured enemy formation', () => {
     const { phase } = liveCampaignBattle();
-    const before = GameState.getBattleRuntime()!;
+    const before = requireInstalledRuntime();
     const placementsBefore = projectEnemyPlacements(before);
 
     replayBattleRuntime(phase);
 
-    const after = GameState.getBattleRuntime()!;
+    const after = requireInstalledRuntime();
     expect(after).not.toBe(before);
     expect(after.state).not.toBe(before.state);
     // Enemies are restored, not rerolled — that is what makes replay a retry of the same
@@ -116,12 +118,12 @@ describe('replayBattleRuntime', () => {
     // by reaching for a module-level stream. Asserting the placement is identical to the
     // original (above) is the behavioral half of the same contract.
     const { phase } = liveCampaignBattle();
-    const before = projectEnemyPlacements(GameState.getBattleRuntime()!);
+    const before = projectEnemyPlacements(requireInstalledRuntime());
 
     replayBattleRuntime(phase);
     replayBattleRuntime(phase);
 
-    expect(projectEnemyPlacements(GameState.getBattleRuntime()!)).toEqual(before);
+    expect(projectEnemyPlacements(requireInstalledRuntime())).toEqual(before);
   });
 });
 
@@ -161,7 +163,7 @@ describe('applyBattleRuntimeMutation', () => {
       battleResolutionRng: forbiddenRng,
     });
 
-    expect(GameState.hasBattleRuntime()).toBe(true);
+    expect(hasInstalledRuntime()).toBe(true);
   });
 
   it('narrows the turn directive, dropping the runtime-aliasing fields', () => {
@@ -226,10 +228,10 @@ describe('battle runtime disposal', () => {
   it('clearBattleRuntimeIfPresent is safe with and without an installed runtime', () => {
     liveCampaignBattle();
     clearBattleRuntimeIfPresent();
-    expect(GameState.hasBattleRuntime()).toBe(false);
+    expect(hasInstalledRuntime()).toBe(false);
 
     expect(() => clearBattleRuntimeIfPresent()).not.toThrow();
-    expect(GameState.hasBattleRuntime()).toBe(false);
+    expect(hasInstalledRuntime()).toBe(false);
   });
 
   it('clears the runtime when leaving battle for a non-battle phase', () => {
@@ -237,7 +239,7 @@ describe('battle runtime disposal', () => {
 
     teardownBattleRuntimeAfterTransition(phase, makeWorldMapPhase());
 
-    expect(GameState.hasBattleRuntime()).toBe(false);
+    expect(hasInstalledRuntime()).toBe(false);
   });
 
   it.each([
@@ -249,7 +251,7 @@ describe('battle runtime disposal', () => {
 
     teardownBattleRuntimeAfterTransition(previous(), resolved());
 
-    expect(GameState.hasBattleRuntime()).toBe(true);
+    expect(hasInstalledRuntime()).toBe(true);
   });
 
   it('is keyed on phase type, not object identity', () => {
@@ -259,6 +261,6 @@ describe('battle runtime disposal', () => {
 
     teardownBattleRuntimeAfterTransition(phase, { ...phase });
 
-    expect(GameState.hasBattleRuntime()).toBe(true);
+    expect(hasInstalledRuntime()).toBe(true);
   });
 });

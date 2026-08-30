@@ -165,7 +165,7 @@ export function autoPlaceEnemies(
 
 export function replayPlaceEnemies(
   state:  BattleState,
-  inputs: EnemyReplayPlacementInput[],
+  inputs: readonly EnemyReplayPlacementInput[],
 ): BattleState {
   for (const { unitInput, anchor } of inputs) {
     const unit = createUnitInstance(unitInput);

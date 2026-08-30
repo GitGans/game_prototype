@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GameState } from '../../src/core/GameState';
 import {
+  clearBattleRuntimeSlot,
+  writeBattleRuntimeSlot,
+} from '../../src/core/battleRuntimeStorage';
+import {
   applyMovePartyPhaseAction,
   applyBattleWorldConsequence,
 } from '../../src/core/phaseHandlers/worldPhaseHandler';
@@ -24,7 +28,7 @@ import { FIXTURE_MAP_ID } from './helpers/phaseManagerLifecycleHarness';
  */
 
 function installRuntime(sessionSource: PlayerSessionSource): void {
-  GameState.setBattleRuntime(createBattleRuntimeContext({
+  writeBattleRuntimeSlot(createBattleRuntimeContext({
     state: createEmptyBattleState(),
     participants: [],
     replaySetup: { enemyPlacements: [] },
@@ -43,13 +47,13 @@ function campaignBattlePhase(mapId: string | undefined = FIXTURE_MAP_ID) {
 
 describe('worldPhaseHandler', () => {
   beforeEach(() => {
-    GameState.resetBattleRuntime();
+    clearBattleRuntimeSlot();
     GameState.clearDebugState();
     initializeNewCampaign();
   });
 
   afterEach(() => {
-    GameState.resetBattleRuntime();
+    clearBattleRuntimeSlot();
     GameState.clearDebugState();
   });
 
@@ -167,7 +171,7 @@ describe('worldPhaseHandler', () => {
     });
 
     it('throws when no battle runtime is installed at all', () => {
-      GameState.resetBattleRuntime();
+      clearBattleRuntimeSlot();
 
       expect(() => applyBattleWorldConsequence({
         previousPhase: campaignBattlePhase(),

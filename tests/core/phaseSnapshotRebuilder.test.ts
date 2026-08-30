@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { rebuildPhaseSnapshot } from '../../src/core/phaseSnapshotRebuilder';
 import { GameState } from '../../src/core/GameState';
+import {
+  clearBattleRuntimeSlot,
+  readBattleRuntimeSlot,
+  writeBattleRuntimeSlot,
+} from '../../src/core/battleRuntimeStorage';
 import { initCampaignState } from '../../src/core/initCampaignState';
 import { initializeDebugSession, clearDebugSession } from '../../src/core/debugLifecycle';
 import { createBattleRuntimeContext } from '../../src/core/battleRuntimeContext';
@@ -89,7 +94,7 @@ function debugEquipScreenPhase(): Extract<GamePhase, { type: 'debug_equip_screen
 describe('rebuildPhaseSnapshot', () => {
   beforeEach(() => {
     resetUnitIdCounter();
-    if (GameState.hasBattleRuntime()) GameState.resetBattleRuntime();
+    clearBattleRuntimeSlot();
     clearDebugSession();
     installCampaign();
     installDebugSession();
@@ -220,7 +225,7 @@ describe('rebuildPhaseSnapshot', () => {
       }
 
       // Runtime is already cleared by the time this snapshot is built.
-      expect(GameState.hasBattleRuntime()).toBe(false);
+      expect(readBattleRuntimeSlot()).toBeNull();
 
       const campaignResult = rebuildPhaseSnapshot(resultsPhase('campaign'));
       const debugResult = rebuildPhaseSnapshot(resultsPhase('debug'));
@@ -252,7 +257,7 @@ describe('rebuildPhaseSnapshot', () => {
           },
         ],
       });
-      GameState.setBattleRuntime(
+      writeBattleRuntimeSlot(
         createBattleRuntimeContext({
           state,
           participants: [],

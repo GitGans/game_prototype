@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { GameState } from "../../src/core/GameState";
+import {
+  clearBattleRuntimeSlot,
+  readBattleRuntimeSlot,
+  writeBattleRuntimeSlot,
+} from "../../src/core/battleRuntimeStorage";
 import { initializeNewCampaign } from "../../src/core/campaignLifecycle";
 import { initializeDebugSessionForLevel } from "../../src/core/debugLifecycle";
 import {
@@ -22,14 +27,14 @@ import { PLAYER_UNITS } from "../../src/data/units";
 describe("initializeNewCampaign", () => {
   beforeEach(() => {
     GameState.clearDebugState();
-    GameState.resetBattleRuntime();
+    clearBattleRuntimeSlot();
   });
 
   // The ownership test below intentionally LEAVES both resources installed — that is the
   // point of it. Without this, it would leak singleton state into whatever runs next.
   afterEach(() => {
     GameState.clearDebugState();
-    GameState.resetBattleRuntime();
+    clearBattleRuntimeSlot();
   });
 
   it("installs a campaign built from the production catalogs", () => {
@@ -71,13 +76,13 @@ describe("initializeNewCampaign", () => {
     initializeDebugSessionForLevel(3);
     const debugBefore = GameState.requireDebugState();
 
-    GameState.setBattleRuntime(createBattleRuntimeContext({
+    writeBattleRuntimeSlot(createBattleRuntimeContext({
       state: createEmptyBattleState(),
       participants: [],
       replaySetup: { enemyPlacements: [] },
       sessionSource: "debug",
     }));
-    const runtimeBefore = GameState.getBattleRuntime();
+    const runtimeBefore = readBattleRuntimeSlot();
 
     initializeNewCampaign();
 
@@ -89,7 +94,7 @@ describe("initializeNewCampaign", () => {
     // disposing the runtime and resetting RNG belong to `phaseActionEffects`, which sequences
     // them around this call — doing any of them here would make `new_game` perform them twice.
     expect(GameState.getDebugState()).toBe(debugBefore);
-    expect(GameState.hasBattleRuntime()).toBe(true);
-    expect(GameState.getBattleRuntime()).toBe(runtimeBefore);
+    expect(readBattleRuntimeSlot()).not.toBeNull();
+    expect(readBattleRuntimeSlot()).toBe(runtimeBefore);
   });
 });

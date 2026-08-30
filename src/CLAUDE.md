@@ -25,7 +25,7 @@ The system is split into layers: static content definitions, domain logic, orche
 * progression/→ unit progression domain (roster state, class/upgrade resolution, stats)
 * campaign/ → persistent campaign state contract (`CampaignState`) — the only future save source
 * save/     → future save/load boundary contract (`SaveRepository`); no implementation yet
-* core/     → game orchestration: PhaseManager, GameState, phase definitions, transitions
+* core/     → game orchestration: PhaseManager, GameState (campaign/debug containers), battle-runtime storage + access gateways, phase definitions, transitions
 * objects/  → game-specific visual components (unit views, tooltips, skill bars)
 * ui/       → reusable, game-agnostic UI primitives (buttons, inputs, theme)
 * scenes/   → Phaser scenes — composition, input handling, PhaseManager triggers only
@@ -131,7 +131,8 @@ imports — enforced by `check-boundaries.mjs`.
 * change the persistent campaign state shape           → campaign/campaignState.ts
 * change the save/load boundary contract               → save/saveTypes.ts
 * change how a new campaign is initialized             → core/initCampaignState.ts + data/campaignInitialStateDefinition.ts
-* change runtime ownership of campaign/debug/battle state → core/GameState.ts
+* change runtime ownership of campaign/debug state         → core/GameState.ts
+* change battle-runtime storage, reads or the write capability → core/battleRuntimeStorage.ts / core/battleRuntimeAccess.ts / core/battleRuntimeWriteAccess.ts
 * change a visual component tied to game data         → objects/
 * change a reusable UI primitive                      → ui/
 * change global styles or constants                   → ui/theme.ts (UI_THEME), core/Constants.ts

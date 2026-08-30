@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   createLifecycleHarness,
   resetGameStateBetweenTests,
+  hasInstalledRuntime,
   ORC_PATROL_ENEMY_GROUP_ID,
   ORC_PATROL_TRIGGER_POS,
   ORC_PATROL_ENTITY_KEY,
@@ -72,7 +73,7 @@ describe('PhaseManager world consequences', () => {
     expect(isEncounterAlive(subMapBefore, ORC_PATROL_ENTITY_KEY)).toBe(true);
     expect(entityStatesBefore).toEqual({});
 
-    expect(GameState.hasBattleRuntime()).toBe(false);
+    expect(hasInstalledRuntime()).toBe(false);
     expect(h.manager.getPhase()).toMatchObject({
       type: 'battle_results',
       mapCleared: false,
@@ -95,7 +96,7 @@ describe('PhaseManager world consequences', () => {
     // Identity preserved: a defeat writes no world consequence at all.
     expect(worldAfter).toBe(worldBefore);
 
-    expect(GameState.hasBattleRuntime()).toBe(false);
+    expect(hasInstalledRuntime()).toBe(false);
     expect(h.manager.getPhase().type).toBe('world_map');
   });
 
@@ -181,7 +182,7 @@ describe('PhaseManager world consequences', () => {
     expect(h.manager.getPhase()).toBe(phaseBefore);
     expect(GameState.getCampaignState()).toBe(campaignBefore);
     expect(GameState.getDebugState()).toBe(debugBefore);
-    expect(GameState.hasBattleRuntime()).toBe(false);
+    expect(hasInstalledRuntime()).toBe(false);
     expect(h.sync.mock.calls.length).toBe(syncCallsBefore);
   });
 });

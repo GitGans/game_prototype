@@ -349,7 +349,9 @@ export type SwitchActiveSkillResult = {
   state: BattleState;
   activeUnit?: Unit;
   activeSkill?: ActionSkillDefinition;
-  validTargets: CellCoord[];
+  // Read-only because the no-op branch returns `state.validTargets` by reference
+  // rather than building a replacement.
+  validTargets: readonly CellCoord[];
 };
 
 export function switchActiveSkillForManualTurn(input: {

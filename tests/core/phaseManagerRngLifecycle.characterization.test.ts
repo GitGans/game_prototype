@@ -18,15 +18,16 @@ import type { LifecycleHarness } from './helpers/phaseManagerLifecycleHarness';
  * session-lifecycle suite instead.
  *
  * MODULE-GRAPH RULE: this file has zero static imports of production modules.
- * `GameState` is a module-level singleton, so after `vi.resetModules()` a
- * statically imported copy would be a *different* instance than the one the
- * dynamically imported PhaseManager writes into — the assertions would read an
- * empty singleton and silently not test the manager under test. Everything
- * comes from the same dynamic graph, established after `vi.doMock()`.
+ * `battleRuntimeStorage` holds the active attempt in a module-level cell (as
+ * `GameState` does for campaign/debug), so after `vi.resetModules()` a statically
+ * imported copy would be a *different* cell than the one the dynamically imported
+ * PhaseManager writes into — the assertions would read an empty slot and silently
+ * not test the manager under test. Everything comes from the same dynamic graph,
+ * established after `vi.doMock()`; the runtime is reached through the harness's
+ * `requireInstalledRuntime()` rather than a static storage import.
  */
 
 const RANDOM_MODULE = '../../src/core/random';
-const GAME_STATE_MODULE = '../../src/core/GameState';
 const HARNESS_MODULE = './helpers/phaseManagerLifecycleHarness';
 
 const ORC_PATROL = 'orc_patrol';
@@ -73,11 +74,8 @@ async function loadWithScriptedSetupStream() {
       }),
     };
   });
-  const [{ GameState }, harness] = await Promise.all([
-    import(GAME_STATE_MODULE),
-    import(HARNESS_MODULE),
-  ]);
-  return { GameState, ...harness };
+  const harness = await import(HARNESS_MODULE);
+  return { ...harness };
 }
 
 async function loadWithTrackedResolutionStream() {
@@ -93,11 +91,8 @@ async function loadWithTrackedResolutionStream() {
       },
     };
   });
-  const [{ GameState }, harness] = await Promise.all([
-    import(GAME_STATE_MODULE),
-    import(HARNESS_MODULE),
-  ]);
-  return { GameState, resolutionStreams, ...harness };
+  const harness = await import(HARNESS_MODULE);
+  return { resolutionStreams, ...harness };
 }
 
 describe('PhaseManager RNG lifecycle', () => {
@@ -115,29 +110,29 @@ describe('PhaseManager RNG lifecycle', () => {
   // so an identical placement projection proves a fresh stream was installed.
 
   it('new_game installs a fresh battleSetup stream even mid-battle', async () => {
-    const { GameState, createLifecycleHarness, projectEnemyPlacements } =
+    const { requireInstalledRuntime, createLifecycleHarness, projectEnemyPlacements } =
       await loadWithScriptedSetupStream();
 
     const h = createLifecycleHarness();
     h.startNewCampaign();
     h.startCampaignBattle(ORC_PATROL, ORC_PATROL_POS);
-    const first = projectEnemyPlacements(GameState.getBattleRuntime());
+    const first = projectEnemyPlacements(requireInstalledRuntime());
 
     h.startNewCampaign(); // dispatched mid-battle
     h.startCampaignBattle(ORC_PATROL, ORC_PATROL_POS);
-    const second = projectEnemyPlacements(GameState.getBattleRuntime());
+    const second = projectEnemyPlacements(requireInstalledRuntime());
 
     expect(second).toEqual(first);
   });
 
   it('init_debug installs a fresh battleSetup stream', async () => {
-    const { GameState, createLifecycleHarness, projectEnemyPlacements } =
+    const { requireInstalledRuntime, createLifecycleHarness, projectEnemyPlacements } =
       await loadWithScriptedSetupStream();
 
     const h = createLifecycleHarness();
     h.startNewCampaign();
     h.startCampaignBattle(ORC_PATROL, ORC_PATROL_POS);
-    const first = projectEnemyPlacements(GameState.getBattleRuntime());
+    const first = projectEnemyPlacements(requireInstalledRuntime());
 
     // Must start from a CAMPAIGN battle: 'debug' is rejected from a battle
     // phase and from debug_equip_screen, so only a defeat back to world_map
@@ -148,20 +143,20 @@ describe('PhaseManager RNG lifecycle', () => {
 
     h.openDebugSession(1);
     h.startDebugBattle(ORC_PATROL);
-    const second = projectEnemyPlacements(GameState.getBattleRuntime());
+    const second = projectEnemyPlacements(requireInstalledRuntime());
 
     expect(second).toEqual(first);
   });
 
   it('reset_debug_session installs a fresh battleSetup stream', async () => {
-    const { GameState, createLifecycleHarness, projectEnemyPlacements } =
+    const { requireInstalledRuntime, createLifecycleHarness, projectEnemyPlacements } =
       await loadWithScriptedSetupStream();
 
     const h = createLifecycleHarness();
     h.startNewCampaign();
     h.openDebugSession(1);
     h.startDebugBattle(ORC_PATROL);
-    const first = projectEnemyPlacements(GameState.getBattleRuntime());
+    const first = projectEnemyPlacements(requireInstalledRuntime());
 
     // reset_debug_session is accepted only from debug_equip_screen, which is
     // exactly where a defeated debug battle returns.
@@ -170,7 +165,7 @@ describe('PhaseManager RNG lifecycle', () => {
     h.manager.transition({ type: 'reset_debug_session' });
 
     h.startDebugBattle(ORC_PATROL);
-    const second = projectEnemyPlacements(GameState.getBattleRuntime());
+    const second = projectEnemyPlacements(requireInstalledRuntime());
 
     expect(second).toEqual(first);
   });
