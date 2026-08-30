@@ -499,3 +499,196 @@ export const RUNTIME_OWNERSHIP_EXPORT_COMPILATION = compileModuleExportPolicies(
   RUNTIME_OWNERSHIP_EXPORT_POLICIES,
   RUNTIME_OWNERSHIP_EXPORT_COVERAGE,
 );
+
+// ─── Stage 4C: facade collaborator import policies ──────────────────────────
+//
+// The exact, reviewed dependency set of every direct non-neutral facade collaborator that does
+// not already receive an exact policy from a canonical registry of its own. Phase handlers get
+// theirs from PHASE_HANDLER_IMPORT_POLICIES; core/GameState and core/battleRuntimeAccess from
+// RUNTIME_OWNERSHIP_IMPORT_POLICIES. Everything else registered beneath the three facades is
+// here.
+//
+// Stage 4A guarantees a facade's imports match its registration; it says nothing about what
+// those registered collaborators may import. That gap is the hidden-monolith route this
+// registry closes: battlePhaseEffects acquiring snapshot construction, campaignLifecycle
+// absorbing debug lifecycle, worldMapProjection importing GameState and becoming a mutation
+// route.
+//
+// The OBLIGATION to appear here is derived from ORCHESTRATION_COLLABORATOR_REGISTRY (see
+// scripts/orchestration-collaborator-coverage.mjs), so a new collaborator cannot exist
+// ungoverned and an entry with no corresponding collaborator is a stale registration. The
+// CONTENTS stay hand-reviewed: deriving an allowlist from source would agree with any change.
+//
+// These supplement, never replace, the broader PURE_CORE_FILES purity rules and the
+// directory-layer RULES; a module can be subject to all three.
+//
+// Written sorted lexicographically within each list, as a readability convention for this
+// registry only, so a diff shows exactly one added or removed line. Order is deliberately NOT
+// machine-validated — see the note in scripts/orchestration-collaborator-coverage.mjs.
+export const ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES = {
+  // ── Effects side ──
+
+  // The battle-runtime lifecycle owner. It may hold battle rules, both runtime gateways,
+  // session storage (it reads AND writes rosters), the pipeline contracts and the RNG type.
+  // It may hold no snapshot builder and no metadata module: producing render state belongs to
+  // the read side, and a write owner that could also project is the hidden monolith this
+  // registry exists to prevent. Stage 4B's write-capability design is unchanged by this entry.
+  "core/battlePhaseEffects.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "battle/turnResolver",
+      "core/battleRuntimeAccess",
+      "core/battleRuntimeContext",
+      "core/battleRuntimeWriteAccess",
+      "core/battleStart",
+      "core/phaseEffectsResult",
+      "core/phaseHandlers/battlePhaseHandler",
+      "core/phases",
+      "core/playerSessionStore",
+      "shared/random",
+    ],
+  },
+
+  // Campaign CONTAINER creation. Its five data catalogues are exactly why it exists — they
+  // stay out of phaseActionEffects, which decides *when* a campaign is created but must not
+  // know what one is made of. No debug lifecycle, no battle runtime, no RNG.
+  "core/campaignLifecycle.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/GameState",
+      "core/initCampaignState",
+      "data/campaignInitialStateDefinition",
+      "data/itemDefinitions",
+      "data/mapDefinitions",
+      "data/startingInventoryDefinitions",
+      "data/units",
+    ],
+  },
+
+  // Debug session CONTAINER lifecycle. The mirror of campaignLifecycle; the two must stay
+  // separable, so this must not acquire campaign construction — no core/initCampaignState and
+  // no data/campaignInitialStateDefinition.
+  "core/debugLifecycle.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/DebugBattleState",
+      "core/GameState",
+      "core/debugPlayerSession",
+      "data/itemDefinitions",
+      "data/startingInventoryDefinitions",
+      "data/units",
+    ],
+  },
+
+  // The RNG implementations. The only file permitted to call Math.random() (see the
+  // [no-ambient-random] scan), and therefore deliberately dependency-free beyond the contract.
+  "core/random.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["shared/random"],
+  },
+
+  // ── Metadata side ──
+  // core/GameState.ts is NOT duplicated here: its canonical policy stays in
+  // RUNTIME_OWNERSHIP_IMPORT_POLICIES, and two policies for one module would make neither
+  // authoritative.
+
+  // Static content catalogue: shared type contracts only.
+  "data/mapDefinitions.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["shared/worldTypes"],
+  },
+
+  // The pure map-completion rule: its own domain types only. No storage, no core, no phases —
+  // this is what keeps `{ mapCleared }` derivable without the resolver reading state.
+  "world/mapCompletion.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["world/types"],
+  },
+
+  // ── Snapshot side ──
+  // core/battleRuntimeAccess.ts is NOT duplicated here — same reason as core/GameState.ts.
+
+  // The sole seam resolving a PlayerSessionSource to campaign or debug storage. Storage-only:
+  // it may see the two player-owned domain contracts and the state singleton, and no
+  // inventory/progression/battle RULE — those live in their own domains.
+  "core/playerSessionStore.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/GameState",
+      "core/playerSessionState",
+      "inventory",
+      "progression",
+    ],
+  },
+
+  // The battle render/control projection. Battle formulas are correct here — core deriving
+  // presentation data from authoritative state — but a store, a runtime gateway or a write
+  // owner is not: the caller hands it an already-validated runtime.
+  "core/battlePhaseSnapshot.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "battle/combatStart",
+      "battle/skillPlanCompiler",
+      "battle/skillRuntime",
+      "battle/turnResolver",
+      "core/battleRuntimeContext",
+      "core/battleSnapshotBuilder",
+      "core/phases",
+      "shared/gridTypes",
+    ],
+  },
+
+  // The result-screen read model: a pure function of (roster, seeds), type contracts only.
+  "core/battleResultsSnapshot.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["core/phases", "progression"],
+  },
+
+  // The player-equipment projection shared by equip_screen and debug_equip_screen. It takes a
+  // PlayerSessionState directly and resolves no storage itself — no GameState, no
+  // playerSessionStore, no campaign/debug branch.
+  "core/equipmentScreenSnapshot.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/phases",
+      "core/playerSessionState",
+      "core/unitSpriteKey",
+      "core/unitSprites",
+      "core/unitStatsSnapshot",
+      "core/unitUpgradePresentation",
+      "data/itemDefinitions",
+      "data/units",
+      "inventory",
+      "progression",
+      "shared/snapshotTypes",
+      "shared/unitTypes",
+    ],
+  },
+
+  // The camp read model. Forwards progression's party status; recomputes no bound.
+  "core/rosterCampSnapshot.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["core/phases", "data/units", "progression"],
+  },
+
+  // The upgrade-tree read model.
+  "core/upgradeTreeSnapshot.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/phases",
+      "core/unitSpriteKey",
+      "core/unitSprites",
+      "core/unitUpgradePresentation",
+      "data/units",
+      "progression",
+    ],
+  },
+
+  // The READ-ONLY world projection. Campaign-world WRITES live in campaignWorldTransitions —
+  // this allowlist is what keeps that split real: no store, no transformation module, so a
+  // read-side module can never become the route to a campaign mutation.
+  "core/worldMapProjection.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: ["campaign", "progression", "world/types"],
+  },
+};

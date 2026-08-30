@@ -1,4 +1,5 @@
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
+import { sep } from "path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain .mjs tooling module, intentionally untyped
 import {
@@ -15,6 +16,7 @@ import {
   TRANSITION_CONTRACT_IMPORT_POLICIES,
   ORCHESTRATION_COLLABORATOR_REGISTRY,
   ORCHESTRATION_REGISTRY_COMPILATION,
+  ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES,
   RUNTIME_OWNERSHIP_IMPORT_POLICIES,
   RESTRICTED_IMPORT_TARGETS,
   GAME_STATE_FIELDS,
@@ -24,7 +26,10 @@ import {
 import {
   FACADE_KIND_ROLES,
   compareFacadeImports,
+  compareImportSets,
 } from "../../scripts/orchestration-collaborator-policy.mjs";
+// @ts-expect-error — plain .mjs tooling module, intentionally untyped
+import { compileCollaboratorCoverage } from "../../scripts/orchestration-collaborator-coverage.mjs";
 // The real facade sources are read with the SAME scanner and the SAME normalization the
 // checker uses. A test-local re-implementation of either could disagree with production about
 // a single import and turn this suite into false confidence.
@@ -824,4 +829,246 @@ describe("GameState ownership registries", () => {
       expect(name.toLowerCase()).not.toContain("battle");
     }
   });
+});
+
+// ─── Stage 4C: facade collaborator reverse coverage ─────────────────────────
+
+const STAGE_4C_REGISTRY_NAME = "ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES";
+
+describe("ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES (real production policy)", () => {
+  /**
+   * Pinned exactly, all thirteen entries — same argument as every sibling registry pin above.
+   * A rejection-only test does not stay closed: appending one specifier to an effects owner or
+   * a snapshot projection would leave "rejects X" assertions green while handing that module a
+   * dependency nobody reviewed.
+   */
+  it("pins the complete reviewed dependency set of every covered collaborator", () => {
+    expect(ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES).toEqual({
+      "core/battlePhaseEffects.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "battle/turnResolver",
+          "core/battleRuntimeAccess",
+          "core/battleRuntimeContext",
+          "core/battleRuntimeWriteAccess",
+          "core/battleStart",
+          "core/phaseEffectsResult",
+          "core/phaseHandlers/battlePhaseHandler",
+          "core/phases",
+          "core/playerSessionStore",
+          "shared/random",
+        ],
+      },
+      "core/campaignLifecycle.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "core/GameState",
+          "core/initCampaignState",
+          "data/campaignInitialStateDefinition",
+          "data/itemDefinitions",
+          "data/mapDefinitions",
+          "data/startingInventoryDefinitions",
+          "data/units",
+        ],
+      },
+      "core/debugLifecycle.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "core/DebugBattleState",
+          "core/GameState",
+          "core/debugPlayerSession",
+          "data/itemDefinitions",
+          "data/startingInventoryDefinitions",
+          "data/units",
+        ],
+      },
+      "core/random.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["shared/random"],
+      },
+      "data/mapDefinitions.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["shared/worldTypes"],
+      },
+      "world/mapCompletion.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["world/types"],
+      },
+      "core/playerSessionStore.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "core/GameState",
+          "core/playerSessionState",
+          "inventory",
+          "progression",
+        ],
+      },
+      "core/battlePhaseSnapshot.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "battle/combatStart",
+          "battle/skillPlanCompiler",
+          "battle/skillRuntime",
+          "battle/turnResolver",
+          "core/battleRuntimeContext",
+          "core/battleSnapshotBuilder",
+          "core/phases",
+          "shared/gridTypes",
+        ],
+      },
+      "core/battleResultsSnapshot.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["core/phases", "progression"],
+      },
+      "core/equipmentScreenSnapshot.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "core/phases",
+          "core/playerSessionState",
+          "core/unitSpriteKey",
+          "core/unitSprites",
+          "core/unitStatsSnapshot",
+          "core/unitUpgradePresentation",
+          "data/itemDefinitions",
+          "data/units",
+          "inventory",
+          "progression",
+          "shared/snapshotTypes",
+          "shared/unitTypes",
+        ],
+      },
+      "core/rosterCampSnapshot.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["core/phases", "data/units", "progression"],
+      },
+      "core/upgradeTreeSnapshot.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "core/phases",
+          "core/unitSpriteKey",
+          "core/unitSprites",
+          "core/unitUpgradePresentation",
+          "data/units",
+          "progression",
+        ],
+      },
+      "core/worldMapProjection.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: ["campaign", "progression", "world/types"],
+      },
+    });
+  });
+
+  it("neither duplicates nor omits the modules owned by another canonical registry", () => {
+    // core/GameState.ts and core/battleRuntimeAccess.ts keep their Stage 4B policies; the four
+    // covered phase handlers keep theirs. Two policies for one module would make neither
+    // authoritative, which the coverage compiler rejects — this pins the intent directly.
+    for (const fileKey of Object.keys(RUNTIME_OWNERSHIP_IMPORT_POLICIES)) {
+      expect(ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES).not.toHaveProperty(fileKey);
+    }
+    for (const fileKey of Object.keys(PHASE_HANDLER_IMPORT_POLICIES)) {
+      expect(ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES).not.toHaveProperty(fileKey);
+    }
+  });
+});
+
+describe("Stage 4C reverse coverage against the real registries and sources", () => {
+  /**
+   * A second, independent enforcement path, exactly like the Stage 4A parity suite above.
+   * `node scripts/check-boundaries.mjs` prints "✓ All boundaries clean" on clean source whether
+   * its coverage loop enforces everything or nothing, and `npm test` never runs the checker —
+   * so this suite re-derives the whole comparison from the real registries and files.
+   *
+   * It does NOT verify that check-boundaries.mjs is wired correctly; that would need a
+   * subprocess test of the executable, deliberately out of scope here as it is for Stage 4A.
+   * Same scanner, same normalization as production; see the imports at the top.
+   */
+  const SRC = new URL("../../src/", import.meta.url);
+
+  const sourceFiles = readdirSync(SRC.pathname, { recursive: true })
+    .map((entry) => String(entry).split(sep).join("/"))
+    .filter((entry) => entry.endsWith(".ts") || entry.endsWith(".tsx"));
+
+  const { problems, coverage } = compileCollaboratorCoverage({
+    registry: ORCHESTRATION_COLLABORATOR_REGISTRY,
+    policyRegistries: [
+      { name: "PHASE_HANDLER_IMPORT_POLICIES", policies: PHASE_HANDLER_IMPORT_POLICIES },
+      {
+        name: "RUNTIME_OWNERSHIP_IMPORT_POLICIES",
+        policies: RUNTIME_OWNERSHIP_IMPORT_POLICIES,
+      },
+      {
+        name: STAGE_4C_REGISTRY_NAME,
+        policies: ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES,
+      },
+    ],
+    stage4cRegistryName: STAGE_4C_REGISTRY_NAME,
+    sourceFiles,
+  });
+
+  it("compiles cleanly, with every obligation covered", () => {
+    // Coverage is EMPTY whenever compilation has problems. Without the length assertion,
+    // "nothing enforced at all" would look identical to a clean run.
+    expect(problems).toEqual([]);
+    expect(coverage).toHaveLength(19);
+  });
+
+  it("derives exactly the expected obligations, and which registry owns each", () => {
+    // The whole point of reverse coverage: this set is DERIVED from the Stage 4A registry, not
+    // hand-listed. Registering a new non-neutral collaborator changes this list, and it cannot
+    // be satisfied without a reviewed policy.
+    expect(
+      coverage.map((entry: { fileKey: string; registryName: string }) => [
+        entry.fileKey,
+        entry.registryName,
+      ]),
+    ).toEqual([
+      ["core/GameState.ts", "RUNTIME_OWNERSHIP_IMPORT_POLICIES"],
+      ["core/battlePhaseEffects.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/battlePhaseSnapshot.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/battleResultsSnapshot.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/battleRuntimeAccess.ts", "RUNTIME_OWNERSHIP_IMPORT_POLICIES"],
+      ["core/campaignLifecycle.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/debugLifecycle.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/equipmentScreenSnapshot.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/phaseHandlers/campPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
+      ["core/phaseHandlers/inventoryPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
+      ["core/phaseHandlers/progressionPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
+      ["core/phaseHandlers/worldPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
+      ["core/playerSessionStore.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/random.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/rosterCampSnapshot.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/upgradeTreeSnapshot.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/worldMapProjection.ts", STAGE_4C_REGISTRY_NAME],
+      ["data/mapDefinitions.ts", STAGE_4C_REGISTRY_NAME],
+      ["world/mapCompletion.ts", STAGE_4C_REGISTRY_NAME],
+    ]);
+  });
+
+  it.each(
+    coverage.map((entry: { fileKey: string }) => [entry.fileKey, entry]),
+  )(
+    "%s imports exactly its allowed specifiers",
+    (
+      _label: string,
+      entry: { fileKey: string; policy: { allowedSpecifiers: string[] } },
+    ) => {
+      const importerFile = new URL(entry.fileKey, SRC).pathname;
+      const source = readFileSync(importerFile, "utf8");
+
+      const discovered = [...findImports(source)].map(({ spec }: { spec: string }) =>
+        normalizeSpecifier({ srcRoot: SRC.pathname, importerFile, specifier: spec }),
+      );
+
+      // Non-vacuity: a file that read as empty, or whose imports all vanished, must not pass.
+      expect(source.length).toBeGreaterThan(0);
+      if (entry.policy.allowedSpecifiers.length > 0) {
+        expect(discovered.length).toBeGreaterThan(0);
+      }
+
+      expect(
+        compareImportSets({ discovered, allowed: entry.policy.allowedSpecifiers }),
+      ).toEqual({ unregistered: [], stale: [] });
+    },
+  );
 });

@@ -21,6 +21,12 @@
  *
  * Widening a row is an architectural decision: it must be a visible edit here plus in
  * tests/scripts/boundaryPolicy.test.ts, which pins this table exactly.
+ *
+ * LIMIT OF THE GUARANTEE. This table bounds WHICH modules a facade may depend on, not which
+ * methods it calls on them. `authoritative-state-reader` is a reviewed classification, not a
+ * mechanically enforced read-only capability: core/GameState and core/playerSessionStore both
+ * expose replacement methods, and an import allowlist cannot tell a getter call from a setter
+ * call. Nothing here — and nothing in Stage 4C's reverse coverage — inspects a function body.
  */
 export const FACADE_KIND_ROLES = {
   effects: ["neutral-contract", "effects-owner", "effects-infrastructure"],
@@ -225,15 +231,38 @@ export function compileCollaboratorRegistry(registry) {
 }
 
 /**
- * Two-way set parity between what a facade actually imports and what is registered for it.
+ * Two-way set parity between imports discovered in a real source file and the imports some
+ * reviewed policy allows.
  *
- * An exact allowlist alone catches a NEW unregistered import but not a STALE registration left
- * behind after an import is deleted — a dormant licence for that dependency to return without
- * review. Hence `stale` alongside `unregistered`.
+ * An exact allowlist alone catches a NEW unregistered import but not a STALE entry left behind
+ * after an import is deleted — a dormant licence for that dependency to return without review.
+ * Hence `stale` alongside `unregistered`.
  *
- * `discoveredSpecifiers` may repeat (several import statements from one module) — repeats are
- * one collaborator, not several. Order never matters. Results keep first-seen / registered
- * order so checker output is stable.
+ * `discovered` may repeat (several import statements from one module) — repeats are one
+ * dependency, not several. Order never matters to correctness, but output order is fixed so
+ * checker and test output stay stable: `unregistered` in first-discovered order, `stale` in
+ * policy order.
+ *
+ * This is the ONE comparison. `compareFacadeImports` below and Stage 4C's reverse coverage
+ * (scripts/orchestration-collaborator-coverage.mjs) both route through it — two comparisons
+ * that disagreed about a single import would let a test pass while the checker failed.
+ */
+export function compareImportSets({ discovered, allowed }) {
+  const allowedSet = new Set(allowed);
+  const discoveredSet = new Set(discovered);
+
+  return {
+    unregistered: [...discoveredSet].filter((specifier) => !allowedSet.has(specifier)),
+    stale: allowed.filter((specifier) => !discoveredSet.has(specifier)),
+  };
+}
+
+/**
+ * Facade-registry-shaped wrapper over compareImportSets: what a facade actually imports vs what
+ * is registered for it.
+ *
+ * The missing-facade case is deliberate and unchanged: an unregistered facade has no allowed
+ * set at all, so everything it imports is unregistered and nothing can be stale.
  */
 export function compareFacadeImports({ facadeKey, discoveredSpecifiers, registry }) {
   const entry = registry[facadeKey];
@@ -241,12 +270,8 @@ export function compareFacadeImports({ facadeKey, discoveredSpecifiers, registry
     return { unregistered: [...new Set(discoveredSpecifiers)], stale: [] };
   }
 
-  const registered = entry.collaborators.map(({ specifier }) => specifier);
-  const registeredSet = new Set(registered);
-  const discoveredSet = new Set(discoveredSpecifiers);
-
-  return {
-    unregistered: [...discoveredSet].filter((specifier) => !registeredSet.has(specifier)),
-    stale: registered.filter((specifier) => !discoveredSet.has(specifier)),
-  };
+  return compareImportSets({
+    discovered: discoveredSpecifiers,
+    allowed: entry.collaborators.map(({ specifier }) => specifier),
+  });
 }

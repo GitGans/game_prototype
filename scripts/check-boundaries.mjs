@@ -35,13 +35,18 @@ import {
   TRANSITION_CONTRACT_IMPORT_POLICIES,
   ORCHESTRATION_COLLABORATOR_REGISTRY,
   ORCHESTRATION_REGISTRY_COMPILATION,
+  ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES,
   RUNTIME_OWNERSHIP_IMPORT_POLICIES,
   RESTRICTED_IMPORT_TARGETS,
   RUNTIME_OWNERSHIP_EXPORT_COMPILATION,
   GAME_STATE_FIELDS,
   GAME_STATE_PUBLIC_API,
 } from "./orchestration-boundary-rules.mjs";
-import { compareFacadeImports } from "./orchestration-collaborator-policy.mjs";
+import {
+  compareFacadeImports,
+  compareImportSets,
+} from "./orchestration-collaborator-policy.mjs";
+import { compileCollaboratorCoverage } from "./orchestration-collaborator-coverage.mjs";
 import {
   compileRestrictedImportTargets,
   evaluateObservedImport,
@@ -618,6 +623,90 @@ for (const [facadeKey, policy] of Object.entries(facadeImportPolicies)) {
       `  ${facadeKey}  [${facadeKey} collaborators] registered collaborator is no longer ` +
         `imported: "${specifier}" — remove it rather than leaving a dormant permission`,
     );
+  }
+}
+
+// ─── Stage 4C: facade collaborator reverse coverage ─────────────────────────
+// Stage 4A closes the three facades; this closes the level immediately below them. Every
+// direct non-neutral collaborator must carry exactly one canonical exact policy, and that
+// policy must match the real source in BOTH directions — an unregistered import is a new
+// undeclared dependency, a stale allowed import is a dormant permission for a removed one to
+// return without review.
+//
+// Two different "stale" concepts meet here, and they are not the same check:
+//   · configuration-stale — a Stage 4C REGISTRY ENTRY with no matching collaborator, reported
+//     by the compiler;
+//   · source-stale — an ALLOWED SPECIFIER the real file no longer imports, reported per file.
+//
+// Six modules end up scanned twice (the four phase handlers by their own block above,
+// core/GameState.ts and core/battleRuntimeAccess.ts by the Stage 4B block below). That is
+// deliberate: neither of those blocks checks source-staleness, and the duplication is the cost
+// of adding the missing guarantee without weakening what already exists.
+{
+  const sourceFiles = [...walkFiles(SRC)].map(([file]) =>
+    relative(SRC, file).split(sep).join("/"),
+  );
+
+  const { problems, coverage } = compileCollaboratorCoverage({
+    registry: ORCHESTRATION_COLLABORATOR_REGISTRY,
+    policyRegistries: [
+      { name: "PHASE_HANDLER_IMPORT_POLICIES", policies: PHASE_HANDLER_IMPORT_POLICIES },
+      {
+        name: "RUNTIME_OWNERSHIP_IMPORT_POLICIES",
+        policies: RUNTIME_OWNERSHIP_IMPORT_POLICIES,
+      },
+      {
+        name: "ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES",
+        policies: ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES,
+      },
+    ],
+    stage4cRegistryName: "ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES",
+    sourceFiles,
+  });
+
+  for (const problem of problems) {
+    errors.push(`  [orchestration-collaborator-coverage] ${problem}`);
+  }
+
+  // `coverage` is empty whenever `problems` is non-empty, so a broken configuration reports
+  // itself instead of quietly scanning nothing.
+  for (const { fileKey, registryName, policy } of coverage) {
+    const file = join(SRC, ...fileKey.split("/"));
+    // readTargetFile, not readFileSync: a moved or deleted covered module must become a
+    // diagnosed violation rather than a crash.
+    const content = readTargetFile(file, "orchestration-collaborator-coverage");
+    if (content === null) continue;
+
+    const discovered = [];
+
+    for (const { spec, line } of findImports(content)) {
+      const normalizedSpecifier = normalizeSpecifier(file, spec);
+      discovered.push(normalizedSpecifier);
+
+      const violation = evaluateDirectoryPolicy({
+        policy,
+        normalizedSpecifier,
+        isRelativeSpecifier: spec.startsWith("."),
+      });
+      if (violation === null) continue;
+
+      errors.push(
+        `  ${fileKey}:${line}  [orchestration-collaborator-coverage] unregistered import — ` +
+          `approve it in ${registryName}  →  "${spec}"`,
+      );
+    }
+
+    // Unregistered imports are reported above WITH line numbers; only the set-level half is
+    // taken from here, so no violation is printed twice.
+    const { stale } = compareImportSets({ discovered, allowed: policy.allowedSpecifiers });
+
+    for (const specifier of stale) {
+      errors.push(
+        `  ${fileKey}  [orchestration-collaborator-coverage] allowed import is no longer ` +
+          `present: "${specifier}" — remove it from ${registryName} rather than leaving a ` +
+          `dormant permission`,
+      );
+    }
   }
 }
 

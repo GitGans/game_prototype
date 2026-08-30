@@ -6,6 +6,7 @@ import {
   validateCollaboratorRegistry,
   compileCollaboratorRegistry,
   compareFacadeImports,
+  compareImportSets,
 } from "../../scripts/orchestration-collaborator-policy.mjs";
 
 const FACADE = "core/exampleFacade.ts";
@@ -255,5 +256,69 @@ describe("compareFacadeImports", () => {
         registry,
       }),
     ).toEqual({ unregistered: ["core/phases"], stale: [] });
+  });
+});
+
+/**
+ * The generic comparison extracted in Stage 4C. `compareFacadeImports` above and the reverse
+ * coverage in scripts/orchestration-collaborator-coverage.mjs both route through this, so the
+ * checker and its tests cannot disagree about a single import.
+ */
+describe("compareImportSets", () => {
+  const allowed = ["core/phaseEffectsResult", "core/phases", "core/debugLifecycle"];
+
+  it("passes when the two sets are equal", () => {
+    expect(compareImportSets({ discovered: [...allowed], allowed })).toEqual({
+      unregistered: [],
+      stale: [],
+    });
+  });
+
+  it("reports unregistered and stale independently, in one pass", () => {
+    expect(
+      compareImportSets({
+        discovered: ["core/phases", "core/GameState", "core/phaseEffectsResult"],
+        allowed,
+      }),
+    ).toEqual({
+      // core/debugLifecycle is allowed but no longer imported; core/GameState is the reverse.
+      unregistered: ["core/GameState"],
+      stale: ["core/debugLifecycle"],
+    });
+  });
+
+  it("counts a repeated discovered import once", () => {
+    expect(
+      compareImportSets({
+        discovered: ["core/GameState", "core/GameState", "core/GameState"],
+        allowed: [],
+      }),
+    ).toEqual({ unregistered: ["core/GameState"], stale: [] });
+  });
+
+  it("orders unregistered by first discovery and stale by policy order", () => {
+    expect(
+      compareImportSets({
+        discovered: ["zzz/last", "aaa/first", "zzz/last"],
+        allowed: ["mmm/second", "bbb/first"],
+      }),
+    ).toEqual({
+      unregistered: ["zzz/last", "aaa/first"],
+      stale: ["mmm/second", "bbb/first"],
+    });
+  });
+
+  it("reports every discovered import when nothing is allowed", () => {
+    expect(compareImportSets({ discovered: ["a", "b"], allowed: [] })).toEqual({
+      unregistered: ["a", "b"],
+      stale: [],
+    });
+  });
+
+  it("reports every allowed specifier as stale when nothing is discovered", () => {
+    expect(compareImportSets({ discovered: [], allowed: ["a", "b"] })).toEqual({
+      unregistered: [],
+      stale: ["a", "b"],
+    });
   });
 });
