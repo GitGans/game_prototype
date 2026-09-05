@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(node scripts/check-boundaries.mjs; echo \"exit=$?\")",
       "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
       "Read(//home/node/.claude/**)",
       "Read(//home/node/.codex/**)",
@@ -23,8 +24,12 @@
       "Bash(cd /workspace && npx vitest *)"
     ],
     "deny": [
-      "Edit(CLAUDE.md, /workspace/CLAUDE.md, architecture_plan.md)",
-      "Write(CLAUDE.md, /workspace/CLAUDE.md, architecture_plan.md)"
+      "Edit(CLAUDE.md)",
+      "Write(CLAUDE.md)",
+      "Edit(**/CLAUDE.md)",
+      "Write(**/CLAUDE.md)",
+      "Edit(architecture_plan.md)",
+      "Write(architecture_plan.md)"
     ]
   }
 }

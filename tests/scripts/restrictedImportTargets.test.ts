@@ -9,7 +9,13 @@ import {
   findStaleImporterPermissions,
 } from "../../scripts/restricted-import-targets.mjs";
 // @ts-expect-error — plain .mjs tooling module, intentionally untyped
-import { RESTRICTED_IMPORT_TARGETS } from "../../scripts/orchestration-boundary-rules.mjs";
+import {
+  RESTRICTED_IMPORT_TARGETS,
+  BATTLE_RUNTIME_RESTRICTED_TARGETS,
+  STATE_STORE_RESTRICTED_TARGETS,
+  STATE_STORE_FORWARDING_TARGETS,
+  RUNTIME_OWNERSHIP_EXPORT_COVERAGE,
+} from "../../scripts/orchestration-boundary-rules.mjs";
 // The real sources are read with the SAME scanner and normalization the checker uses. A
 // test-local re-implementation of either could disagree with production about a single import
 // and turn this suite into false confidence.
@@ -44,6 +50,32 @@ describe("RESTRICTED_IMPORT_TARGETS registry", () => {
         reason: "Battle-runtime write capability owned by battlePhaseEffects.",
         allowedImporters: ["core/battlePhaseEffects.ts"],
       },
+      "core/GameState": {
+        reason:
+          "Authoritative campaign/debug state container. Direct access is container-lifecycle, " +
+          "mutation-handler, metadata or snapshot authority.",
+        allowedImporters: [
+          "core/campaignLifecycle.ts",
+          "core/debugLifecycle.ts",
+          "core/phaseHandlers/worldPhaseHandler.ts",
+          "core/phaseSnapshotRebuilder.ts",
+          "core/phaseTransitionMetadata.ts",
+          "core/playerSessionStore.ts",
+        ],
+      },
+      "core/playerSessionStore": {
+        reason:
+          "Campaign/debug player-session storage gateway. Direct access is session-mutation or " +
+          "authoritative snapshot-resolution authority.",
+        allowedImporters: [
+          "core/battlePhaseEffects.ts",
+          "core/phaseHandlers/battlePhaseHandler.ts",
+          "core/phaseHandlers/campPhaseHandler.ts",
+          "core/phaseHandlers/inventoryPhaseHandler.ts",
+          "core/phaseHandlers/progressionPhaseHandler.ts",
+          "core/phaseSnapshotRebuilder.ts",
+        ],
+      },
     });
   });
 
@@ -51,8 +83,36 @@ describe("RESTRICTED_IMPORT_TARGETS registry", () => {
     const { problems, targets } = compile(RESTRICTED_IMPORT_TARGETS);
     expect(problems).toEqual([]);
     expect(Object.keys(targets).sort()).toEqual([
+      "core/GameState",
       "core/battleRuntimeStorage",
       "core/battleRuntimeWriteAccess",
+      "core/playerSessionStore",
+    ]);
+  });
+
+  // The registry is a spread of two groups, and the GROUP is what decides which forwarding
+  // protection a target receives: a pinned export surface, or the direct-forwarding scan. A target
+  // written straight into the union literal would be inbound-restricted but forward freely.
+  it("gives every restricted target exactly one protection group", () => {
+    const battleRuntime = Object.keys(BATTLE_RUNTIME_RESTRICTED_TARGETS);
+    const stateStores = Object.keys(STATE_STORE_RESTRICTED_TARGETS);
+
+    expect(battleRuntime.filter((target) => stateStores.includes(target))).toEqual([]);
+    expect([...battleRuntime, ...stateStores].sort()).toEqual(
+      Object.keys(RESTRICTED_IMPORT_TARGETS).sort(),
+    );
+    expect(STATE_STORE_FORWARDING_TARGETS).toEqual(stateStores);
+  });
+
+  // Re-basing this on the FULL registry would demand a hand-pinned export surface for the eleven
+  // state-store owners — and could never be satisfied, since both stores export a `const`, a kind
+  // scripts/module-export-policy.mjs cannot express.
+  it("keeps the pinned-export-surface obligation on the battle-runtime group only", () => {
+    expect(RUNTIME_OWNERSHIP_EXPORT_COVERAGE).toEqual([
+      "core/battlePhaseEffects.ts",
+      "core/battleRuntimeAccess.ts",
+      "core/battleRuntimeStorage.ts",
+      "core/battleRuntimeWriteAccess.ts",
     ]);
   });
 });
@@ -70,6 +130,21 @@ describe("evaluateObservedImport", () => {
 
   it("allows the write capability from battlePhaseEffects only", () => {
     expect(evaluate("core/battlePhaseEffects.ts", "core/battleRuntimeWriteAccess")).toBeNull();
+  });
+
+  it("allows each state store from its registered owners", () => {
+    expect(evaluate("core/campaignLifecycle.ts", "core/GameState")).toBeNull();
+    expect(evaluate("core/phaseSnapshotRebuilder.ts", "core/GameState")).toBeNull();
+    expect(evaluate("core/playerSessionStore.ts", "core/GameState")).toBeNull();
+    expect(evaluate("core/phaseHandlers/campPhaseHandler.ts", "core/playerSessionStore")).toBeNull();
+    expect(evaluate("core/battlePhaseEffects.ts", "core/playerSessionStore")).toBeNull();
+  });
+
+  // The two stores are separate capabilities. Owning campaign/debug container lifecycle does not
+  // imply session-mutation authority, and a battle-runtime owner is not a container owner.
+  it("does not let an owner of one store reach the other", () => {
+    expect(evaluate("core/campaignLifecycle.ts", "core/playerSessionStore")).not.toBeNull();
+    expect(evaluate("core/battlePhaseEffects.ts", "core/GameState")).not.toBeNull();
   });
 
   // These are the modules that could most plausibly reach for the runtime "just to read it" or
@@ -98,6 +173,31 @@ describe("evaluateObservedImport", () => {
         target: "core/battleRuntimeWriteAccess",
         reason: "Battle-runtime write capability owned by battlePhaseEffects.",
       });
+    },
+  );
+
+  // A representative spread rather than one case per module: the coordinator, the effects facade,
+  // the pure router, a pure domain module, a scene, and a pure core collaborator. Each is one
+  // review away from acquiring state authority it has never had.
+  const REJECTED_STATE_IMPORTERS = [
+    "core/PhaseManager.ts",
+    "core/phaseActionEffects.ts",
+    "core/phaseTransitionResolver.ts",
+    "core/battleStart.ts",
+    "scenes/Battle.ts",
+    "world/mapCompletion.ts",
+  ];
+
+  it.each(REJECTED_STATE_IMPORTERS)("rejects GameState imported by %s", (importerKey: string) => {
+    expect(evaluate(importerKey, "core/GameState")?.target).toBe("core/GameState");
+  });
+
+  it.each(REJECTED_STATE_IMPORTERS)(
+    "rejects playerSessionStore imported by %s",
+    (importerKey: string) => {
+      expect(evaluate(importerKey, "core/playerSessionStore")?.target).toBe(
+        "core/playerSessionStore",
+      );
     },
   );
 
@@ -199,16 +299,23 @@ describe("real-source inbound scan", () => {
     expect(findStaleImporterPermissions({ targets, observedEdges })).toEqual([]);
   });
 
-  it("actually observed the registered importers (the scan is not vacuous)", () => {
-    // Without this, a scan that silently walked zero files would satisfy both tests above.
-    expect(
-      observedEdges.some(
-        (edge) =>
-          edge.importerKey === "core/battlePhaseEffects.ts" &&
-          edge.normalizedSpecifier === "core/battleRuntimeWriteAccess",
-      ),
-    ).toBe(true);
-  });
+  it.each([
+    ["core/battlePhaseEffects.ts", "core/battleRuntimeWriteAccess"],
+    ["core/phaseSnapshotRebuilder.ts", "core/GameState"],
+    ["core/phaseHandlers/campPhaseHandler.ts", "core/playerSessionStore"],
+  ])(
+    "actually observed %s → %s (the scan is not vacuous)",
+    (importerKey: string, normalizedSpecifier: string) => {
+      // Without this, a scan that silently walked zero files — or that resolved the new targets'
+      // specifiers differently from the checker — would satisfy both tests above.
+      expect(
+        observedEdges.some(
+          (edge) =>
+            edge.importerKey === importerKey && edge.normalizedSpecifier === normalizedSpecifier,
+        ),
+      ).toBe(true);
+    },
+  );
 });
 
 describe("validateRestrictedImportTargets fails closed", () => {

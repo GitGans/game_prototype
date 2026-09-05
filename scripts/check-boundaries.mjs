@@ -38,6 +38,7 @@ import {
   ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES,
   RUNTIME_OWNERSHIP_IMPORT_POLICIES,
   RESTRICTED_IMPORT_TARGETS,
+  STATE_STORE_FORWARDING_TARGETS,
   RUNTIME_OWNERSHIP_EXPORT_COMPILATION,
   GAME_STATE_FIELDS,
   GAME_STATE_PUBLIC_API,
@@ -53,6 +54,7 @@ import {
   findStaleImporterPermissions,
 } from "./restricted-import-targets.mjs";
 import { evaluateStateOwnershipPolicy } from "./state-ownership-policy.mjs";
+import { evaluateStateStoreForwarding } from "./state-store-forwarding-policy.mjs";
 import { evaluateModuleExportPolicy } from "./module-export-policy.mjs";
 import { checkPhaseHandlerCoverage } from "./phase-handler-coverage.mjs";
 import {
@@ -770,6 +772,36 @@ for (const [fileKey, policy] of Object.entries(RUNTIME_OWNERSHIP_IMPORT_POLICIES
       `  [restricted import target] stale permission: "${importer}" no longer imports ` +
         `"${target}" — remove it rather than leaving a dormant permission`,
     );
+  }
+}
+
+// ─── State-store forwarding (direct re-export of a restricted store) ────────
+// Complements the inbound allowlist above: that says who may PICK a store up, this says that a
+// permitted holder may not HAND IT ON. The battle-runtime targets close the same direction with a
+// pinned export surface further below; the two state stores cannot (they export a `const`), so they
+// get this deliberately shallow direct-forwarding scan instead — see
+// scripts/state-store-forwarding-policy.mjs for the full scope argument.
+{
+  const restricted = new Set(STATE_STORE_FORWARDING_TARGETS);
+
+  for (const [file, content] of walkFiles(SRC)) {
+    const fileKey = relative(SRC, file).split(sep).join("/");
+    const isRestrictedSpecifier = (spec) => restricted.has(normalizeSpecifier(file, spec));
+
+    // Only a file that NAMES a store can forward one, so this pre-filter costs no coverage while
+    // keeping the TypeScript parse off the ~230 files that never mention one. findImports() matches
+    // `export … from` and `import('x')` as well as `import … from`, so a file whose only mention is
+    // a re-export or a dynamic import still reaches the parse below.
+    const namesAStore = [...findImports(content)].some(({ spec }) => isRestrictedSpecifier(spec));
+    if (!namesAStore) continue;
+
+    for (const problem of evaluateStateStoreForwarding({
+      sourceText: content,
+      fileName: fileKey,
+      isRestrictedSpecifier,
+    })) {
+      errors.push(`  ${fileKey}  [state store forwarding] ${problem}`);
+    }
   }
 }
 

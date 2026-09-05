@@ -82,6 +82,7 @@ Browser-based game with a turn-based game on a grid.
 - Routing, metadata derivation, lifecycle/effects, and snapshot projection have separate owners. Coordinators and facades must not absorb domain rules.
 - Scenes render committed `GamePhase` data and dispatch actions through `PhaseManager`. Gameplay scene control belongs only to the Phaser scene synchronizer, except for explicit bootstrap transitions.
 - Battle runtime writes belong only to its lifecycle owner; reads use the validated read-only gateway. Render snapshots must not share mutable runtime-owned data.
+- `GameState` and `PlayerSessionStore` may be imported only by their registered owners and never re-exported onward; a new direct consumer requires an explicit importer-policy change.
 - Boundary failures must be fixed or resolved through an explicit architectural policy change. Never accept them as a new baseline.
 
 Verify with:

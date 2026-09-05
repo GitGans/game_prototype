@@ -9,6 +9,8 @@ import {
 // @ts-expect-error — plain .mjs tooling module, intentionally untyped
 import {
   RESTRICTED_IMPORT_TARGETS,
+  BATTLE_RUNTIME_RESTRICTED_TARGETS,
+  STATE_STORE_FORWARDING_TARGETS,
   RUNTIME_OWNERSHIP_EXPORT_COMPILATION,
   RUNTIME_OWNERSHIP_EXPORT_COVERAGE,
   RUNTIME_OWNERSHIP_EXPORT_POLICIES,
@@ -112,21 +114,42 @@ describe("RUNTIME_OWNERSHIP_EXPORT_POLICIES configuration", () => {
 
   /**
    * The closure argument, stated as an assertion: the modules that must be pinned are exactly
-   * the restricted targets plus their permitted importers, and that derived set is exactly what
-   * the registry covers. A new restricted capability cannot exist with an unpinned surface.
+   * the BATTLE-RUNTIME restricted targets plus their permitted importers, and that derived set is
+   * exactly what the registry covers. A new battle-runtime capability cannot exist with an
+   * unpinned surface.
+   *
+   * Derived from BATTLE_RUNTIME_RESTRICTED_TARGETS, not from the whole registry — see the next
+   * test for the other half of the closure.
    */
-  it("covers exactly the modules holding restricted authority", () => {
+  it("covers exactly the modules holding restricted battle-runtime authority", () => {
     expect(RUNTIME_OWNERSHIP_EXPORT_COVERAGE).toEqual(
       Object.keys(RUNTIME_OWNERSHIP_EXPORT_POLICIES).sort(),
     );
     expect(RUNTIME_OWNERSHIP_EXPORT_COVERAGE).toEqual([
       ...new Set([
-        ...Object.keys(RESTRICTED_IMPORT_TARGETS).map((target: string) => `${target}.ts`),
-        ...Object.values(RESTRICTED_IMPORT_TARGETS).flatMap(
+        ...Object.keys(BATTLE_RUNTIME_RESTRICTED_TARGETS).map((target: string) => `${target}.ts`),
+        ...Object.values(BATTLE_RUNTIME_RESTRICTED_TARGETS).flatMap(
           (entry) => (entry as { allowedImporters: string[] }).allowedImporters,
         ),
       ]),
     ].sort());
+  });
+
+  /**
+   * The other half: every restricted target NOT covered here is covered by the direct-forwarding
+   * scan instead, so no restricted capability is left with both directions open. The state stores
+   * cannot use a pinned surface at all — both export a `const`, a kind SUPPORTED_KINDS omits — so
+   * this is a genuine split of mechanism, not an exemption.
+   */
+  it("leaves no restricted target without a forwarding protection", () => {
+    const pinned = new Set(
+      Object.keys(BATTLE_RUNTIME_RESTRICTED_TARGETS).map((target: string) => `${target}.ts`),
+    );
+    const forwardingScanned = new Set(STATE_STORE_FORWARDING_TARGETS as string[]);
+
+    for (const target of Object.keys(RESTRICTED_IMPORT_TARGETS)) {
+      expect(pinned.has(`${target}.ts`) || forwardingScanned.has(target)).toBe(true);
+    }
   });
 });
 

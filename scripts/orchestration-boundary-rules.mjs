@@ -422,8 +422,20 @@ export const GAME_STATE_PUBLIC_API = [
  * restricted, i.e. a fail-OPEN hole. validateRestrictedImportTargets rejects both mistakes.
  *
  * `allowedImporters` must be sorted and duplicate-free so registry diffs stay reviewable.
+ *
+ * The registry is written as TWO GROUPS spread into one object, because a restricted target also
+ * needs its FORWARDING closed and the two groups use different mechanisms for that — see each
+ * group's comment. Every target must belong to exactly one group; the union below adds nothing of
+ * its own, so a target written directly into it would receive no forwarding protection at all.
+ * tests/scripts/restrictedImportTargets.test.ts pins that closure.
  */
-export const RESTRICTED_IMPORT_TARGETS = {
+
+// Forwarding closed by a hand-pinned export surface (RUNTIME_OWNERSHIP_EXPORT_POLICIES below).
+// Appropriate for the narrow battle-runtime capability chain: three tiny modules plus one owner,
+// where pinning the whole surface is cheap and the forwarding risk is sharpest — battleRuntimeAccess
+// may legitimately import storage, so nothing but a closed surface stops it re-exporting the write
+// capability under an approved name.
+export const BATTLE_RUNTIME_RESTRICTED_TARGETS = {
   "core/battleRuntimeStorage": {
     reason: "Internal battle-runtime storage cell.",
     allowedImporters: [
@@ -437,6 +449,57 @@ export const RESTRICTED_IMPORT_TARGETS = {
   },
 };
 
+// Authoritative state stores. Forwarding closed by the DIRECT-FORWARDING scan
+// (scripts/state-store-forwarding-policy.mjs), deliberately NOT by a pinned export surface.
+//
+// Two reasons. Practical: the permitted holders are large orchestration modules —
+// battlePhaseHandler alone exports fifteen names — so pinning every surface would make routine
+// development expensive for no capability gain. Structural: both stores export a `const`
+// (`export const GameState = new GameStateManager()`), a declaration kind module-export-policy.mjs
+// does not support at all, so a pinned surface here could never pass in the first place.
+//
+// allowedImporters are the EXISTING owners of campaign/debug container lifecycle, campaign-world and
+// session mutation, and authoritative read-side metadata/snapshot resolution. Adding one is an
+// explicit review, never a side effect of writing a new core/** module. Note the asymmetry is real:
+// an approved importer of one store is not thereby an approved importer of the other.
+export const STATE_STORE_RESTRICTED_TARGETS = {
+  "core/GameState": {
+    reason:
+      "Authoritative campaign/debug state container. Direct access is container-lifecycle, " +
+      "mutation-handler, metadata or snapshot authority.",
+    allowedImporters: [
+      "core/campaignLifecycle.ts",
+      "core/debugLifecycle.ts",
+      "core/phaseHandlers/worldPhaseHandler.ts",
+      "core/phaseSnapshotRebuilder.ts",
+      "core/phaseTransitionMetadata.ts",
+      "core/playerSessionStore.ts",
+    ],
+  },
+  "core/playerSessionStore": {
+    reason:
+      "Campaign/debug player-session storage gateway. Direct access is session-mutation or " +
+      "authoritative snapshot-resolution authority.",
+    allowedImporters: [
+      "core/battlePhaseEffects.ts",
+      "core/phaseHandlers/battlePhaseHandler.ts",
+      "core/phaseHandlers/campPhaseHandler.ts",
+      "core/phaseHandlers/inventoryPhaseHandler.ts",
+      "core/phaseHandlers/progressionPhaseHandler.ts",
+      "core/phaseSnapshotRebuilder.ts",
+    ],
+  },
+};
+
+// The single object the checker enforces: a spread of the two groups above and NOTHING else.
+export const RESTRICTED_IMPORT_TARGETS = {
+  ...BATTLE_RUNTIME_RESTRICTED_TARGETS,
+  ...STATE_STORE_RESTRICTED_TARGETS,
+};
+
+// The targets whose forwarding is closed by the direct-forwarding scan rather than a pinned surface.
+export const STATE_STORE_FORWARDING_TARGETS = Object.keys(STATE_STORE_RESTRICTED_TARGETS);
+
 /**
  * The exact public export surface of every module holding restricted battle-runtime authority.
  *
@@ -445,6 +508,10 @@ export const RESTRICTED_IMPORT_TARGETS = {
  * capability under any name — including an approved one — and every other module reaches it
  * through an unrestricted specifier while the import checker stays green. battleRuntimeAccess
  * is the sharp case: it may legitimately import storage, so nothing but this closes that path.
+ *
+ * SCOPE: the BATTLE_RUNTIME group only. The state stores close the same direction through
+ * scripts/state-store-forwarding-policy.mjs instead — see STATE_STORE_RESTRICTED_TARGETS for why a
+ * pinned surface is both the wrong tool and an impossible one there.
  *
  * Entries are the REVIEWED expected surface, written by hand. They are deliberately not derived
  * from the source (that would agree with any change) nor from imports (an export surface is a
@@ -480,18 +547,26 @@ export const RUNTIME_OWNERSHIP_EXPORT_POLICIES = {
 };
 
 /**
- * Which modules MUST have a pinned export surface: every restricted target, plus every module
- * permitted to import one. That is precisely the set holding restricted authority, so the
- * closure argument is derived rather than asserted by four hand-written keys — adding a
- * restricted target or a permitted importer automatically requires a reviewed export surface.
- * The same obligation checkPhaseHandlerCoverage imposes on core/phaseHandlers/**.
+ * Which modules MUST have a pinned export surface: every battle-runtime restricted target, plus
+ * every module permitted to import one. That is precisely the set holding restricted battle-runtime
+ * authority, so the closure argument is derived rather than asserted by four hand-written keys —
+ * adding a target or a permitted importer to that group automatically requires a reviewed export
+ * surface. The same obligation checkPhaseHandlerCoverage imposes on core/phaseHandlers/**.
+ *
+ * Derived from BATTLE_RUNTIME_RESTRICTED_TARGETS, NOT from the full registry. Deriving it from the
+ * union would demand a hand-pinned surface for all eleven state-store owners — and could never be
+ * satisfied, since both stores export a `const`, a kind module-export-policy.mjs cannot express.
+ * Their forwarding is closed by scripts/state-store-forwarding-policy.mjs instead, and
+ * tests/scripts/restrictedImportTargets.test.ts pins that this list stays battle-runtime only.
  *
  * Only the coverage obligation is derived; the export NAMES stay hand-reviewed above.
  */
 export const RUNTIME_OWNERSHIP_EXPORT_COVERAGE = [
   ...new Set([
-    ...Object.keys(RESTRICTED_IMPORT_TARGETS).map((target) => `${target}.ts`),
-    ...Object.values(RESTRICTED_IMPORT_TARGETS).flatMap((entry) => entry.allowedImporters),
+    ...Object.keys(BATTLE_RUNTIME_RESTRICTED_TARGETS).map((target) => `${target}.ts`),
+    ...Object.values(BATTLE_RUNTIME_RESTRICTED_TARGETS).flatMap(
+      (entry) => entry.allowedImporters,
+    ),
   ]),
 ].sort();
 

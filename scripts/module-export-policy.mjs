@@ -276,7 +276,11 @@ function describeForm(statement) {
 // would pass vacuously. Verified present and populated on the pinned typescript@^5.4.0.
 // A missing/non-array value is treated as a VIOLATION, not as "clean" — if a future TypeScript
 // drops the property this fails loudly instead of quietly enforcing nothing.
-function readParseProblems(sourceFile) {
+//
+// Exported for scripts/state-store-forwarding-policy.mjs, which parses the same sources and needs
+// the same fail-closed behaviour: two implementations that disagreed about a broken file would be
+// exactly the fail-open case this helper exists to prevent.
+export function readParseProblems(sourceFile) {
   const diagnostics = sourceFile.parseDiagnostics;
 
   if (!Array.isArray(diagnostics)) {
