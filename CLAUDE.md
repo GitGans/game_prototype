@@ -12,8 +12,8 @@ Browser-based game with a turn-based game on a grid.
 
 ## System Structure
 
-- **Central controller — PhaseManager**
-  The only place responsible for controlling game flow and Phaser scenes (start/stop).
+- **Flow coordinator — PhaseManager**
+  Owns the gameplay transition pipeline and requests scene synchronization through `PhaseSceneSynchronizer`.
 
 - **GamePhase = screen + data**
   Each screen corresponds to exactly one `GamePhase`, which contains **all data required for rendering**.
@@ -22,10 +22,20 @@ Browser-based game with a turn-based game on a grid.
 
   ```
   Scene → PhaseManager.transition()
-        → resolveTransition() → next GamePhase
-        → applyActionSideEffects() → mutate CampaignState
-        → syncPhaserScenes() → start scene
+        → derivePhaseTransitionMetadata() → resolveTransition() → next GamePhase
+        → phaseActionEffects.apply()        (all mutation, lifecycle sequencing and
+                                             battle-runtime teardown)
+        → rebuildPhaseSnapshot()
+        → PhaseSceneSynchronizer.sync() / notifyPhaseChanged()
+        → returns PhaseTransitionResult
   ```
+
+  `transition()` returns a synchronous, call-scoped `PhaseTransitionResult`:
+  `{ status: "rejected" }` or `{ status: "applied", battleFeedback }`. It reports
+  acceptance and transient battle feedback only — no `GamePhase` (render state comes
+  from `getPhase()`) and no navigation/mutation classification (routing belongs to
+  `resolveTransition`). Battle feedback belongs to the invocation that produced it;
+  a later action can never observe an earlier action's feedback.
 
 - **Two types of state**
   - `CampaignState` — persistent (progress, HP, items)
@@ -40,8 +50,8 @@ Browser-based game with a turn-based game on a grid.
 
 ### What must NOT be violated
 
-- ❌ **No scene control outside PhaseManager**
-  (`this.scene.start/stop/launch` is forbidden)
+- ❌ **No direct gameplay scene control outside `PhaserSceneSynchronizer`**
+  Scenes route navigation through `PhaseManager.transition()`; direct scene control is allowed only during Boot/Preloader bootstrap.
 
 - ❌ **No skipping the transition pipeline**
   no shortcuts, even for simple cases
@@ -64,9 +74,23 @@ Browser-based game with a turn-based game on a grid.
   - no state access
   - must be pure
 
----
+### Enforced architecture boundaries
 
-Use node scripts/check-boundaries.mjs 2>&1 to check boundaries.
+- `core/**` must not import Phaser. `PhaseManager` and `phaseTransitionResolver` must remain importable in Node without browser globals.
+- `PhaseManager` only coordinates: metadata → routing → effects → snapshot rebuild → scene sync/notification. Rejected transitions produce no effects.
+- `phaseTransitionResolver` is pure: it receives the current phase, action, and derived metadata, and returns the next phase or rejection. It must not access state, RNG, storage, scenes, Phaser, or mutation modules.
+- Routing, metadata derivation, lifecycle/effects, and snapshot projection have separate owners. Coordinators and facades must not absorb domain rules.
+- Scenes render committed `GamePhase` data and dispatch actions through `PhaseManager`. Gameplay scene control belongs only to the Phaser scene synchronizer, except for explicit bootstrap transitions.
+- Battle runtime writes belong only to its lifecycle owner; reads use the validated read-only gateway. Render snapshots must not share mutable runtime-owned data.
+- `GameState` and `PlayerSessionStore` may be imported only by their registered owners and never re-exported onward; a new direct consumer requires an explicit importer-policy change.
+- Boundary failures must be fixed or resolved through an explicit architectural policy change. Never accept them as a new baseline.
+
+Verify with:
+
+```bash
+npm test
+node scripts/check-boundaries.mjs
+```
 
 ---
 

@@ -14,6 +14,11 @@ export interface ItemTooltipData {
   classRestriction: string | null;
   /** null = no restriction; true = allowed; false = not allowed */
   classAllowed: boolean | null;
+  /**
+   * Extra wrapped lines rendered after the class line, already composed by the caller.
+   * This component renders supplied text and composes nothing itself.
+   */
+  notes: Array<{ text: string; tone: 'neutral' | 'positive' | 'negative' }>;
 }
 
 export class ItemTooltip extends BaseTooltip<ItemTooltipData> {
@@ -58,6 +63,19 @@ export class ItemTooltip extends BaseTooltip<ItemTooltipData> {
         wordWrap: { width: TW - pad * 2 },
       });
       y += lineH;
+    }
+
+    // Note lines (use effect, blocked reason). Wrapped, so height is measured, not assumed.
+    for (const note of data.notes) {
+      const color =
+        note.tone === 'positive' ? UI_THEME.color.value.positive :
+        note.tone === 'negative' ? UI_THEME.color.value.negative :
+                                   UI_THEME.color.value.neutral;
+      const text = this.addText(pad, y, note.text, {
+        fontSize: fontSize("xs"), color,
+        wordWrap: { width: TW - pad * 2 },
+      });
+      y += Math.max(lineH, text.height);
     }
 
     return y + pad;

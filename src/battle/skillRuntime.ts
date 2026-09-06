@@ -17,7 +17,7 @@ export function getActiveSkill(unit: SkillOwner): ActionSkillDefinition {
 
 /** Returns a random element from targets. Returns null if targets is empty. */
 export function resolveRandomTarget(
-  targets: CellCoord[],
+  targets: readonly CellCoord[],
   rng: Rng,
 ): CellCoord | null {
   return pickOneOrNull(rng, targets);
@@ -44,7 +44,7 @@ export function resolveRandomSkillIndex(
  */
 export function resolveBestHealTarget(
   state: BattleState,
-  targets: CellCoord[],
+  targets: readonly CellCoord[],
 ): CellCoord | null {
   if (targets.length === 0) return null;
   return targets.reduce((best, coord) => {

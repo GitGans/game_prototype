@@ -1,5 +1,5 @@
 import type { UnitClassId, UnitBattleStatKey } from './unitTypes';
-import type { ItemDefinition, ItemRuntimeMetadata } from './itemTypes';
+import type { ConsumableUseFailure, ItemDefinition, ItemRuntimeMetadata } from './itemTypes';
 
 // ─── Stat Snapshots ───────────────────────────────────────────────────────────
 
@@ -57,4 +57,44 @@ export interface UnitTabSnapshot {
   classId:    UnitClassId;
   className:  string;
   spriteKey:  string | null;
+}
+
+// ─── Consumable Use Projections ───────────────────────────────────────────────
+// Read-only UI projections for consumable use. They live here, beside the other snapshot
+// contracts, so the render side can describe consumable eligibility without importing the
+// modules that evaluate or execute a use.
+
+/**
+ * Eligibility of one consumable instance against the currently selected character.
+ *
+ * Produced by the same evaluation the executor runs (`core/consumableUsability.ts`), so a prompt
+ * can never advertise an action that confirmation would silently refuse.
+ */
+export type ConsumableUsability =
+  | { canUse: true; effect: { stat: UnitBattleStatKey; amount: number; healsCurrentHp: boolean } }
+  | { canUse: false; reason: ConsumableUseFailure };
+
+/**
+ * A pending confirmation as pure data — the only thing the pipeline carries between the effects
+ * side that records it and the snapshot side that projects it. Its OWNER is not a field: the
+ * store is keyed by `PlayerSessionSource`, so a request cannot claim a session it is not in.
+ */
+export interface PendingConsumeRequest {
+  readonly instanceId: string;
+  readonly unitTemplateId: string;
+}
+
+/**
+ * Everything the confirmation dialog needs, structured — never formatted text. Wording is
+ * produced by `objects/itemUseEffectPresentation.ts`, which `core/` must not import.
+ */
+export interface PendingConsumePrompt {
+  instanceId:     string;
+  unitTemplateId: string;
+  unitName:       string;
+  itemName:       string;
+  stat:           UnitBattleStatKey;
+  amount:         number;
+  /** true only for stat === 'hp' — the boost also restores current HP by the same amount. */
+  healsCurrentHp: boolean;
 }

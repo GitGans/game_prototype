@@ -1,4 +1,4 @@
-import type { TurnStartDirective } from '../battle/turnResolver';
+import type { BattleTurnDirectiveFeedback } from './battleActionFeedback';
 import { getActiveSkill } from '../battle/skillRuntime';
 import { compileSkillUsePlan } from '../battle/skillPlanCompiler';
 import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
@@ -8,7 +8,7 @@ import type {
 } from '../shared/battleDirectivePresentationModel';
 
 export function mapDirectiveToPresentationInput(
-  directive: TurnStartDirective,
+  directive: BattleTurnDirectiveFeedback,
   unitName: string | null,
 ): BattleDirectivePresentationInput {
   switch (directive.type) {

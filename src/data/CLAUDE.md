@@ -85,9 +85,12 @@ Live game state in `BattleState` / `CampaignState`
   usable     -> slot must be usable_slot (reserved exclusively for kind 'usable')
   consumable -> slot null
   ```
-- **`useEffect` is data only** — `equipment` forbids it; `usable` and `consumable` require it. It is NOT
-  applied anywhere at runtime in this stage (no heal/revive/permanent-stat mechanics, no use/delete).
-  Mechanics will be designed later from this data shape.
+- **`useEffect` presence by kind** — `equipment` forbids it; `usable` and `consumable` require it.
+  **`permanent_stat_boost` is executable**: `core/consumableUse.ts` applies it and destroys the source
+  instance, so the builder validates its payload (the stat must be a canonical battle stat; the amount
+  must be finite and > 0 — no item id or particular amount is privileged). `heal`, `revive` and
+  `usable` activation remain unimplemented; the use operation rejects them with `unsupported_effect`,
+  and they carry no payload validation yet.
 - **Acquisition data lives elsewhere** — starting inventory in `startingInventoryDefinitions.ts`; shop/loot
   in their own future definition files. Item entries never carry acquisition data.
 

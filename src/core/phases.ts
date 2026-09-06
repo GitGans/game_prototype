@@ -11,6 +11,10 @@ import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
 import type { SubMapState, WorldPos } from '../shared/worldTypes';
 import type { PlayerSessionSource } from './playerSessionState';
+import type {
+  ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest,
+} from '../shared/snapshotTypes';
+export type { ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest };
 import type { BattleParticipant, BattleExitOutcome } from './battleRuntimeContext';
 export type { BattleExitOutcome };
 
@@ -78,7 +82,7 @@ export type GamePhase =
       // Immutable presentation metadata only. Final level and life state always come
       // from the roster selected by `sessionSource` — never from a battle-start snapshot.
       participantSeeds: BattleResultParticipantSeed[];
-      units:            BattleResultUnit[];   // rebuilt by rebuildSnapshot from the stored roster
+      units:            BattleResultUnit[];   // rebuilt by rebuildPhaseSnapshot from the stored roster
       returnPhase:      GamePhase;
       mapCleared:       boolean;
     }
@@ -90,7 +94,7 @@ export type GamePhase =
       triggerPos?:        { x: number; y: number };
       mapId?:             string;
       participants:       BattleParticipant[];     // battle-start snapshot; never rebuilt from current placement
-      benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildSnapshot after every placement action
+      benchUnits:         (BattleUnitSnapshot | null)[]; // rebuilt by rebuildPhaseSnapshot after every placement action
       placementSelection: PlacementSelection;           // mirrors BattleState.placementSelection
       battlePhase:         BattleState['phase'];
       // Placement-phase control state: at least one LIVING player unit is
@@ -149,6 +153,8 @@ export type GamePhase =
       canStartBattle: boolean;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
+      consumableUsage: Record<string, ConsumableUsability>;
+      pendingConsumePrompt: PendingConsumePrompt | null;
     }
   | {
       type: 'equip_screen';
@@ -163,6 +169,8 @@ export type GamePhase =
       unitStats: UnitStatsSnapshot | null;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
+      consumableUsage: Record<string, ConsumableUsability>;
+      pendingConsumePrompt: PendingConsumePrompt | null;
     }
   | {
       type: 'upgrade_tree';
@@ -195,6 +203,10 @@ export type PhaseAction =
   // ── Item mutations (mutation-only: resolveTransition returns same ref) ──
   | { type: 'equip_item'; instanceId: string; unitTemplateId: string }
   | { type: 'unequip_item'; unitTemplateId: string; slot: string }
+  // ── Consumable use (mutation-only) — request/cancel change presentation state only ──
+  | { type: 'request_consume_item'; instanceId: string }
+  | { type: 'confirm_consume_item'; instanceId: string; unitTemplateId: string }
+  | { type: 'cancel_consume_item' }
   // ── Commerce (mutation-only) — stub, no shop phase yet ────────
   | { type: 'buy_item'; definitionId: string }
   | { type: 'sell_item'; instanceId: string }
@@ -238,6 +250,6 @@ export type PhaseAction =
   | { type: 'battle_clear_preview_target' };
 
 // Empty snapshots used by resolveTransition as placeholders —
-// rebuildSnapshot fills them with real data after side effects run.
+// rebuildPhaseSnapshot fills them with real data after side effects run.
 export const EMPTY_BACKPACK_SNAPSHOT: BackpackSnapshot = { slots: Array(24).fill(null) };
 export const EMPTY_EQUIP_SNAPSHOT: EquipmentSnapshot = { slots: {} };

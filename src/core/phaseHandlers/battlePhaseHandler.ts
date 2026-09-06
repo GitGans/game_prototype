@@ -35,7 +35,11 @@ import type {
   BattleRuntimeContext,
   BattleExitOutcome,
 } from '../battleRuntimeContext';
-export type { AutoTurnIntention };
+import type {
+  BattleActionFeedback,
+  BattleTurnDirectiveFeedback,
+  BattleAutoTurnDirectiveFeedback,
+} from '../battleActionFeedback';
 
 // ─── Battle Lifecycle Actions ─────────────────────────────────────────────────
 
@@ -206,6 +210,88 @@ export type BattlePhaseActionResult = {
   autoTurnDirective?:  BattleAutoTurnDirective;
   autoTurnApplied?:    boolean;
 };
+
+/**
+ * Drops `activeSkill` and `validTargets`. `validTargets` is the same array
+ * reference that lives in `BattleState.validTargets` — forwarding it would hand a
+ * scene a live handle into committed battle state.
+ */
+function projectTurnDirective(directive: TurnStartDirective): BattleTurnDirectiveFeedback {
+  switch (directive.type) {
+    case 'none':
+      return { type: 'none', reason: directive.reason };
+    case 'continue_immediately':
+      return { type: 'continue_immediately' };
+    case 'schedule_next_turn':
+      return { type: 'schedule_next_turn', delayKind: directive.delayKind };
+    case 'schedule_auto_turn':
+      return {
+        type:         'schedule_auto_turn',
+        activeUnitId: directive.activeUnitId,
+        delayKind:    directive.delayKind,
+      };
+    case 'await_manual_target':
+      return {
+        type:         'await_manual_target',
+        activeUnitId: directive.activeUnitId,
+        promptKind:   directive.promptKind,
+      };
+    default: {
+      const _exhaustive: never = directive;
+      throw new Error(`Unhandled turn start directive: ${JSON.stringify(_exhaustive)}`);
+    }
+  }
+}
+
+/**
+ * Builds a fresh intention object. `PhaseManager` stores the ORIGINAL intention
+ * into `runtime.pendingAutoTurnIntention`, so returning it would alias runtime state.
+ */
+function projectAutoTurnDirective(
+  directive: BattleAutoTurnDirective,
+): BattleAutoTurnDirectiveFeedback {
+  switch (directive.type) {
+    case 'none':
+      return { type: 'none', reason: directive.reason };
+    case 'handoff_manual':
+      return { type: 'handoff_manual' };
+    case 'restart_turn':
+      return { type: 'restart_turn' };
+    case 'intention':
+      return {
+        type:      'intention',
+        intention: {
+          unitId:         directive.intention.unitId,
+          activeUnitSide: directive.intention.activeUnitSide,
+        },
+        animateAttack: directive.animateAttack,
+      };
+    default: {
+      const _exhaustive: never = directive;
+      throw new Error(`Unhandled auto turn directive: ${JSON.stringify(_exhaustive)}`);
+    }
+  }
+}
+
+/**
+ * Narrows the handler's authoritative result to the transient feedback scenes may see.
+ *
+ * Field-by-field on purpose: an object spread would silently forward any future
+ * internal field (state, context, runtime handles) into the public contract.
+ *
+ * `events` is copied as consumer-side defence — the array is handed to
+ * `presentBattleEvents()`, and nothing prevents a future presentation change from
+ * sorting or shifting it in place. Do not remove the copy on the grounds that the
+ * handler builds a fresh array per action; the handler is not the risk.
+ */
+export function projectBattleActionFeedback(result: BattlePhaseActionResult): BattleActionFeedback {
+  const feedback: BattleActionFeedback = { events: [...result.events] };
+  if (result.directive !== undefined)         feedback.directive = projectTurnDirective(result.directive);
+  if (result.winner !== undefined)            feedback.winner = result.winner;
+  if (result.autoTurnDirective !== undefined) feedback.autoTurnDirective = projectAutoTurnDirective(result.autoTurnDirective);
+  if (result.autoTurnApplied !== undefined)   feedback.autoTurnApplied = result.autoTurnApplied;
+  return feedback;
+}
 
 function withWinner(
   result: Omit<BattlePhaseActionResult, 'winner'>,

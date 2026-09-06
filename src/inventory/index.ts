@@ -1,6 +1,7 @@
 export * from './inventoryConstants';
 export * from './containerOps';
 export * from './equipmentOps';
+export * from './consumableOps';
 export * from './equipmentBonuses';
 export * from './inventorySnapshots';
 export * from './pricing';

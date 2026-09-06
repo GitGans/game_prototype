@@ -86,6 +86,61 @@ describe("PlayerSessionStore", () => {
     expect(after.initialConfig).toBe(config);
   });
 
+
+  describe("replaceSession — roster and inventory committed together", () => {
+    it("preserves campaign world and money while replacing both domains at once", () => {
+      const before = GameState.getCampaignState();
+      const nextRoster = { units: {} };
+      const nextInventory = { instances: {}, containers: {} };
+
+      PlayerSessionStore.replaceSession('campaign', { roster: nextRoster, inventory: nextInventory });
+
+      const after = GameState.getCampaignState();
+      expect(after.roster).toBe(nextRoster);
+      expect(after.inventory).toBe(nextInventory);
+      expect(after.world).toBe(before.world);
+      expect(after.money).toBe(before.money);
+    });
+
+    it("preserves the debug initialConfig while replacing the session", () => {
+      const config = debugConfig();
+      GameState.setDebugState({ session: freshDebugSession(), initialConfig: config });
+      const nextRoster = { units: {} };
+      const nextInventory = { instances: {}, containers: {} };
+
+      PlayerSessionStore.replaceSession('debug', { roster: nextRoster, inventory: nextInventory });
+
+      const after = GameState.getDebugState()!;
+      expect(after.session.roster).toBe(nextRoster);
+      expect(after.session.inventory).toBe(nextInventory);
+      expect(after.initialConfig).toBe(config);
+    });
+
+    it("throws rather than falling back to campaign when the debug session is absent", () => {
+      GameState.clearDebugState();
+
+      expect(() => PlayerSessionStore.replaceSession('debug', {
+        roster: { units: {} }, inventory: { instances: {}, containers: {} },
+      })).toThrow(/Debug state is not initialized/);
+    });
+
+    it("keeps the two storage trees isolated", () => {
+      const debugSession = freshDebugSession();
+      GameState.setDebugState({ session: debugSession, initialConfig: debugConfig() });
+      const campaignBefore = GameState.getCampaignState();
+
+      PlayerSessionStore.replaceSession('campaign', {
+        roster: { units: {} }, inventory: { instances: {}, containers: {} },
+      });
+      expect(GameState.getDebugState()!.session).toBe(debugSession);
+
+      PlayerSessionStore.replaceSession('debug', {
+        roster: { units: {} }, inventory: { instances: {}, containers: {} },
+      });
+      expect(GameState.getCampaignState().world).toBe(campaignBefore.world);
+    });
+  });
+
   it("campaign writes never touch debug state", () => {
     const debugSession = freshDebugSession();
     GameState.setDebugState({ session: debugSession, initialConfig: debugConfig() });

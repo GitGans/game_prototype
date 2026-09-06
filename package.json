@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run check:boundaries && tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:boundaries": "node scripts/check-boundaries.mjs"

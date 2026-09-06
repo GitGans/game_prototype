@@ -6,7 +6,8 @@ import type {
   BattleFieldUnitCellsSnapshot,
 } from '../shared/battleSnapshots';
 import type { UnitStatsSnapshot } from '../shared/snapshotTypes';
-import type { CellCoord } from '../shared/gridTypes';
+import type { CellCoord, UnitShape } from '../shared/gridTypes';
+import type { ActiveEffect } from '../shared/activeEffect';
 import type { UnitDeployment } from '../shared/unitDeploymentTypes';
 import { effectiveStats } from '../battle/combat';
 import { requireDeployment } from '../battle/deployment';
@@ -22,6 +23,38 @@ function cloneDeployment(d: UnitDeployment): UnitDeployment {
     : { kind: 'bench', slot: d.slot };
 }
 
+// `unit.shape` aliases an entry in the shared SHAPES registry (data/shapeDefinitions.ts) —
+// every unit of the same shape holds the SAME object. Handing it to a scene by reference
+// would let one mutation corrupt that shape for the whole process. <=4 offsets, so the copy
+// is free.
+function cloneShape(shape: UnitShape): UnitShape {
+  return { offsets: shape.offsets.map(o => ({ ...o })) };
+}
+
+// activeEffects is runtime-owned. It is readonly by type through the battle-runtime read
+// gateway, but `readonly` is erased at runtime, so this deep copy remains the actual value
+// isolation guarantee for scenes — the two are complementary, not redundant.
+// `Effect` is a flat record, so a shallow copy of it is a complete copy. <=2 effects per unit.
+function cloneActiveEffect(ae: ActiveEffect): ActiveEffect {
+  return {
+    effectDisplayName: ae.effectDisplayName,
+    effect:            { ...ae.effect },
+    remainingRounds:   ae.remainingRounds,
+    // Optional by contract — spread only when present, so the copy keeps the same key shape
+    // instead of gaining an explicit `periodicHp: undefined`.
+    ...(ae.periodicHp ? { periodicHp: { ...ae.periodicHp } } : {}),
+  };
+}
+
+/**
+ * Projects one runtime unit into its scene-facing snapshot.
+ *
+ * VALUE ISOLATION CONTRACT — no field of the result aliases runtime-owned mutable state.
+ * `shape`, `deployment`, `sprite.states`, the `skills` array and `activeEffects` (including
+ * each nested `effect` / `periodicHp`) are all copies. The only references shared with
+ * another layer are the `ActionSkillDefinition` entries inside `skills`: shared, immutable
+ * static content from the SKILLS registry, exposed as `readonly` and mutated by no layer.
+ */
 export function buildBattleUnitSnapshot(
   unit: Unit,
   runtimeDeployment: UnitDeployment,
@@ -66,13 +99,17 @@ export function buildBattleUnitSnapshot(
 
     statDisplay,
 
-    shape:      unit.shape,
+    shape:      cloneShape(unit.shape),
     deployment,
     sprite,
 
-    skills:           unit.skills,
+    // The array is per-unit and mutable, so it is copied. Its ActionSkillDefinition
+    // entries are deliberately NOT deep-cloned: they are shared, immutable static content
+    // from the SKILLS registry, not runtime state, and cloning whole skill trees on every
+    // snapshot rebuild would land on a hot path (battle_preview_target fires on pointer move).
+    skills:           [...unit.skills],
     activeSkillIndex: unit.activeSkillIndex,
-    activeEffects:    unit.activeEffects,
+    activeEffects:    unit.activeEffects.map(cloneActiveEffect),
 
     rowTrait:    unit.rowTrait,
     templateId:  unit.templateId,
@@ -98,8 +135,8 @@ export interface BattleUnitSnapshotViews {
  * reference the same instances. Iteration follows state.units insertion order, so
  * unitsById and fieldUnits preserve that order (same as the previous helpers).
  *
- * Production code that needs a full battle phase read model (i.e. PhaseManager's
- * rebuildSnapshot) MUST use this builder so the views share one snapshot object set.
+ * Production code that needs a full battle phase read model (i.e. battlePhaseSnapshot.ts's
+ * buildBattlePhaseSnapshot) MUST use this builder so the views share one snapshot object set.
  * The array helpers below are compatibility/test conveniences, not the production API.
  */
 export function buildBattleUnitSnapshotViews(
@@ -226,7 +263,7 @@ export function buildBattleFieldUnitCellsSnapshot(
 export function projectPreviewTarget(input: {
   battlePhase:         BattleState['phase'];
   previewTargetCoord:  CellCoord | null;
-  validTargets:        CellCoord[];
+  validTargets:        readonly CellCoord[];  // runtime-owned; inspected only
   hasActiveUnit:       boolean;
   fieldUnitCells:      BattleFieldUnitCellsSnapshot;
   unitsById:           Map<string, BattleUnitSnapshot>;

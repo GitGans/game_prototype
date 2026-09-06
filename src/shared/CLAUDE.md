@@ -16,8 +16,8 @@ Dependency-free, cross-layer type contract system. Single source of truth for al
 - `unitTypes.ts` — Unit blueprints: `UnitBlueprint`, `UnitBattleStats`, `UnitClass`, `UnitUpgradeTier`
 - `skillTypes.ts` — Combat primitive and semantic input types: `Effect`, `SkillPattern`, and semantic refs (`DamageModifierRef`, `PostDamageEffect`, `InstantEffectApplication`, `AppliedEffectMeta`) used by `combat.ts` and `skillUsePlan.ts`. Legacy block-shaped skill interfaces have been removed.
 - `skillDefinitionTypes.ts` — Active authoring contract: `ActionSkillDefinition`, action types, target policy types, matrix refs, power source types
-- `itemTypes.ts` — Item/equipment: `ItemDefinition` (facts only — no `usage`/`equipSlot`), `ItemRuntimeMetadata` + `ItemRuntimeKind` (`equipment` | `usable` | `consumable`; generated behavior/slot), `ItemCatalog`, `ItemInstance`, `ItemContainer`, `EquipSlot` (usable slot key is `usable_slot`), `ItemUseEffect` (data-only discriminated union — not applied at runtime this stage)
-- `snapshotTypes.ts` — UI projections: `UnitStatsSnapshot`, `SkillIconSnapshot`, `BackpackSnapshot`, `EquipmentSnapshot`
+- `itemTypes.ts` — Item/equipment: `ItemDefinition` (facts only — no `usage`/`equipSlot`), `ItemRuntimeMetadata` + `ItemRuntimeKind` (`equipment` | `usable` | `consumable`; generated behavior/slot), `ItemCatalog`, `ItemInstance`, `ItemContainer`, `EquipSlot` (usable slot key is `usable_slot`), `ItemUseEffect` (discriminated union; `permanent_stat_boost` is EXECUTABLE — `heal` and `revive` remain data only), plus the consumable failure vocabulary `ConsumableLocationFailure` / `ConsumableBoostFailure` / `ConsumableUseFailure` shared by inventory, progression and core
+- `snapshotTypes.ts` — UI projections: `UnitStatsSnapshot`, `SkillIconSnapshot`, `BackpackSnapshot`, `EquipmentSnapshot`, plus the consumable-use projections `ConsumableUsability`, `PendingConsumeRequest` and `PendingConsumePrompt` (structured data only — never formatted text; wording lives in `objects/itemUseEffectPresentation.ts`)
 - `battleSnapshots.ts` — Battle-phase projections: `BattleUnitSnapshot`, `FieldBattleUnitSnapshot`, `BattleOccupancySnapshot` (rebuilt dynamically per phase)
 - `worldTypes.ts` — Map contracts: `SubMapDefinition`, `SubMapState`, `LayoutCell`, `MapEntityType`
 
@@ -62,7 +62,7 @@ Domain contracts defined here
 - change unit stats, class list, or progression structure → `unitTypes.ts`
 - change skill runtime bridge types (damage types, effects, patterns) → `skillTypes.ts`
 - change skill authoring contract → `skillDefinitionTypes.ts`
-- change equipment slots or item effects → `itemTypes.ts`
+- change equipment slots, item effects, or consumable failure reasons → `itemTypes.ts`
 - change what data UI receives for unit/item display → `snapshotTypes.ts`
 - change what data is available during battle/placement phase → `battleSnapshots.ts`
 - change map layout or world entity structure → `worldTypes.ts`

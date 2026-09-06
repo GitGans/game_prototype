@@ -4,11 +4,32 @@ import type {
   ItemDefinition,
   ItemRuntimeKind,
   ItemRuntimeMetadata,
+  ItemUseEffect,
 } from '../../shared/itemTypes';
 import type { ItemGroup } from './authoredItemTypes';
 import { createZeroBattleStatMap } from '../../shared/battleStatUtils';
+import { UNIT_BATTLE_STAT_KEYS } from '../../shared/unitTypes';
 
 const KINDS_REQUIRING_USE_EFFECT: ReadonlySet<ItemRuntimeKind> = new Set(['usable', 'consumable']);
+
+const BATTLE_STAT_KEYS: ReadonlySet<string> = new Set(UNIT_BATTLE_STAT_KEYS);
+
+/**
+ * Effect-payload validation. Deliberately generic: no item id and no particular amount is
+ * hardcoded, so new authored content is checked by the same rules.
+ *
+ * `permanent_stat_boost` is the only effect with executable mechanics (see core/consumableUse.ts);
+ * `heal` and `revive` remain catalog data only, so they carry no extra validation yet.
+ */
+function assertUseEffect(id: string, effect: ItemUseEffect): void {
+  if (effect.type !== 'permanent_stat_boost') return;
+  if (!BATTLE_STAT_KEYS.has(effect.stat)) {
+    throw new Error(`Item "${id}" boosts unknown battle stat "${effect.stat}"`);
+  }
+  if (!Number.isFinite(effect.amount) || effect.amount <= 0) {
+    throw new Error(`Item "${id}" must boost by a finite amount > 0 (got ${effect.amount})`);
+  }
+}
 
 /**
  * Pure builder: turns authored item groups into the generated catalog. Group array order and
@@ -48,6 +69,7 @@ export function buildItemCatalog(groups: readonly ItemGroup[]): ItemCatalog {
       if (group.kind === 'equipment' && item.useEffect) {
         throw new Error(`Item "${id}" of kind "equipment" must not have a useEffect`);
       }
+      if (item.useEffect) assertUseEffect(id, item.useEffect);
 
       definitions[id] = {
         id,

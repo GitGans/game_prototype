@@ -55,7 +55,7 @@ returned to `src/core` for phase transition or rendering
 
 ## Invariants
 
-- All state-mutating functions return a **new** `BattleState`; they never mutate in place
+- All state-mutating functions return a **new** `BattleState`; they never mutate in place. This is enforced by the type system, not convention: `BattleState`, `Unit`, `OccupancyMap`, `ActiveEffect`, `CellCoord`, `UnitShape` and `UnitDeployment` are `readonly` at every runtime-owned depth (`ReadonlyMap` / `readonly T[]`), so a write requires building a replacement. Helpers that only query state therefore take `ReadonlyMap` / `readonly T[]` parameters while still returning fresh mutable collections. Never reach for a cast to silence a readonly error — see the read-gateway bullet in the root `CLAUDE.md`
 - `OccupancyMap` is always rebuilt via `buildOccupancy()` after any unit position change
 - A unit may hold at most **2** active effects; the oldest is evicted when a third is applied
 - Placement validation is anchor-based: shape offsets from the anchor define all occupied cells

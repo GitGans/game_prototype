@@ -26,14 +26,43 @@ export type BattleStatBonuses = UnitBattleStatMap;
 export type PartialBattleStatBonuses = UnitBattleStatDelta;
 
 /**
- * Catalog DATA ONLY. No runtime use/apply/delete mechanics exist in this stage.
- * A discriminated union keeps the contract honest (e.g. revive carries no amount);
- * mechanics will be designed later from this shape.
+ * A discriminated union keeps the contract honest (e.g. revive carries no amount).
+ *
+ * `permanent_stat_boost` is EXECUTABLE: `core/consumableUse.ts` applies it and destroys the
+ * source instance. `heal` and `revive` remain catalog data only — no mechanics exist for them,
+ * and the use operation rejects them with `unsupported_effect`.
  */
 export type ItemUseEffect =
   | { type: 'heal'; amount: number }
   | { type: 'revive' }
   | { type: 'permanent_stat_boost'; stat: keyof BattleStatBonuses; amount: number };
+
+/**
+ * Consumable-use failure vocabulary. Declared here, beside `ItemUseEffect`, because three layers
+ * report into one contract and none of them may import the others:
+ *   inventory/consumableOps.ts   → ConsumableLocationFailure
+ *   progression/consumableStatBoost.ts → ConsumableBoostFailure
+ *   core/consumableUsability.ts  → widens both into ConsumableUseFailure
+ */
+export type ConsumableLocationFailure =
+  | 'missing_instance'
+  | 'missing_definition'
+  | 'not_consumable'
+  | 'missing_use_effect'
+  | 'not_in_backpack'
+  | 'duplicate_placement';
+
+export type ConsumableBoostFailure =
+  | 'unit_dead'
+  | 'invalid_amount'
+  | 'invalid_result';
+
+export type ConsumableUseFailure =
+  | ConsumableLocationFailure
+  | ConsumableBoostFailure
+  | 'unit_not_found'
+  | 'blueprint_not_found'
+  | 'unsupported_effect';
 
 /**
  * Item-specific facts only. Behavior (usable/equippable) and placement (slot) are NOT

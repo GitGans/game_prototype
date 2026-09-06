@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { EventBus, Events } from './EventBus';
+import { EventBus, Events } from '../core/EventBus';
 
 /**
  * Subscribes a Phaser scene handler to STATE_CHANGED and automatically

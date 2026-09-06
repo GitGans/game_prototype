@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { PhaseManager } from "../../core/PhaseManager";
 import type { PhaseAction } from "../../core/phases";
-import type { BattlePhaseActionResult, AutoTurnIntention } from "../../core/phaseHandlers/battlePhaseHandler";
+import type { BattleActionFeedback, AutoTurnIntentionFeedback } from "../../core/battleActionFeedback";
 import type { CellCoord, Col, Side } from "../../battle/types";
 import type { FieldBattleUnitSnapshot } from "../../shared/battleSnapshots";
 import { getOccupiedCells } from "../../battle/shapes";
@@ -186,9 +186,9 @@ export class BattleTurnFlowController {
 
   // ─── Core Action Helper ───────────────────────────────────────────────────
 
-  private runBattleAction(action: BattleTurnSceneAction): BattlePhaseActionResult | null {
-    PhaseManager.transition(action);
-    return PhaseManager.getLastBattleTransition();
+  private runBattleAction(action: BattleTurnSceneAction): BattleActionFeedback | null {
+    const result = PhaseManager.transition(action);
+    return result.status === "applied" ? result.battleFeedback : null;
   }
 
   // ─── Attack Animation ─────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ export class BattleTurnFlowController {
 
   // ─── Winner Handling ──────────────────────────────────────────────────────
 
-  private handleBattleWinner(result: BattlePhaseActionResult | null): boolean {
+  private handleBattleWinner(result: BattleActionFeedback | null): boolean {
     if (!result?.winner) return false;
     this.clearTimers();
     this.destroyControls();
@@ -383,7 +383,7 @@ export class BattleTurnFlowController {
     }
   }
 
-  private applyAutoTurnAndPresent(intention: AutoTurnIntention): void {
+  private applyAutoTurnAndPresent(intention: AutoTurnIntentionFeedback): void {
     if (this.destroyed) return;
     const applied = this.runBattleAction({ type: "battle_apply_auto_turn" });
     if (!applied) return;

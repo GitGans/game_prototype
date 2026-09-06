@@ -6,7 +6,7 @@ import { isAlive } from './lifeState';
  * - Sorted by initiative descending.
  * - Ties: interleave player first, then enemy (player, enemy, player, enemy, ...).
  */
-export function buildRoundQueue(units: Map<string, Unit>): string[] {
+export function buildRoundQueue(units: ReadonlyMap<string, Unit>): string[] {
   const alive = Array.from(units.values())
     .filter(isAlive)
     .map(u => {
@@ -43,7 +43,7 @@ export function buildRoundQueue(units: Map<string, Unit>): string[] {
 /**
  * Removes dead units from the queue.
  */
-export function pruneQueue(queue: string[], units: Map<string, Unit>): string[] {
+export function pruneQueue(queue: readonly string[], units: ReadonlyMap<string, Unit>): string[] {
   return queue.filter(id => {
     const u = units.get(id);
     return u !== undefined && isAlive(u);
@@ -67,9 +67,9 @@ export function pruneQueue(queue: string[], units: Map<string, Unit>): string[] 
  */
 export function rebuildRemainingQueue(
   currentId: string,
-  remaining: string[],
+  remaining: readonly string[],
   chargedThisRound: ReadonlySet<string>,
-  units: Map<string, Unit>
+  units: ReadonlyMap<string, Unit>
 ): string[] {
   const effectiveInit = (id: string): number => {
     const u = units.get(id);

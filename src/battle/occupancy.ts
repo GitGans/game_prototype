@@ -6,8 +6,8 @@ import { getOccupiedCells } from './shapes';
 import { isAlive } from './lifeState';
 
 export function buildOccupancy(
-  units: Map<string, Unit>,
-  deployments: Map<string, UnitDeployment>,
+  units: ReadonlyMap<string, Unit>,
+  deployments: ReadonlyMap<string, UnitDeployment>,
 ): OccupancyMap {
   const cellToUnitId = new Map<string, string>();
   const unitToCells = new Map<string, CellCoord[]>();

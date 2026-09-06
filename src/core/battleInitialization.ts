@@ -92,7 +92,7 @@ export function buildNewBattleState(
 export function buildReplayBattleState(
   emptyState:      BattleState,
   setup:           PlayerBattleSetup,
-  savedPlacements: EnemyReplayPlacement[],
+  savedPlacements: readonly EnemyReplayPlacement[],
 ): BattleReplayInitResult {
   const playerResult = autoPlacePlayer(emptyState, setup, BENCH_SLOTS);
   let state = playerResult.state;

@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(node scripts/check-boundaries.mjs; echo \"exit=$?\")",
       "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
       "Read(//home/node/.claude/**)",
       "Read(//home/node/.codex/**)",
@@ -15,7 +16,18 @@
       "Bash(npx vitest *)",
       "Bash(grep -i \"\\\\.ts$\")",
       "Bash(npx tsc *)",
-      "Bash(node scripts/check-boundaries.mjs)"
+      "Bash(node scripts/check-boundaries.mjs)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(grep *)",
+      "Bash(cd /workspace && npx tsc *)",
+      "Bash(cd /workspace && npx vitest *)"
+    ],
+    "deny": [
+      "Edit(CLAUDE.md)",
+      "Write(CLAUDE.md)",
+      "Edit(architecture_plan.md)",
+      "Write(architecture_plan.md)"
     ]
   }
 }

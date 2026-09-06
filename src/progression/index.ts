@@ -6,3 +6,4 @@ export * from './stats';
 export * from './rosterState';
 export * from './rosterCamp';
 export * from './rosterUpgrades';
+export * from './consumableStatBoost';

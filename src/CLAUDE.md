@@ -25,7 +25,7 @@ The system is split into layers: static content definitions, domain logic, orche
 * progression/→ unit progression domain (roster state, class/upgrade resolution, stats)
 * campaign/ → persistent campaign state contract (`CampaignState`) — the only future save source
 * save/     → future save/load boundary contract (`SaveRepository`); no implementation yet
-* core/     → game orchestration: PhaseManager, GameState, phase definitions, transitions
+* core/     → game orchestration: PhaseManager, GameState (campaign/debug containers), battle-runtime storage + access gateways, phase definitions, transitions
 * objects/  → game-specific visual components (unit views, tooltips, skill bars)
 * ui/       → reusable, game-agnostic UI primitives (buttons, inputs, theme)
 * scenes/   → Phaser scenes — composition, input handling, PhaseManager triggers only
@@ -53,14 +53,31 @@ user input (scene)
 ↓
 PhaseManager.transition()
 ↓
+derivePhaseTransitionMetadata()  →  stateful facts for the pure resolver
+↓
 resolveTransition()  →  next GamePhase  (pure, no side effects)
 ↓
-applyActionSideEffects()  →  mutate CampaignState / BattleState
+phaseActionEffects.apply()  →  mutate CampaignState / BattleState, run lifecycle sequences
 ↓
-syncPhaserScenes()  →  start scene
+rebuildPhaseSnapshot()  →  read authoritative state, produce the render snapshot
+↓
+PhaseSceneSynchronizer.sync(phase)  →  start scene   (navigation)
+notifyPhaseChanged()                →  refresh signal (mutation-only)
 ↓
 scene reads GamePhase and renders
 ```
+
+Every step above is an **injected** collaborator: `PhaseManagerClass` requires a
+`PhaseManagerDependencies` set and constructs none of them itself. `createProductionPhaseManager()`
+(`core/PhaseManager.ts`) is the single production composition path — it wires the five real
+collaborators and builds a fresh `phaseActionEffects` controller per manager, so no two managers
+share a gameplay RNG pair. The exported `PhaseManager` singleton comes from that factory.
+
+`PhaseManager` (`src/core/`) never touches Phaser directly — it delegates scene start/stop to an
+injected `PhaseSceneSynchronizer` (contract in `core/`, Phaser implementation in
+`scenes/phaserSceneSynchronizer.ts`), supplied separately through `init()` because scene control
+only exists after Phaser boots. `core/**` must not import `phaser` at all, including type-only
+imports — enforced by `check-boundaries.mjs`.
 
 ## Entry Points
 
@@ -87,7 +104,8 @@ scene reads GamePhase and renders
 
 * Scenes are stateless — they read from GamePhase and handle input only
 * All screen transitions go through PhaseManager; no scene.start/stop outside it
-* resolveTransition() must be pure — no Phaser calls, no state mutation
+* resolveTransition() (`core/phaseTransitionResolver.ts`) must be pure — no Phaser calls, no state mutation, no reading `GameState`; derived facts it needs (e.g. `mapCleared`) are passed in as explicit metadata, computed by `core/phaseTransitionMetadata.ts` before `PhaseManager` calls it
+* Snapshot rebuilding belongs to `core/phaseSnapshotRebuilder.ts` (dispatch) and `core/battlePhaseSnapshot.ts` (the battle projection) — never to a scene and never to `PhaseManager` itself
 * CampaignState and BattleState must not mix
 * UI primitives (ui/) must have zero game-domain knowledge
 * GamePhase is the single source of truth for what a scene renders
@@ -109,11 +127,12 @@ scene reads GamePhase and renders
 * add/change game content (units, skills, items)      → data/
 * change battle rules (combat, targeting, placement)  → battle/
 * change world-map rules                              → world/
-* add a new game screen or transition                 → core/phases.ts + core/PhaseManager.ts + scenes/
+* add a new game screen or transition                 → core/phases.ts + core/phaseTransitionResolver.ts + core/phaseActionEffects.ts + scenes/ (not core/PhaseManager.ts — the coordinator is action-agnostic)
 * change the persistent campaign state shape           → campaign/campaignState.ts
 * change the save/load boundary contract               → save/saveTypes.ts
 * change how a new campaign is initialized             → core/initCampaignState.ts + data/campaignInitialStateDefinition.ts
-* change runtime ownership of campaign/debug/battle state → core/GameState.ts
+* change runtime ownership of campaign/debug state         → core/GameState.ts
+* change battle-runtime storage, reads or the write capability → core/battleRuntimeStorage.ts / core/battleRuntimeAccess.ts / core/battleRuntimeWriteAccess.ts
 * change a visual component tied to game data         → objects/
 * change a reusable UI primitive                      → ui/
 * change global styles or constants                   → ui/theme.ts (UI_THEME), core/Constants.ts

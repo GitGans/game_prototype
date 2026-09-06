@@ -150,7 +150,7 @@ export function buildEnemyPlacementCandidates(
 }
 
 export function buildEnemyReplayInputs(
-  savedPlacements: Array<{ templateId: string; anchor: CellCoord; level: number }>,
+  savedPlacements: readonly { templateId: string; anchor: CellCoord; level: number }[],
 ): EnemyReplayPlacementInput[] {
   let counter = 1;
   const result: EnemyReplayPlacementInput[] = [];
