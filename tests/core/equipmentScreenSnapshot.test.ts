@@ -62,6 +62,82 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
     expect(snap.learnedSkills.length).toBeGreaterThan(0);
   });
 
+
+  describe("consumable projections", () => {
+    const VITALITY = "item_start_vitality_essence";
+
+    it("reports every backpack consumable as usable for a living selected character", () => {
+      const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID);
+
+      expect(snap.consumableUsage[VITALITY])
+        .toEqual({ canUse: true, effect: { stat: "hp", amount: 5, healsCurrentHp: true } });
+    });
+
+    it("keys usage only by consumables, never by equipment", () => {
+      const session = freshSession();
+      const snap = buildEquipmentScreenPlayerSnapshot(session, UNIT_ID);
+
+      for (const instanceId of Object.keys(snap.consumableUsage)) {
+        const definitionId = session.inventory.instances[instanceId].definitionId;
+        expect(ITEM_CATALOG.metadataById[definitionId].kind).toBe("consumable");
+      }
+    });
+
+    it("reports the blocking reason for a dead selected character rather than omitting the entry", () => {
+      const session = freshSession();
+      const dead = {
+        ...session,
+        roster: { units: {
+          ...session.roster.units,
+          [UNIT_ID]: { ...session.roster.units[UNIT_ID], lifeState: "dead" as const, currentHp: 0 },
+        } },
+      };
+
+      const snap = buildEquipmentScreenPlayerSnapshot(dead, UNIT_ID);
+
+      expect(snap.consumableUsage[VITALITY]).toEqual({ canUse: false, reason: "unit_dead" });
+      expect(snap.pendingConsumePrompt).toBeNull();
+    });
+
+    it("projects a justified pending request with names and effect", () => {
+      const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID, {
+        instanceId: VITALITY, unitTemplateId: UNIT_ID,
+      });
+
+      expect(snap.pendingConsumePrompt).toEqual({
+        instanceId: VITALITY,
+        unitTemplateId: UNIT_ID,
+        unitName: PLAYER_UNITS.find(u => u.templateId === UNIT_ID)!.name,
+        itemName: ITEM_CATALOG.definitions.vitality_essence.name,
+        stat: "hp",
+        amount: 5,
+        healsCurrentHp: true,
+      });
+    });
+
+    it("omits a prompt whose target is not the selected character", () => {
+      const other = PLAYER_UNITS[1].templateId;
+      const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID, {
+        instanceId: VITALITY, unitTemplateId: other,
+      });
+
+      expect(snap.pendingConsumePrompt).toBeNull();
+    });
+
+    it("omits a prompt for an item no longer in the backpack", () => {
+      const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID, {
+        instanceId: "already_consumed", unitTemplateId: UNIT_ID,
+      });
+
+      expect(snap.pendingConsumePrompt).toBeNull();
+    });
+
+    it("omits a prompt when no request is pending", () => {
+      expect(buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID).pendingConsumePrompt)
+        .toBeNull();
+    });
+  });
+
   it("does not require any campaign state to build a debug-sourced snapshot", () => {
     // No GameState setup at all — proves the builder only reads the passed-in session.
     const session = freshSession();

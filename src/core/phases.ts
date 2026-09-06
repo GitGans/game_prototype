@@ -11,6 +11,10 @@ import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
 import type { SubMapState, WorldPos } from '../shared/worldTypes';
 import type { PlayerSessionSource } from './playerSessionState';
+import type {
+  ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest,
+} from '../shared/snapshotTypes';
+export type { ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest };
 import type { BattleParticipant, BattleExitOutcome } from './battleRuntimeContext';
 export type { BattleExitOutcome };
 
@@ -149,6 +153,8 @@ export type GamePhase =
       canStartBattle: boolean;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
+      consumableUsage: Record<string, ConsumableUsability>;
+      pendingConsumePrompt: PendingConsumePrompt | null;
     }
   | {
       type: 'equip_screen';
@@ -163,6 +169,8 @@ export type GamePhase =
       unitStats: UnitStatsSnapshot | null;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
+      consumableUsage: Record<string, ConsumableUsability>;
+      pendingConsumePrompt: PendingConsumePrompt | null;
     }
   | {
       type: 'upgrade_tree';
@@ -195,6 +203,10 @@ export type PhaseAction =
   // ── Item mutations (mutation-only: resolveTransition returns same ref) ──
   | { type: 'equip_item'; instanceId: string; unitTemplateId: string }
   | { type: 'unequip_item'; unitTemplateId: string; slot: string }
+  // ── Consumable use (mutation-only) — request/cancel change presentation state only ──
+  | { type: 'request_consume_item'; instanceId: string }
+  | { type: 'confirm_consume_item'; instanceId: string; unitTemplateId: string }
+  | { type: 'cancel_consume_item' }
   // ── Commerce (mutation-only) — stub, no shop phase yet ────────
   | { type: 'buy_item'; definitionId: string }
   | { type: 'sell_item'; instanceId: string }

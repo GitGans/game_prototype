@@ -132,6 +132,7 @@ export class EquipmentPanel {
       phase.backpack, itemTooltip,
       onBackpackItemClick,
       BACKPACK_COLS, BACKPACK_ROWS,
+      phase.consumableUsage,
     );
 
     const backpackBottomY    = backpackY + BACKPACK_ROWS * (CELL_SIZE + CELL_GAP) - CELL_GAP;
@@ -179,7 +180,7 @@ export class EquipmentPanel {
       selectedUnit, unitStats, this.statsX, this.statsY + HEADER_H, STATS_W,
     );
     this.matrix.refresh(phase.unitEquipment);
-    this.backpack.refresh(phase.backpack);
+    this.backpack.refresh(phase.backpack, phase.consumableUsage);
     this.skillRow.setPosition(this.skillX, this.skillY);
     this.skillRow.render(phase.upgradeSkills);
   }

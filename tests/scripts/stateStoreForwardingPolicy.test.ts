@@ -170,7 +170,8 @@ describe("real-source sweep", () => {
   ].sort();
 
   it("covers every registered owner (the sweep is not vacuous)", () => {
-    expect(OWNERS.length).toBe(11);
+    // 12 since consumablePhaseHandler joined playerSessionStore's permitted importers.
+    expect(OWNERS.length).toBe(12);
   });
 
   it.each(OWNERS)("%s forwards nothing", (fileKey: string) => {

@@ -12,6 +12,7 @@ import {
 import {
   RESTRICTED_IMPORT_TARGETS,
   BATTLE_RUNTIME_RESTRICTED_TARGETS,
+  CONSUME_CONFIRMATION_RESTRICTED_TARGETS,
   STATE_STORE_RESTRICTED_TARGETS,
   STATE_STORE_FORWARDING_TARGETS,
   RUNTIME_OWNERSHIP_EXPORT_COVERAGE,
@@ -39,6 +40,18 @@ const compile = (registry: unknown) => compileRestrictedImportTargets(registry);
 describe("RESTRICTED_IMPORT_TARGETS registry", () => {
   it("pins the exact registry", () => {
     expect(RESTRICTED_IMPORT_TARGETS).toEqual({
+      "core/consumeConfirmationStorage": {
+        reason: "Internal pending-confirmation storage cells.",
+        allowedImporters: [
+          "core/consumeConfirmationAccess.ts",
+          "core/consumeConfirmationWriteAccess.ts",
+        ],
+      },
+      "core/consumeConfirmationWriteAccess": {
+        reason:
+          "Confirmation write capability owned by phaseHandlers/consumablePhaseHandler.",
+        allowedImporters: ["core/phaseHandlers/consumablePhaseHandler.ts"],
+      },
       "core/battleRuntimeStorage": {
         reason: "Internal battle-runtime storage cell.",
         allowedImporters: [
@@ -71,6 +84,7 @@ describe("RESTRICTED_IMPORT_TARGETS registry", () => {
           "core/battlePhaseEffects.ts",
           "core/phaseHandlers/battlePhaseHandler.ts",
           "core/phaseHandlers/campPhaseHandler.ts",
+          "core/phaseHandlers/consumablePhaseHandler.ts",
           "core/phaseHandlers/inventoryPhaseHandler.ts",
           "core/phaseHandlers/progressionPhaseHandler.ts",
           "core/phaseSnapshotRebuilder.ts",
@@ -86,19 +100,24 @@ describe("RESTRICTED_IMPORT_TARGETS registry", () => {
       "core/GameState",
       "core/battleRuntimeStorage",
       "core/battleRuntimeWriteAccess",
+      "core/consumeConfirmationStorage",
+      "core/consumeConfirmationWriteAccess",
       "core/playerSessionStore",
     ]);
   });
 
-  // The registry is a spread of two groups, and the GROUP is what decides which forwarding
+  // The registry is a spread of three groups, and the GROUP is what decides which forwarding
   // protection a target receives: a pinned export surface, or the direct-forwarding scan. A target
   // written straight into the union literal would be inbound-restricted but forward freely.
   it("gives every restricted target exactly one protection group", () => {
     const battleRuntime = Object.keys(BATTLE_RUNTIME_RESTRICTED_TARGETS);
+    const confirmation = Object.keys(CONSUME_CONFIRMATION_RESTRICTED_TARGETS);
     const stateStores = Object.keys(STATE_STORE_RESTRICTED_TARGETS);
+    const pinnedSurfaceGroups = [...battleRuntime, ...confirmation];
 
-    expect(battleRuntime.filter((target) => stateStores.includes(target))).toEqual([]);
-    expect([...battleRuntime, ...stateStores].sort()).toEqual(
+    expect(pinnedSurfaceGroups.filter((target) => stateStores.includes(target))).toEqual([]);
+    expect(battleRuntime.filter((target) => confirmation.includes(target))).toEqual([]);
+    expect([...pinnedSurfaceGroups, ...stateStores].sort()).toEqual(
       Object.keys(RESTRICTED_IMPORT_TARGETS).sort(),
     );
     expect(STATE_STORE_FORWARDING_TARGETS).toEqual(stateStores);
@@ -107,12 +126,19 @@ describe("RESTRICTED_IMPORT_TARGETS registry", () => {
   // Re-basing this on the FULL registry would demand a hand-pinned export surface for the eleven
   // state-store owners — and could never be satisfied, since both stores export a `const`, a kind
   // scripts/module-export-policy.mjs cannot express.
-  it("keeps the pinned-export-surface obligation on the battle-runtime group only", () => {
+  it("keeps the pinned-export-surface obligation on the capability groups only", () => {
+    // Both capability groups carry it — targets AND permitted importers, so neither direction is
+    // left open. The state stores are still excluded: both export a `const`, a kind
+    // scripts/module-export-policy.mjs cannot express.
     expect(RUNTIME_OWNERSHIP_EXPORT_COVERAGE).toEqual([
       "core/battlePhaseEffects.ts",
       "core/battleRuntimeAccess.ts",
       "core/battleRuntimeStorage.ts",
       "core/battleRuntimeWriteAccess.ts",
+      "core/consumeConfirmationAccess.ts",
+      "core/consumeConfirmationStorage.ts",
+      "core/consumeConfirmationWriteAccess.ts",
+      "core/phaseHandlers/consumablePhaseHandler.ts",
     ]);
   });
 });

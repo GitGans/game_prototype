@@ -5,6 +5,8 @@ import { ItemSlotSnapshot } from '../shared/snapshotTypes';
 import { ItemTooltip, ItemTooltipData } from './ItemTooltip';
 import { ItemIconView } from './ItemIconView';
 import { UNIT_BATTLE_STAT_KEYS, STAT_PRESENTATION, formatStatValue } from './statPresentation';
+import type { ConsumableUsability } from '../shared/snapshotTypes';
+import { formatUseEffectLine, formatConsumableBlockedReason } from './itemUseEffectPresentation';
 
 export interface ItemCellConfig {
   scene: Phaser.Scene;
@@ -16,10 +18,16 @@ export interface ItemCellConfig {
   item: ItemSlotSnapshot | null;
   tooltip: ItemTooltip;
   onClick?: (item: ItemSlotSnapshot | null) => void;
+  /**
+   * Consumable eligibility for the currently selected character, supplied by the owner.
+   * Travels the existing item-data path — this component never reads phase or session state.
+   */
+  usage?: ConsumableUsability | null;
 }
 
 export class ItemCell extends Phaser.GameObjects.Container {
   private currentItem: ItemSlotSnapshot | null;
+  private currentUsage: ConsumableUsability | null;
   private readonly cfg: ItemCellConfig;
   private borderRect!: Phaser.GameObjects.Rectangle;
   private contentObjects: Phaser.GameObjects.GameObject[] = [];
@@ -28,6 +36,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
     super(cfg.scene, cfg.x + cfg.size / 2, cfg.y + cfg.size / 2);
     this.cfg = cfg;
     this.currentItem = cfg.item;
+    this.currentUsage = cfg.usage ?? null;
 
     // Background
     const bgRect = cfg.scene.add.rectangle(-cfg.size / 2, -cfg.size / 2, cfg.size, cfg.size, ITEM_VISUAL_THEME.cell.bg).setOrigin(0, 0);
@@ -62,8 +71,9 @@ export class ItemCell extends Phaser.GameObjects.Container {
     cfg.scene.add.existing(this);
   }
 
-  refresh(item: ItemSlotSnapshot | null): void {
+  refresh(item: ItemSlotSnapshot | null, usage: ConsumableUsability | null = null): void {
     this.currentItem = item;
+    this.currentUsage = usage;
     for (const obj of this.contentObjects) obj.destroy();
     this.contentObjects = [];
     this.buildContent(item);
@@ -97,11 +107,27 @@ export class ItemCell extends Phaser.GameObjects.Container {
         display: formatStatValue(key, Math.abs(def.battleStatBonuses[key])),
       }));
 
+    // Effect and blocked-reason lines, composed here from the supplied usage — the tooltip
+    // renders what it is given. The blocked reason is unconditional: a player must always be
+    // told why a consumable cannot be used (e.g. the character is dead).
+    const notes: ItemTooltipData['notes'] = [];
+    if (item.metadata.kind === 'consumable') {
+      const effectLine = formatUseEffectLine(def.useEffect);
+      if (effectLine) notes.push({ text: effectLine, tone: 'positive' });
+      if (this.currentUsage && !this.currentUsage.canUse) {
+        notes.push({
+          text: formatConsumableBlockedReason(this.currentUsage.reason),
+          tone: 'negative',
+        });
+      }
+    }
+
     const data: ItemTooltipData = {
       name: def.name,
       stats,
       classRestriction: def.allowedClassIds?.length ? def.allowedClassIds.join(', ') : null,
       classAllowed: null,
+      notes,
     };
 
     const matrix = this.getWorldTransformMatrix();

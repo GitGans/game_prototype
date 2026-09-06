@@ -26,8 +26,6 @@
     "deny": [
       "Edit(CLAUDE.md)",
       "Write(CLAUDE.md)",
-      "Edit(**/CLAUDE.md)",
-      "Write(**/CLAUDE.md)",
       "Edit(architecture_plan.md)",
       "Write(architecture_plan.md)"
     ]

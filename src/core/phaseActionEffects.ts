@@ -12,6 +12,12 @@ import {
   applyBattleWorldConsequence,
 } from './phaseHandlers/worldPhaseHandler';
 import { applyEquipmentPhaseAction } from './phaseHandlers/inventoryPhaseHandler';
+import {
+  openConsumeConfirmation,
+  clearConsumeConfirmationIfPresent,
+  teardownConsumeConfirmationAfterTransition,
+  applyConsumablePhaseAction,
+} from './phaseHandlers/consumablePhaseHandler';
 import { applyCampPhaseAction } from './phaseHandlers/campPhaseHandler';
 import { applyChooseUpgradePhaseAction } from './phaseHandlers/progressionPhaseHandler';
 import {
@@ -77,6 +83,10 @@ export interface PhaseActionEffectsDependencies {
   applyMovePartyPhaseAction: typeof applyMovePartyPhaseAction;
   applyBattleWorldConsequence: typeof applyBattleWorldConsequence;
   applyEquipmentPhaseAction: typeof applyEquipmentPhaseAction;
+  openConsumeConfirmation: typeof openConsumeConfirmation;
+  clearConsumeConfirmationIfPresent: typeof clearConsumeConfirmationIfPresent;
+  teardownConsumeConfirmationAfterTransition: typeof teardownConsumeConfirmationAfterTransition;
+  applyConsumablePhaseAction: typeof applyConsumablePhaseAction;
   applyCampPhaseAction: typeof applyCampPhaseAction;
   applyChooseUpgradePhaseAction: typeof applyChooseUpgradePhaseAction;
   startBattleRuntime: typeof startBattleRuntime;
@@ -106,6 +116,10 @@ export function createDefaultPhaseActionEffects(): PhaseActionEffectsController 
     applyMovePartyPhaseAction,
     applyBattleWorldConsequence,
     applyEquipmentPhaseAction,
+    openConsumeConfirmation,
+    clearConsumeConfirmationIfPresent,
+    teardownConsumeConfirmationAfterTransition,
+    applyConsumablePhaseAction,
     applyCampPhaseAction,
     applyChooseUpgradePhaseAction,
     startBattleRuntime,
@@ -152,18 +166,27 @@ export function createPhaseActionEffects(
       case 'new_game':
         d.clearDebugSession();
         d.clearBattleRuntimeIfPresent();
+        // Accepted from ANY phase, so dispose both owners rather than relying on the
+        // equip-screen teardown below.
+        d.clearConsumeConfirmationIfPresent('campaign');
+        d.clearConsumeConfirmationIfPresent('debug');
         replaceRngStreams();
         d.initializeNewCampaign();
         return NO_PHASE_EFFECTS;
 
       case 'init_debug':
         d.clearBattleRuntimeIfPresent();
+        d.clearConsumeConfirmationIfPresent('debug');
         replaceRngStreams();
         d.initializeDebugSessionForLevel(action.level);
         return NO_PHASE_EFFECTS;
 
       case 'reset_debug_session':
+        // Load-bearing: the reset keeps the same phase AND the same selected character, so the
+        // structural teardown below would not fire — and it recreates the same authored instance
+        // ids, so matching ids would not distinguish the stale request either.
         d.clearBattleRuntimeIfPresent();
+        d.clearConsumeConfirmationIfPresent('debug');
         replaceRngStreams();
         d.resetDebugSession();
         return NO_PHASE_EFFECTS;
@@ -171,6 +194,8 @@ export function createPhaseActionEffects(
       case 'exit_to_menu':
         d.clearDebugSession();
         d.clearBattleRuntimeIfPresent();
+        d.clearConsumeConfirmationIfPresent('campaign');
+        d.clearConsumeConfirmationIfPresent('debug');
         replaceRngStreams();
         return NO_PHASE_EFFECTS;
 
@@ -260,6 +285,38 @@ export function createPhaseActionEffects(
         d.applyEquipmentPhaseAction({ source: previousPhase.sessionSource, action });
         return NO_PHASE_EFFECTS;
 
+      // ── Consumable confirmation ──────────────────────────────────────────
+      // Request and cancel change PRESENTATION state only — no roster or inventory write. The
+      // owner is the equip screen's own session, so a campaign screen can never file or dispose
+      // a debug request.
+      case 'request_consume_item':
+      case 'cancel_consume_item':
+        if (previousPhase.type !== 'equip_screen' && previousPhase.type !== 'debug_equip_screen') {
+          throw lifecycleError(
+            `"${action.type}" was accepted from a "${previousPhase.type}" phase`,
+          );
+        }
+        if (action.type === 'request_consume_item') {
+          d.openConsumeConfirmation({
+            source: previousPhase.sessionSource,
+            instanceId: action.instanceId,
+            // Always the selected character — never a caller-chosen target.
+            unitTemplateId: previousPhase.selectedUnitTemplateId,
+          });
+        } else {
+          d.clearConsumeConfirmationIfPresent(previousPhase.sessionSource);
+        }
+        return NO_PHASE_EFFECTS;
+
+      case 'confirm_consume_item':
+        if (previousPhase.type !== 'equip_screen' && previousPhase.type !== 'debug_equip_screen') {
+          throw lifecycleError(
+            `"confirm_consume_item" was accepted from a "${previousPhase.type}" phase`,
+          );
+        }
+        d.applyConsumablePhaseAction({ previousPhase, action });
+        return NO_PHASE_EFFECTS;
+
       case 'toggle_camp_unit':
         if (previousPhase.type !== 'camp' && previousPhase.type !== 'debug_equip_screen') {
           throw lifecycleError(
@@ -319,6 +376,7 @@ export function createPhaseActionEffects(
     // Runs only after the action-specific effect succeeded. If it threw, teardown, snapshot
     // rebuild, commit and sync/notify are all skipped — the existing non-transactional
     // contract. Nothing is rolled back.
+    d.teardownConsumeConfirmationAfterTransition(previousPhase, resolvedPhase);
     d.teardownBattleRuntimeAfterTransition(previousPhase, resolvedPhase);
     return effects;
   };

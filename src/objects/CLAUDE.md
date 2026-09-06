@@ -20,6 +20,7 @@ Current files:
 - `battleEventPresentation.ts` — formats battle events as floating-text and log entries
 - `battleDirectivePresentation.ts` — formats `BattleDirectivePresentationInput` (from `shared/`) as status text and skill-bar visibility flags; owns all directive UI wording
 - `battleSkillPreviewPresentation.ts` — formats skill-preview header color and damage/healing estimates
+- `itemUseEffectPresentation.ts` — formats consumable wording: the confirmation prompt, the tooltip effect line, and the blocked-reason line. HP wording must state BOTH the permanent max-HP growth and the immediate heal
 
 Presentation builders:
 - receive already-computed read models and presentation inputs from `shared/` or `core/`
@@ -51,7 +52,7 @@ Applying presentation output to Phaser objects is the responsibility of `BattleP
 - `EffectTooltip.ts` — popup for a single active effect
 - `SkillTooltip.ts` — popup for skill name and damage type
 - `SkillCellTooltip.ts` — extended skill popup with description and screen-clamped positioning
-- `ItemTooltip.ts` — item stats and class-restriction popup
+- `ItemTooltip.ts` — item stats, class-restriction and supplied `notes` lines. It RENDERS notes and composes none: eligibility travels the existing `EquipmentPanel → BackpackRow → ItemCell` data path and `ItemCell` composes the lines via `itemUseEffectPresentation.ts`
 - `UnitCampButton.ts` — camp/party toggle button placed on unit portraits; built on `Button`
 - `BattleResultUnitCard.ts` — post-battle unit card (sprite, name, level); built on `Panel`
 - `BattleEndOverlay.ts` — victory/defeat overlay composed from `Panel` + `Button`; receives outcome, isDebugBattle, labels, and callbacks; never reads `GameState` or calls `PhaseManager`

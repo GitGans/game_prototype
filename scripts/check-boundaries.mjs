@@ -304,6 +304,54 @@ const PURE_CORE_FILES = [
     ],
   },
   {
+    // The consumable READ MODEL: decides whether a use is possible and to what effect. It
+    // composes the inventory and progression domains and must not reach storage, the phase
+    // pipeline or rendering — nor the executor's write path, which lives in its own module.
+    file: join(SRC, "core", "consumableUsability.ts"),
+    banned: [
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/playerSessionStore",
+      "core/consumeConfirmationStorage",
+      "core/consumeConfirmationAccess",
+      "core/consumeConfirmationWriteAccess",
+      // The executor. The dependency is one-way by design: the read model owns the whole
+      // eligibility decision and consumableUse adds no rule of its own. Without this line the
+      // direction is a convention here — equipmentScreenSnapshot's own allowlist bans
+      // core/consumableUse, but this module, which it may import, had no such restriction.
+      "core/consumableUse",
+      "core/battleRuntimeAccess",
+      "core/battleRuntimeContext",
+      "core/PhaseManager",
+      "core/phaseActionEffects",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
+    ],
+  },
+  {
+    // The consumable EXECUTOR: returns the next session, never installs it. Installing is the
+    // phase handler's job, so a store here would let a pure op become a mutation route.
+    file: join(SRC, "core", "consumableUse.ts"),
+    banned: [
+      "core/GameState",
+      "core/DebugBattleState",
+      "core/playerSessionStore",
+      "core/consumeConfirmationStorage",
+      "core/consumeConfirmationAccess",
+      "core/consumeConfirmationWriteAccess",
+      "core/battleRuntimeAccess",
+      "core/battleRuntimeContext",
+      "core/PhaseManager",
+      "core/phaseActionEffects",
+      "scenes",
+      "objects",
+      "ui",
+      "phaser",
+    ],
+  },
+  {
     file: join(SRC, "core", "battleSetupProjection.ts"),
     banned: [
       "core/GameState",

@@ -37,7 +37,9 @@ export interface StartingItemDefinition {
   placement: StartingItemPlacement;
 }
 
-// Keep current gameplay equivalent: three items in the shared backpack, slots 0/1/2.
+// Two rings in the shared backpack (slots 0/1), a necklace equipped on the warrior, and one of
+// each permanent-stat consumable (slots 2/3). Used for BOTH campaign and debug initialization, so
+// resetting a debug session restores the consumables and discards accumulated permanent bonuses.
 export const CAMPAIGN_STARTING_ITEMS = [
   {
     instanceId: "item_start_bronze_ring",
@@ -53,5 +55,15 @@ export const CAMPAIGN_STARTING_ITEMS = [
     instanceId: "item_start_bronze_necklace",
     itemDefinitionId: "bronze_necklace",
     placement: { kind: "equipped", unitTemplateId: "warrior" },
+  },
+  {
+    instanceId: "item_start_vitality_essence",
+    itemDefinitionId: "vitality_essence",
+    placement: { kind: "backpack", slot: "2" },
+  },
+  {
+    instanceId: "item_start_might_essence",
+    itemDefinitionId: "might_essence",
+    placement: { kind: "backpack", slot: "3" },
   },
 ] satisfies readonly StartingItemDefinition[];

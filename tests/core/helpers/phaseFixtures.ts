@@ -1,3 +1,4 @@
+import { EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT } from '../../../src/core/phases';
 import type { GamePhase } from '../../../src/core/phases';
 
 /**
@@ -12,6 +13,27 @@ import type { GamePhase } from '../../../src/core/phases';
 
 type WorldMapPhase = Extract<GamePhase, { type: 'world_map' }>;
 type BattlePhase = Extract<GamePhase, { type: 'battle' }>;
+type EquipScreenPhase = Extract<GamePhase, { type: 'equip_screen' }>;
+
+export function makeEquipScreenPhase(overrides: Partial<EquipScreenPhase> = {}): EquipScreenPhase {
+  return {
+    type: 'equip_screen',
+    sessionSource: 'campaign',
+    returnPhase: { type: 'main_menu' },
+    selectedUnitTemplateId: 'warrior',
+    selectedUnitSpriteKey: null,
+    selectedUnit: null,
+    availableUnits: [],
+    backpack: EMPTY_BACKPACK_SNAPSHOT,
+    unitEquipment: EMPTY_EQUIP_SNAPSHOT,
+    unitStats: null,
+    learnedSkills: [],
+    upgradeSkills: [],
+    consumableUsage: {},
+    pendingConsumePrompt: null,
+    ...overrides,
+  };
+}
 
 export function makeWorldMapPhase(overrides: Partial<WorldMapPhase> = {}): WorldMapPhase {
   return {

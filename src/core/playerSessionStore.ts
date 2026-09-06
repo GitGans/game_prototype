@@ -29,4 +29,23 @@ export const PlayerSessionStore = {
       GameState.replaceDebugInventory(next);
     }
   },
+
+  /**
+   * Replaces roster and inventory together, in one enclosing state replacement.
+   *
+   * Needed by operations that change both domains at once (consumable use): two sequential
+   * `replaceRoster` + `replaceInventory` calls would publish an intermediate state in which the
+   * bonus is granted but the item still exists. Everything outside the session — campaign world
+   * and money, debug `initialConfig` — is preserved verbatim.
+   */
+  replaceSession(source: PlayerSessionSource, next: PlayerSessionState): void {
+    if (source === 'campaign') {
+      const campaign = GameState.getCampaignState();
+      GameState.setCampaignState({ ...campaign, roster: next.roster, inventory: next.inventory });
+      return;
+    }
+    const debugState = GameState.getDebugState();
+    if (!debugState) throw new Error('Debug state is not initialized');
+    GameState.setDebugState({ ...debugState, session: next });
+  },
 };

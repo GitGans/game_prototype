@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildItemCatalog } from "../../src/data/items/buildItemCatalog";
 import type { ItemGroup } from "../../src/data/items/authoredItemTypes";
 import { ITEM_CATALOG } from "../../src/data/items";
+import { UNIT_BATTLE_STAT_KEYS } from "../../src/shared/unitTypes";
 
 describe("buildItemCatalog", () => {
   it("derives the item id from the object key", () => {
@@ -60,6 +61,56 @@ describe("buildItemCatalog", () => {
       { kind: "usable", slot: "usable_slot", items: { broken: { name: "X", buyPrice: 1 } } },
     ];
     expect(() => buildItemCatalog(groups)).toThrow(/requires a useEffect/);
+  });
+
+  it("throws when a permanent_stat_boost names a stat outside the canonical battle stats", () => {
+    const groups = [
+      { kind: "consumable", items: { bad: {
+        name: "Bad", buyPrice: 1,
+        useEffect: { type: "permanent_stat_boost", stat: "luck", amount: 5 },
+      } } },
+    ] as unknown as ItemGroup[];
+
+    expect(() => buildItemCatalog(groups)).toThrow(/unknown battle stat "luck"/);
+  });
+
+  it.each([0, -3, Number.NaN, Number.POSITIVE_INFINITY])(
+    "throws when a permanent_stat_boost amount is not finite and positive (%s)",
+    (amount) => {
+      const groups: ItemGroup[] = [
+        { kind: "consumable", items: { bad: {
+          name: "Bad", buyPrice: 1,
+          useEffect: { type: "permanent_stat_boost", stat: "hp", amount },
+        } } },
+      ];
+
+      expect(() => buildItemCatalog(groups)).toThrow(/finite amount > 0/);
+    },
+  );
+
+  it("accepts a valid permanent_stat_boost for every canonical stat", () => {
+    // No item id and no particular amount is privileged: the rule is generic.
+    const groups: ItemGroup[] = UNIT_BATTLE_STAT_KEYS.map((stat, i) => ({
+      kind: "consumable",
+      items: { [`e_${stat}`]: {
+        name: stat, buyPrice: 1,
+        useEffect: { type: "permanent_stat_boost", stat, amount: i + 1 },
+      } },
+    }));
+
+    const { definitions } = buildItemCatalog(groups);
+    expect(Object.keys(definitions)).toHaveLength(UNIT_BATTLE_STAT_KEYS.length);
+  });
+
+  it("leaves heal and revive effects unvalidated — they carry no mechanics yet", () => {
+    const groups: ItemGroup[] = [
+      { kind: "consumable", items: {
+        h: { name: "H", buyPrice: 1, useEffect: { type: "heal", amount: 3 } },
+        r: { name: "R", buyPrice: 1, useEffect: { type: "revive" } },
+      } },
+    ];
+
+    expect(() => buildItemCatalog(groups)).not.toThrow();
   });
 
   it("throws when a consumable item is missing its useEffect", () => {

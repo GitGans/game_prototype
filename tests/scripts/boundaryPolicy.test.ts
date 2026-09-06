@@ -519,6 +519,7 @@ describe("ORCHESTRATION_COLLABORATOR_REGISTRY (real production policy)", () => {
           { specifier: "core/campaignLifecycle", role: "effects-owner" },
           { specifier: "core/debugLifecycle", role: "effects-owner" },
           { specifier: "core/phaseHandlers/campPhaseHandler", role: "effects-owner" },
+          { specifier: "core/phaseHandlers/consumablePhaseHandler", role: "effects-owner" },
           { specifier: "core/phaseHandlers/inventoryPhaseHandler", role: "effects-owner" },
           { specifier: "core/phaseHandlers/progressionPhaseHandler", role: "effects-owner" },
           { specifier: "core/phaseHandlers/worldPhaseHandler", role: "effects-owner" },
@@ -541,6 +542,7 @@ describe("ORCHESTRATION_COLLABORATOR_REGISTRY (real production policy)", () => {
           { specifier: "core/phases", role: "neutral-contract" },
           { specifier: "core/GameState", role: "authoritative-state-reader" },
           { specifier: "core/battleRuntimeAccess", role: "authoritative-state-reader" },
+          { specifier: "core/consumeConfirmationAccess", role: "authoritative-state-reader" },
           { specifier: "core/playerSessionStore", role: "authoritative-state-reader" },
           { specifier: "core/battlePhaseSnapshot", role: "snapshot-projection" },
           { specifier: "core/battleResultsSnapshot", role: "snapshot-projection" },
@@ -725,6 +727,21 @@ describe("runtime ownership import allowlists", () => {
           "core/phases",
         ],
       },
+      "core/consumeConfirmationStorage.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "core/playerSessionState",
+          "shared/snapshotTypes",
+        ],
+      },
+      "core/consumeConfirmationWriteAccess.ts": {
+        kind: "exact-import-allowlist",
+        allowedSpecifiers: [
+          "core/consumeConfirmationStorage",
+          "core/playerSessionState",
+          "shared/snapshotTypes",
+        ],
+      },
       "core/battleRuntimeWriteAccess.ts": {
         kind: "exact-import-allowlist",
         allowedSpecifiers: [
@@ -733,6 +750,18 @@ describe("runtime ownership import allowlists", () => {
         ],
       },
     });
+  });
+
+  it("rejects the confirmation write gateway acquiring a read", () => {
+    // Same guarantee as the battle-runtime pair: the ownership check at confirm time goes
+    // through the read gateway, in the handler that holds both — never by widening this module.
+    expect(
+      evaluateDirectoryPolicy({
+        policy: RUNTIME_OWNERSHIP_IMPORT_POLICIES["core/consumeConfirmationWriteAccess.ts"],
+        normalizedSpecifier: "core/consumeConfirmationAccess",
+        isRelativeSpecifier: true,
+      }),
+    ).toMatchObject({ kind: "outside-exact-import-allowlist" });
   });
 
   it("rejects GameState importing battle runtime again", () => {
@@ -871,6 +900,16 @@ describe("ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES (real production policy)", 
           "data/units",
         ],
       },
+      "core/consumeConfirmationAccess.ts": {
+        kind: "exact-import-allowlist",
+        // The READ gateway. Never the write capability: the cell and the writer are pinned in
+        // RUNTIME_OWNERSHIP_IMPORT_POLICIES, exactly as for the battle-runtime triad.
+        allowedSpecifiers: [
+          "core/consumeConfirmationStorage",
+          "core/phases",
+          "shared/snapshotTypes",
+        ],
+      },
       "core/debugLifecycle.ts": {
         kind: "exact-import-allowlist",
         allowedSpecifiers: [
@@ -923,6 +962,8 @@ describe("ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES (real production policy)", 
       "core/equipmentScreenSnapshot.ts": {
         kind: "exact-import-allowlist",
         allowedSpecifiers: [
+          // The READ MODEL. `core/consumableUse` — the executor — is deliberately absent.
+          "core/consumableUsability",
           "core/phases",
           "core/playerSessionState",
           "core/unitSpriteKey",
@@ -1010,7 +1051,7 @@ describe("Stage 4C reverse coverage against the real registries and sources", ()
     // Coverage is EMPTY whenever compilation has problems. Without the length assertion,
     // "nothing enforced at all" would look identical to a clean run.
     expect(problems).toEqual([]);
-    expect(coverage).toHaveLength(19);
+    expect(coverage).toHaveLength(21);
   });
 
   it("derives exactly the expected obligations, and which registry owns each", () => {
@@ -1029,9 +1070,11 @@ describe("Stage 4C reverse coverage against the real registries and sources", ()
       ["core/battleResultsSnapshot.ts", STAGE_4C_REGISTRY_NAME],
       ["core/battleRuntimeAccess.ts", "RUNTIME_OWNERSHIP_IMPORT_POLICIES"],
       ["core/campaignLifecycle.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/consumeConfirmationAccess.ts", STAGE_4C_REGISTRY_NAME],
       ["core/debugLifecycle.ts", STAGE_4C_REGISTRY_NAME],
       ["core/equipmentScreenSnapshot.ts", STAGE_4C_REGISTRY_NAME],
       ["core/phaseHandlers/campPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
+      ["core/phaseHandlers/consumablePhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
       ["core/phaseHandlers/inventoryPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
       ["core/phaseHandlers/progressionPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
       ["core/phaseHandlers/worldPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],

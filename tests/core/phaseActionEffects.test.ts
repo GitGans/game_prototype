@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createPhaseActionEffects } from '../../src/core/phaseActionEffects';
 import { NO_PHASE_EFFECTS } from '../../src/core/phaseEffectsResult';
 import type { PhaseAction, GamePhase } from '../../src/core/phases';
-import { makeBattlePhase, makeWorldMapPhase } from './helpers/phaseFixtures';
+import { makeBattlePhase, makeEquipScreenPhase, makeWorldMapPhase } from './helpers/phaseFixtures';
 import { makeFakeEffectsDependencies } from './helpers/phaseActionEffectsFakes';
 
 /**
@@ -70,12 +70,16 @@ describe('phaseActionEffects dispatch', () => {
 });
 
 describe('phaseActionEffects lifecycle ordering', () => {
-  it('orders new_game as clear debug -> clear runtime -> reset RNG -> build campaign', () => {
+  it('orders new_game as clear debug -> clear runtime -> drop confirmations -> reset RNG -> build campaign', () => {
     const { controller, calls } = setup();
 
     controller.apply({ type: 'new_game' }, MAIN_MENU, WORLD_MAP);
 
-    expect(calls).toEqual(['clearDebug', 'clearRuntime', 'rng', 'campaign', 'teardown']);
+    // Accepted from ANY phase, so BOTH confirmation owners are disposed explicitly rather than
+    // relying on the equip-screen teardown, which only fires when leaving an equip screen.
+    expect(calls).toEqual([
+      'clearDebug', 'clearRuntime', 'consumeClear', 'consumeClear', 'rng', 'campaign', 'teardown',
+    ]);
   });
 
   it('orders init_debug as clear runtime -> reset RNG -> create session', () => {
@@ -83,16 +87,19 @@ describe('phaseActionEffects lifecycle ordering', () => {
 
     controller.apply({ type: 'init_debug', level: 4 }, { type: 'debug_level_select' }, WORLD_MAP);
 
-    expect(calls).toEqual(['clearRuntime', 'rng', 'debugInit', 'teardown']);
+    expect(calls).toEqual(['clearRuntime', 'consumeClear', 'rng', 'debugInit', 'teardown']);
     expect(deps.initializeDebugSessionForLevel).toHaveBeenCalledWith(4);
   });
 
-  it('orders reset_debug_session as clear runtime -> reset RNG -> rebuild session', () => {
+  it('orders reset_debug_session as clear runtime -> drop the debug confirmation -> reset RNG -> rebuild session', () => {
     const { controller, calls } = setup();
 
     controller.apply({ type: 'reset_debug_session' }, WORLD_MAP, WORLD_MAP);
 
-    expect(calls).toEqual(['clearRuntime', 'rng', 'debugReset', 'teardown']);
+    // The explicit clear is load-bearing: a reset keeps the same phase AND the same selected
+    // character, so the structural teardown never fires — and it recreates the same authored
+    // instance ids, so matching ids would not distinguish the stale request either.
+    expect(calls).toEqual(['clearRuntime', 'consumeClear', 'rng', 'debugReset', 'teardown']);
   });
 
   it('orders exit_to_menu as clear debug -> clear runtime -> reset RNG', () => {
@@ -100,7 +107,9 @@ describe('phaseActionEffects lifecycle ordering', () => {
 
     controller.apply({ type: 'exit_to_menu' }, WORLD_MAP, MAIN_MENU);
 
-    expect(calls).toEqual(['clearDebug', 'clearRuntime', 'rng', 'teardown']);
+    expect(calls).toEqual([
+      'clearDebug', 'clearRuntime', 'consumeClear', 'consumeClear', 'rng', 'teardown',
+    ]);
   });
 
   it('persists the roster result before the world consequence and clears the runtime last', () => {
@@ -128,6 +137,30 @@ describe('phaseActionEffects lifecycle ordering', () => {
     ).toThrow('roster write failed');
 
     expect(calls).toEqual(['rosterResult']);
+  });
+
+  it('dispatches confirm_consume_item with the phase as the only owner description', () => {
+    const equip = makeEquipScreenPhase();
+    const { controller, deps } = setup();
+
+    controller.apply(
+      { type: 'confirm_consume_item', instanceId: 'i1', unitTemplateId: 'warrior' },
+      equip,
+      equip,
+    );
+
+    // Exactly `{ previousPhase, action }` — no second `source` argument to disagree with the phase.
+    expect(deps.applyConsumablePhaseAction).toHaveBeenCalledWith({
+      previousPhase: equip,
+      action: { type: 'confirm_consume_item', instanceId: 'i1', unitTemplateId: 'warrior' },
+    });
+
+    // Separately: the ORIGINAL phase reference, not a structural copy. `toHaveBeenCalledWith`
+    // compares structurally, so it cannot make this claim — a facade that forwarded
+    // `{ ...previousPhase }` would satisfy the assertion above and still be reconstructing the
+    // owner description it is supposed to pass through.
+    const [forwarded] = vi.mocked(deps.applyConsumablePhaseAction).mock.calls[0];
+    expect(forwarded.previousPhase).toBe(equip);
   });
 });
 

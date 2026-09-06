@@ -76,6 +76,11 @@ const ACTION_SAMPLES = {
   switch_equip_unit: { type: 'switch_equip_unit', templateId: 'soldier' },
   equip_item: { type: 'equip_item', instanceId: 'inst_1', unitTemplateId: 'soldier' },
   unequip_item: { type: 'unequip_item', unitTemplateId: 'soldier', slot: 'accessory' },
+  request_consume_item: { type: 'request_consume_item', instanceId: 'inst_1' },
+  confirm_consume_item: {
+    type: 'confirm_consume_item', instanceId: 'inst_1', unitTemplateId: 'soldier',
+  },
+  cancel_consume_item: { type: 'cancel_consume_item' },
   buy_item: { type: 'buy_item', definitionId: 'item_1' },
   sell_item: { type: 'sell_item', instanceId: 'inst_1' },
   toggle_camp_unit: { type: 'toggle_camp_unit', templateId: 'soldier' },

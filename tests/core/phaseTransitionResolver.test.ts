@@ -55,6 +55,8 @@ function debugEquipScreenPhase(overrides: Partial<DebugEquipScreenPhase> = {}): 
     canStartBattle: true,
     learnedSkills: [],
     upgradeSkills: [],
+    consumableUsage: {},
+    pendingConsumePrompt: null,
     ...overrides,
   };
 }
@@ -73,6 +75,8 @@ function equipScreenPhase(overrides: Partial<EquipScreenPhase> = {}): EquipScree
     unitStats: null,
     learnedSkills: [],
     upgradeSkills: [],
+    consumableUsage: {},
+    pendingConsumePrompt: null,
     ...overrides,
   };
 }
@@ -230,6 +234,31 @@ describe("phaseTransitionResolver", () => {
       ["reset_debug_session", debugEquipScreenPhase(), { type: "reset_debug_session" }],
       ["equip_item", equipScreenPhase(), { type: "equip_item", instanceId: "i1", unitTemplateId: "u1" }],
       ["unequip_item", equipScreenPhase(), { type: "unequip_item", unitTemplateId: "u1", slot: "helmet" }],
+      [
+        "request_consume_item",
+        equipScreenPhase({ consumableUsage: { i1: { canUse: true, effect: { stat: "hp", amount: 5, healsCurrentHp: true } } } }),
+        { type: "request_consume_item", instanceId: "i1" },
+      ],
+      [
+        "confirm_consume_item",
+        equipScreenPhase({
+          pendingConsumePrompt: {
+            instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E",
+            stat: "hp", amount: 5, healsCurrentHp: true,
+          },
+        }),
+        { type: "confirm_consume_item", instanceId: "i1", unitTemplateId: "unit_1" },
+      ],
+      [
+        "cancel_consume_item",
+        equipScreenPhase({
+          pendingConsumePrompt: {
+            instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E",
+            stat: "hp", amount: 5, healsCurrentHp: true,
+          },
+        }),
+        { type: "cancel_consume_item" },
+      ],
       ["choose_upgrade", upgradeTreePhase(), { type: "choose_upgrade", tierId: 5, upgradeId: "opt_1" }],
       ["toggle_camp_unit", campPhase(), { type: "toggle_camp_unit", templateId: "u1" }],
       ["battle_begin_combat", battle, { type: "battle_begin_combat" }],
@@ -241,6 +270,105 @@ describe("phaseTransitionResolver", () => {
 
     it.each(cases)("%s -> same reference", (_name, current, action) => {
       expect(resolveTransition(current, action, metadata)).toBe(current);
+    });
+  });
+
+
+  describe("consumable confirmation routing", () => {
+    const eligible = { i1: { canUse: true, effect: { stat: "hp", amount: 5, healsCurrentHp: true } } };
+    const prompt = { instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E", stat: "hp", amount: 5, healsCurrentHp: true };
+
+    it("rejects a request from a non-equipment phase", () => {
+      expect(resolveTransition(makeBattlePhase(), { type: "request_consume_item", instanceId: "i1" }, metadata))
+        .toBeNull();
+      expect(resolveTransition(worldMapPhase(true), { type: "request_consume_item", instanceId: "i1" }, metadata))
+        .toBeNull();
+    });
+
+    it("rejects a request for an ineligible item", () => {
+      const phase = equipScreenPhase({
+        consumableUsage: { i1: { canUse: false, reason: "unit_dead" } },
+      });
+      expect(resolveTransition(phase, { type: "request_consume_item", instanceId: "i1" }, metadata))
+        .toBeNull();
+    });
+
+    it("rejects a request for an item the snapshot does not mention at all", () => {
+      expect(resolveTransition(equipScreenPhase(), { type: "request_consume_item", instanceId: "i9" }, metadata))
+        .toBeNull();
+    });
+
+    it("rejects a request while no character is selected", () => {
+      const phase = equipScreenPhase({ selectedUnitTemplateId: "", consumableUsage: eligible });
+      expect(resolveTransition(phase, { type: "request_consume_item", instanceId: "i1" }, metadata))
+        .toBeNull();
+    });
+
+    it("rejects a second request while one is pending", () => {
+      const phase = equipScreenPhase({ consumableUsage: eligible, pendingConsumePrompt: prompt });
+      expect(resolveTransition(phase, { type: "request_consume_item", instanceId: "i1" }, metadata))
+        .toBeNull();
+    });
+
+    it("rejects competing equipment mutations while a confirmation is pending", () => {
+      const phase = equipScreenPhase({ pendingConsumePrompt: prompt });
+      expect(resolveTransition(phase, { type: "equip_item", instanceId: "i2", unitTemplateId: "unit_1" }, metadata))
+        .toBeNull();
+      expect(resolveTransition(phase, { type: "unequip_item", unitTemplateId: "unit_1", slot: "helmet" }, metadata))
+        .toBeNull();
+    });
+
+    it("rejects a confirmation with nothing pending", () => {
+      expect(resolveTransition(
+        equipScreenPhase(),
+        { type: "confirm_consume_item", instanceId: "i1", unitTemplateId: "unit_1" },
+        metadata,
+      )).toBeNull();
+    });
+
+    it("rejects a confirmation naming a different instance than the pending one", () => {
+      const phase = equipScreenPhase({ pendingConsumePrompt: prompt });
+      expect(resolveTransition(
+        phase,
+        { type: "confirm_consume_item", instanceId: "i2", unitTemplateId: "unit_1" },
+        metadata,
+      )).toBeNull();
+    });
+
+    it("rejects a confirmation naming a different target than the pending one", () => {
+      const phase = equipScreenPhase({ pendingConsumePrompt: prompt });
+      expect(resolveTransition(
+        phase,
+        { type: "confirm_consume_item", instanceId: "i1", unitTemplateId: "other" },
+        metadata,
+      )).toBeNull();
+    });
+
+    it("rejects a confirmation whose target is no longer the selected character", () => {
+      const phase = equipScreenPhase({
+        selectedUnitTemplateId: "other", pendingConsumePrompt: prompt,
+      });
+      expect(resolveTransition(
+        phase,
+        { type: "confirm_consume_item", instanceId: "i1", unitTemplateId: "unit_1" },
+        metadata,
+      )).toBeNull();
+    });
+
+    it("rejects a cancellation with nothing pending", () => {
+      expect(resolveTransition(equipScreenPhase(), { type: "cancel_consume_item" }, metadata))
+        .toBeNull();
+    });
+
+    it("accepts all three from the debug equipment screen too", () => {
+      const requesting = debugEquipScreenPhase({ consumableUsage: eligible });
+      expect(resolveTransition(requesting, { type: "request_consume_item", instanceId: "i1" }, metadata))
+        .toBe(requesting);
+
+      const pending = debugEquipScreenPhase({
+        pendingConsumePrompt: { ...prompt, unitTemplateId: "unit_1" },
+      });
+      expect(resolveTransition(pending, { type: "cancel_consume_item" }, metadata)).toBe(pending);
     });
   });
 

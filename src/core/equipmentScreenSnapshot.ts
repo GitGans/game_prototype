@@ -16,6 +16,12 @@ import { buildSkillIconSnapshot } from './unitUpgradePresentation';
 import { resolvePlayerUnitSpriteSheet } from './unitSprites';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { EMPTY_EQUIP_SNAPSHOT } from './phases';
+import type {
+  ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest,
+} from '../shared/snapshotTypes';
+// The READ MODEL only. `core/consumableUse` — the executor — is deliberately absent from this
+// module's import allowlist, so a projection has no path to a roster/inventory replacement.
+import { evaluateConsumableUsability } from './consumableUsability';
 
 export interface EquipmentScreenPlayerSnapshot {
   selectedUnitSpriteKey: string | null;
@@ -26,6 +32,69 @@ export interface EquipmentScreenPlayerSnapshot {
   unitStats: UnitStatsSnapshot | null;
   learnedSkills: SkillIconSnapshot[];
   upgradeSkills: SkillIconSnapshot[];
+  /** Keyed by item instance id; consumables in the shared backpack only. */
+  consumableUsage: Record<string, ConsumableUsability>;
+  pendingConsumePrompt: PendingConsumePrompt | null;
+}
+
+/**
+ * Eligibility for every backpack consumable against the selected character, produced by the same
+ * evaluation the executor runs — the UI and the application never maintain separate rules. For a
+ * dead or missing selected character every entry reports the blocking reason rather than being
+ * omitted, so the screen can explain why use is unavailable.
+ */
+function buildConsumableUsage(
+  session: PlayerSessionState,
+  backpack: BackpackSnapshot,
+  selectedUnitTemplateId: string,
+): Record<string, ConsumableUsability> {
+  const usage: Record<string, ConsumableUsability> = {};
+  for (const slot of backpack.slots) {
+    if (!slot || slot.metadata.kind !== 'consumable') continue;
+    usage[slot.instanceId] = evaluateConsumableUsability({
+      session,
+      catalog: ITEM_CATALOG,
+      playerBlueprints: PLAYER_UNITS,
+      unitTemplateId: selectedUnitTemplateId,
+      instanceId: slot.instanceId,
+    });
+  }
+  return usage;
+}
+
+/**
+ * Projects the pending request into renderable prompt data — or omits it.
+ *
+ * Omission HIDES the dialog; it never disposes the request. Disposal belongs to
+ * `phaseHandlers/consumablePhaseHandler`, the only holder of the confirmation write capability.
+ * Two different operations, two different owners.
+ */
+function buildPendingConsumePrompt(
+  pendingConsume: PendingConsumeRequest | null,
+  usage: Record<string, ConsumableUsability>,
+  backpack: BackpackSnapshot,
+  selectedUnitTemplateId: string,
+  selectedUnitName: string | null,
+): PendingConsumePrompt | null {
+  if (!pendingConsume) return null;
+  if (pendingConsume.unitTemplateId !== selectedUnitTemplateId) return null;
+  if (selectedUnitName === null) return null;
+
+  const entry = usage[pendingConsume.instanceId];
+  if (!entry?.canUse) return null;
+
+  const slot = backpack.slots.find(s => s?.instanceId === pendingConsume.instanceId);
+  if (!slot) return null;
+
+  return {
+    instanceId: pendingConsume.instanceId,
+    unitTemplateId: pendingConsume.unitTemplateId,
+    unitName: selectedUnitName,
+    itemName: slot.definition.name,
+    stat: entry.effect.stat,
+    amount: entry.effect.amount,
+    healsCurrentHp: entry.effect.healsCurrentHp,
+  };
 }
 
 function spriteKeyFromProgression(
@@ -51,6 +120,7 @@ function buildUnitTab(blueprint: UnitBlueprint, session: PlayerSessionState): Un
 export function buildEquipmentScreenPlayerSnapshot(
   session: PlayerSessionState,
   selectedUnitTemplateId: string,
+  pendingConsume: PendingConsumeRequest | null = null,
 ): EquipmentScreenPlayerSnapshot {
   // Matches today's buildUnitTabSnapshots(): iterate ALL blueprints unconditionally,
   // not just ones present in the roster (a unit missing from roster.units still
@@ -62,6 +132,8 @@ export function buildEquipmentScreenPlayerSnapshot(
   const selectedBlueprint = PLAYER_UNITS.find(u => u.templateId === selectedUnitTemplateId);
   const selectedUnitState = session.roster.units[selectedUnitTemplateId];
 
+  const consumableUsage = buildConsumableUsage(session, backpack, selectedUnitTemplateId);
+
   if (!selectedBlueprint || !selectedUnitState) {
     return {
       selectedUnitSpriteKey: null,
@@ -72,6 +144,9 @@ export function buildEquipmentScreenPlayerSnapshot(
       unitStats: null,
       learnedSkills: [],
       upgradeSkills: [],
+      consumableUsage,
+      // No selected character to target — every usage entry already reports the reason.
+      pendingConsumePrompt: null,
     };
   }
 
@@ -97,5 +172,13 @@ export function buildEquipmentScreenPlayerSnapshot(
     unitStats,
     learnedSkills,
     upgradeSkills: learnedSkills.slice(1, 5),
+    consumableUsage,
+    pendingConsumePrompt: buildPendingConsumePrompt(
+      pendingConsume,
+      consumableUsage,
+      backpack,
+      selectedUnitTemplateId,
+      selectedBlueprint.name,
+    ),
   };
 }

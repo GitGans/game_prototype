@@ -10,6 +10,7 @@ import {
 import {
   RESTRICTED_IMPORT_TARGETS,
   BATTLE_RUNTIME_RESTRICTED_TARGETS,
+  CONSUME_CONFIRMATION_RESTRICTED_TARGETS,
   STATE_STORE_FORWARDING_TARGETS,
   RUNTIME_OWNERSHIP_EXPORT_COMPILATION,
   RUNTIME_OWNERSHIP_EXPORT_COVERAGE,
@@ -81,8 +82,29 @@ describe("runtime-ownership export surfaces against the real sources", () => {
 
 describe("RUNTIME_OWNERSHIP_EXPORT_POLICIES configuration", () => {
   /** Pins the exact reviewed surfaces: any expansion or removal is a visible test change. */
-  it("registers exactly the four runtime-ownership modules and their surfaces", () => {
+  it("registers exactly the runtime-ownership modules and their surfaces", () => {
     expect(RUNTIME_OWNERSHIP_EXPORT_POLICIES).toEqual({
+      // The pending-confirmation triad: same closed-surface guarantee as the battle-runtime
+      // triad, so the write capability cannot be forwarded onward under another name.
+      "core/consumeConfirmationStorage.ts": [
+        { name: "clearConsumeConfirmationSlot", kind: "function" },
+        { name: "readConsumeConfirmationSlot", kind: "function" },
+        { name: "writeConsumeConfirmationSlot", kind: "function" },
+      ],
+      "core/consumeConfirmationAccess.ts": [
+        { name: "readPendingConsumeForPhase", kind: "function" },
+      ],
+      "core/consumeConfirmationWriteAccess.ts": [
+        { name: "clearPendingConsume", kind: "function" },
+        { name: "setPendingConsume", kind: "function" },
+      ],
+      "core/phaseHandlers/consumablePhaseHandler.ts": [
+        { name: "ConsumablePhaseAction", kind: "type-alias" },
+        { name: "applyConsumablePhaseAction", kind: "function" },
+        { name: "clearConsumeConfirmationIfPresent", kind: "function" },
+        { name: "openConsumeConfirmation", kind: "function" },
+        { name: "teardownConsumeConfirmationAfterTransition", kind: "function" },
+      ],
       "core/battleRuntimeStorage.ts": [
         { name: "clearBattleRuntimeSlot", kind: "function" },
         { name: "readBattleRuntimeSlot", kind: "function" },
@@ -121,14 +143,21 @@ describe("RUNTIME_OWNERSHIP_EXPORT_POLICIES configuration", () => {
    * Derived from BATTLE_RUNTIME_RESTRICTED_TARGETS, not from the whole registry — see the next
    * test for the other half of the closure.
    */
-  it("covers exactly the modules holding restricted battle-runtime authority", () => {
+  it("covers exactly the modules holding restricted runtime authority", () => {
     expect(RUNTIME_OWNERSHIP_EXPORT_COVERAGE).toEqual(
       Object.keys(RUNTIME_OWNERSHIP_EXPORT_POLICIES).sort(),
     );
+    // Derived, never hand-listed: both restricted-capability groups (battle runtime and pending
+    // confirmation) must have every target AND every permitted importer pinned, so a new
+    // capability cannot ship with one direction open.
+    const capabilityGroups = {
+      ...BATTLE_RUNTIME_RESTRICTED_TARGETS,
+      ...CONSUME_CONFIRMATION_RESTRICTED_TARGETS,
+    };
     expect(RUNTIME_OWNERSHIP_EXPORT_COVERAGE).toEqual([
       ...new Set([
-        ...Object.keys(BATTLE_RUNTIME_RESTRICTED_TARGETS).map((target: string) => `${target}.ts`),
-        ...Object.values(BATTLE_RUNTIME_RESTRICTED_TARGETS).flatMap(
+        ...Object.keys(capabilityGroups).map((target: string) => `${target}.ts`),
+        ...Object.values(capabilityGroups).flatMap(
           (entry) => (entry as { allowedImporters: string[] }).allowedImporters,
         ),
       ]),
@@ -143,7 +172,10 @@ describe("RUNTIME_OWNERSHIP_EXPORT_POLICIES configuration", () => {
    */
   it("leaves no restricted target without a forwarding protection", () => {
     const pinned = new Set(
-      Object.keys(BATTLE_RUNTIME_RESTRICTED_TARGETS).map((target: string) => `${target}.ts`),
+      [
+        ...Object.keys(BATTLE_RUNTIME_RESTRICTED_TARGETS),
+        ...Object.keys(CONSUME_CONFIRMATION_RESTRICTED_TARGETS),
+      ].map((target: string) => `${target}.ts`),
     );
     const forwardingScanned = new Set(STATE_STORE_FORWARDING_TARGETS as string[]);
 

@@ -8,6 +8,7 @@ import { buildRosterCampSnapshot } from './rosterCampSnapshot';
 import { buildUpgradeTreePlayerSnapshot } from './upgradeTreeSnapshot';
 import { buildBattleResultsSnapshot } from './battleResultsSnapshot';
 import { projectWorldMapSnapshot } from './worldMapProjection';
+import { readPendingConsumeForPhase } from './consumeConfirmationAccess';
 
 /**
  * Recomputes the data snapshot for one phase from authoritative state.
@@ -35,13 +36,20 @@ export function rebuildPhaseSnapshot(phase: GamePhase): GamePhase {
 
     case 'equip_screen': {
       const session = PlayerSessionStore.getSession(phase.sessionSource);
-      const snapshot = buildEquipmentScreenPlayerSnapshot(session, phase.selectedUnitTemplateId);
+      // READ-ONLY. The gateway hands back a request only when this phase can justify it; an
+      // unjustifiable one is simply not projected, which HIDES the dialog. Disposing it belongs
+      // to phaseHandlers/consumablePhaseHandler — this module holds no write capability.
+      const snapshot = buildEquipmentScreenPlayerSnapshot(
+        session, phase.selectedUnitTemplateId, readPendingConsumeForPhase(phase),
+      );
       return { ...phase, ...snapshot };
     }
 
     case 'debug_equip_screen': {
       const session = PlayerSessionStore.getSession(phase.sessionSource);
-      const equipSnapshot = buildEquipmentScreenPlayerSnapshot(session, phase.selectedUnitTemplateId);
+      const equipSnapshot = buildEquipmentScreenPlayerSnapshot(
+        session, phase.selectedUnitTemplateId, readPendingConsumeForPhase(phase),
+      );
       const { campUnitIds, selectedForBattleUnitCount, activeLivingUnitCount, canStartBattle } =
         buildRosterCampSnapshot(session.roster);
       return {

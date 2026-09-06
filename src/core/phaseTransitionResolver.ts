@@ -35,6 +35,8 @@ function buildDebugEquipScreenPlaceholder(): DebugEquipScreenPhase {
     canStartBattle: false,
     learnedSkills: [],
     upgradeSkills: [],
+    consumableUsage: {},                  // filled by rebuildPhaseSnapshot
+    pendingConsumePrompt: null,           // filled by rebuildPhaseSnapshot
   };
 }
 
@@ -82,6 +84,8 @@ function buildEquipScreenPlaceholder(
     unitStats: null,                      // filled by rebuildPhaseSnapshot
     learnedSkills: [],                    // filled by rebuildPhaseSnapshot
     upgradeSkills: [],                    // filled by rebuildPhaseSnapshot
+    consumableUsage: {},                  // filled by rebuildPhaseSnapshot
+    pendingConsumePrompt: null,           // filled by rebuildPhaseSnapshot
   };
 }
 
@@ -231,11 +235,46 @@ export function resolveTransition(
 
     case 'equip_item':
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
+      if (currentPhase.pendingConsumePrompt) return null; // no competing mutation while confirming
       return currentPhase;
 
     case 'unequip_item':
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
+      if (currentPhase.pendingConsumePrompt) return null; // no competing mutation while confirming
       return currentPhase;
+
+    // ── Consumable confirmation (mutation-only) ──────────────────────────────
+    // All three return `currentPhase` BY REFERENCE. PhaseManager classifies by reference identity,
+    // so returning `{ ...currentPhase, … }` here would be treated as navigation and would call
+    // sceneSynchronizer.sync(), restarting EquipScreen on every dialog open and cancel. The pending
+    // request therefore lives in the ConsumeConfirmationController, never in a phase field written
+    // here; this resolver owns acceptance only, and stays pure.
+
+    case 'request_consume_item': {
+      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
+      if (!currentPhase.selectedUnitTemplateId) return null;
+      if (currentPhase.pendingConsumePrompt) return null;   // one confirmation at a time
+      // Eligibility comes from the snapshot this resolver was handed — no new dependency.
+      if (!currentPhase.consumableUsage[action.instanceId]?.canUse) return null;
+      // The target is always the selected character; effects records it, never the caller.
+      return currentPhase;
+    }
+
+    case 'confirm_consume_item': {
+      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
+      const pending = currentPhase.pendingConsumePrompt;
+      if (!pending) return null;
+      if (pending.instanceId !== action.instanceId) return null;              // stale dialog
+      if (pending.unitTemplateId !== action.unitTemplateId) return null;
+      if (pending.unitTemplateId !== currentPhase.selectedUnitTemplateId) return null;
+      return currentPhase; // effects clear the request, then re-validate before committing
+    }
+
+    case 'cancel_consume_item': {
+      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
+      if (!currentPhase.pendingConsumePrompt) return null;
+      return currentPhase;
+    }
 
     // ── Upgrade tree navigation ──────────────────────────────────────────────
     case 'open_upgrade_tree': {

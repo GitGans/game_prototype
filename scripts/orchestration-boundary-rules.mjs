@@ -90,6 +90,23 @@ export const PHASE_HANDLER_IMPORT_POLICIES = {
       "progression",
     ],
   },
+  // The consumable-use domain owner: the confirmation lifecycle plus the commit. It is the only
+  // module permitted to hold the confirmation write capability (see RESTRICTED_IMPORT_TARGETS),
+  // and it holds BOTH gateways deliberately — the confirm-time ownership check reads, and reading
+  // is not folded into the write gateway.
+  "core/phaseHandlers/consumablePhaseHandler.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/consumableUse",
+      "core/consumeConfirmationAccess",
+      "core/consumeConfirmationWriteAccess",
+      "core/phases",
+      "core/playerSessionState",
+      "core/playerSessionStore",
+      "data/itemDefinitions",
+      "data/units",
+    ],
+  },
   "core/phaseHandlers/inventoryPhaseHandler.ts": {
     kind: "exact-import-allowlist",
     allowedSpecifiers: [
@@ -190,6 +207,11 @@ export const SCENE_PIPELINE_BANNED_IMPORTS = [
   "core/battlePhaseSnapshot",
   "core/battleSnapshotBuilder",
   "core/battleResultsSnapshot",
+  "core/consumableUsability",
+  "core/consumableUse",
+  "core/consumeConfirmationAccess",
+  "core/consumeConfirmationStorage",
+  "core/consumeConfirmationWriteAccess",
   "core/equipmentScreenSnapshot",
   "core/unitStatsSnapshot",
   "core/rosterCampSnapshot",
@@ -287,6 +309,7 @@ export const ORCHESTRATION_COLLABORATOR_REGISTRY = {
       { specifier: "core/campaignLifecycle", role: "effects-owner" },
       { specifier: "core/debugLifecycle", role: "effects-owner" },
       { specifier: "core/phaseHandlers/campPhaseHandler", role: "effects-owner" },
+      { specifier: "core/phaseHandlers/consumablePhaseHandler", role: "effects-owner" },
       { specifier: "core/phaseHandlers/inventoryPhaseHandler", role: "effects-owner" },
       { specifier: "core/phaseHandlers/progressionPhaseHandler", role: "effects-owner" },
       { specifier: "core/phaseHandlers/worldPhaseHandler", role: "effects-owner" },
@@ -318,6 +341,10 @@ export const ORCHESTRATION_COLLABORATOR_REGISTRY = {
       { specifier: "core/phases", role: "neutral-contract" },
       { specifier: "core/GameState", role: "authoritative-state-reader" },
       { specifier: "core/battleRuntimeAccess", role: "authoritative-state-reader" },
+      // Read gateway for the pending consumable confirmation. A state reader, truthfully: it is
+      // called at runtime. The rebuilder cannot dispose a request — the write capability lives in
+      // a separate module it may not import.
+      { specifier: "core/consumeConfirmationAccess", role: "authoritative-state-reader" },
       { specifier: "core/playerSessionStore", role: "authoritative-state-reader" },
       { specifier: "core/battlePhaseSnapshot", role: "snapshot-projection" },
       { specifier: "core/battleResultsSnapshot", role: "snapshot-projection" },
@@ -368,6 +395,28 @@ export const RUNTIME_OWNERSHIP_IMPORT_POLICIES = {
       "core/battleRuntimeContext",
       "core/battleRuntimeStorage",
       "core/phases",
+    ],
+  },
+  // The confirmation cell. Rule-free like battleRuntimeStorage, and keyed by session: naming
+  // PlayerSessionSource from its owner is what makes a pending request OWNED, so a campaign
+  // transition can never read or dispose a debug one. Matching instance ids prove nothing —
+  // a debug reset recreates the same authored ids.
+  "core/consumeConfirmationStorage.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/playerSessionState",
+      "shared/snapshotTypes",
+    ],
+  },
+  // The confirmation write capability: records and disposes, nothing else. Like
+  // battleRuntimeWriteAccess it may NOT acquire a read — the ownership check at confirm time
+  // goes through the read gateway, in the handler that holds both.
+  "core/consumeConfirmationWriteAccess.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/consumeConfirmationStorage",
+      "core/playerSessionState",
+      "shared/snapshotTypes",
     ],
   },
   "core/battleRuntimeWriteAccess.ts": {
@@ -484,6 +533,7 @@ export const STATE_STORE_RESTRICTED_TARGETS = {
       "core/battlePhaseEffects.ts",
       "core/phaseHandlers/battlePhaseHandler.ts",
       "core/phaseHandlers/campPhaseHandler.ts",
+      "core/phaseHandlers/consumablePhaseHandler.ts",
       "core/phaseHandlers/inventoryPhaseHandler.ts",
       "core/phaseHandlers/progressionPhaseHandler.ts",
       "core/phaseSnapshotRebuilder.ts",
@@ -492,8 +542,32 @@ export const STATE_STORE_RESTRICTED_TARGETS = {
 };
 
 // The single object the checker enforces: a spread of the two groups above and NOTHING else.
+/**
+ * Confirmation-state importer restrictions, mirroring BATTLE_RUNTIME_RESTRICTED_TARGETS.
+ *
+ * Restricting the IMPORTER direction is the point: an outbound allowlist can say what a module
+ * may depend on, but not "who may pick up this authority". Holding an import of the write
+ * capability IS the authority to open or dispose a confirmation, so exactly one production module
+ * may hold it.
+ */
+export const CONSUME_CONFIRMATION_RESTRICTED_TARGETS = {
+  "core/consumeConfirmationStorage": {
+    reason: "Internal pending-confirmation storage cells.",
+    allowedImporters: [
+      "core/consumeConfirmationAccess.ts",
+      "core/consumeConfirmationWriteAccess.ts",
+    ],
+  },
+  "core/consumeConfirmationWriteAccess": {
+    reason:
+      "Confirmation write capability owned by phaseHandlers/consumablePhaseHandler.",
+    allowedImporters: ["core/phaseHandlers/consumablePhaseHandler.ts"],
+  },
+};
+
 export const RESTRICTED_IMPORT_TARGETS = {
   ...BATTLE_RUNTIME_RESTRICTED_TARGETS,
+  ...CONSUME_CONFIRMATION_RESTRICTED_TARGETS,
   ...STATE_STORE_RESTRICTED_TARGETS,
 };
 
@@ -535,6 +609,29 @@ export const RUNTIME_OWNERSHIP_EXPORT_POLICIES = {
     { name: "clearBattleRuntime", kind: "function" },
     { name: "installBattleRuntime", kind: "function" },
   ],
+  "core/consumeConfirmationStorage.ts": [
+    { name: "clearConsumeConfirmationSlot", kind: "function" },
+    { name: "readConsumeConfirmationSlot", kind: "function" },
+    { name: "writeConsumeConfirmationSlot", kind: "function" },
+  ],
+  "core/consumeConfirmationAccess.ts": [
+    { name: "readPendingConsumeForPhase", kind: "function" },
+  ],
+  "core/consumeConfirmationWriteAccess.ts": [
+    { name: "clearPendingConsume", kind: "function" },
+    { name: "setPendingConsume", kind: "function" },
+  ],
+  // The one holder of the confirmation write capability, pinned for the same reason
+  // battlePhaseEffects is: without a closed surface, a single
+  // `export { setPendingConsume } from '../consumeConfirmationWriteAccess'` would hand the
+  // capability to every importer of the handler with the import checker still green.
+  "core/phaseHandlers/consumablePhaseHandler.ts": [
+    { name: "ConsumablePhaseAction", kind: "type-alias" },
+    { name: "applyConsumablePhaseAction", kind: "function" },
+    { name: "clearConsumeConfirmationIfPresent", kind: "function" },
+    { name: "openConsumeConfirmation", kind: "function" },
+    { name: "teardownConsumeConfirmationAfterTransition", kind: "function" },
+  ],
   "core/battlePhaseEffects.ts": [
     { name: "BattleRuntimeMutationAction", kind: "type-alias" },
     { name: "applyBattleExitRosterEffect", kind: "function" },
@@ -561,10 +658,19 @@ export const RUNTIME_OWNERSHIP_EXPORT_POLICIES = {
  *
  * Only the coverage obligation is derived; the export NAMES stay hand-reviewed above.
  */
+// Derived from EVERY restricted-capability group, never hand-listed: each group's targets and
+// each group's permitted importers must carry a pinned export surface, so a capability can be
+// neither picked up by an unlisted module nor forwarded onward by a listed one. A new group
+// therefore cannot ship with one direction open.
+const RESTRICTED_CAPABILITY_GROUPS = {
+  ...BATTLE_RUNTIME_RESTRICTED_TARGETS,
+  ...CONSUME_CONFIRMATION_RESTRICTED_TARGETS,
+};
+
 export const RUNTIME_OWNERSHIP_EXPORT_COVERAGE = [
   ...new Set([
-    ...Object.keys(BATTLE_RUNTIME_RESTRICTED_TARGETS).map((target) => `${target}.ts`),
-    ...Object.values(BATTLE_RUNTIME_RESTRICTED_TARGETS).flatMap(
+    ...Object.keys(RESTRICTED_CAPABILITY_GROUPS).map((target) => `${target}.ts`),
+    ...Object.values(RESTRICTED_CAPABILITY_GROUPS).flatMap(
       (entry) => entry.allowedImporters,
     ),
   ]),
@@ -683,6 +789,21 @@ export const ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES = {
   // ── Snapshot side ──
   // core/battleRuntimeAccess.ts is NOT duplicated here — same reason as core/GameState.ts.
 
+  // The confirmation READ gateway — a snapshot-facade collaborator, so its policy lives here
+  // while the cell and the write capability are pinned in RUNTIME_OWNERSHIP_IMPORT_POLICIES,
+  // exactly as for the battle-runtime triad.
+  //
+  // Read-only by responsibility: it resolves a justified request and exposes nothing else. It may
+  // see the phase unions because justification is phase-relative, and never the write capability.
+  "core/consumeConfirmationAccess.ts": {
+    kind: "exact-import-allowlist",
+    allowedSpecifiers: [
+      "core/consumeConfirmationStorage",
+      "core/phases",
+      "shared/snapshotTypes",
+    ],
+  },
+
   // The sole seam resolving a PlayerSessionSource to campaign or debug storage. Storage-only:
   // it may see the two player-owned domain contracts and the state singleton, and no
   // inventory/progression/battle RULE — those live in their own domains.
@@ -725,6 +846,10 @@ export const ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES = {
   "core/equipmentScreenSnapshot.ts": {
     kind: "exact-import-allowlist",
     allowedSpecifiers: [
+      // The consumable READ MODEL. `core/consumableUse` — the executor — is deliberately absent:
+      // this line is what makes "a projection cannot reach a roster/inventory replacement" an
+      // enforced guarantee rather than a convention about which function is called.
+      "core/consumableUsability",
       "core/phases",
       "core/playerSessionState",
       "core/unitSpriteKey",
