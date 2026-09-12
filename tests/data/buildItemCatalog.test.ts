@@ -102,11 +102,58 @@ describe("buildItemCatalog", () => {
     expect(Object.keys(definitions)).toHaveLength(UNIT_BATTLE_STAT_KEYS.length);
   });
 
-  it("leaves heal and revive effects unvalidated — they carry no mechanics yet", () => {
+  it("accepts any positive consumable heal amount — no value is privileged", () => {
     const groups: ItemGroup[] = [
       { kind: "consumable", items: {
-        h: { name: "H", buyPrice: 1, useEffect: { type: "heal", amount: 3 } },
-        r: { name: "R", buyPrice: 1, useEffect: { type: "revive" } },
+        small: { name: "S", buyPrice: 1, useEffect: { type: "heal", amount: 10 } },
+        large: { name: "L", buyPrice: 1, useEffect: { type: "heal", amount: 9999 } },
+        tiny:  { name: "T", buyPrice: 1, useEffect: { type: "heal", amount: 0.5 } },
+      } },
+    ];
+
+    expect(() => buildItemCatalog(groups)).not.toThrow();
+  });
+
+  it.each([0, -1, NaN, Infinity])(
+    "throws when a consumable heals by %s",
+    (amount) => {
+      const groups: ItemGroup[] = [
+        { kind: "consumable", items: {
+          bad: { name: "B", buyPrice: 1, useEffect: { type: "heal", amount } },
+        } },
+      ];
+
+      expect(() => buildItemCatalog(groups)).toThrow(/must heal a finite amount > 0/);
+    },
+  );
+
+  it("validates a USABLE heal payload too — validation follows executability", () => {
+    // `heal` is now executable for a usable as well: from the backpack (core/itemUse.ts) and
+    // from usable_slot in battle (battle/itemUse.ts). Both kinds get the same contract.
+    const groups: ItemGroup[] = [
+      { kind: "usable", slot: "usable_slot", items: {
+        jar: { name: "J", buyPrice: 1, useEffect: { type: "heal", amount: 0 } },
+      } },
+    ];
+
+    expect(() => buildItemCatalog(groups)).toThrow(/must heal a finite amount/);
+  });
+
+  it("accepts a positive USABLE heal, so authoring a new potion size needs no code change", () => {
+    const groups: ItemGroup[] = [
+      { kind: "usable", slot: "usable_slot", items: {
+        big: { name: "Big", buyPrice: 1, useEffect: { type: "heal", amount: 999 } },
+      } },
+    ];
+
+    expect(() => buildItemCatalog(groups)).not.toThrow();
+  });
+
+  it("leaves revive unvalidated for both kinds — it carries no payload and no mechanics", () => {
+    const groups: ItemGroup[] = [
+      { kind: "consumable", items: { r: { name: "R", buyPrice: 1, useEffect: { type: "revive" } } } },
+      { kind: "usable", slot: "usable_slot", items: {
+        s: { name: "S", buyPrice: 1, useEffect: { type: "revive" } },
       } },
     ];
 

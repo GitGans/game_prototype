@@ -40,17 +40,17 @@ const compile = (registry: unknown) => compileRestrictedImportTargets(registry);
 describe("RESTRICTED_IMPORT_TARGETS registry", () => {
   it("pins the exact registry", () => {
     expect(RESTRICTED_IMPORT_TARGETS).toEqual({
-      "core/consumeConfirmationStorage": {
+      "core/itemInteractionStorage": {
         reason: "Internal pending-confirmation storage cells.",
         allowedImporters: [
-          "core/consumeConfirmationAccess.ts",
-          "core/consumeConfirmationWriteAccess.ts",
+          "core/itemInteractionAccess.ts",
+          "core/itemInteractionWriteAccess.ts",
         ],
       },
-      "core/consumeConfirmationWriteAccess": {
+      "core/itemInteractionWriteAccess": {
         reason:
-          "Confirmation write capability owned by phaseHandlers/consumablePhaseHandler.",
-        allowedImporters: ["core/phaseHandlers/consumablePhaseHandler.ts"],
+          "Confirmation write capability owned by phaseHandlers/itemUsePhaseHandler.",
+        allowedImporters: ["core/phaseHandlers/itemUsePhaseHandler.ts"],
       },
       "core/battleRuntimeStorage": {
         reason: "Internal battle-runtime storage cell.",
@@ -84,8 +84,8 @@ describe("RESTRICTED_IMPORT_TARGETS registry", () => {
           "core/battlePhaseEffects.ts",
           "core/phaseHandlers/battlePhaseHandler.ts",
           "core/phaseHandlers/campPhaseHandler.ts",
-          "core/phaseHandlers/consumablePhaseHandler.ts",
           "core/phaseHandlers/inventoryPhaseHandler.ts",
+          "core/phaseHandlers/itemUsePhaseHandler.ts",
           "core/phaseHandlers/progressionPhaseHandler.ts",
           "core/phaseSnapshotRebuilder.ts",
         ],
@@ -100,8 +100,8 @@ describe("RESTRICTED_IMPORT_TARGETS registry", () => {
       "core/GameState",
       "core/battleRuntimeStorage",
       "core/battleRuntimeWriteAccess",
-      "core/consumeConfirmationStorage",
-      "core/consumeConfirmationWriteAccess",
+      "core/itemInteractionStorage",
+      "core/itemInteractionWriteAccess",
       "core/playerSessionStore",
     ]);
   });
@@ -135,10 +135,10 @@ describe("RESTRICTED_IMPORT_TARGETS registry", () => {
       "core/battleRuntimeAccess.ts",
       "core/battleRuntimeStorage.ts",
       "core/battleRuntimeWriteAccess.ts",
-      "core/consumeConfirmationAccess.ts",
-      "core/consumeConfirmationStorage.ts",
-      "core/consumeConfirmationWriteAccess.ts",
-      "core/phaseHandlers/consumablePhaseHandler.ts",
+      "core/itemInteractionAccess.ts",
+      "core/itemInteractionStorage.ts",
+      "core/itemInteractionWriteAccess.ts",
+      "core/phaseHandlers/itemUsePhaseHandler.ts",
     ]);
   });
 });

@@ -29,8 +29,8 @@ export function makeEquipScreenPhase(overrides: Partial<EquipScreenPhase> = {}):
     unitStats: null,
     learnedSkills: [],
     upgradeSkills: [],
-    consumableUsage: {},
-    pendingConsumePrompt: null,
+    itemUsage: {},
+    pendingItemUsePrompt: null,
     ...overrides,
   };
 }

@@ -219,6 +219,13 @@ export type TurnStartDirective =
       activeUnitId: string;
       delayKind: 'auto_player' | 'auto_enemy';
     }
+  /**
+   * The acting unit has a decision to make, but no attack target to prompt for — today, a
+   * blocked melee turn for a unit carrying a usable item. Deliberately NOT `await_manual_target`
+   * with an empty list: there is no target to invent and no attack prompt to show, only a bar
+   * of actions.
+   */
+  | { type: 'await_manual_action'; activeUnitId: string }
   | {
       type: 'await_manual_target';
       activeUnitId: string;
@@ -238,6 +245,12 @@ export function resolveActiveTurnStart(input: {
   state: BattleState;
   context: TurnContext;
   mode: BattleMode;
+  /**
+   * Battle unit ids holding a supported, unconsumed equipped item. Passed in rather than
+   * derived, because deciding what a unit is carrying needs an inventory and a catalog, and
+   * `battle/` may reach neither. Absent on every automatic path, where it is irrelevant.
+   */
+  unitsWithItemAction?: ReadonlySet<string>;
 }): TurnStartResult {
   const { context, mode } = input;
   let { state } = input;
@@ -310,6 +323,19 @@ export function resolveActiveTurnStart(input: {
   );
 
   if (validTargets.length === 0 && isEnemyMeleeTargetPolicy(currentPlan.targetPolicy)) {
+    // A unit carrying a usable item still has a real decision here; auto-skipping its turn
+    // would silently remove the only chance to drink. No invented target, no attack prompt —
+    // and a full-health carrier still stops, with the action shown disabled and the ordinary
+    // manual skip control available.
+    if (input.unitsWithItemAction?.has(currentUnit.id)) {
+      return {
+        state: { ...state, phase: 'select_target', validTargets: [] },
+        context,
+        events: [],
+        directive: { type: 'await_manual_action', activeUnitId: activeId },
+      };
+    }
+
     const blockedEvent: TurnEvent = {
       type: 'turn_skipped',
       unitId: currentUnit.id,

@@ -86,24 +86,27 @@ describe("RUNTIME_OWNERSHIP_EXPORT_POLICIES configuration", () => {
     expect(RUNTIME_OWNERSHIP_EXPORT_POLICIES).toEqual({
       // The pending-confirmation triad: same closed-surface guarantee as the battle-runtime
       // triad, so the write capability cannot be forwarded onward under another name.
-      "core/consumeConfirmationStorage.ts": [
-        { name: "clearConsumeConfirmationSlot", kind: "function" },
-        { name: "readConsumeConfirmationSlot", kind: "function" },
-        { name: "writeConsumeConfirmationSlot", kind: "function" },
+      "core/itemInteractionStorage.ts": [
+        { name: "clearItemInteractionSlot", kind: "function" },
+        { name: "readItemInteractionSlot", kind: "function" },
+        { name: "writeItemInteractionSlot", kind: "function" },
       ],
-      "core/consumeConfirmationAccess.ts": [
-        { name: "readPendingConsumeForPhase", kind: "function" },
+      "core/itemInteractionAccess.ts": [
+        { name: "readItemInteractionForPhase", kind: "function" },
       ],
-      "core/consumeConfirmationWriteAccess.ts": [
-        { name: "clearPendingConsume", kind: "function" },
-        { name: "setPendingConsume", kind: "function" },
+      "core/itemInteractionWriteAccess.ts": [
+        { name: "clearItemInteraction", kind: "function" },
+        { name: "setItemInteraction", kind: "function" },
       ],
-      "core/phaseHandlers/consumablePhaseHandler.ts": [
-        { name: "ConsumablePhaseAction", kind: "type-alias" },
-        { name: "applyConsumablePhaseAction", kind: "function" },
-        { name: "clearConsumeConfirmationIfPresent", kind: "function" },
-        { name: "openConsumeConfirmation", kind: "function" },
-        { name: "teardownConsumeConfirmationAfterTransition", kind: "function" },
+      "core/phaseHandlers/itemUsePhaseHandler.ts": [
+        { name: "ItemActionSelection", kind: "type-alias" },
+        { name: "ItemUsePhaseAction", kind: "type-alias" },
+        { name: "applyItemActionSelection", kind: "function" },
+        { name: "applyItemUsePhaseAction", kind: "function" },
+        { name: "clearItemInteractionIfPresent", kind: "function" },
+        { name: "beginItemUseConfirmation", kind: "function" },
+        { name: "openItemActions", kind: "function" },
+        { name: "teardownItemInteractionAfterTransition", kind: "function" },
       ],
       "core/battleRuntimeStorage.ts": [
         { name: "clearBattleRuntimeSlot", kind: "function" },
@@ -119,7 +122,7 @@ describe("RUNTIME_OWNERSHIP_EXPORT_POLICIES configuration", () => {
       ],
       "core/battlePhaseEffects.ts": [
         { name: "BattleRuntimeMutationAction", kind: "type-alias" },
-        { name: "applyBattleExitRosterEffect", kind: "function" },
+        { name: "finalizeBattleSessionOnExit", kind: "function" },
         { name: "applyBattleRuntimeMutation", kind: "function" },
         { name: "clearBattleRuntimeIfPresent", kind: "function" },
         { name: "replayBattleRuntime", kind: "function" },

@@ -1,6 +1,6 @@
 import {
   GamePhase, PhaseAction, EMPTY_BACKPACK_SNAPSHOT, EMPTY_EQUIP_SNAPSHOT,
-  type UpgradeTreePhase,
+  type UpgradeTreePhase, type BattleActionBarEntry,
 } from './phases';
 import type { PhaseTransitionMetadata } from './phaseTransitionMetadataContract';
 
@@ -35,8 +35,9 @@ function buildDebugEquipScreenPlaceholder(): DebugEquipScreenPhase {
     canStartBattle: false,
     learnedSkills: [],
     upgradeSkills: [],
-    consumableUsage: {},                  // filled by rebuildPhaseSnapshot
-    pendingConsumePrompt: null,           // filled by rebuildPhaseSnapshot
+    itemUsage: {},                  // filled by rebuildPhaseSnapshot
+    itemActionMenu: null,                 // filled by rebuildPhaseSnapshot
+    pendingItemUsePrompt: null,           // filled by rebuildPhaseSnapshot
   };
 }
 
@@ -58,6 +59,7 @@ function buildBattlePlaceholder(
     roundQueue:          [],
     activeUnitId:        null,
     activeUnit:          null,
+    activeUnitActions:   [],
     battleMode:               'manual',                                           // filled by rebuildPhaseSnapshot
     activeUnitSide:           null,                                               // filled by rebuildPhaseSnapshot
     manualTurnControlsVisible: false,                                             // filled by rebuildPhaseSnapshot
@@ -84,8 +86,9 @@ function buildEquipScreenPlaceholder(
     unitStats: null,                      // filled by rebuildPhaseSnapshot
     learnedSkills: [],                    // filled by rebuildPhaseSnapshot
     upgradeSkills: [],                    // filled by rebuildPhaseSnapshot
-    consumableUsage: {},                  // filled by rebuildPhaseSnapshot
-    pendingConsumePrompt: null,           // filled by rebuildPhaseSnapshot
+    itemUsage: {},                  // filled by rebuildPhaseSnapshot
+    itemActionMenu: null,                 // filled by rebuildPhaseSnapshot
+    pendingItemUsePrompt: null,           // filled by rebuildPhaseSnapshot
   };
 }
 
@@ -235,12 +238,12 @@ export function resolveTransition(
 
     case 'equip_item':
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      if (currentPhase.pendingConsumePrompt) return null; // no competing mutation while confirming
+      if (currentPhase.pendingItemUsePrompt) return null; // no competing mutation while confirming
       return currentPhase;
 
     case 'unequip_item':
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      if (currentPhase.pendingConsumePrompt) return null; // no competing mutation while confirming
+      if (currentPhase.pendingItemUsePrompt) return null; // no competing mutation while confirming
       return currentPhase;
 
     // ── Consumable confirmation (mutation-only) ──────────────────────────────
@@ -250,19 +253,48 @@ export function resolveTransition(
     // request therefore lives in the ConsumeConfirmationController, never in a phase field written
     // here; this resolver owns acceptance only, and stays pure.
 
-    case 'request_consume_item': {
+    case 'open_item_actions': {
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
       if (!currentPhase.selectedUnitTemplateId) return null;
-      if (currentPhase.pendingConsumePrompt) return null;   // one confirmation at a time
+      // One modal at a time. Both fields project the same storage cell, so either being set
+      // means an interaction is already open.
+      if (currentPhase.itemActionMenu || currentPhase.pendingItemUsePrompt) return null;
+      // The item must be a backpack item this screen already evaluated — no new dependency.
+      if (!currentPhase.itemUsage[action.instanceId]) return null;
+      return currentPhase;
+    }
+
+    case 'close_item_actions': {
+      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
+      if (!currentPhase.itemActionMenu) return null;
+      return currentPhase;
+    }
+
+    case 'select_item_action': {
+      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
+      const menu = currentPhase.itemActionMenu;
+      if (!menu) return null;
+      if (menu.instanceId !== action.instanceId) return null;                 // stale window
+      if (menu.unitTemplateId !== currentPhase.selectedUnitTemplateId) return null;
+      // A disabled option is not selectable — for `equip` exactly as for `use`.
+      const option = menu.options.find(o => o.action === action.action);
+      if (!option?.enabled) return null;
+      return currentPhase; // effects re-validate live before clearing and applying
+    }
+
+    case 'request_use_item': {
+      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
+      if (!currentPhase.selectedUnitTemplateId) return null;
+      if (currentPhase.itemActionMenu || currentPhase.pendingItemUsePrompt) return null; // one modal at a time
       // Eligibility comes from the snapshot this resolver was handed — no new dependency.
-      if (!currentPhase.consumableUsage[action.instanceId]?.canUse) return null;
+      if (!currentPhase.itemUsage[action.instanceId]?.canUse) return null;
       // The target is always the selected character; effects records it, never the caller.
       return currentPhase;
     }
 
-    case 'confirm_consume_item': {
+    case 'confirm_use_item': {
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      const pending = currentPhase.pendingConsumePrompt;
+      const pending = currentPhase.pendingItemUsePrompt;
       if (!pending) return null;
       if (pending.instanceId !== action.instanceId) return null;              // stale dialog
       if (pending.unitTemplateId !== action.unitTemplateId) return null;
@@ -270,9 +302,9 @@ export function resolveTransition(
       return currentPhase; // effects clear the request, then re-validate before committing
     }
 
-    case 'cancel_consume_item': {
+    case 'cancel_use_item': {
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      if (!currentPhase.pendingConsumePrompt) return null;
+      if (!currentPhase.pendingItemUsePrompt) return null;
       return currentPhase;
     }
 
@@ -329,6 +361,29 @@ export function resolveTransition(
     case 'swap_field_units':
       if (currentPhase.type !== 'battle') return null;
       return currentPhase; // phaseActionEffects mutates BattleState; rebuildPhaseSnapshot refreshes phase
+
+    /**
+     * Item activation is the one battle-turn action with an acceptance rule of its own, decided
+     * purely from committed phase data: the battle must be under MANUAL player control, and the
+     * bar must actually be offering this item as an ENABLED action right now.
+     *
+     * `battleMode` is checked because `battlePhase === 'select_target'` is set on automatic
+     * turns too — the phase alone never establishes manual control. The authoritative refusal
+     * still happens in the evaluator against the runtime; this only keeps an obviously invalid
+     * action out of the effects pipeline.
+     */
+    case 'battle_use_item': {
+      if (currentPhase.type !== 'battle') return null;
+      if (currentPhase.battleMode !== 'manual') return null;
+      const entry = currentPhase.activeUnitActions.find(
+        (a): a is Extract<BattleActionBarEntry, { kind: 'item' }> =>
+          a.kind === 'item'
+          && a.unitId === action.unitId
+          && a.instanceId === action.instanceId,
+      );
+      if (!entry?.enabled) return null;
+      return currentPhase;
+    }
 
     // ── Battle turn (mutation-only) ───────────────────────────────────────
     case 'battle_start_turn':

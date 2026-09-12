@@ -15,6 +15,13 @@ export type BattleEvent =
       casterId: string; casterName: string;
       targetId: string; targetName: string }
 
+  // ── Item activation (equipped usable_slot item, manual turn) ────────
+  // A distinct variant rather than a reused skill_heal: the source is an item, the wording
+  // names it, and nothing about it is a skill (no caster/target pair, no skill index).
+  | { type: 'item_heal';
+      unitId: string; unitName: string;
+      itemName: string; amount: number }
+
   // ── Post-damage (vampirism) ─────────────────────────────────────────
   | { type: 'vampirism_heal';
       unitId: string; unitName: string; amount: number }

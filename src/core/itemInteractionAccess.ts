@@ -1,9 +1,9 @@
 import type { GamePhase } from './phases';
-import type { PendingConsumeRequest } from '../shared/snapshotTypes';
-import { readConsumeConfirmationSlot } from './consumeConfirmationStorage';
+import type { ItemInteraction } from '../shared/snapshotTypes';
+import { readItemInteractionSlot } from './itemInteractionStorage';
 
 /**
- * The READ gateway for pending consumable confirmations. `readPendingConsumeForPhase` is its
+ * The READ gateway for the pending item interaction. `readItemInteractionForPhase` is its
  * entire public surface, pinned in `RUNTIME_OWNERSHIP_EXPORT_POLICIES` — a closed surface is what
  * stops the write capability being forwarded through the read side under another name.
  *
@@ -12,7 +12,7 @@ import { readConsumeConfirmationSlot } from './consumeConfirmationStorage';
  * lifecycle.
  *
  * ── What "justified" means ──────────────────────────────────────────────────────────────────
- * A request is returned only when the supplied phase can account for it: an equip screen, whose
+ * An interaction is returned only when the supplied phase can account for it: an equip screen, whose
  * OWN session holds the request, still showing the character the request targets. This is the
  * ownership assertion `requireBattleRuntimeForPhase` performs for the battle runtime, expressed
  * as a filter rather than a throw because an unjustified request is a normal state (the screen
@@ -23,12 +23,12 @@ import { readConsumeConfirmationSlot } from './consumeConfirmationStorage';
  * ownership check. It is deliberately NOT how disposal finds a stale request: it returns null in
  * exactly the cases teardown exists to clean up — screen left, character changed — so a teardown
  * built on it would leave the request in storage to reappear on return. Disposal is owner-keyed
- * and unconditional; see `teardownConsumeConfirmationAfterTransition`.
+ * and unconditional; see `teardownItemInteractionAfterTransition`.
  */
-export function readPendingConsumeForPhase(phase: GamePhase): PendingConsumeRequest | null {
+export function readItemInteractionForPhase(phase: GamePhase): ItemInteraction | null {
   if (phase.type !== 'equip_screen' && phase.type !== 'debug_equip_screen') return null;
 
-  const pending = readConsumeConfirmationSlot(phase.sessionSource);
+  const pending = readItemInteractionSlot(phase.sessionSource);
   if (pending === null) return null;
   if (pending.unitTemplateId !== phase.selectedUnitTemplateId) return null;
 

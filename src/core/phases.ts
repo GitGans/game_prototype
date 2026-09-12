@@ -5,16 +5,17 @@ import type {
   BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
 } from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
-import type { BattleUnitSnapshot, FieldBattleUnitSnapshot, BattleOccupancySnapshot, BattleFieldUnitCellsSnapshot } from '../shared/battleSnapshots';
+import type { BattleUnitSnapshot, FieldBattleUnitSnapshot, BattleOccupancySnapshot, BattleFieldUnitCellsSnapshot, BattleActionBarEntry } from '../shared/battleSnapshots';
+export type { BattleActionBarEntry };
 import type { PlacementSelection, BattleState, BattleMode, Side } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
 import type { SubMapState, WorldPos } from '../shared/worldTypes';
 import type { PlayerSessionSource } from './playerSessionState';
 import type {
-  ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest,
+  ItemUsability, PendingItemUsePrompt, ItemActionMenuSnapshot, ItemActionKind,
 } from '../shared/snapshotTypes';
-export type { ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest };
+export type { ItemUsability, PendingItemUsePrompt, ItemActionMenuSnapshot, ItemActionKind };
 import type { BattleParticipant, BattleExitOutcome } from './battleRuntimeContext';
 export type { BattleExitOutcome };
 
@@ -116,6 +117,13 @@ export type GamePhase =
       activeUnitId:        string | null;
       // Active unit is always field-deployed (round queue is field-only).
       activeUnit:          FieldBattleUnitSnapshot | null;
+      /**
+       * The active unit's action bar: its ordinary skills, plus its equipped usable item when
+       * one is currently offerable. Projected for the ACTIVE UNIT ONLY — building it per unit
+       * would put the item evaluator on the `battle_preview_target` pointer-move path N times
+       * for a bar that only ever shows one unit.
+       */
+      activeUnitActions:   readonly BattleActionBarEntry[];
       battleMode:              BattleMode;
       activeUnitSide:          Side | null;
       manualTurnControlsVisible: boolean;
@@ -153,8 +161,9 @@ export type GamePhase =
       canStartBattle: boolean;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
-      consumableUsage: Record<string, ConsumableUsability>;
-      pendingConsumePrompt: PendingConsumePrompt | null;
+      itemUsage: Record<string, ItemUsability>;
+      itemActionMenu: ItemActionMenuSnapshot | null;
+      pendingItemUsePrompt: PendingItemUsePrompt | null;
     }
   | {
       type: 'equip_screen';
@@ -169,8 +178,9 @@ export type GamePhase =
       unitStats: UnitStatsSnapshot | null;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
-      consumableUsage: Record<string, ConsumableUsability>;
-      pendingConsumePrompt: PendingConsumePrompt | null;
+      itemUsage: Record<string, ItemUsability>;
+      itemActionMenu: ItemActionMenuSnapshot | null;
+      pendingItemUsePrompt: PendingItemUsePrompt | null;
     }
   | {
       type: 'upgrade_tree';
@@ -203,10 +213,13 @@ export type PhaseAction =
   // ── Item mutations (mutation-only: resolveTransition returns same ref) ──
   | { type: 'equip_item'; instanceId: string; unitTemplateId: string }
   | { type: 'unequip_item'; unitTemplateId: string; slot: string }
-  // ── Consumable use (mutation-only) — request/cancel change presentation state only ──
-  | { type: 'request_consume_item'; instanceId: string }
-  | { type: 'confirm_consume_item'; instanceId: string; unitTemplateId: string }
-  | { type: 'cancel_consume_item' }
+  // ── Item use (mutation-only) — open/close/select/request/cancel change presentation only ──
+  | { type: 'open_item_actions'; instanceId: string }
+  | { type: 'close_item_actions' }
+  | { type: 'select_item_action'; instanceId: string; action: ItemActionKind }
+  | { type: 'request_use_item'; instanceId: string }
+  | { type: 'confirm_use_item'; instanceId: string; unitTemplateId: string }
+  | { type: 'cancel_use_item' }
   // ── Commerce (mutation-only) — stub, no shop phase yet ────────
   | { type: 'buy_item'; definitionId: string }
   | { type: 'sell_item'; instanceId: string }
@@ -239,6 +252,10 @@ export type PhaseAction =
   | { type: 'battle_start_turn' }
   | { type: 'battle_select_skill'; skillIndex: number }
   | { type: 'battle_use_skill'; unitId: string; target: CellCoord; skillIndex?: number }
+  // Activation of the item equipped in `usable_slot`, during the acting unit's own manual turn.
+  // The payload identifies WHO and WHICH item — never a healing amount and never a target: both
+  // are derived, the amount from authored data and the target from the actor itself.
+  | { type: 'battle_use_item'; unitId: string; instanceId: string }
   | { type: 'battle_advance_turn' }
   | { type: 'battle_skip_turn'; reason?: 'manual_skip' | 'blocked_melee' }
   | { type: 'battle_charge_turn' }

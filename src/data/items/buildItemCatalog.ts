@@ -18,10 +18,20 @@ const BATTLE_STAT_KEYS: ReadonlySet<string> = new Set(UNIT_BATTLE_STAT_KEYS);
  * Effect-payload validation. Deliberately generic: no item id and no particular amount is
  * hardcoded, so new authored content is checked by the same rules.
  *
- * `permanent_stat_boost` is the only effect with executable mechanics (see core/consumableUse.ts);
- * `heal` and `revive` remain catalog data only, so they carry no extra validation yet.
+ * Validation follows executability. `permanent_stat_boost` is executable for every kind that may
+ * carry it, so its payload is always checked. `heal` is executable for both `usable` and
+ * `consumable` — a usable potion is drunk from the backpack (core/itemUse.ts) and from
+ * usable_slot in battle (battle/itemUse.ts) — so both are checked, and only `equipment`, which
+ * may not carry a useEffect at all, is exempt. `revive` has no payload and no mechanics.
  */
-function assertUseEffect(id: string, effect: ItemUseEffect): void {
+function assertUseEffect(id: string, kind: ItemRuntimeKind, effect: ItemUseEffect): void {
+  if (effect.type === 'heal') {
+    if (kind === 'equipment') return;
+    if (!Number.isFinite(effect.amount) || effect.amount <= 0) {
+      throw new Error(`Item "${id}" must heal a finite amount > 0 (got ${effect.amount})`);
+    }
+    return;
+  }
   if (effect.type !== 'permanent_stat_boost') return;
   if (!BATTLE_STAT_KEYS.has(effect.stat)) {
     throw new Error(`Item "${id}" boosts unknown battle stat "${effect.stat}"`);
@@ -38,8 +48,8 @@ function assertUseEffect(id: string, effect: ItemUseEffect): void {
  *
  * useEffect ownership by kind (enforced here):
  *   equipment  → useEffect forbidden
- *   usable     → useEffect required (data only)
- *   consumable → useEffect required (data only)
+ *   usable     → useEffect required; `heal` is executable (backpack and battle)
+ *   consumable → useEffect required; `permanent_stat_boost` and `heal` are executable
  *
  * slot invariant by kind (enforced here):
  *   equipment  → ordinary equipment slot only, NEVER usable_slot
@@ -69,7 +79,7 @@ export function buildItemCatalog(groups: readonly ItemGroup[]): ItemCatalog {
       if (group.kind === 'equipment' && item.useEffect) {
         throw new Error(`Item "${id}" of kind "equipment" must not have a useEffect`);
       }
-      if (item.useEffect) assertUseEffect(id, item.useEffect);
+      if (item.useEffect) assertUseEffect(id, group.kind, item.useEffect);
 
       definitions[id] = {
         id,

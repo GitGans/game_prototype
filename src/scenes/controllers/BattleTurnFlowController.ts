@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { PhaseManager } from "../../core/PhaseManager";
-import type { PhaseAction } from "../../core/phases";
+import type { PhaseAction, BattleActionBarEntry } from "../../core/phases";
 import type { BattleActionFeedback, AutoTurnIntentionFeedback } from "../../core/battleActionFeedback";
 import type { CellCoord, Col, Side } from "../../battle/types";
 import type { FieldBattleUnitSnapshot } from "../../shared/battleSnapshots";
@@ -24,6 +24,7 @@ type BattleTurnSceneAction = Extract<PhaseAction, {
     | "battle_start_turn"
     | "battle_select_skill"
     | "battle_use_skill"
+    | "battle_use_item"
     | "battle_advance_turn"
     | "battle_skip_turn"
     | "battle_charge_turn"
@@ -530,7 +531,11 @@ export class BattleTurnFlowController {
   // ─── Skill Bar ────────────────────────────────────────────────────────────
 
   private showSkillIcons(unit: FieldBattleUnitSnapshot): void {
-    if (unit.skills.length < 1) { this.deps.skillBar.hide(); return; }
+    // Layout is derived from the DISPLAYED action count, which includes the item entry when the
+    // committed snapshot offers one — never from `unit.skills.length`.
+    const phase = PhaseManager.getPhase();
+    const actions = phase.type === 'battle' ? phase.activeUnitActions : [];
+    if (actions.length < 1) { this.deps.skillBar.hide(); return; }
 
     const iconSize = Math.round(20 * LAYOUT_SCALE);
     const iconGap  = Math.round(3  * LAYOUT_SCALE);
@@ -546,10 +551,44 @@ export class BattleTurnFlowController {
     const unitTopY    = this.deps.cellPixelPos(unit.deployment.anchor.side, topRow,    rightmostCol).y - CELL_SIZE / 2;
     const unitBottomY = this.deps.cellPixelPos(unit.deployment.anchor.side, bottomRow, rightmostCol).y + CELL_SIZE / 2;
     const unitCenterY = (unitTopY + unitBottomY) / 2;
-    const totalH      = unit.skills.length * iconSize + (unit.skills.length - 1) * iconGap;
+    const totalH      = actions.length * iconSize + (actions.length - 1) * iconGap;
     const startY      = unitCenterY - totalH / 2 + iconSize / 2;
 
-    this.deps.skillBar.show(unit, iconX, startY, iconSize, iconGap, i => this.switchActiveSkill(i));
+    this.deps.skillBar.show(
+      actions, unit.activeSkillIndex, iconX, startY, iconSize, iconGap,
+      entry => this.selectBarAction(entry),
+    );
+  }
+
+  /**
+   * A skill switches the active skill and re-prompts for a target. An item is dispatched
+   * IMMEDIATELY: no skill selection, no target preview, no target confirmation, no attack
+   * animation — it resolves against its owner and ends the turn.
+   */
+  private selectBarAction(entry: BattleActionBarEntry): void {
+    if (entry.kind === 'skill') { this.switchActiveSkill(entry.skillIndex); return; }
+    this.useEquippedItem(entry.unitId, entry.instanceId);
+  }
+
+  private useEquippedItem(unitId: string, instanceId: string): void {
+    // Pre-action active unit: used only as a style hint for presentBattleEvents.
+    const phase = PhaseManager.getPhase();
+    const activeUnit = phase.type === 'battle' ? phase.activeUnit : null;
+
+    const result = this.runBattleAction({ type: 'battle_use_item', unitId, instanceId });
+    // A rejected or refused activation changes nothing and must not schedule a turn.
+    if (!result?.itemUse?.applied) return;
+
+    // The bar is rebuilt from the committed snapshot at the next turn start; clearing it here
+    // makes the consumed action disappear immediately rather than one frame late.
+    this.clearSkillIcons();
+    this.deps.battlePresentation.presentBattleEvents(result.events, activeUnit);
+
+    if (this.handleBattleWinner(result)) return;
+
+    this.schedule(BattleTurnFlowController.DELAY_NEXT_TURN, () =>
+      this.startActiveUnitTurn(),
+    );
   }
 
   private clearSkillIcons(): void {

@@ -22,8 +22,8 @@ import { normalizeSpecifier } from "../../scripts/import-specifier.mjs";
 const SRC = new URL("../../src/", import.meta.url).pathname;
 const CHECKER = new URL("../../scripts/check-boundaries.mjs", import.meta.url).pathname;
 
-const READ_MODEL_KEY = "core/consumableUsability.ts";
-const EXECUTOR_KEY = "core/consumableUse.ts";
+const READ_MODEL_KEY = "core/itemUsability.ts";
+const EXECUTOR_KEY = "core/itemUse.ts";
 
 // Explicitly typed so TypeScript treats every call as never-returning and narrows afterwards.
 const fail: (what: string) => never = (what) => {
@@ -37,7 +37,7 @@ const fail: (what: string) => never = (what) => {
  * True when `entry.file` is exactly `join(SRC, "core", "<fileName>")`.
  *
  * The whole expression is validated, not just its string arguments: `join(OTHER_ROOT, "core",
- * "consumableUsability.ts")` collects the same literals but targets a different file, and
+ * "itemUsability.ts")` collects the same literals but targets a different file, and
  * accepting it would let this suite pin a policy that protects something else while reporting
  * that the read model is covered.
  */
@@ -125,11 +125,11 @@ function bannedImportsIn(fileKey: string, banned: readonly string[], source: str
   });
 }
 
-describe("consumableUsability PURE_CORE policy (extracted from the real checker)", () => {
+describe("itemUsability PURE_CORE policy (extracted from the real checker)", () => {
   const banned = extractBannedList(READ_MODEL_KEY);
 
   it("bans the executor", () => {
-    expect(banned).toContain("core/consumableUse");
+    expect(banned).toContain("core/itemUse");
   });
 
   it("keeps the restrictions that were already in force", () => {
@@ -139,9 +139,9 @@ describe("consumableUsability PURE_CORE policy (extracted from the real checker)
       "core/GameState",
       "core/DebugBattleState",
       "core/playerSessionStore",
-      "core/consumeConfirmationStorage",
-      "core/consumeConfirmationAccess",
-      "core/consumeConfirmationWriteAccess",
+      "core/itemInteractionStorage",
+      "core/itemInteractionAccess",
+      "core/itemInteractionWriteAccess",
       "core/battleRuntimeAccess",
       "core/battleRuntimeContext",
       "core/PhaseManager",
@@ -158,28 +158,28 @@ describe("consumableUsability PURE_CORE policy (extracted from the real checker)
   // Every dependency form scripts/import-scanner.mjs recognises. A rule that caught only the
   // plain form would be bypassable by a re-export or a side-effect import.
   it.each([
-    ["value import", `import { useConsumableItem } from './consumableUse';`],
-    ["type-only import", `import type { ConsumableUseResult } from './consumableUse';`],
-    ["re-export", `export { useConsumableItem } from './consumableUse';`],
-    ["side-effect import", `import './consumableUse';`],
-    ["literal dynamic import", `const m = await import('./consumableUse');`],
-    ["parent-relative specifier", `import { x } from '../core/consumableUse';`],
+    ["value import", `import { useItem } from './itemUse';`],
+    ["type-only import", `import type { ConsumableUseResult } from './itemUse';`],
+    ["re-export", `export { useItem } from './itemUse';`],
+    ["side-effect import", `import './itemUse';`],
+    ["literal dynamic import", `const m = await import('./itemUse');`],
+    ["parent-relative specifier", `import { x } from '../core/itemUse';`],
   ])("rejects the reverse edge — %s", (_label, source) => {
     expect(bannedImportsIn(READ_MODEL_KEY, banned, source)).toEqual([
-      { spec: expect.any(String), entry: "core/consumableUse" },
+      { spec: expect.any(String), entry: "core/itemUse" },
     ]);
   });
 
-  it("accepts the real consumableUsability.ts source", () => {
+  it("accepts the real itemUsability.ts source", () => {
     const source = readFileSync(`${SRC}${READ_MODEL_KEY}`, "utf8");
     expect(bannedImportsIn(READ_MODEL_KEY, banned, source)).toEqual([]);
   });
 
   it("does not match the read model through a shared textual prefix", () => {
-    // 'core/consumableUse' is a textual prefix of 'core/consumableUsability' but not a
+    // 'core/itemUse' is a textual prefix of 'core/itemUsability' but not a
     // path-segment prefix. If that ever inverted, the new ban would take the read model down.
-    expect(matchesPathPrefix("core/consumableUsability", "core/consumableUse")).toBe(false);
-    expect(matchesPathPrefix("core/consumableUse", "core/consumableUse")).toBe(true);
+    expect(matchesPathPrefix("core/itemUsability", "core/itemUse")).toBe(false);
+    expect(matchesPathPrefix("core/itemUse", "core/itemUse")).toBe(true);
   });
 });
 
@@ -187,18 +187,68 @@ describe("the permitted direction stays open", () => {
   const banned = extractBannedList(EXECUTOR_KEY);
 
   it("lets the executor import the read model", () => {
-    expect(banned).not.toContain("core/consumableUsability");
+    expect(banned).not.toContain("core/itemUsability");
     expect(
       bannedImportsIn(
         EXECUTOR_KEY,
         banned,
-        `import { evaluateConsumable } from './consumableUsability';`,
+        `import { evaluateItemUse } from './itemUsability';`,
       ),
     ).toEqual([]);
   });
 
-  it("accepts the real consumableUse.ts source", () => {
+  it("accepts the real itemUse.ts source", () => {
     const source = readFileSync(`${SRC}${EXECUTOR_KEY}`, "utf8");
     expect(bannedImportsIn(EXECUTOR_KEY, banned, source)).toEqual([]);
+  });
+});
+
+/**
+ * The same read/write split, one layer down, for the BATTLE item modules.
+ *
+ * It is enforced differently — by `battlePhaseSnapshot`'s exact-import allowlist rather than a
+ * `PURE_CORE_FILES` ban — because the snapshot builder is a registered orchestration
+ * collaborator, and an exact allowlist rejects anything unlisted without enumerating it. The
+ * guarantee is the same: a projection can ask "is this enabled?" and cannot change anything.
+ */
+describe("battle item evaluator/executor split", () => {
+  const SNAPSHOT_KEY = "core/battlePhaseSnapshot.ts";
+
+  it("registers the evaluator for the snapshot builder, and NOT the executor", async () => {
+    const { ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES } = await import(
+      // @ts-expect-error — plain .mjs tooling module, intentionally untyped
+      "../../scripts/orchestration-boundary-rules.mjs"
+    );
+    const policy = ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES[SNAPSHOT_KEY];
+
+    expect(policy.allowedSpecifiers).toContain("battle/itemUsability");
+    expect(policy.allowedSpecifiers).not.toContain("battle/itemUse");
+  });
+
+  it("the real snapshot builder imports the evaluator and never the executor", () => {
+    const importerFile = `${SRC}${SNAPSHOT_KEY}`;
+    const specifiers = [...findImports(readFileSync(importerFile, "utf8"))].map(
+      ({ spec }: { spec: string }) =>
+        normalizeSpecifier({ srcRoot: SRC, importerFile, specifier: spec }),
+    );
+
+    expect(specifiers).toContain("battle/itemUsability");
+    expect(specifiers).not.toContain("battle/itemUse");
+  });
+
+  it("the executor may import the evaluator — the permitted direction", () => {
+    const importerFile = `${SRC}battle/itemUse.ts`;
+    const specifiers = [...findImports(readFileSync(importerFile, "utf8"))].map(
+      ({ spec }: { spec: string }) =>
+        normalizeSpecifier({ srcRoot: SRC, importerFile, specifier: spec }),
+    );
+
+    expect(specifiers).toContain("battle/itemUsability");
+  });
+
+  it("does not match the evaluator through a shared textual prefix", () => {
+    // 'battle/itemUse' is a textual prefix of 'battle/itemUsability' but not a path-segment
+    // prefix — the same trap the core pair has.
+    expect(matchesPathPrefix("battle/itemUsability", "battle/itemUse")).toBe(false);
   });
 });

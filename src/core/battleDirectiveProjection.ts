@@ -18,6 +18,9 @@ export function mapDirectiveToPresentationInput(
     case 'await_manual_target':
       return { type: 'await_manual_target', promptKind: directive.promptKind, unitName };
 
+    case 'await_manual_action':
+      return { type: 'await_manual_action', unitName };
+
     case 'none':
     case 'continue_immediately':
     case 'schedule_next_turn':

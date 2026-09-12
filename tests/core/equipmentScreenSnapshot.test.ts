@@ -63,24 +63,111 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
   });
 
 
+  describe("current HP projection", () => {
+    const POTION = "item_start_small_healing_potion";
+
+    /** Same shape the potion tests below use: a session wounded by `missing` HP. */
+    function wounded(session: PlayerSessionState, missing: number): PlayerSessionState {
+      const maxHp = buildEquipmentScreenPlayerSnapshot(session, UNIT_ID).unitStats!.maxHp.value;
+      return {
+        ...session,
+        roster: { units: {
+          ...session.roster.units,
+          [UNIT_ID]: { ...session.roster.units[UNIT_ID], currentHp: maxHp - missing },
+        } },
+      };
+    }
+
+    it("shows a wounded character's actual HP against the resolved maximum", () => {
+      const stats = buildEquipmentScreenPlayerSnapshot(wounded(freshSession(), 3), UNIT_ID).unitStats!;
+
+      expect(stats.hp.value).toBe(stats.maxHp.value - 3);
+    });
+
+    it("shows the resolved maximum for an undamaged character", () => {
+      const stats = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID).unitStats!;
+
+      expect(stats.hp.value).toBe(stats.maxHp.value);
+    });
+
+    it("shows 0 for a dead character, with the maximum unchanged", () => {
+      const session = freshSession();
+      const dead = {
+        ...session,
+        roster: { units: {
+          ...session.roster.units,
+          [UNIT_ID]: { ...session.roster.units[UNIT_ID], lifeState: "dead" as const, currentHp: 0 },
+        } },
+      };
+
+      const stats = buildEquipmentScreenPlayerSnapshot(dead, UNIT_ID).unitStats!;
+
+      expect(stats.hp.value).toBe(0);
+      expect(stats.maxHp.value)
+        .toBe(buildEquipmentScreenPlayerSnapshot(session, UNIT_ID).unitStats!.maxHp.value);
+    });
+
+    // The regression that matters most: both halves of ONE screen — the stat row and the
+    // potion preview — must report the same health. They were built from different sources
+    // and silently disagreed.
+    it("displayed HP agrees with the healing-potion preview inside the same snapshot", () => {
+      const snap = buildEquipmentScreenPlayerSnapshot(wounded(freshSession(), 3), UNIT_ID);
+      const usage = snap.itemUsage[POTION];
+
+      expect(usage.canUse).toBe(true);
+      if (!usage.canUse || usage.effect.type !== "heal") throw new Error("expected a heal preview");
+      expect(usage.effect.currentHp).toBe(snap.unitStats!.hp.value);
+      expect(usage.effect.maxHp).toBe(snap.unitStats!.maxHp.value);
+    });
+  });
+
   describe("consumable projections", () => {
     const VITALITY = "item_start_vitality_essence";
+    const POTION = "item_start_small_healing_potion";
 
     it("reports every backpack consumable as usable for a living selected character", () => {
       const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID);
 
-      expect(snap.consumableUsage[VITALITY])
-        .toEqual({ canUse: true, effect: { stat: "hp", amount: 5, healsCurrentHp: true } });
+      expect(snap.itemUsage[VITALITY]).toEqual({
+        canUse: true,
+        effect: { type: "permanent_stat_boost", stat: "hp", amount: 5, healsCurrentHp: true },
+      });
     });
 
-    it("keys usage only by consumables, never by equipment", () => {
+    it("blocks a healing potion for an undamaged character, and previews it for a hurt one", () => {
+      const session = freshSession();
+      const potionUsage = (s: typeof session) =>
+        buildEquipmentScreenPlayerSnapshot(s, UNIT_ID).itemUsage[POTION];
+
+      // The starting roster is at full HP (currentHp: null), so the potion restores nothing.
+      expect(potionUsage(session)).toEqual({ canUse: false, reason: "unit_full_hp" });
+
+      const maxHp = buildEquipmentScreenPlayerSnapshot(session, UNIT_ID).unitStats!.maxHp.value;
+      const hurt = {
+        ...session,
+        roster: { units: {
+          ...session.roster.units,
+          [UNIT_ID]: { ...session.roster.units[UNIT_ID], currentHp: maxHp - 3 },
+        } },
+      };
+
+      expect(potionUsage(hurt)).toEqual({
+        canUse: true,
+        // restoredHp is CLAMPED to the 3 missing HP, not the potion's authored 10.
+        effect: { type: "heal", amount: 10, restoredHp: 3, currentHp: maxHp - 3, maxHp },
+      });
+    });
+
+    it("keys usage by usable and consumable items, never by equipment", () => {
       const session = freshSession();
       const snap = buildEquipmentScreenPlayerSnapshot(session, UNIT_ID);
 
-      for (const instanceId of Object.keys(snap.consumableUsage)) {
+      for (const instanceId of Object.keys(snap.itemUsage)) {
         const definitionId = session.inventory.instances[instanceId].definitionId;
-        expect(ITEM_CATALOG.metadataById[definitionId].kind).toBe("consumable");
+        expect(["usable", "consumable"]).toContain(ITEM_CATALOG.metadataById[definitionId].kind);
       }
+      // The starting healing potion is a backpack USABLE and must be represented.
+      expect(snap.itemUsage[POTION]).toBeDefined();
     });
 
     it("reports the blocking reason for a dead selected character rather than omitting the entry", () => {
@@ -95,23 +182,21 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
 
       const snap = buildEquipmentScreenPlayerSnapshot(dead, UNIT_ID);
 
-      expect(snap.consumableUsage[VITALITY]).toEqual({ canUse: false, reason: "unit_dead" });
-      expect(snap.pendingConsumePrompt).toBeNull();
+      expect(snap.itemUsage[VITALITY]).toEqual({ canUse: false, reason: "unit_dead" });
+      expect(snap.pendingItemUsePrompt).toBeNull();
     });
 
     it("projects a justified pending request with names and effect", () => {
       const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID, {
-        instanceId: VITALITY, unitTemplateId: UNIT_ID,
+        kind: "confirming_use", instanceId: VITALITY, unitTemplateId: UNIT_ID,
       });
 
-      expect(snap.pendingConsumePrompt).toEqual({
+      expect(snap.pendingItemUsePrompt).toEqual({
         instanceId: VITALITY,
         unitTemplateId: UNIT_ID,
         unitName: PLAYER_UNITS.find(u => u.templateId === UNIT_ID)!.name,
         itemName: ITEM_CATALOG.definitions.vitality_essence.name,
-        stat: "hp",
-        amount: 5,
-        healsCurrentHp: true,
+        effect: { type: "permanent_stat_boost", stat: "hp", amount: 5, healsCurrentHp: true },
       });
     });
 
@@ -121,7 +206,7 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
         instanceId: VITALITY, unitTemplateId: other,
       });
 
-      expect(snap.pendingConsumePrompt).toBeNull();
+      expect(snap.pendingItemUsePrompt).toBeNull();
     });
 
     it("omits a prompt for an item no longer in the backpack", () => {
@@ -129,11 +214,11 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
         instanceId: "already_consumed", unitTemplateId: UNIT_ID,
       });
 
-      expect(snap.pendingConsumePrompt).toBeNull();
+      expect(snap.pendingItemUsePrompt).toBeNull();
     });
 
     it("omits a prompt when no request is pending", () => {
-      expect(buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID).pendingConsumePrompt)
+      expect(buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID).pendingItemUsePrompt)
         .toBeNull();
     });
   });

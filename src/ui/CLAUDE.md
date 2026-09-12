@@ -42,6 +42,21 @@ caller manages state changes and re-renders
 - depends on: Phaser (GameObjects, Scene), `src/core/Constants.ts` (layout scale)
 - used by: `src/objects/` (game-specific visuals), `src/scenes/` (composition)
 
+## Modals
+
+- `ModalFrame.ts` is the shared modal framing: a full-screen input-blocking scrim, a centred
+  `Panel` with its own hit area, a content depth above both, one-shot idempotent teardown, and
+  **teardown-before-callback** resolution. `ConfirmationDialog` and `ActionDialog` are both built
+  on it; a new modal builds on it too rather than re-rolling the stack.
+- Two of its behaviours are load-bearing, not defensive style: the panel's dedicated hit area
+  stops an inside click falling through to the scrim and dismissing the modal, and `resolve()`
+  tears down BEFORE invoking the callback, so a scene reconciler that destroys a modal in
+  response to committed state can never fire an action while doing so.
+- `ActionDialog` renders disabled actions visibly with their explanation and lets the `Button`'s
+  own disabled state block the click — one place decides whether a callback can fire.
+- `ContextMenu.ts` is a different component (anchored, pass-through dismissal) and is unrelated
+  to this frame.
+
 ## Invariants
 
 - No imports from `src/core/GameState`, `src/battle/`, `src/objects/`, or `src/scenes/`

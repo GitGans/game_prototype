@@ -51,6 +51,8 @@ type RuntimeReplayPlacement = ArrayValue<RuntimeRead['replaySetup']['enemyPlacem
 type RuntimeDeployment      = MapValue<RuntimeState['deployments']>;
 type RuntimeCoord           = ArrayValue<RuntimeState['validTargets']>;
 type RuntimeIntention       = NonNullable<RuntimeRead['pendingAutoTurnIntention']>;
+type RuntimeUsableResource  = MapValue<RuntimeRead['usableResources']>;
+type RuntimeConsumedRecord  = ArrayValue<RuntimeRead['consumedItems']>;
 
 // Exported so `noUnusedLocals` accepts the aliases above; never instantiated.
 export type BattleRuntimeReadonlyRecordContract = [
@@ -72,6 +74,11 @@ export type BattleRuntimeReadonlyRecordContract = [
   ExpectNever<MutableKeysOfUnion<RuntimeDeployment>>,
   ExpectNever<MutableKeysOfUnion<RuntimeCoord>>,
   ExpectNever<MutableKeysOfUnion<RuntimeIntention>>,
+  ExpectNever<MutableKeysOfUnion<RuntimeUsableResource>>,
+  // The item EFFECT, not just the record holding it: a plain `readonly effect: ItemUseEffect`
+  // would leave `effect.amount` assignable and let a runtime reader rewrite an authored value.
+  ExpectNever<MutableKeysOfUnion<RuntimeUsableResource['effect']>>,
+  ExpectNever<MutableKeysOfUnion<RuntimeConsumedRecord>>,
 ];
 
 // ═══ 2. Representative collection-capability checks ══════════════════════════
@@ -91,6 +98,19 @@ runtime.participants.pop();
 
 // @ts-expect-error — turn context exposes a query-only set
 runtime.turnContext.chargedThisRound.add('p1');
+
+// ── attempt item resources ───────────────────────────────────────────────────
+// @ts-expect-error — the resource map is query-only; consumption installs a replacement runtime
+runtime.usableResources.set('p1', runtime.usableResources.get('p1')!);
+
+// @ts-expect-error — the consumption log is append-only through a replacement runtime
+runtime.consumedItems.push(runtime.consumedItems[0]);
+
+const resource = runtime.usableResources.get('p1');
+if (resource && resource.effect.type === 'heal') {
+  // @ts-expect-error — the authored heal amount is not a runtime-writable field
+  resource.effect.amount = 999;
+}
 
 // ── battle state ─────────────────────────────────────────────────────────────
 // @ts-expect-error — runtime unit storage is query-only

@@ -4,6 +4,7 @@ import type { SpriteState, RowTrait, UnitLifeState } from './unitTypes';
 import type { ActiveEffect }                         from './activeEffect';
 import type { UnitDeployment }                       from './unitDeploymentTypes';
 import type { UnitStatsSnapshot }                    from './snapshotTypes';
+import type { BattleItemUseFailure, ReadonlyItemUseEffect } from './itemTypes';
 
 // Minimal render-ready sprite data for a battle unit. Built by
 // core/battleSnapshotBuilder — UI must not derive texture keys itself.
@@ -14,6 +15,37 @@ export interface UnitSpriteSnapshot {
   textureKey: string;
   states: readonly SpriteState[];
 }
+
+// ─── Skill-bar actions ────────────────────────────────────────────────────────
+
+/**
+ * One render-ready entry of the active unit's action bar: an ordinary skill, or the item
+ * equipped in its `usable_slot`.
+ *
+ * A discriminated reference, not a synthetic skill: the item is never registered in the static
+ * skill catalog, never added to learned skills and never shifts ordinary skill indexes — which
+ * is also what keeps it out of AI skill selection.
+ *
+ * `disabledReason` is structured; the wording lives in
+ * `objects/itemUseEffectPresentation.ts`, which `core/` must not import.
+ */
+export type BattleActionBarEntry =
+  | {
+      readonly kind: 'skill';
+      readonly skillIndex: number;
+      readonly skill: ActionSkillDefinition;
+    }
+  | {
+      readonly kind: 'item';
+      readonly unitId: string;
+      readonly instanceId: string;
+      readonly label: string;
+      readonly sprite: string | null;
+      /** Copied, never shared with the runtime resource or the catalog. */
+      readonly effect: ReadonlyItemUseEffect;
+      readonly enabled: boolean;
+      readonly disabledReason: BattleItemUseFailure | null;
+    };
 
 // ─── Scene-facing unit snapshot ───────────────────────────────────────────────
 

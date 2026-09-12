@@ -76,9 +76,11 @@ Live game state in `BattleState` / `CampaignState`
   `definitions[id]` holds the facts; `metadataById[id]` holds generated `{ kind, slot }`. This is the
   source for both item definitions and runtime behavior/slot metadata — `metadataById` is generated, not
   re-authored (so it is not duplication).
-- **Kind meaning:** `equipment` = ordinary gear; `usable` = equippable future-use item placed into
-  `usable_slot`; `consumable` = backpack-only future-use item (not equippable). The `usable`/`consumable`
-  split is about _where the item lives_, not _what happens on use_.
+- **Kind meaning:** `equipment` = ordinary gear; `usable` = equippable activatable item placed into
+  `usable_slot`; `consumable` = backpack-only activatable item (not equippable). The
+  `usable`/`consumable` split is about _where the item lives_, not _what happens on use_ — a
+  `usable` is drinkable from the backpack exactly like a `consumable`, and additionally activatable
+  from `usable_slot` during a manual battle turn.
 - **`slot` invariant** (enforced at build time, both at the type level and by runtime guards):
   ```text
   equipment  -> ordinary equipment slot only, never usable_slot
@@ -86,11 +88,15 @@ Live game state in `BattleState` / `CampaignState`
   consumable -> slot null
   ```
 - **`useEffect` presence by kind** — `equipment` forbids it; `usable` and `consumable` require it.
-  **`permanent_stat_boost` is executable**: `core/consumableUse.ts` applies it and destroys the source
-  instance, so the builder validates its payload (the stat must be a canonical battle stat; the amount
-  must be finite and > 0 — no item id or particular amount is privileged). `heal`, `revive` and
-  `usable` activation remain unimplemented; the use operation rejects them with `unsupported_effect`,
-  and they carry no payload validation yet.
+  **Validation follows executability.** `permanent_stat_boost` is executable wherever it may appear, so
+  its payload is always validated (the stat must be a canonical battle stat; the amount must be finite
+  and > 0). `heal` is executable for **both** `usable` and `consumable` — out of combat by
+  `core/itemUse.ts`, and in battle from `usable_slot` by `battle/itemUse.ts` — so its amount is
+  validated for both, and only `equipment`, which may carry no `useEffect` at all, is exempt.
+  `revive` remains unimplemented and carries no payload validation; every use path rejects it with
+  `unsupported_effect`. No item id and no particular amount is ever privileged — a stronger potion
+  is a new entry in `items/usable/healing.ts`, never a new branch, and nothing outside that file
+  changes.
 - **Acquisition data lives elsewhere** — starting inventory in `startingInventoryDefinitions.ts`; shop/loot
   in their own future definition files. Item entries never carry acquisition data.
 

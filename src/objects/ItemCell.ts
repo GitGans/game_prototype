@@ -5,8 +5,8 @@ import { ItemSlotSnapshot } from '../shared/snapshotTypes';
 import { ItemTooltip, ItemTooltipData } from './ItemTooltip';
 import { ItemIconView } from './ItemIconView';
 import { UNIT_BATTLE_STAT_KEYS, STAT_PRESENTATION, formatStatValue } from './statPresentation';
-import type { ConsumableUsability } from '../shared/snapshotTypes';
-import { formatUseEffectLine, formatConsumableBlockedReason } from './itemUseEffectPresentation';
+import type { ItemUsability } from '../shared/snapshotTypes';
+import { formatUseEffectLine, formatItemBlockedReason } from './itemUseEffectPresentation';
 
 export interface ItemCellConfig {
   scene: Phaser.Scene;
@@ -22,12 +22,12 @@ export interface ItemCellConfig {
    * Consumable eligibility for the currently selected character, supplied by the owner.
    * Travels the existing item-data path — this component never reads phase or session state.
    */
-  usage?: ConsumableUsability | null;
+  usage?: ItemUsability | null;
 }
 
 export class ItemCell extends Phaser.GameObjects.Container {
   private currentItem: ItemSlotSnapshot | null;
-  private currentUsage: ConsumableUsability | null;
+  private currentUsage: ItemUsability | null;
   private readonly cfg: ItemCellConfig;
   private borderRect!: Phaser.GameObjects.Rectangle;
   private contentObjects: Phaser.GameObjects.GameObject[] = [];
@@ -71,7 +71,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
     cfg.scene.add.existing(this);
   }
 
-  refresh(item: ItemSlotSnapshot | null, usage: ConsumableUsability | null = null): void {
+  refresh(item: ItemSlotSnapshot | null, usage: ItemUsability | null = null): void {
     this.currentItem = item;
     this.currentUsage = usage;
     for (const obj of this.contentObjects) obj.destroy();
@@ -116,7 +116,7 @@ export class ItemCell extends Phaser.GameObjects.Container {
       if (effectLine) notes.push({ text: effectLine, tone: 'positive' });
       if (this.currentUsage && !this.currentUsage.canUse) {
         notes.push({
-          text: formatConsumableBlockedReason(this.currentUsage.reason),
+          text: formatItemBlockedReason(this.currentUsage.reason),
           tone: 'negative',
         });
       }

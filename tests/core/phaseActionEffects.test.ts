@@ -119,47 +119,49 @@ describe('phaseActionEffects lifecycle ordering', () => {
 
     controller.apply({ type: 'exit_battle', outcome: 'victory' }, BATTLE, WORLD_MAP);
 
-    expect(calls).toEqual(['rosterResult', 'worldConsequence', 'teardown']);
+    // Session finalization runs BEFORE the action's own dispatch, because exit_to_menu and
+    // new_game destroy the outgoing session inside theirs.
+    expect(calls).toEqual(['sessionFinalization', 'worldConsequence', 'teardown']);
   });
 
   it('does not run the generic teardown when an action-specific effect throws', () => {
     // Non-transactional by contract: the failed mutation is NOT rolled back, but nothing
     // after it runs either — no teardown, and (in the coordinator) no commit or sync.
     const { controller, calls } = setup({
-      applyBattleExitRosterEffect: () => {
-        calls.push('rosterResult');
-        throw new Error('roster write failed');
+      applyBattleWorldConsequence: () => {
+        calls.push('worldConsequence');
+        throw new Error('world write failed');
       },
     });
 
     expect(() =>
       controller.apply({ type: 'exit_battle', outcome: 'victory' }, BATTLE, WORLD_MAP),
-    ).toThrow('roster write failed');
+    ).toThrow('world write failed');
 
-    expect(calls).toEqual(['rosterResult']);
+    expect(calls).toEqual(['sessionFinalization', 'worldConsequence']);
   });
 
-  it('dispatches confirm_consume_item with the phase as the only owner description', () => {
+  it('dispatches confirm_use_item with the phase as the only owner description', () => {
     const equip = makeEquipScreenPhase();
     const { controller, deps } = setup();
 
     controller.apply(
-      { type: 'confirm_consume_item', instanceId: 'i1', unitTemplateId: 'warrior' },
+      { type: 'confirm_use_item', instanceId: 'i1', unitTemplateId: 'warrior' },
       equip,
       equip,
     );
 
     // Exactly `{ previousPhase, action }` — no second `source` argument to disagree with the phase.
-    expect(deps.applyConsumablePhaseAction).toHaveBeenCalledWith({
+    expect(deps.applyItemUsePhaseAction).toHaveBeenCalledWith({
       previousPhase: equip,
-      action: { type: 'confirm_consume_item', instanceId: 'i1', unitTemplateId: 'warrior' },
+      action: { type: 'confirm_use_item', instanceId: 'i1', unitTemplateId: 'warrior' },
     });
 
     // Separately: the ORIGINAL phase reference, not a structural copy. `toHaveBeenCalledWith`
     // compares structurally, so it cannot make this claim — a facade that forwarded
     // `{ ...previousPhase }` would satisfy the assertion above and still be reconstructing the
     // owner description it is supposed to pass through.
-    const [forwarded] = vi.mocked(deps.applyConsumablePhaseAction).mock.calls[0];
+    const [forwarded] = vi.mocked(deps.applyItemUsePhaseAction).mock.calls[0];
     expect(forwarded.previousPhase).toBe(equip);
   });
 });
@@ -262,7 +264,6 @@ describe('phaseActionEffects fails closed on impossible accepted inputs', () => 
     ['battle placement from main_menu', { type: 'clear_placement_selection' }, MAIN_MENU],
     ['replay from world_map', { type: 'replay' }, WORLD_MAP],
     ['exit_battle from world_map', { type: 'exit_battle', outcome: 'victory' }, WORLD_MAP],
-    ['move_party from battle', { type: 'move_party', partyPos: { x: 1, y: 1 } }, BATTLE],
     ['equip_item from world_map', { type: 'equip_item', instanceId: 'i1', unitTemplateId: 'soldier' }, WORLD_MAP],
     ['toggle_camp_unit from world_map', { type: 'toggle_camp_unit', templateId: 'soldier' }, WORLD_MAP],
     ['choose_upgrade from main_menu', { type: 'choose_upgrade', tierId: 5, upgradeId: 'x' as never }, MAIN_MENU],
@@ -275,6 +276,26 @@ describe('phaseActionEffects fails closed on impossible accepted inputs', () => 
       /phaseActionEffects: /,
     );
     expect(calls).toEqual([]);
+  });
+
+  /**
+   * The one impossible input that is NOT owner-free, and deliberately so: session finalization
+   * is STRUCTURAL — "the previous phase is battle and the resolved one is not" — so it runs
+   * before any action-specific validation, exactly as it must for `exit_to_menu` and `new_game`,
+   * which destroy the outgoing session inside their own dispatch cases.
+   *
+   * Making it action-aware to keep this case owner-free would reintroduce the action catalogue
+   * the structural check exists to avoid, and would silently miss future battle-to-non-battle
+   * transitions. The action itself still throws and still applies no world or roster rule.
+   */
+  it('settles the outgoing attempt before throwing for move_party from battle', () => {
+    const { controller, calls } = setup();
+
+    expect(() =>
+      controller.apply({ type: 'move_party', partyPos: { x: 1, y: 1 } }, BATTLE, WORLD_MAP),
+    ).toThrow(/phaseActionEffects: /);
+
+    expect(calls).toEqual(['sessionFinalization']);
   });
 
   it.each([

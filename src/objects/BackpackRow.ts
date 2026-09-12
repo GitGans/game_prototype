@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { BackpackSnapshot, ItemSlotSnapshot } from "../shared/snapshotTypes";
 import { ItemTooltip } from "./ItemTooltip";
 import { ItemCell } from "./ItemCell";
-import type { ConsumableUsability } from "../shared/snapshotTypes";
+import type { ItemUsability } from "../shared/snapshotTypes";
 
 export class BackpackRow extends Phaser.GameObjects.Container {
   private cells: ItemCell[] = [];
@@ -19,7 +19,7 @@ export class BackpackRow extends Phaser.GameObjects.Container {
     cols: number = 5,
     rows: number = 2,
     /** Consumable eligibility keyed by instance id, forwarded to each cell for its tooltip. */
-    consumableUsage: Record<string, ConsumableUsability> = {},
+    itemUsage: Record<string, ItemUsability> = {},
   ) {
     super(scene, x, y);
 
@@ -44,7 +44,7 @@ export class BackpackRow extends Phaser.GameObjects.Container {
         slotLabel: "",
         item,
         tooltip,
-        usage: item ? consumableUsage[item.instanceId] ?? null : null,
+        usage: item ? itemUsage[item.instanceId] ?? null : null,
         onClick: (it) => {
           if (it)
             onItemClick(
@@ -62,11 +62,11 @@ export class BackpackRow extends Phaser.GameObjects.Container {
 
   refresh(
     snapshot: BackpackSnapshot,
-    consumableUsage: Record<string, ConsumableUsability> = {},
+    itemUsage: Record<string, ItemUsability> = {},
   ): void {
     this.cells.forEach((cell, i) => {
       const item = snapshot.slots[i] ?? null;
-      cell.refresh(item, item ? consumableUsage[item.instanceId] ?? null : null);
+      cell.refresh(item, item ? itemUsage[item.instanceId] ?? null : null);
     });
   }
 }

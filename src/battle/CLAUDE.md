@@ -53,6 +53,30 @@ returned to `src/core` for phase transition or rendering
 - depends on: `src/shared` (grid, skill, unit, item, snapshot types), `src/data` (skill definitions, shape definitions)
 - used by: `src/core` (battle initialization, phase handlers, `PhaseManager`)
 
+## Item activation
+
+- **Effect support has one definition: `isSupportedBattleItemEffect` in `itemUsability.ts`.** The
+  action-bar projection and the blocked-melee rule both consult it, so they cannot drift apart
+  about what counts as a usable item.
+- **Read and write are separate modules on purpose.** `itemUsability.ts` decides eligibility and
+  is importable by `core/battlePhaseSnapshot`; `itemUse.ts` executes and is importable only by
+  `core/phaseHandlers/battlePhaseHandler`. A projection must be able to ask "is this enabled?"
+  without being able to change anything — "does not call" and "cannot reach" are different
+  guarantees, and only the second is enforceable. Both directions are pinned in
+  `ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES`.
+- **Manual mode is checked first, and explicitly.** `BattleState.phase === 'select_target'` is set
+  on automatic turns too (`resolveActiveTurnStart` steps 6 and 7), so the phase alone never
+  establishes manual player control. `mode` is supplied by the caller from the validated runtime.
+- **This layer never learns what a unit is carrying.** Deciding that needs an inventory and a
+  catalog, both out of reach here, so `resolveActiveTurnStart` takes `unitsWithItemAction` and
+  `itemUse`/`itemUsability` take a narrow `BattleItemResource` (`{ instanceId, name, effect }`).
+  `battle/**` imports neither `progression/**` nor `inventory/**` — enforced by the `battle/**`
+  directory rule in `check-boundaries.mjs`, not by this sentence.
+- **`await_manual_action` is a distinct directive, not `await_manual_target` with no targets.** A
+  blocked melee turn for a unit carrying a supported item stops on that unit and shows its action
+  bar; there is no target to invent and no attack prompt to show. Without a carrier the existing
+  auto-skip is unchanged, and automatic/quick paths never reach the branch.
+
 ## Invariants
 
 - All state-mutating functions return a **new** `BattleState`; they never mutate in place. This is enforced by the type system, not convention: `BattleState`, `Unit`, `OccupancyMap`, `ActiveEffect`, `CellCoord`, `UnitShape` and `UnitDeployment` are `readonly` at every runtime-owned depth (`ReadonlyMap` / `readonly T[]`), so a write requires building a replacement. Helpers that only query state therefore take `ReadonlyMap` / `readonly T[]` parameters while still returning fresh mutable collections. Never reach for a cast to silence a readonly error — see the read-gateway bullet in the root `CLAUDE.md`

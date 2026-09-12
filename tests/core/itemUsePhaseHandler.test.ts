@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { GameState } from "../../src/core/GameState";
 import { PlayerSessionStore } from "../../src/core/playerSessionStore";
 import {
-  openConsumeConfirmation,
-  clearConsumeConfirmationIfPresent,
-  teardownConsumeConfirmationAfterTransition,
-  applyConsumablePhaseAction,
-} from "../../src/core/phaseHandlers/consumablePhaseHandler";
-import { readPendingConsumeForPhase } from "../../src/core/consumeConfirmationAccess";
-import { clearConsumeConfirmationSlot } from "../../src/core/consumeConfirmationStorage";
+  beginItemUseConfirmation,
+  clearItemInteractionIfPresent,
+  teardownItemInteractionAfterTransition,
+  applyItemUsePhaseAction,
+} from "../../src/core/phaseHandlers/itemUsePhaseHandler";
+import { readItemInteractionForPhase } from "../../src/core/itemInteractionAccess";
+import { clearItemInteractionSlot } from "../../src/core/itemInteractionStorage";
 import { createDebugPlayerSession } from "../../src/core/debugPlayerSession";
 import { initCampaignState } from "../../src/core/initCampaignState";
 import { PLAYER_UNITS } from "../../src/data/units";
@@ -40,8 +40,8 @@ function equipPhaseFor(source: PlayerSessionSource, selected = UNIT_ID): GamePha
     unitStats: null,
     learnedSkills: [],
     upgradeSkills: [],
-    consumableUsage: {},
-    pendingConsumePrompt: null,
+    itemUsage: {},
+    pendingItemUsePrompt: null,
   };
   return source === "campaign"
     ? { type: "equip_screen", sessionSource: "campaign", returnPhase: { type: "main_menu" }, ...shared }
@@ -66,62 +66,62 @@ beforeEach(() => {
     }),
     initialConfig: debugConfig(),
   });
-  clearConsumeConfirmationSlot("campaign");
-  clearConsumeConfirmationSlot("debug");
+  clearItemInteractionSlot("campaign");
+  clearItemInteractionSlot("debug");
 });
 
 function commit(source: PlayerSessionSource, instanceId = VITALITY): void {
-  openConsumeConfirmation({ source, instanceId, unitTemplateId: UNIT_ID });
-  applyConsumablePhaseAction({
+  beginItemUseConfirmation({ source, instanceId, unitTemplateId: UNIT_ID });
+  applyItemUsePhaseAction({
     previousPhase: equipPhaseFor(source),
-    action: { type: "confirm_consume_item", instanceId, unitTemplateId: UNIT_ID },
+    action: { type: "confirm_use_item", instanceId, unitTemplateId: UNIT_ID },
   });
 }
 
 describe("confirmation lifecycle", () => {
   it("files a request under the equip screen's own session", () => {
-    openConsumeConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
 
-    expect(readPendingConsumeForPhase(equipPhaseFor("debug")))
-      .toEqual({ instanceId: VITALITY, unitTemplateId: UNIT_ID });
-    expect(readPendingConsumeForPhase(equipPhaseFor("campaign"))).toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("debug")))
+      .toEqual({ kind: "confirming_use", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).toBeNull();
   });
 
   it("clears one owner and leaves the other alone", () => {
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
-    openConsumeConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
 
-    clearConsumeConfirmationIfPresent("campaign");
+    clearItemInteractionIfPresent("campaign");
 
-    expect(readPendingConsumeForPhase(equipPhaseFor("campaign"))).toBeNull();
-    expect(readPendingConsumeForPhase(equipPhaseFor("debug"))).not.toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("debug"))).not.toBeNull();
   });
 
   it("is idempotent with nothing pending", () => {
-    expect(() => clearConsumeConfirmationIfPresent("campaign")).not.toThrow();
+    expect(() => clearItemInteractionIfPresent("campaign")).not.toThrow();
   });
 });
 
-describe("teardownConsumeConfirmationAfterTransition", () => {
+describe("teardownItemInteractionAfterTransition", () => {
   it("keeps the request while the same screen shows the same character", () => {
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
 
-    teardownConsumeConfirmationAfterTransition(
+    teardownItemInteractionAfterTransition(
       equipPhaseFor("campaign"), equipPhaseFor("campaign"),
     );
 
-    expect(readPendingConsumeForPhase(equipPhaseFor("campaign"))).not.toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).not.toBeNull();
   });
 
   it("disposes it when the selected character changes", () => {
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
 
-    teardownConsumeConfirmationAfterTransition(
+    teardownItemInteractionAfterTransition(
       equipPhaseFor("campaign", UNIT_ID), equipPhaseFor("campaign", "healer"),
     );
 
     // And it does not reappear on returning to the original character.
-    expect(readPendingConsumeForPhase(equipPhaseFor("campaign", UNIT_ID))).toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign", UNIT_ID))).toBeNull();
   });
 
   it.each([
@@ -129,33 +129,33 @@ describe("teardownConsumeConfirmationAfterTransition", () => {
     ["debug_level_select", { type: "debug_level_select" } as GamePhase],
   ])("disposes it on exit to %s, a phase carrying no sessionSource", (_label, resolved) => {
     // The owner has to come from the PREVIOUS phase — the resolved one cannot supply it.
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
 
-    teardownConsumeConfirmationAfterTransition(equipPhaseFor("campaign"), resolved);
+    teardownItemInteractionAfterTransition(equipPhaseFor("campaign"), resolved);
 
-    expect(readPendingConsumeForPhase(equipPhaseFor("campaign"))).toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).toBeNull();
   });
 
   it("disposes only the owner that left, never the other session's request", () => {
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
-    openConsumeConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
 
-    teardownConsumeConfirmationAfterTransition(equipPhaseFor("campaign"), { type: "main_menu" });
+    teardownItemInteractionAfterTransition(equipPhaseFor("campaign"), { type: "main_menu" });
 
-    expect(readPendingConsumeForPhase(equipPhaseFor("campaign"))).toBeNull();
-    expect(readPendingConsumeForPhase(equipPhaseFor("debug"))).not.toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("debug"))).not.toBeNull();
   });
 
   it("does nothing when the previous phase was never an equipment screen", () => {
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
 
-    teardownConsumeConfirmationAfterTransition({ type: "main_menu" }, { type: "debug_level_select" });
+    teardownItemInteractionAfterTransition({ type: "main_menu" }, { type: "debug_level_select" });
 
-    expect(readPendingConsumeForPhase(equipPhaseFor("campaign"))).not.toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).not.toBeNull();
   });
 });
 
-describe("applyConsumablePhaseAction", () => {
+describe("applyItemUsePhaseAction", () => {
   it.each<PlayerSessionSource>(["campaign", "debug"])(
     "grants exactly one bonus and removes exactly one instance (%s)",
     (source) => {
@@ -207,9 +207,9 @@ describe("applyConsumablePhaseAction", () => {
   it("writes nothing when no request is pending", () => {
     const before = PlayerSessionStore.getSession("campaign");
 
-    applyConsumablePhaseAction({
+    applyItemUsePhaseAction({
       previousPhase: equipPhaseFor("campaign"),
-      action: { type: "confirm_consume_item", instanceId: VITALITY, unitTemplateId: UNIT_ID },
+      action: { type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID },
     });
 
     const after = PlayerSessionStore.getSession("campaign");
@@ -218,35 +218,35 @@ describe("applyConsumablePhaseAction", () => {
   });
 
   it("writes nothing when the action's instance does not match the stored request", () => {
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
     const before = PlayerSessionStore.getSession("campaign");
 
-    applyConsumablePhaseAction({
+    applyItemUsePhaseAction({
       previousPhase: equipPhaseFor("campaign"),
-      action: { type: "confirm_consume_item", instanceId: MIGHT, unitTemplateId: UNIT_ID },
+      action: { type: "confirm_use_item", instanceId: MIGHT, unitTemplateId: UNIT_ID },
     });
 
     expect(PlayerSessionStore.getSession("campaign").inventory).toBe(before.inventory);
   });
 
   it("writes nothing when the action's target does not match the stored request", () => {
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
     const before = PlayerSessionStore.getSession("campaign");
 
-    applyConsumablePhaseAction({
+    applyItemUsePhaseAction({
       previousPhase: equipPhaseFor("campaign"),
-      action: { type: "confirm_consume_item", instanceId: VITALITY, unitTemplateId: "healer" },
+      action: { type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: "healer" },
     });
 
     expect(PlayerSessionStore.getSession("campaign").inventory).toBe(before.inventory);
   });
 
   it("disposes the request whether or not the commit succeeds", () => {
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
 
     commit("campaign");
 
-    expect(readPendingConsumeForPhase(equipPhaseFor("campaign"))).toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).toBeNull();
   });
 
   it("grants nothing on a repeated confirmation of an already consumed instance", () => {
@@ -282,41 +282,41 @@ describe("applyConsumablePhaseAction", () => {
       const other: PlayerSessionSource = source === "campaign" ? "debug" : "campaign";
       // Identical instance and character ids in both sessions: a debug reset recreates the same
       // authored instance ids, so nothing but the owning phase can tell these two apart.
-      openConsumeConfirmation({ source, instanceId: VITALITY, unitTemplateId: UNIT_ID });
-      openConsumeConfirmation({ source: other, instanceId: VITALITY, unitTemplateId: UNIT_ID });
+      beginItemUseConfirmation({ source, instanceId: VITALITY, unitTemplateId: UNIT_ID });
+      beginItemUseConfirmation({ source: other, instanceId: VITALITY, unitTemplateId: UNIT_ID });
       const untouched = PlayerSessionStore.getSession(other);
 
-      applyConsumablePhaseAction({
+      applyItemUsePhaseAction({
         previousPhase: equipPhaseFor(source),
-        action: { type: "confirm_consume_item", instanceId: VITALITY, unitTemplateId: UNIT_ID },
+        action: { type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID },
       });
 
       expect(PlayerSessionStore.getSession(source).roster.units[UNIT_ID].permanentBonuses)
         .toEqual({ hp: 5 });
-      expect(readPendingConsumeForPhase(equipPhaseFor(source))).toBeNull();
+      expect(readItemInteractionForPhase(equipPhaseFor(source))).toBeNull();
 
       // The other owner is untouched in both domains — session and confirmation alike.
       const otherAfter = PlayerSessionStore.getSession(other);
       expect(otherAfter.roster).toBe(untouched.roster);
       expect(otherAfter.inventory).toBe(untouched.inventory);
-      expect(readPendingConsumeForPhase(equipPhaseFor(other))).not.toBeNull();
+      expect(readItemInteractionForPhase(equipPhaseFor(other))).not.toBeNull();
     },
   );
 
   it("writes nothing and disposes nothing from a non-equipment phase", () => {
-    openConsumeConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
-    openConsumeConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
     const campaign = PlayerSessionStore.getSession("campaign");
     const debug = PlayerSessionStore.getSession("debug");
 
-    applyConsumablePhaseAction({
+    applyItemUsePhaseAction({
       previousPhase: { type: "main_menu" },
-      action: { type: "confirm_consume_item", instanceId: VITALITY, unitTemplateId: UNIT_ID },
+      action: { type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID },
     });
 
     expect(PlayerSessionStore.getSession("campaign").inventory).toBe(campaign.inventory);
     expect(PlayerSessionStore.getSession("debug").inventory).toBe(debug.inventory);
-    expect(readPendingConsumeForPhase(equipPhaseFor("campaign"))).not.toBeNull();
-    expect(readPendingConsumeForPhase(equipPhaseFor("debug"))).not.toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).not.toBeNull();
+    expect(readItemInteractionForPhase(equipPhaseFor("debug"))).not.toBeNull();
   });
 });

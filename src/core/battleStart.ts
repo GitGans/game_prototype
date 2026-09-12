@@ -11,8 +11,55 @@ import {
   createEmptyBattleState,
   type BattleReplaySetup,
   type BattleRuntimeContext,
+  type BattleUsableResource,
 } from './battleRuntimeContext';
+import type { PlayerInitialPlacement } from '../battle/autoPlace';
+import type { ItemCatalog } from '../shared/itemTypes';
+import { ITEM_CATALOG } from '../data/itemDefinitions';
 import type { PlayerSessionSource, PlayerSessionState } from './playerSessionState';
+
+/**
+ * Projects each player unit's equipped `usable_slot` item into an attempt-scoped resource.
+ *
+ * One pipeline for campaign and debug, and for a new attempt and a replay alike: the source
+ * only selects which session is read. Placement records supply the battle unit id, so the
+ * result is keyed the way the runtime is.
+ *
+ * Every entry is CONSTRUCTED FRESH with its effect copied out of the catalog. Forwarding
+ * `definition.useEffect` would hand a runtime holder a live reference into authored data.
+ */
+function buildBattleUsableResources(
+  session: PlayerSessionState,
+  placements: readonly PlayerInitialPlacement[],
+  catalog: ItemCatalog = ITEM_CATALOG,
+): Map<string, BattleUsableResource> {
+  const resources = new Map<string, BattleUsableResource>();
+
+  for (const placement of placements) {
+    const container = session.inventory.containers[`equip_${placement.templateId}`];
+    const instanceId = container?.slots.usable_slot;
+    if (!instanceId) continue;
+
+    const instance = session.inventory.instances[instanceId];
+    if (!instance) continue;
+    const definition = catalog.definitions[instance.definitionId];
+    const metadata = catalog.metadataById[instance.definitionId];
+    // Kind and placement decide, never the effect: an unsupported effect still becomes a
+    // resource here and is refused later, by the layer that knows which effects have mechanics.
+    if (!definition?.useEffect || metadata?.kind !== 'usable') continue;
+
+    resources.set(placement.unitId, {
+      instanceId,
+      definitionId: instance.definitionId,
+      name: definition.name,
+      sprite: definition.sprite ?? null,
+      effect: { ...definition.useEffect },   // copy, never the catalog's object
+      unitTemplateId: placement.templateId,
+    });
+  }
+
+  return resources;
+}
 
 /**
  * Both battle-attempt factories require a session whose current roster can start a
@@ -54,9 +101,10 @@ export function createBattleRuntimeForSession(
 
   return createBattleRuntimeContext({
     state,
-    participants:  buildInitialBattleParticipants(state, playerPlacements),
-    replaySetup:   { enemyPlacements },
-    sessionSource: input.sessionSource,
+    participants:     buildInitialBattleParticipants(state, playerPlacements),
+    replaySetup:      { enemyPlacements },
+    sessionSource:    input.sessionSource,
+    usableResources:  buildBattleUsableResources(input.session, playerPlacements),
   });
 }
 
@@ -93,8 +141,11 @@ export function createReplayBattleRuntimeForSession(
 
   return createBattleRuntimeContext({
     state,
-    participants:  buildInitialBattleParticipants(state, playerPlacements),
-    replaySetup:   input.replaySetup,
-    sessionSource: input.sessionSource,
+    participants:     buildInitialBattleParticipants(state, playerPlacements),
+    replaySetup:      input.replaySetup,
+    sessionSource:    input.sessionSource,
+    // Read from the CURRENT session, exactly like the player units above — which is why a
+    // replay restores a potion the discarded attempt had spent.
+    usableResources:  buildBattleUsableResources(input.session, playerPlacements),
   });
 }

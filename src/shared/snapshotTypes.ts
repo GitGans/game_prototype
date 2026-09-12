@@ -1,5 +1,11 @@
 import type { UnitClassId, UnitBattleStatKey } from './unitTypes';
-import type { ConsumableUseFailure, ItemDefinition, ItemRuntimeMetadata } from './itemTypes';
+import type {
+  ItemUseFailure,
+  ItemEquipFailure,
+  ItemDefinition,
+  ItemRuntimeMetadata,
+  ReadonlyItemUseEffect,
+} from './itemTypes';
 
 // ─── Stat Snapshots ───────────────────────────────────────────────────────────
 
@@ -13,6 +19,12 @@ export interface UnitStatValueSnapshot {
  * fields that aren't part of the additive stat model: level (metadata) and
  * maxHp (hp's ceiling — a distinct concept from hp's current value).
  * Adding a 9th battle stat updates this automatically; no manual field to add.
+ *
+ * `hp` carries CURRENT HP, not a resolved stat total: `maxHp` is the resolved
+ * total, and it is `maxHp` that the HP row is colored from, so lost HP never
+ * reads as an equipment debuff. `hp`'s pair is therefore always neutral
+ * (`value === highlightBase`). Both producers — `core/battleSnapshotBuilder.ts`
+ * (runtime HP) and `core/unitStatsSnapshot.ts` (persistent HP) — follow this.
  */
 export type UnitStatsSnapshot =
   Record<UnitBattleStatKey, UnitStatValueSnapshot> & {
@@ -59,42 +71,106 @@ export interface UnitTabSnapshot {
   spriteKey:  string | null;
 }
 
-// ─── Consumable Use Projections ───────────────────────────────────────────────
-// Read-only UI projections for consumable use. They live here, beside the other snapshot
-// contracts, so the render side can describe consumable eligibility without importing the
-// modules that evaluate or execute a use.
+// ─── Item Use Projections ─────────────────────────────────────────────────────
+// Read-only UI projections for item use. They live here, beside the other snapshot contracts,
+// so the render side can describe item eligibility without importing the modules that evaluate
+// or execute a use.
 
 /**
- * Eligibility of one consumable instance against the currently selected character.
+ * What a successful use would do to the selected character — structured data, never formatted
+ * text (wording lives in `objects/itemUseEffectPresentation.ts`).
  *
- * Produced by the same evaluation the executor runs (`core/consumableUsability.ts`), so a prompt
- * can never advertise an action that confirmation would silently refuse.
+ * The heal variant carries `restoredHp` — the CLAMPED result for this target, not the item's
+ * nominal amount — because the clamping rule belongs to `progression/itemHealing.ts` and
+ * must not be re-derived in the render layer. It deliberately carries no `nextHp`: that is
+ * `currentHp + restoredHp`, and a stored copy could disagree with the fields it is derived from.
  */
-export type ConsumableUsability =
-  | { canUse: true; effect: { stat: UnitBattleStatKey; amount: number; healsCurrentHp: boolean } }
-  | { canUse: false; reason: ConsumableUseFailure };
+export type ItemEffectPreview =
+  | {
+      type: 'permanent_stat_boost';
+      stat: UnitBattleStatKey;
+      amount: number;
+      /** true only for stat === 'hp' — the boost also restores current HP by the same amount. */
+      healsCurrentHp: boolean;
+    }
+  | {
+      type: 'heal';
+      /** The item's authored amount, before clamping to missing HP. */
+      amount: number;
+      /** min(amount, maxHp - currentHp) — always > 0, or the use would be ineligible. */
+      restoredHp: number;
+      currentHp: number;
+      maxHp: number;
+    };
 
 /**
- * A pending confirmation as pure data — the only thing the pipeline carries between the effects
- * side that records it and the snapshot side that projects it. Its OWNER is not a field: the
- * store is keyed by `PlayerSessionSource`, so a request cannot claim a session it is not in.
+ * Eligibility of one item instance (backpack consumable or usable) against the currently
+ * selected character.
+ *
+ * Produced by the same evaluation the executor runs (`core/itemUsability.ts`), so a prompt can
+ * never advertise an action that confirmation would silently refuse.
  */
-export interface PendingConsumeRequest {
-  readonly instanceId: string;
-  readonly unitTemplateId: string;
-}
+export type ItemUsability =
+  | { canUse: true; effect: ItemEffectPreview }
+  | { canUse: false; reason: ItemUseFailure };
 
 /**
  * Everything the confirmation dialog needs, structured — never formatted text. Wording is
  * produced by `objects/itemUseEffectPresentation.ts`, which `core/` must not import.
  */
-export interface PendingConsumePrompt {
+export interface PendingItemUsePrompt {
   instanceId:     string;
   unitTemplateId: string;
   unitName:       string;
   itemName:       string;
-  stat:           UnitBattleStatKey;
-  amount:         number;
-  /** true only for stat === 'hp' — the boost also restores current HP by the same amount. */
-  healsCurrentHp: boolean;
+  effect:         ItemEffectPreview;
+}
+
+/**
+ * The open item interaction as pure data — the only thing the pipeline carries between the
+ * effects side that records it and the snapshot side that projects it. `closed` is the absence of
+ * one (a null slot), so at most one modal can be open by construction.
+ *
+ * Its OWNER is not a field: storage is keyed by `PlayerSessionSource`, so an interaction cannot
+ * claim a session it is not in. Declared here rather than in `core/itemInteractionStorage`
+ * because that module is importer-restricted — the snapshot projection must be able to NAME this
+ * type without gaining the ability to write the cell.
+ */
+export type ItemInteraction =
+  | {
+      readonly kind: 'choosing_action';
+      readonly instanceId: string;
+      readonly unitTemplateId: string;
+    }
+  | {
+      readonly kind: 'confirming_use';
+      readonly instanceId: string;
+      readonly unitTemplateId: string;
+    };
+
+/** The gameplay actions an item-action window can offer. A semantic value, never a callback. */
+export type ItemActionKind = 'use' | 'equip';
+
+/**
+ * One row of the item-action window. `disabledReason` is structured — the wording lives in
+ * `objects/itemActionPresentation.ts`, which core/ must not import.
+ */
+export interface ItemActionOptionSnapshot {
+  readonly action: ItemActionKind;
+  readonly enabled: boolean;
+  readonly disabledReason: ItemUseFailure | ItemEquipFailure | null;
+}
+
+/**
+ * The open item-action window as pure data. Its enabled flags come from the same read-side
+ * evaluators execution re-runs, so the window cannot offer an action the pipeline would refuse.
+ */
+export interface ItemActionMenuSnapshot {
+  readonly instanceId: string;
+  readonly unitTemplateId: string;
+  readonly unitName: string;
+  readonly itemName: string;
+  /** Absent only for an item with no useEffect at all. */
+  readonly effect: ReadonlyItemUseEffect | null;
+  readonly options: readonly ItemActionOptionSnapshot[];
 }

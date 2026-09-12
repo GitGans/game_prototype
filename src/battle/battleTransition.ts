@@ -18,7 +18,16 @@ import { computeOneTurn } from './quickTurn';
 // ─── Action Union ────────────────────────────────────────────────────────────
 
 export type BattleAction =
-  | { type: 'start_turn'; mode: BattleMode }
+  | {
+      type: 'start_turn';
+      mode: BattleMode;
+      /**
+       * Battle unit ids holding a supported, unconsumed equipped item. Forwarded verbatim to
+       * `resolveActiveTurnStart` — this facade adds no rule. Supplied by the caller because
+       * `battle/` never reads an inventory or a runtime context.
+       */
+      unitsWithItemAction?: ReadonlySet<string>;
+    }
   | { type: 'select_skill'; skillIndex: number }
   | { type: 'use_skill'; unitId: string; target: CellCoord; skillIndex?: number }
   | { type: 'advance_turn' }
@@ -48,7 +57,10 @@ export function resolveBattleTransition(input: {
   switch (action.type) {
 
     case 'start_turn': {
-      const result = resolveActiveTurnStart({ state, context, mode: action.mode });
+      const result = resolveActiveTurnStart({
+        state, context, mode: action.mode,
+        unitsWithItemAction: action.unitsWithItemAction,
+      });
       return {
         state: result.state,
         context: result.context,

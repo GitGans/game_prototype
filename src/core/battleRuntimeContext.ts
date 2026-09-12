@@ -1,6 +1,7 @@
 import { buildOccupancy } from "../battle/occupancy";
 import { type TurnContext, createTurnContext } from "../battle/turnResolver";
 import type { BattleState, BattleMode } from "../battle/types";
+import type { ReadonlyItemUseEffect } from "../shared/itemTypes";
 import type { CellCoord, Side } from "../shared/gridTypes";
 import type { PlayerSessionSource } from "./playerSessionState";
 
@@ -29,6 +30,48 @@ export interface EnemyReplayPlacement {
  */
 export interface BattleReplaySetup {
   readonly enemyPlacements: readonly EnemyReplayPlacement[];
+}
+
+/**
+ * Read-only description of the item equipped in one player unit's usable_slot at attempt start.
+ *
+ * ── Why it lives on the runtime context and not on `BattleState`/`Unit` ─────────────────────
+ * This is attempt-scoped data that outlives every state transform and feeds exit settlement —
+ * the same role `participants` already plays. `BattleState` and `Unit` are rebuilt by every
+ * transform, so a field here would have to be threaded through placement, death and revive for
+ * a value no battle rule reads. Keeping it here also means an unused potion stays associated
+ * with its owner while a used one does not return when that owner is revived, without a single
+ * line in those transforms.
+ *
+ * Battle domain functions never receive this whole record: they get a narrow
+ * `BattleItemResource` (`{ instanceId, name, effect }`) — enough to match the requested instance
+ * and read the authored amount, and nothing that could reach an inventory or a session.
+ */
+export interface BattleUsableResource {
+  readonly instanceId: string;
+  readonly definitionId: string;
+  readonly name: string;
+  readonly sprite: string | null;
+  /**
+   * Deeply readonly: a plain `readonly effect: ItemUseEffect` would still allow
+   * `resource.effect.amount = 0`, bypassing the exclusive runtime-write owner.
+   */
+  readonly effect: ReadonlyItemUseEffect;
+  readonly unitTemplateId: string;
+}
+
+/**
+ * One consumption event inside THIS attempt, addressed for settlement at exit.
+ *
+ * It is an attempt-local log, not a second inventory: the persistent removal happens exactly
+ * once, when the attempt is exited (`core/battleItemSettlement.ts`). No slot is stored —
+ * `usable_slot` is the only slot a usable item can occupy, and settlement re-derives it through
+ * inventory validation rather than trusting a value carried across a boundary.
+ */
+export interface BattleItemConsumptionRecord {
+  readonly instanceId: string;
+  readonly definitionId: string;
+  readonly unitTemplateId: string;
 }
 
 export type AutoTurnIntention =
@@ -80,6 +123,9 @@ export interface BattleRuntimeContext {
   readonly mode: BattleMode;
   readonly sessionSource: PlayerSessionSource;
   readonly pendingAutoTurnIntention: AutoTurnIntention | null;
+  /** Keyed by BATTLE unit id. An entry is removed the moment its item is consumed. */
+  readonly usableResources: ReadonlyMap<string, BattleUsableResource>;
+  readonly consumedItems: readonly BattleItemConsumptionRecord[];
 }
 
 export function createEmptyBattleState(): BattleState {
@@ -114,6 +160,7 @@ export function createBattleRuntimeContext(input: {
   participants: readonly BattleParticipant[];
   replaySetup: BattleReplaySetup;
   sessionSource: PlayerSessionSource;
+  usableResources?: ReadonlyMap<string, BattleUsableResource>;
 }): BattleRuntimeContext {
   return {
     state: input.state,
@@ -123,5 +170,15 @@ export function createBattleRuntimeContext(input: {
     mode: "manual",
     sessionSource: input.sessionSource,
     pendingAutoTurnIntention: null,
+    // Copied entry by entry, effects included: a forwarded reference would let a runtime holder
+    // edit the catalog's authored data. Copying only the Map is not enough.
+    usableResources: new Map(
+      [...(input.usableResources ?? new Map())].map(([unitId, resource]) => [
+        unitId, { ...resource, effect: { ...resource.effect } },
+      ]),
+    ),
+    // Every attempt starts with nothing consumed — including a replay, which is what makes a
+    // discarded attempt's potion come back.
+    consumedItems: [],
   };
 }

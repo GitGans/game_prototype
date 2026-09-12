@@ -78,16 +78,16 @@ export function makeFakeEffectsDependencies(
     applyEquipmentPhaseAction: vi.fn(() => {
       calls.push('equipment');
     }),
-    openConsumeConfirmation: vi.fn(() => {
+    beginItemUseConfirmation: vi.fn(() => {
       calls.push('consumeOpen');
     }),
-    clearConsumeConfirmationIfPresent: vi.fn(() => {
+    clearItemInteractionIfPresent: vi.fn(() => {
       calls.push('consumeClear');
     }),
     // Runs on EVERY transition, like the battle-runtime finalizer, so it is deliberately not
     // logged into `calls`: the lifecycle-ordering assertions describe action-specific effects.
-    teardownConsumeConfirmationAfterTransition: vi.fn(),
-    applyConsumablePhaseAction: vi.fn(() => {
+    teardownItemInteractionAfterTransition: vi.fn(),
+    applyItemUsePhaseAction: vi.fn(() => {
       calls.push('consumable');
     }),
     applyCampPhaseAction: vi.fn(() => {
@@ -104,8 +104,8 @@ export function makeFakeEffectsDependencies(
     replayBattleRuntime: vi.fn(() => {
       calls.push('replay');
     }),
-    applyBattleExitRosterEffect: vi.fn(() => {
-      calls.push('rosterResult');
+    finalizeBattleSessionOnExit: vi.fn(() => {
+      calls.push('sessionFinalization');
     }),
     applyBattleRuntimeMutation: vi.fn(() => {
       calls.push('battleMutation');

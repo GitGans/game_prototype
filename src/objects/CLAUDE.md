@@ -20,7 +20,7 @@ Current files:
 - `battleEventPresentation.ts` — formats battle events as floating-text and log entries
 - `battleDirectivePresentation.ts` — formats `BattleDirectivePresentationInput` (from `shared/`) as status text and skill-bar visibility flags; owns all directive UI wording
 - `battleSkillPreviewPresentation.ts` — formats skill-preview header color and damage/healing estimates
-- `itemUseEffectPresentation.ts` — formats consumable wording: the confirmation prompt, the tooltip effect line, and the blocked-reason line. HP wording must state BOTH the permanent max-HP growth and the immediate heal
+- `itemUseEffectPresentation.ts` — formats consumable wording: the confirmation prompt, the tooltip effect line, and the blocked-reason line. An HP **boost** must state BOTH the permanent max-HP growth and the immediate heal; ordinary **healing** must state neither — it restores current HP only, and wording that implied growth would make a potion indistinguishable from an essence. The heal prompt reports `restoredHp` (already clamped by progression), never the item's nominal amount; the tooltip line is target-independent and says "up to"
 
 Presentation builders:
 - receive already-computed read models and presentation inputs from `shared/` or `core/`
@@ -81,6 +81,26 @@ Scene receives user interaction via callback — no state mutation here
 
 - depends on: `src/ui/` (BaseTooltip, HpBar, theme, primitives), `src/shared/` (grid, unit, snapshot, item, skill contracts; battle snapshots), `src/core/Constants`, `src/core/phases`, `src/core/unitSpriteKey`
 - used by: scenes (`src/scenes/`)
+
+## Item presentation
+
+- `itemUseEffectPresentation.ts` — wording for out-of-combat use (confirmation body, tooltip line,
+  blocked reasons) plus `formatBattleItemActionTooltip` for the skill-bar item action, which
+  states the two consequences the icon cannot show: the item is CONSUMED and the turn ENDS.
+- `itemActionPresentation.ts` — wording and option shaping for the item-action window. It
+  **formats and forwards; it decides nothing**: `enabled` is copied through from the snapshot and
+  never recomputed, and the module has no idea which actions an item supports — the option list
+  arrives already decided by the read model (`core/itemUsability` for use,
+  `inventory.evaluateEquipItem` for equip). Disabled reasons come from two vocabularies
+  (`ItemUseFailure`, `ItemEquipFailure`) whose members overlap by name with different wording, so
+  the ACTION selects the table, never the reason alone. `tests/objects/` asserts the pass-through,
+  so a future eligibility rule cannot migrate quietly into wording.
+- `ItemActionDialog.ts` — the item-aware adapter over the generic `ui/ActionDialog`. Structured
+  snapshot data in, callbacks out; no PhaseManager, no storage, no executor, no potion branch.
+- `SkillBar.ts` renders the entries the committed snapshot supplies (`BattleActionBarEntry`) and
+  decides nothing about which exist or are enabled. A disabled item entry stays VISIBLE and
+  dimmed — a recoverable "not yet" is information; an unsupported effect produces no entry at all,
+  and that decision belongs to `battle/itemUsability`.
 
 ## Invariants
 

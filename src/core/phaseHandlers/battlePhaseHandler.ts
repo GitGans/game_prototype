@@ -11,6 +11,11 @@ import {
 import { checkGameOver }               from '../../battle/combat';
 import { resolveBattleTransition }     from '../../battle/battleTransition';
 import { resolveSkillTurn }            from '../../battle/skillTurnResolver';
+import { applyBattleItemUse }          from '../../battle/itemUse';
+import {
+  isSupportedBattleItemEffect,
+  type BattleItemResource,
+} from '../../battle/itemUsability';
 import { decideAutoTurn }             from '../../battle/autoTurn';
 import {
   selectBenchSlot,
@@ -30,6 +35,7 @@ import type { PlayerSessionSource }     from '../playerSessionState';
 import { PlayerSessionStore }           from '../playerSessionStore';
 import { applyFieldPlacementsToRoster } from '../playerUnitPersistence';
 import { applyBattleResult }            from '../battleExit';
+import type { RosterState }             from '../../progression';
 import type {
   AutoTurnIntention,
   BattleRuntimeContext,
@@ -117,19 +123,23 @@ export function applyBattleLifecyclePhaseAction(input: {
 // ─── Battle Exit ──────────────────────────────────────────────────────────────
 
 /**
- * The only place a battle result is bound to storage. Contains no roster rules and no
- * campaign/debug conditional: `sessionSource` selects a storage tree and nothing else.
- * A missing debug session throws through `PlayerSessionStore`, never falling back to
- * campaign. The next roster is fully computed before the single write.
+ * Composes the next roster for a battle exit, and WRITES NOTHING.
+ *
+ * It stops at the roster because an exit now settles two domains at once — the battle result and
+ * the attempt's item consumption — and those must reach storage in ONE `replaceSession` call,
+ * or a moment exists in which the potion is gone but the damage is not yet recorded. Sequencing
+ * that single write is `battlePhaseEffects.finalizeBattleSessionOnExit`'s job.
+ *
+ * Contains no roster rules and no campaign/debug conditional: `sessionSource` selects a storage
+ * tree and nothing else. A missing debug session throws through `PlayerSessionStore`, never
+ * falling back to campaign.
  */
-export function applyBattleExitPhaseAction(input: {
+export function computeBattleExitRoster(input: {
   runtime: BattleRuntimeContext;
   outcome: BattleExitOutcome;
-}): void {
-  const source  = input.runtime.sessionSource;
-  const session = PlayerSessionStore.getSession(source);
-  const next    = applyBattleResult({ runtime: input.runtime, session, outcome: input.outcome });
-  PlayerSessionStore.replaceRoster(source, next);
+}): RosterState {
+  const session = PlayerSessionStore.getSession(input.runtime.sessionSource);
+  return applyBattleResult({ runtime: input.runtime, session, outcome: input.outcome });
 }
 
 // ─── Battle Preview Target (transient manual-targeting UI state) ───────────────
@@ -175,6 +185,7 @@ export type BattleTurnPhaseAction = Extract<PhaseAction, {
     | 'battle_start_turn'
     | 'battle_select_skill'
     | 'battle_use_skill'
+    | 'battle_use_item'
     | 'battle_advance_turn'
     | 'battle_skip_turn'
     | 'battle_charge_turn'
@@ -184,7 +195,7 @@ export type BattleTurnPhaseAction = Extract<PhaseAction, {
 }>;
 
 const BATTLE_TURN_ACTION_TYPES = new Set<string>([
-  'battle_start_turn', 'battle_select_skill', 'battle_use_skill',
+  'battle_start_turn', 'battle_select_skill', 'battle_use_skill', 'battle_use_item',
   'battle_advance_turn', 'battle_skip_turn', 'battle_charge_turn',
   'battle_quick_turn',
   'battle_decide_auto_turn',
@@ -209,6 +220,20 @@ export type BattlePhaseActionResult = {
   winner?:             Side;
   autoTurnDirective?:  BattleAutoTurnDirective;
   autoTurnApplied?:    boolean;
+  /**
+   * Present only on a SUCCESSFUL `battle_use_item`. It is what lets `battlePhaseEffects` drop
+   * the consumed resource and append one record inside the same runtime installation — the
+   * handler decides, the effects owner writes.
+   */
+  itemUse?: BattleItemUseOutcome;
+};
+
+/** What a successful in-battle item activation produced, for the runtime and for feedback. */
+export type BattleItemUseOutcome = {
+  readonly instanceId: string;
+  readonly unitId: string;
+  readonly itemName: string;
+  readonly restoredHp: number;
 };
 
 /**
@@ -236,6 +261,8 @@ function projectTurnDirective(directive: TurnStartDirective): BattleTurnDirectiv
         activeUnitId: directive.activeUnitId,
         promptKind:   directive.promptKind,
       };
+    case 'await_manual_action':
+      return { type: 'await_manual_action', activeUnitId: directive.activeUnitId };
     default: {
       const _exhaustive: never = directive;
       throw new Error(`Unhandled turn start directive: ${JSON.stringify(_exhaustive)}`);
@@ -290,6 +317,14 @@ export function projectBattleActionFeedback(result: BattlePhaseActionResult): Ba
   if (result.winner !== undefined)            feedback.winner = result.winner;
   if (result.autoTurnDirective !== undefined) feedback.autoTurnDirective = projectAutoTurnDirective(result.autoTurnDirective);
   if (result.autoTurnApplied !== undefined)   feedback.autoTurnApplied = result.autoTurnApplied;
+  // Rebuilt, never forwarded: the handler's outcome is a runtime-facing record.
+  if (result.itemUse !== undefined) {
+    feedback.itemUse = {
+      applied:    true,
+      itemName:   result.itemUse.itemName,
+      restoredHp: result.itemUse.restoredHp,
+    };
+  }
   return feedback;
 }
 
@@ -308,8 +343,15 @@ export function applyBattleTurnAction(input: {
   mode:                      BattleMode;
   rng:                       Rng;
   pendingAutoTurnIntention?: AutoTurnIntention | null;
+  /**
+   * The attempt's still-unconsumed equipped items, keyed by battle unit id. A NARROW value
+   * supplied by `battlePhaseEffects`, which owns the runtime — this handler never resolves a
+   * runtime and never performs a storage lookup, exactly like `mode` above.
+   */
+  itemResources?:            ReadonlyMap<string, BattleItemResource>;
 }): BattlePhaseActionResult {
   const { state, context, action, mode, rng } = input;
+  const itemResources = input.itemResources ?? new Map<string, BattleItemResource>();
 
   switch (action.type) {
 
@@ -317,8 +359,63 @@ export function applyBattleTurnAction(input: {
     // unit, or manual melee blocked and auto-skipped). advanceTurn ticks
     // round effects which can kill units → check game-over.
     case 'battle_start_turn': {
-      const result = resolveBattleTransition({ state, context, action: { type: 'start_turn', mode }, rng });
+      // A unit holding a SUPPORTED item still has a real decision on a blocked melee turn, so
+      // the resolver must not auto-skip it. Support is decided by `battle/itemUsability` and
+      // nowhere else, so this rule and the action bar cannot disagree about what counts.
+      const unitsWithItemAction = new Set(
+        [...itemResources]
+          .filter(([, resource]) => isSupportedBattleItemEffect(resource.effect))
+          .map(([unitId]) => unitId),
+      );
+      const result = resolveBattleTransition({
+        state, context, rng,
+        action: { type: 'start_turn', mode, unitsWithItemAction },
+      });
       return withWinner({ state: result.state, context: result.context, events: result.events, directive: result.directive });
+    }
+
+    /**
+     * Compound, and in the SAME load-bearing order `battle_use_skill` uses below:
+     * heal → game-over → advance exactly one turn (ticking round effects) → game-over.
+     * A failed activation returns the state untouched and advances nothing.
+     */
+    case 'battle_use_item': {
+      const applied = applyBattleItemUse({
+        state, mode,
+        unitId:          action.unitId,
+        instanceId:      action.instanceId,
+        resource:        itemResources.get(action.unitId) ?? null,
+        // A consumed item is removed from `itemResources` by the effects owner, so absence here
+        // already means "already consumed"; the flag stays for callers holding a stale map.
+        alreadyConsumed: false,
+      });
+      if (!applied.ok) return { state, context, events: [] };
+
+      const { state: healed, events, restoredHp } = applied.result;
+
+      const winnerAfterHeal = checkGameOver(healed);
+      if (winnerAfterHeal) {
+        return {
+          state: { ...healed, phase: 'end' }, context, events: [...events],
+          winner: winnerAfterHeal,
+          itemUse: { instanceId: action.instanceId, unitId: action.unitId,
+                     itemName: itemResources.get(action.unitId)!.name, restoredHp },
+        };
+      }
+
+      const advanced = resolveBattleTransition({
+        state: healed, context, action: { type: 'advance_turn' }, rng,
+      });
+      const winnerAfterAdvance = checkGameOver(advanced.state);
+
+      return {
+        state: winnerAfterAdvance ? { ...advanced.state, phase: 'end' } : advanced.state,
+        context: advanced.context,
+        events: [...events, ...advanced.events],
+        ...(winnerAfterAdvance ? { winner: winnerAfterAdvance } : {}),
+        itemUse: { instanceId: action.instanceId, unitId: action.unitId,
+                   itemName: itemResources.get(action.unitId)!.name, restoredHp },
+      };
     }
 
     // Pure UI state — no damage, no queue advancement.

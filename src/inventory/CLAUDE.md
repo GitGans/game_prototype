@@ -1,24 +1,24 @@
 # inventory
 
 ## Role
-Pure inventory & equipment domain. All item-container, equip/unequip, equipment-bonus, consumable
+Pure inventory & equipment domain. All item-container, equip/unequip, equipment-bonus, item
 resolution/removal, snapshot, and pricing rules. No rendering, no Phaser, no GameState access, no
-progression resolution. This domain resolves and DESTROYS a consumable; what its effect DOES is
-progression's business, and composing the two is `core`'s.
+progression resolution. This domain resolves and DESTROYS an item; what its effect DOES is
+progression's or battle's business, and composing them is `core`'s.
 
 ## Responsibilities
 - Low-level item container placement and movement (`containerOps.ts`)
 - Equip / unequip / equipped-item queries with class restrictions (`equipmentOps.ts`)
 - Stat-bonus aggregation from equipped items (`equipmentBonuses.ts`)
-- Consumable resolution and destruction (`consumableOps.ts`)
+- Item resolution and destruction for use (`itemUseOps.ts`)
 - Inventory/equipment read-model snapshots for UI/setup (`inventorySnapshots.ts`)
 - Item economy helpers (`pricing.ts`)
 
 ## Key Files
 - [inventoryConstants.ts](inventoryConstants.ts) — `BACKPACK_SLOT_COUNT = 24` (single capacity invariant)
 - [containerOps.ts](containerOps.ts) — `canPlaceItem`, `findFreeBackpackSlot`, `findItemLocation`, `moveItem`, plus the immutable `applySlotChanges` primitive
-- [equipmentOps.ts](equipmentOps.ts) — `canUnitEquipItem`, `getEquippedItems`, `equipItem`, `unequipItem` (`equipItem`/`unequipItem` take and return `InventoryState`; `unequipItem` takes a `ConcreteEquipSlot` and resolves its destination backpack via `requireSharedBackpack`, no `backpackId` parameter)
-- [consumableOps.ts](consumableOps.ts) — `validateBackpackConsumable` (read-only: resolves a consumable and its authored `useEffect`), `consumeBackpackItem` (immutable removal via `applySlotChanges`). Both require the instance to have **exactly one** container reference, in the structurally identified shared backpack: consumption deletes the registry entry, so a second reference would be left dangling — `duplicate_placement` is rejected rather than half-repaired
+- [equipmentOps.ts](equipmentOps.ts) — `canUnitEquipItem`, `getEquippedItems`, `evaluateEquipItem`, `equipItem`, `unequipItem`. **`evaluateEquipItem` is the read half of `equipItem` and enforces every one of its preconditions** — slot resolution, equipment container, source location and swap feasibility against the vacated containers — because `canUnitEquipItem` checks only instance/definition existence and class restriction and is *not* a sufficient "can this be equipped" predicate. `equipItem` is implemented on top of it, so a screen's enabled state and the pipeline's outcome are one decision and cannot drift (`equipItem`/`unequipItem` take and return `InventoryState`; `unequipItem` takes a `ConcreteEquipSlot` and resolves its destination backpack via `requireSharedBackpack`, no `backpackId` parameter)
+- [itemUseOps.ts](itemUseOps.ts) — `validateItemForUse` (read-only), `removeItemInstances` (immutable batch removal via `applySlotChanges`) and the single-request wrapper `consumeBackpackItem`. Validation takes an explicit **expected location** (`ItemUseLocation`): `shared_backpack` accepts `consumable` and `usable`, `equipped_usable` accepts a `usable` whose metadata places it in `usable_slot` and that is actually in `equip_${unitTemplateId}` there. The equipped variant carries **no caller-chosen slot** — letting a caller name the slot would let a misplaced item authorize its own consumption. Every request requires the instance to have **exactly one** container reference: removal deletes the registry entry, so a second reference would be left dangling — `duplicate_placement` is rejected rather than half-repaired. `removeItemInstances` validates the **whole batch** against the original inventory before constructing a result, and rejects a repeated instance id explicitly (validating it twice would otherwise succeed twice)
 - [equipmentBonuses.ts](equipmentBonuses.ts) — `getEquippedBonuses`
 - [equipmentSlotResolver.ts](equipmentSlotResolver.ts) — `canMetadataUseEquipmentSlot`, `resolvePreferredEquipSlot` (own the `ring` → `ring_1`/`ring_2` rule; `usable` items resolve to `usable_slot`; metadata-driven), `isConcreteEquipSlot` (application-boundary guard rejecting the item-level pseudo-slot `'ring'` and unknown strings)
 - [inventorySnapshots.ts](inventorySnapshots.ts) — `buildBackpackSnapshot`, `buildEquipmentSnapshot` (both take `InventoryState`; `buildBackpackSnapshot` resolves its backpack via `requireSharedBackpack`, no container-id parameter)
@@ -48,13 +48,19 @@ progression's business, and composing the two is `core`'s.
   and assign the returned `nextContainers` / `nextInstances` back themselves.
 - **No progression:** equipment rules that need the current class take a resolved `classId` argument; `core`
   resolves it (via `resolveUnitProgression`) and passes it in.
-- **Consumable use is split across three layers, and this one owns only the item half.**
-  `consumableOps.ts` resolves and removes; it never applies an effect and never sees a roster.
-  Applying a `permanent_stat_boost` is `progression/consumableStatBoost.ts`; composing the two is
-  `core/consumableUse.ts`. `useEffect` reaches this domain as opaque data it forwards to the caller.
-- **`heal`, `revive` and `usable` activation remain unimplemented.** Only `permanent_stat_boost` has
-  runtime mechanics; the other effects stay catalog data, and the use operation rejects them with
-  `unsupported_effect`.
+- **Item use is split across layers, and this one owns only the item half.**
+  `itemUseOps.ts` resolves and removes; it never applies an effect and never sees a roster.
+  Applying a `permanent_stat_boost` is `progression/consumableStatBoost.ts` and applying a `heal`
+  out of combat is `progression/itemHealing.ts`; composing them with the item half is
+  `core/itemUse.ts`. In battle the effect half is `battle/itemUse.ts` and this layer is not
+  involved at all until the attempt is exited, when `core/battleItemSettlement.ts` converts the
+  attempt's consumption records into one `removeItemInstances` batch. `useEffect` reaches this
+  domain as opaque data it forwards to the caller: **kind and placement decide here, never the
+  effect type**.
+- **`usable` items are activatable, from two places.** A `usable` in the shared backpack is
+  drinkable exactly like a `consumable` (`shared_backpack`); the same item in `usable_slot` is
+  activatable during a manual battle turn (`equipped_usable`). `revive` remains unimplemented and
+  is rejected with `unsupported_effect` by the layer that owns effect support — never here.
 - **Backpack capacity is 24** everywhere — operations and snapshots both use `BACKPACK_SLOT_COUNT`. Do not
   reintroduce a hardcoded `10` or `24`.
 - **Every `InventoryState` has exactly one structurally identified shared backpack** —
@@ -68,7 +74,7 @@ progression's business, and composing the two is `core`'s.
   else swap `ring_1`.
 
 ## Where to Modify
-- consumable resolution / removal → [consumableOps.ts](consumableOps.ts)
+- item resolution / removal for use → [itemUseOps.ts](itemUseOps.ts)
 - container placement / movement rules → [containerOps.ts](containerOps.ts)
 - equip / unequip / class restrictions → [equipmentOps.ts](equipmentOps.ts)
 - equipment stat-bonus aggregation → [equipmentBonuses.ts](equipmentBonuses.ts)

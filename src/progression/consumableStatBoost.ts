@@ -1,5 +1,5 @@
 import type { UnitBattleStatKey } from '../shared/unitTypes';
-import type { ConsumableBoostFailure } from '../shared/itemTypes';
+import type { ItemBoostFailure } from '../shared/itemTypes';
 import type { RosterState, PlayerUnitState } from './rosterState';
 
 /**
@@ -24,7 +24,7 @@ export interface ApplyPermanentStatBoostInput {
 
 export type ApplyPermanentStatBoostResult =
   | { ok: true; nextUnit: PlayerUnitState }
-  | { ok: false; reason: ConsumableBoostFailure };
+  | { ok: false; reason: ItemBoostFailure };
 
 export function applyPermanentStatBoost(
   input: ApplyPermanentStatBoostInput,
@@ -61,7 +61,7 @@ export function applyPermanentStatBoost(
 
 export type ConsumeStatBoostRosterResult =
   | { ok: true; nextRoster: RosterState }
-  | { ok: false; reason: ConsumableBoostFailure | 'unit_not_found' };
+  | { ok: false; reason: ItemBoostFailure | 'unit_not_found' };
 
 /** Roster-level wrapper, matching the chooseUnitUpgrade / toggleUnitCampStatus shape. */
 export function applyPermanentStatBoostToRoster(

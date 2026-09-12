@@ -45,6 +45,13 @@ export function buildBattleDirectivePresentation(
         displaySkillBar: true,
       };
 
+    case 'await_manual_action':
+      // No target prompt: there is nothing to click on the grid. The bar is the whole turn.
+      return {
+        statusText: `${input.unitName ?? '?'} — no attack target; use an item or skip`,
+        displaySkillBar: true,
+      };
+
     case 'none':
       return {};
 

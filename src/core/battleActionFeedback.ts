@@ -17,7 +17,8 @@ export type BattleTurnDirectiveFeedback =
   | { type: 'continue_immediately' }
   | { type: 'schedule_next_turn'; delayKind: 'manual_next' }
   | { type: 'schedule_auto_turn'; activeUnitId: string; delayKind: 'auto_player' | 'auto_enemy' }
-  | { type: 'await_manual_target'; activeUnitId: string; promptKind: 'attack' | 'heal' };
+  | { type: 'await_manual_target'; activeUnitId: string; promptKind: 'attack' | 'heal' }
+  | { type: 'await_manual_action'; activeUnitId: string };
 
 /**
  * Public projection of `AutoTurnIntention` — the two fields a scene reads
@@ -32,6 +33,17 @@ export type BattleTurnDirectiveFeedback =
 export interface AutoTurnIntentionFeedback {
   unitId:         string;
   activeUnitSide: Side;
+}
+
+/**
+ * What a successful in-battle item activation produced. `applied` is explicit rather than
+ * implied by the field's presence, so a scene schedules the next turn only after a real use
+ * and never off a rejected click.
+ */
+export interface BattleItemUseFeedback {
+  readonly applied: boolean;
+  readonly itemName: string;
+  readonly restoredHp: number;
 }
 
 export type BattleAutoTurnDirectiveFeedback =
@@ -54,4 +66,5 @@ export interface BattleActionFeedback {
   winner?:            Side;
   autoTurnDirective?: BattleAutoTurnDirectiveFeedback;
   autoTurnApplied?:   boolean;
+  itemUse?:           BattleItemUseFeedback;
 }
