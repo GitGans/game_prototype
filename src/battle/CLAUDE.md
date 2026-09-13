@@ -55,27 +55,22 @@ returned to `src/core` for phase transition or rendering
 
 ## Item activation
 
-- **Effect support has one definition: `isSupportedBattleItemEffect` in `itemUsability.ts`.** The
-  action-bar projection and the blocked-melee rule both consult it, so they cannot drift apart
-  about what counts as a usable item.
+- **Effect support has one definition: `isSupportedBattleItemEffect` in `itemUsability.ts`.**
+  The action-bar projection and item execution both consult it, so they cannot drift apart.
 - **Read and write are separate modules on purpose.** `itemUsability.ts` decides eligibility and
   is importable by `core/battlePhaseSnapshot`; `itemUse.ts` executes and is importable only by
   `core/phaseHandlers/battlePhaseHandler`. A projection must be able to ask "is this enabled?"
   without being able to change anything — "does not call" and "cannot reach" are different
   guarantees, and only the second is enforceable. Both directions are pinned in
   `ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES`.
-- **Manual mode is checked first, and explicitly.** `BattleState.phase === 'select_target'` is set
-  on automatic turns too (`resolveActiveTurnStart` steps 6 and 7), so the phase alone never
-  establishes manual player control. `mode` is supplied by the caller from the validated runtime.
-- **This layer never learns what a unit is carrying.** Deciding that needs an inventory and a
-  catalog, both out of reach here, so `resolveActiveTurnStart` takes `unitsWithItemAction` and
-  `itemUse`/`itemUsability` take a narrow `BattleItemResource` (`{ instanceId, name, effect }`).
-  `battle/**` imports neither `progression/**` nor `inventory/**` — enforced by the `battle/**`
-  directory rule in `check-boundaries.mjs`, not by this sentence.
-- **`await_manual_action` is a distinct directive, not `await_manual_target` with no targets.** A
-  blocked melee turn for a unit carrying a supported item stops on that unit and shows its action
-  bar; there is no target to invent and no attack prompt to show. Without a carrier the existing
-  auto-skip is unchanged, and automatic/quick paths never reach the branch.
+- **Manual control is determined explicitly by battle mode.**
+  `BattleState.phase === 'select_target'` alone does not establish manual player control.
+- **A living player in manual mode is never skipped automatically.**
+  If the selected skill has no valid targets, turn start waits for a manual action. Automatic and
+  quick turns retain their existing skill-selection and skip/advance behavior.
+- **The battle domain does not read inventory state.**
+  Item activation receives a narrow `BattleItemResource`; turn initialization is independent of
+  equipped items.
 
 ## Invariants
 
@@ -85,13 +80,13 @@ returned to `src/core` for phase transition or rendering
 - Placement validation is anchor-based: shape offsets from the anchor define all occupied cells
 - Every player unit has the permanent `1×1` shape invariant. With a `2×3` player field, 3 bench slots, and at most 9 selected player units, every valid player roster is guaranteed to fit. `autoPlacePlayer()` does not need an unplaceable-player-party failure path — placement failure is an invariant violation and throws. The invariant is enforced structurally at boot by `validateUnitDefinitionCollections` (`core/unitDefinitionValidator.ts`), not only by `tests/core/unitDefinitionsShape.test.ts`.
 - **Placement collision and combat occupancy are two different indexes, and this is the one place they intentionally differ:**
-    - `getDeploymentBlockedCells(state)` (`placement.ts`) — every field-deployed body, **alive and dead**. The only collision source for `canPlace()`. Cell keys carry `side`, so a player corpse blocks only player-side placement.
-    - `buildOccupancy(units, deployments)` (`occupancy.ts`) — **living blockers only**, for combat.
-  A corpse must not block combat targeting, but nothing may be placed on top of it. Never use `state.occupancy` for placement collision, and never use deployments as a combat blocking index.
+  - `getDeploymentBlockedCells(state)` (`placement.ts`) — every field-deployed body, **alive and dead**. The only collision source for `canPlace()`. Cell keys carry `side`, so a player corpse blocks only player-side placement.
+  - `buildOccupancy(units, deployments)` (`occupancy.ts`) — **living blockers only**, for combat.
+    A corpse must not block combat targeting, but nothing may be placed on top of it. Never use `state.occupancy` for placement collision, and never use deployments as a combat blocking index.
 - `canPlace()` derives collision from `state.units + state.deployments`. `withoutUnits()` (`placementState.ts`) must therefore keep removing ignored units from **both** maps — a one-sided removal now throws instead of degrading.
 - `autoPlacePlayer()` is living-first, total, and order-preserving:
-    - living candidates are placed before dead ones, so corpses can never push a living combatant onto the bench (which would make `canBeginCombat()` false for an otherwise valid party);
-    - it returns `AutoPlacePlayerResult { state, placements }`; `placements` follows the **original candidate order**, while runtime IDs (`p1`, `p2`, …) follow creation order, i.e. living-first. Nothing may derive participant or display order from ID order.
+  - living candidates are placed before dead ones, so corpses can never push a living combatant onto the bench (which would make `canBeginCombat()` false for an otherwise valid party);
+  - it returns `AutoPlacePlayerResult { state, placements }`; `placements` follows the **original candidate order**, while runtime IDs (`p1`, `p2`, …) follow creation order, i.e. living-first. Nothing may derive participant or display order from ID order.
 - `PlayerPlacementCandidate.initialLifeState` drives that partition and is passed through to `createUnitInstance`.
 - `createUnitInstance` accepts `initialLifeState` (default `'alive'`). A dead input yields the canonical dead state — `lifeState: 'dead'`, `hp: 0` — and `initialHp` is ignored. Every other resolved field (max HP, stats, class, skills, shape, row trait, sprite sheet, stat-highlight baseline) is identical for alive and dead units.
 - `canBeginCombat(state)` (`combatStart.ts`) — combat may start only in the placement phase and only with at least one **living** player unit field-deployed. Enforced in `applyBattleLifecycleAction`'s `battle_begin_combat`; UI state is never trusted as validation.

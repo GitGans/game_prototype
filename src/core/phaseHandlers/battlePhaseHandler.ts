@@ -12,10 +12,7 @@ import { checkGameOver }               from '../../battle/combat';
 import { resolveBattleTransition }     from '../../battle/battleTransition';
 import { resolveSkillTurn }            from '../../battle/skillTurnResolver';
 import { applyBattleItemUse }          from '../../battle/itemUse';
-import {
-  isSupportedBattleItemEffect,
-  type BattleItemResource,
-} from '../../battle/itemUsability';
+import type { BattleItemResource }  from '../../battle/itemUsability';
 import { decideAutoTurn }             from '../../battle/autoTurn';
 import {
   selectBenchSlot,
@@ -247,8 +244,6 @@ function projectTurnDirective(directive: TurnStartDirective): BattleTurnDirectiv
       return { type: 'none', reason: directive.reason };
     case 'continue_immediately':
       return { type: 'continue_immediately' };
-    case 'schedule_next_turn':
-      return { type: 'schedule_next_turn', delayKind: directive.delayKind };
     case 'schedule_auto_turn':
       return {
         type:         'schedule_auto_turn',
@@ -355,21 +350,12 @@ export function applyBattleTurnAction(input: {
 
   switch (action.type) {
 
-    // resolveActiveTurnStart can call advanceTurn internally (missing active
-    // unit, or manual melee blocked and auto-skipped). advanceTurn ticks
-    // round effects which can kill units → check game-over.
+    // resolveActiveTurnStart calls advanceTurn internally only for technical recovery (missing or
+    // dead active unit). advanceTurn ticks round effects, which can kill units → check game-over.
     case 'battle_start_turn': {
-      // A unit holding a SUPPORTED item still has a real decision on a blocked melee turn, so
-      // the resolver must not auto-skip it. Support is decided by `battle/itemUsability` and
-      // nowhere else, so this rule and the action bar cannot disagree about what counts.
-      const unitsWithItemAction = new Set(
-        [...itemResources]
-          .filter(([, resource]) => isSupportedBattleItemEffect(resource.effect))
-          .map(([unitId]) => unitId),
-      );
       const result = resolveBattleTransition({
         state, context, rng,
-        action: { type: 'start_turn', mode, unitsWithItemAction },
+        action: { type: 'start_turn', mode },
       });
       return withWinner({ state: result.state, context: result.context, events: result.events, directive: result.directive });
     }

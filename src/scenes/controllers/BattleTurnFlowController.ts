@@ -6,10 +6,9 @@ import type { CellCoord, Col, Side } from "../../battle/types";
 import type { FieldBattleUnitSnapshot } from "../../shared/battleSnapshots";
 import { getOccupiedCells } from "../../battle/shapes";
 import {
+  buildManualTurnPresentationInput,
   mapDirectiveToPresentationInput,
-  resolveManualTargetPromptKindForUnit,
 } from "../../core/battleDirectiveProjection";
-import { buildManualTargetStatusText } from "../../objects/battleDirectivePresentation";
 import type { CellView } from "../../objects/CellView";
 import type { UnitView } from "../../objects/UnitView";
 import type { SkillBar } from "../../objects/SkillBar";
@@ -57,8 +56,12 @@ export class BattleTurnFlowController {
   private static readonly DELAY_GAMEOVER    = 600;
   private static readonly DELAY_AUTO_IMPACT = 200;
 
-  // Timer registry
-  private timers = new Set<Phaser.Time.TimerEvent>();
+  // Timer registries.
+  // Turn-flow continuations (next turn, auto think/impact, game over). A mode handoff cancels these.
+  private turnTimers = new Set<Phaser.Time.TimerEvent>();
+  // Cosmetic only (attack-sprite → idle reset). Never cancelled by a handoff, or a unit could stay
+  // frozen in its attack pose.
+  private animationTimers = new Set<Phaser.Time.TimerEvent>();
   private destroyed = false;
 
   // Battle control buttons
@@ -70,18 +73,33 @@ export class BattleTurnFlowController {
 
   // ─── Timer Helpers ────────────────────────────────────────────────────────
 
-  private schedule(delay: number, callback: () => void): void {
+  private scheduleIn(
+    registry: Set<Phaser.Time.TimerEvent>,
+    delay: number,
+    callback: () => void,
+  ): void {
     if (this.destroyed) return;
     const timer = this.deps.scene.time.delayedCall(delay, () => {
-      this.timers.delete(timer);
+      registry.delete(timer);
       if (!this.destroyed) callback();
     });
-    this.timers.add(timer);
+    registry.add(timer);
   }
 
+  private schedule(delay: number, callback: () => void): void {
+    this.scheduleIn(this.turnTimers, delay, callback);
+  }
+
+  private cancelTurnTimers(): void {
+    for (const t of this.turnTimers) t.remove(false);
+    this.turnTimers.clear();
+  }
+
+  /** Everything: used by destroy, battle end and quick battle. */
   private clearTimers(): void {
-    for (const t of this.timers) t.remove(false);
-    this.timers.clear();
+    this.cancelTurnTimers();
+    for (const t of this.animationTimers) t.remove(false);
+    this.animationTimers.clear();
   }
 
   destroy(): void {
@@ -197,7 +215,7 @@ export class BattleTurnFlowController {
   private playAttackAnimation(unitId: string): void {
     const unitView = this.deps.unitViews.get(unitId);
     unitView?.setSpriteState("attack");
-    this.schedule(400, () => {
+    this.scheduleIn(this.animationTimers, 400, () => {
       const current = this.getBattlePhase()?.unitsById.get(unitId);
       if (current && current.lifeState === 'alive') unitView?.setSpriteState("idle");
     });
@@ -249,50 +267,59 @@ export class BattleTurnFlowController {
     this.deps.battlePresentation.presentBattleEvents(result.events, activeUnit);
     this.updateManualButtons();
 
-    switch (result.directive.type) {
+    const directive = result.directive;
+    switch (directive.type) {
       case "continue_immediately": {
-        // Queue recovery: active unit was missing; battle_start_turn advanced queue.
+        // Technical queue recovery: the active entry was missing/dead and was advanced.
         // Effect ticks may have killed units — check before recursing.
         if (this.handleBattleWinner(result)) return;
         this.startActiveUnitTurn();
         return;
       }
 
-      case "schedule_next_turn": {
-        // Melee unit was blocked; battle_start_turn advanced queue.
-        if (this.handleBattleWinner(result)) return;
-        this.schedule(BattleTurnFlowController.DELAY_NEXT_TURN, () =>
-          this.startActiveUnitTurn(),
-        );
-        return;
-      }
-
       case "schedule_auto_turn": {
-        const unit = this.getBattlePhase()?.unitsById.get(result.directive.activeUnitId) ?? null;
-        const unitName = unit?.name ?? null;
+        const unit = this.getBattlePhase()?.unitsById.get(directive.activeUnitId) ?? null;
         this.deps.battlePresentation.applyDirectivePresentation(
-          mapDirectiveToPresentationInput(result.directive, unitName),
+          mapDirectiveToPresentationInput(directive, unit?.name ?? null),
         );
 
-        const delay = result.directive.delayKind === "auto_player"
+        const delay = directive.delayKind === "auto_player"
           ? BattleTurnFlowController.DELAY_AUTO_THINK
           : BattleTurnFlowController.DELAY_ENEMY_THINK;
         this.schedule(delay, () => this.autoTurn());
         return;
       }
 
-      case "await_manual_target": {
-        const phase = PhaseManager.getPhase();
-        const activeUnit = phase.type === "battle" ? phase.activeUnit : null;
-        const unitName = activeUnit?.name ?? null;
-        const mapped = mapDirectiveToPresentationInput(result.directive, unitName);
-        const presentation = this.deps.battlePresentation.applyDirectivePresentation(mapped);
-
-        if (presentation.displaySkillBar && activeUnit) {
-          this.showSkillIcons(activeUnit);
-        }
+      case "await_manual_action":
+      case "await_manual_target":
+        // Control stays with the player whether or not the selected skill has targets. Nothing is
+        // scheduled: the turn ends only through a player action (skill, item, skip, charge).
+        this.presentManualTurn();
         return;
+
+      default: {
+        const _exhaustive: never = directive;
+        throw new Error(`Unhandled turn directive: ${JSON.stringify(_exhaustive)}`);
       }
+    }
+  }
+
+  /**
+   * The ONE manual-turn presentation path — turn start (either manual directive) and skill switch.
+   * Reads the committed phase only; wording and bar visibility come from core/objects.
+   */
+  private presentManualTurn(): void {
+    const phase = this.getBattlePhase();
+    if (!phase) return;
+
+    const presentation = this.deps.battlePresentation.applyDirectivePresentation(
+      buildManualTurnPresentationInput(phase),
+    );
+
+    if (presentation.displaySkillBar && phase.activeUnit) {
+      this.showSkillIcons(phase.activeUnit);
+    } else {
+      this.clearSkillIcons();
     }
   }
 
@@ -493,39 +520,23 @@ export class BattleTurnFlowController {
     if (this.destroyed) return;
 
     const phase = this.getBattlePhase();
-    if (!phase) return;
+    // Only an active combat round can hand off. Placement, an ended battle (a pending game-over
+    // timer must survive) and quick mode are left alone.
+    if (!phase || phase.battlePhase === "placement" || phase.battlePhase === "end") return;
+    if (phase.battleMode !== "auto" && phase.battleMode !== "manual") return;
 
-    if (phase.battleMode === "auto") {
-      PhaseManager.transition({ type: "battle_set_mode", mode: "manual" });
-      this.updateManualButtons();
-      return;
-    }
+    const nextMode = phase.battleMode === "auto" ? "manual" : "auto";
+    const result = PhaseManager.transition({ type: "battle_set_mode", mode: nextMode });
+    // Rejected → nothing changed in the runtime, so existing continuations are still valid.
+    if (result.status !== "applied") return;
 
-    if (phase.battleMode !== "manual") return;
-
-    PhaseManager.transition({ type: "battle_set_mode", mode: "auto" });
+    // battle_set_mode invalidated any pending auto intention in the runtime. Every continuation
+    // scheduled under the old mode is obsolete: cancel them and re-enter the CURRENT queue entry
+    // exactly once under the new mode. battle_start_turn never advances a living unit's turn;
+    // it also clears any preview target, because every turn action does.
+    this.cancelTurnTimers();
     this.updateManualButtons();
-
-    // Read snapshot AFTER the mode transition.
-    // battle_set_mode only changes battleMode — it does not advance the queue
-    // or change the active unit, so activeUnitSide is still valid here.
-    const nextPhase = this.getBattlePhase();
-    if (
-      nextPhase?.battlePhase === "select_target" &&
-      nextPhase.activeUnitSide === "player" &&
-      nextPhase.activeUnit
-    ) {
-      const active = nextPhase.activeUnit;
-      // battle_start_turn resets validTargets and recomputes directive.
-      // Must consume events and winner: start_turn may advance internally.
-      const result = this.runBattleAction({ type: "battle_start_turn" });
-      if (!result) return;
-      this.deps.battlePresentation.presentBattleEvents(result.events, active);
-      if (this.handleBattleWinner(result)) return;
-      if (result.directive?.type === "schedule_auto_turn") {
-        this.schedule(BattleTurnFlowController.DELAY_AUTO_THINK, () => this.autoTurn());
-      }
-    }
+    this.startActiveUnitTurn();
   }
 
   // ─── Skill Bar ────────────────────────────────────────────────────────────
@@ -598,18 +609,8 @@ export class BattleTurnFlowController {
   private switchActiveSkill(index: number): void {
     const result = this.runBattleAction({ type: "battle_select_skill", skillIndex: index });
     if (!result) return;
-
-    // battle_select_skill clears the preview target centrally in PhaseManager.
-
-    const phase = PhaseManager.getPhase();
-    const activeUnit = phase.type === "battle" ? phase.activeUnit : null;
-    if (!activeUnit) return;
-
-    const promptKind = resolveManualTargetPromptKindForUnit(activeUnit);
-    if (!promptKind) return;
-    const status = buildManualTargetStatusText(promptKind, activeUnit.name);
-
-    this.deps.setStatus(status);
-    this.showSkillIcons(activeUnit);
+    // battle_select_skill recomputes validTargets and clears the preview target centrally.
+    // Never re-dispatch battle_start_turn here: it would reset the selected skill to index 0.
+    this.presentManualTurn();
   }
 }

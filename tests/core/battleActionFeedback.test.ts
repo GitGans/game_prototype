@@ -181,11 +181,6 @@ describe("projectBattleActionFeedback", () => {
     ],
     ["continue_immediately", { type: "continue_immediately" }, { type: "continue_immediately" }],
     [
-      "schedule_next_turn",
-      { type: "schedule_next_turn", delayKind: "manual_next" },
-      { type: "schedule_next_turn", delayKind: "manual_next" },
-    ],
-    [
       "schedule_auto_turn",
       { type: "schedule_auto_turn", activeUnitId: ACTIVE_UNIT_ID, delayKind: "auto_enemy" },
       { type: "schedule_auto_turn", activeUnitId: ACTIVE_UNIT_ID, delayKind: "auto_enemy" },
@@ -194,6 +189,11 @@ describe("projectBattleActionFeedback", () => {
       "await_manual_target",
       INTERNAL_AWAIT_MANUAL_TARGET,
       { type: "await_manual_target", activeUnitId: ACTIVE_UNIT_ID, promptKind: "attack" },
+    ],
+    [
+      "await_manual_action",
+      { type: "await_manual_action", activeUnitId: ACTIVE_UNIT_ID },
+      { type: "await_manual_action", activeUnitId: ACTIVE_UNIT_ID },
     ],
   ];
 

@@ -12,8 +12,8 @@ export type BattleDirectivePresentationInput =
       unitName: string | null;
     }
   /**
-   * A manual turn with actions but no attack target to prompt for — a blocked melee turn for a
-   * unit carrying a usable item. The bar is shown; no targeting prompt is.
+   * A manual turn whose selected skill has no valid targets — for any target policy, with or
+   * without an equipped item. The action bar is shown; no targeting prompt is.
    */
   | {
       type: 'await_manual_action';

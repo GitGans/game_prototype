@@ -12,8 +12,8 @@ import { getDeployment } from './deployment';
  * is enforceable.
  *
  * Effect support lives here and only here (`isSupportedBattleItemEffect`), so the action-bar
- * projection and the blocked-melee rule cannot independently decide what counts as a supported
- * item and drift apart.
+ * projection (`core/battlePhaseSnapshot`) and item execution (`battle/itemUse`) cannot
+ * independently decide what counts as a supported item and drift apart.
  */
 
 /**

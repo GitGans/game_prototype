@@ -15,9 +15,9 @@ import type { BattleEvent } from '../battle/battleEvents';
 export type BattleTurnDirectiveFeedback =
   | { type: 'none'; reason: 'battle_ended' | 'quick_mode' | 'empty_queue' }
   | { type: 'continue_immediately' }
-  | { type: 'schedule_next_turn'; delayKind: 'manual_next' }
   | { type: 'schedule_auto_turn'; activeUnitId: string; delayKind: 'auto_player' | 'auto_enemy' }
   | { type: 'await_manual_target'; activeUnitId: string; promptKind: 'attack' | 'heal' }
+  /** Manual turn whose selected skill has no valid targets: action bar, no targeting prompt. */
   | { type: 'await_manual_action'; activeUnitId: string };
 
 /**

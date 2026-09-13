@@ -7,10 +7,7 @@ import { isAlive } from './lifeState';
 import { tickEffects } from './combat';
 import type { EffectEvent } from './combat';
 import { compileSkillUsePlan } from './skillPlanCompiler';
-import {
-  isAliveFriendlyTargetPolicy,
-  isEnemyMeleeTargetPolicy,
-} from './skillUsePlan';
+import { isAliveFriendlyTargetPolicy } from './skillUsePlan';
 import { resolveSkillTargetsForPolicy } from './targeting';
 
 // ─── Turn Context ────────────────────────────────────────────────────────────
@@ -213,17 +210,16 @@ export function chargeActiveTurn(input: {
 export type TurnStartDirective =
   | { type: 'none'; reason: 'battle_ended' | 'quick_mode' | 'empty_queue' }
   | { type: 'continue_immediately' }
-  | { type: 'schedule_next_turn'; delayKind: 'manual_next' }
   | {
       type: 'schedule_auto_turn';
       activeUnitId: string;
       delayKind: 'auto_player' | 'auto_enemy';
     }
   /**
-   * The acting unit has a decision to make, but no attack target to prompt for — today, a
-   * blocked melee turn for a unit carrying a usable item. Deliberately NOT `await_manual_target`
-   * with an empty list: there is no target to invent and no attack prompt to show, only a bar
-   * of actions.
+   * A living player unit in manual mode whose selected skill has no valid targets. Control stays
+   * with the player: the action bar is shown (other skills, an eligible item, skip, charge), but
+   * there is no targeting prompt. Deliberately NOT `await_manual_target` with an empty list —
+   * there is nothing to click on the grid.
    */
   | { type: 'await_manual_action'; activeUnitId: string }
   | {
@@ -245,12 +241,6 @@ export function resolveActiveTurnStart(input: {
   state: BattleState;
   context: TurnContext;
   mode: BattleMode;
-  /**
-   * Battle unit ids holding a supported, unconsumed equipped item. Passed in rather than
-   * derived, because deciding what a unit is carrying needs an inventory and a catalog, and
-   * `battle/` may reach neither. Absent on every automatic path, where it is irrelevant.
-   */
-  unitsWithItemAction?: ReadonlySet<string>;
 }): TurnStartResult {
   const { context, mode } = input;
   let { state } = input;
@@ -312,47 +302,32 @@ export function resolveActiveTurnStart(input: {
     };
   }
 
-  // 8. Player unit in manual mode
-  const currentSkill   = getActiveSkill(currentUnit);
-  const currentPlan    = compileSkillUsePlan(currentSkill);
-  const currentAnchor  = requireFieldDeployment(state, currentUnit.id).anchor;
-  const validTargets   = resolveSkillTargetsForPolicy(
+  // 8. Player unit in manual mode — control always stays with the player.
+  //    A selected skill without targets is not a reason to take the turn away: the player may pick
+  //    another skill, use an item, skip or charge. No event, no queue/round/effect/HP/charge change,
+  //    no RNG. (Missing/dead recovery in step 4 is different: it advances a stale queue entry, it
+  //    does not act on behalf of a living player.)
+  const currentSkill  = getActiveSkill(currentUnit);
+  const currentPlan   = compileSkillUsePlan(currentSkill);
+  const currentAnchor = requireFieldDeployment(state, currentUnit.id).anchor;
+  const validTargets  = resolveSkillTargetsForPolicy(
     currentPlan.targetPolicy,
     state,
     currentAnchor,
   );
+  const waitingState: BattleState = { ...state, phase: 'select_target', validTargets };
 
-  if (validTargets.length === 0 && isEnemyMeleeTargetPolicy(currentPlan.targetPolicy)) {
-    // A unit carrying a usable item still has a real decision here; auto-skipping its turn
-    // would silently remove the only chance to drink. No invented target, no attack prompt —
-    // and a full-health carrier still stops, with the action shown disabled and the ordinary
-    // manual skip control available.
-    if (input.unitsWithItemAction?.has(currentUnit.id)) {
-      return {
-        state: { ...state, phase: 'select_target', validTargets: [] },
-        context,
-        events: [],
-        directive: { type: 'await_manual_action', activeUnitId: activeId },
-      };
-    }
-
-    const blockedEvent: TurnEvent = {
-      type: 'turn_skipped',
-      unitId: currentUnit.id,
-      unitName: currentUnit.name,
-      reason: 'blocked_melee',
-    };
-    const advanced = advanceTurn({ state, context });
+  if (validTargets.length === 0) {
     return {
-      state: advanced.state,
-      context: advanced.context,
-      events: [blockedEvent, ...advanced.events],
-      directive: { type: 'schedule_next_turn', delayKind: 'manual_next' },
+      state: waitingState,
+      context,
+      events: [],
+      directive: { type: 'await_manual_action', activeUnitId: activeId },
     };
   }
 
   return {
-    state: { ...state, phase: 'select_target', validTargets },
+    state: waitingState,
     context,
     events: [],
     directive: {

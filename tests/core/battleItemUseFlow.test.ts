@@ -14,6 +14,7 @@ import type { GamePhase } from "../../src/core/phases";
 import type { BattleMode } from "../../src/battle/types";
 import { PLAYER_UNITS } from "../../src/data/units";
 import { ITEM_CATALOG } from "../../src/data/itemDefinitions";
+import { SKILLS } from "../../src/data/skills/skillDefinitions";
 import { CAMPAIGN_STARTING_ITEMS } from "../../src/data/startingInventoryDefinitions";
 import { MAP_DEFINITIONS } from "../../src/data/mapDefinitions";
 import { CAMPAIGN_INITIAL_STATE_DEFINITION } from "../../src/data/campaignInitialStateDefinition";
@@ -493,5 +494,115 @@ describe("session lifecycle sequencing", () => {
     expect(GameState.getDebugState()).toBeNull();
     // The campaign session was never the settlement target.
     expect(inventoryHas(POTION)).toBe(true);
+  });
+});
+
+// ─── A targetless carrier keeps its turn ──────────────────────────────────────
+
+/**
+ * Gives the carrier only a revive skill. No player unit is dead at the start of these battles, so
+ * the selected skill has no valid target under the real targeting rules — without any item-aware
+ * input reaching the turn-start rule.
+ */
+function makeCarrierTargetless(unitId: string): void {
+  const rt = runtime();
+  const unit = rt.state.units.get(unitId)!;
+  const units = new Map(rt.state.units);
+  units.set(unitId, { ...unit, skills: [SKILLS.revive], activeSkillIndex: 0 });
+  writeBattleRuntimeSlot({ ...rt, state: { ...rt.state, units } });
+}
+
+function startTargetlessTurn(h: LifecycleHarness, hp: number): string {
+  const unitId = makeCarrierActiveAndWounded(h, hp);
+  makeCarrierTargetless(unitId);
+  const result = h.manager.transition({ type: "battle_start_turn" });
+  if (result.status !== "applied") throw new Error("expected battle_start_turn to apply");
+  expect(result.battleFeedback.directive).toEqual({ type: "await_manual_action", activeUnitId: unitId });
+  expect(result.battleFeedback.events).toEqual([]);
+  return unitId;
+}
+
+describe("a targetless carrier", () => {
+  it("keeps the turn, with the potion enabled on its bar", () => {
+    const h = startBattleWithEquippedPotion("warrior");
+    const queueBefore = battlePhase(h).roundQueue;
+    const unitId = startTargetlessTurn(h, 1);
+
+    const phase = battlePhase(h);
+    expect(phase.activeUnitId).toBe(unitId);
+    expect(phase.validTargets).toEqual([]);
+    expect(phase.manualTurnControlsVisible).toBe(true);
+    expect(itemAction(h)).toMatchObject({ kind: "item", instanceId: POTION, enabled: true });
+    // Nothing advanced while waiting.
+    expect(phase.roundQueue.length).toBe(queueBefore.length);
+  });
+
+  it("keeps the turn at full health too, with the potion visible but disabled", () => {
+    const h = startBattleWithEquippedPotion("warrior");
+    const { unitId } = carrier();
+    const maxHp = runtime().state.units.get(unitId)!.maxHp;
+    startTargetlessTurn(h, maxHp);
+
+    expect(itemAction(h)).toMatchObject({ enabled: false, disabledReason: "unit_full_hp" });
+  });
+
+  it("drinking completes exactly one turn", () => {
+    const h = startBattleWithEquippedPotion("warrior");
+    const unitId = startTargetlessTurn(h, 1);
+    const queueBefore = battlePhase(h).roundQueue;
+
+    const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    if (result.status !== "applied") throw new Error("expected applied");
+
+    expect(result.battleFeedback.itemUse?.applied).toBe(true);
+    expect(runtime().state.units.get(unitId)!.hp).toBe(1 + POTION_AMOUNT);
+    expect(itemAction(h)).toBeNull();
+    expect(runtime().state.roundQueue).toEqual(queueBefore.slice(1));
+  });
+
+  it("a refused activation completes no turn", () => {
+    const h = startBattleWithEquippedPotion("warrior");
+    const { unitId } = carrier();
+    const maxHp = runtime().state.units.get(unitId)!.maxHp;
+    startTargetlessTurn(h, maxHp);
+    const queueBefore = battlePhase(h).roundQueue;
+
+    const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+
+    expect(result.status === "applied" ? result.battleFeedback.itemUse : undefined).toBeUndefined();
+    expect(runtime().state.roundQueue).toEqual(queueBefore);
+    expect(runtime().state.units.get(unitId)!.hp).toBe(maxHp);
+  });
+
+  it("an automatic carrier is never made to drink", () => {
+    const h = startBattleWithEquippedPotion("warrior");
+    const unitId = makeCarrierActiveAndWounded(h, 1);
+    makeCarrierTargetless(unitId);
+    setMode("auto");
+
+    h.manager.transition({ type: "battle_start_turn" });
+    h.manager.transition({ type: "battle_decide_auto_turn" });
+    h.manager.transition({ type: "battle_apply_auto_turn" });
+
+    expect(runtime().usableResources.has(unitId)).toBe(true);
+    expect(runtime().consumedItems).toEqual([]);
+    expect(runtime().state.units.get(unitId)!.hp).toBe(1);
+    // The automatic turn still completed.
+    expect(runtime().state.roundQueue[0]).not.toBe(unitId);
+  });
+
+  it("behaves the same in a debug battle", () => {
+    const h = createLifecycleHarness();
+    h.openDebugSession(1);
+    h.manager.transition({ type: "switch_debug_unit", templateId: "warrior" });
+    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
+    h.manager.transition({ type: "select_item_action", instanceId: POTION, action: "equip" });
+    h.startDebugBattle(ORC_PATROL_ENEMY_GROUP_ID);
+    h.manager.transition({ type: "battle_begin_combat" });
+
+    startTargetlessTurn(h, 1);
+
+    expect(battlePhase(h).sessionSource).toBe("debug");
+    expect(itemAction(h)).toMatchObject({ kind: "item", instanceId: POTION, enabled: true });
   });
 });
