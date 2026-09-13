@@ -36,7 +36,8 @@ export interface BattleReplaySetup {
  * Read-only description of the item equipped in one player unit's usable_slot at attempt start.
  *
  * ── Why it lives on the runtime context and not on `BattleState`/`Unit` ─────────────────────
- * This is attempt-scoped data that outlives every state transform and feeds exit settlement —
+ * This is attempt-scoped data that outlives every state transform and feeds settlement when the
+ * attempt is completed —
  * the same role `participants` already plays. `BattleState` and `Unit` are rebuilt by every
  * transform, so a field here would have to be threaded through placement, death and revive for
  * a value no battle rule reads. Keeping it here also means an unused potion stays associated
@@ -61,10 +62,11 @@ export interface BattleUsableResource {
 }
 
 /**
- * One consumption event inside THIS attempt, addressed for settlement at exit.
+ * One consumption event inside THIS attempt, settled only if the attempt is completed.
  *
  * It is an attempt-local log, not a second inventory: the persistent removal happens exactly
- * once, when the attempt is exited (`core/battleItemSettlement.ts`). No slot is stored —
+ * once, on a `victory`/`defeat` exit (`core/battleItemSettlement.ts`); an abandoned or replayed
+ * attempt's log is dropped with the runtime. No slot is stored —
  * `usable_slot` is the only slot a usable item can occupy, and settlement re-derives it through
  * inventory validation rather than trusting a value carried across a boundary.
  */
@@ -125,6 +127,14 @@ export interface BattleRuntimeContext {
   readonly pendingAutoTurnIntention: AutoTurnIntention | null;
   /** Keyed by BATTLE unit id. An entry is removed the moment its item is consumed. */
   readonly usableResources: ReadonlyMap<string, BattleUsableResource>;
+  /**
+   * The ACTIVE unit's equipped item currently in targeting mode, or null. Transient manual-action
+   * state that lives beside the resource it names — an item identity never enters BattleState.
+   * Together with `state.validTargets` and `state.previewTargetCoord` it forms the manual
+   * targeting interaction, which is kept coherent at every committed transition. Written only by
+   * battlePhaseEffects, from an explicit handler instruction or the mode-change rule.
+   */
+  readonly selectedUsableInstanceId: string | null;
   readonly consumedItems: readonly BattleItemConsumptionRecord[];
 }
 
@@ -177,6 +187,8 @@ export function createBattleRuntimeContext(input: {
         unitId, { ...resource, effect: { ...resource.effect } },
       ]),
     ),
+    // Every attempt — new or replayed — starts with no item in targeting mode.
+    selectedUsableInstanceId: null,
     // Every attempt starts with nothing consumed — including a replay, which is what makes a
     // discarded attempt's potion come back.
     consumedItems: [],

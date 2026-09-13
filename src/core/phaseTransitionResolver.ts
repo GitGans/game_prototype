@@ -60,6 +60,7 @@ function buildBattlePlaceholder(
     activeUnitId:        null,
     activeUnit:          null,
     activeUnitActions:   [],
+    selectedUsableInstanceId: null,                                               // filled by rebuildPhaseSnapshot
     battleMode:               'manual',                                           // filled by rebuildPhaseSnapshot
     activeUnitSide:           null,                                               // filled by rebuildPhaseSnapshot
     manualTurnControlsVisible: false,                                             // filled by rebuildPhaseSnapshot
@@ -101,6 +102,22 @@ function buildUpgradeTreePlaceholder(
     unitName: '',        // filled by rebuildPhaseSnapshot via buildUpgradeTreePlayerSnapshot
     upgradeTiers: [],    // filled by rebuildPhaseSnapshot
   };
+}
+
+type ItemActionEntry = Extract<BattleActionBarEntry, { kind: 'item' }>;
+
+/** The ENABLED item entry the committed bar offers for this unit/instance under manual control. */
+function findEnabledItemAction(
+  phase: GamePhase,
+  unitId: string,
+  instanceId: string,
+): ItemActionEntry | null {
+  if (phase.type !== 'battle' || phase.battleMode !== 'manual') return null;
+  const entry = phase.activeUnitActions.find(
+    (a): a is ItemActionEntry =>
+      a.kind === 'item' && a.unitId === unitId && a.instanceId === instanceId,
+  );
+  return entry?.enabled ? entry : null;
 }
 
 export function resolveTransition(
@@ -363,32 +380,48 @@ export function resolveTransition(
       return currentPhase; // phaseActionEffects mutates BattleState; rebuildPhaseSnapshot refreshes phase
 
     /**
-     * Item activation is the one battle-turn action with an acceptance rule of its own, decided
-     * purely from committed phase data: the battle must be under MANUAL player control, and the
-     * bar must actually be offering this item as an ENABLED action right now.
+     * Item selection and activation are the battle-turn actions with acceptance rules of their
+     * own, decided purely from committed phase data: the battle must be under MANUAL player
+     * control, and the bar must actually be offering this item as an ENABLED action right now.
      *
      * `battleMode` is checked because `battlePhase === 'select_target'` is set on automatic
-     * turns too — the phase alone never establishes manual control. The authoritative refusal
-     * still happens in the evaluator against the runtime; this only keeps an obviously invalid
-     * action out of the effects pipeline.
+     * turns too — the phase alone never establishes manual control. Which items need a target is
+     * read from the projected `targetMode` (owned by the battle domain), never from effect types.
+     * The authoritative refusal still happens in the evaluator against the runtime; this only
+     * keeps an obviously invalid action out of the effects pipeline.
      */
-    case 'battle_use_item': {
-      if (currentPhase.type !== 'battle') return null;
-      if (currentPhase.battleMode !== 'manual') return null;
-      const entry = currentPhase.activeUnitActions.find(
-        (a): a is Extract<BattleActionBarEntry, { kind: 'item' }> =>
-          a.kind === 'item'
-          && a.unitId === action.unitId
-          && a.instanceId === action.instanceId,
-      );
-      if (!entry?.enabled) return null;
+    case 'battle_select_item': {
+      const entry = findEnabledItemAction(currentPhase, action.unitId, action.instanceId);
+      // A self item resolves immediately — there is nothing to select.
+      if (!entry || entry.targetMode === 'self') return null;
       return currentPhase;
     }
+
+    case 'battle_use_item': {
+      if (currentPhase.type !== 'battle') return null;
+      const entry = findEnabledItemAction(currentPhase, action.unitId, action.instanceId);
+      if (!entry) return null;
+      if (entry.targetMode === 'self') return action.target === null ? currentPhase : null;
+      // A targeted item must be the committed selection, confirmed on a committed valid cell.
+      if (currentPhase.selectedUsableInstanceId !== action.instanceId) return null;
+      const target = action.target;
+      if (target === null) return null;
+      const isValidTarget = currentPhase.validTargets.some(
+        c => c.side === target.side && c.row === target.row && c.col === target.col,
+      );
+      return isValidTarget ? currentPhase : null;
+    }
+
+    // While an item is in targeting mode the committed validTargets are the ITEM's cells, so a
+    // skill confirmation cannot be admitted until the selection is dropped.
+    case 'battle_use_skill':
+      if (currentPhase.type !== 'battle') return null;
+      if (currentPhase.selectedUsableInstanceId !== null) return null;
+      return currentPhase;
 
     // ── Battle turn (mutation-only) ───────────────────────────────────────
     case 'battle_start_turn':
     case 'battle_select_skill':
-    case 'battle_use_skill':
     case 'battle_advance_turn':
     case 'battle_skip_turn':
     case 'battle_charge_turn':

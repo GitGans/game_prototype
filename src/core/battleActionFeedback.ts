@@ -40,11 +40,20 @@ export interface AutoTurnIntentionFeedback {
  * implied by the field's presence, so a scene schedules the next turn only after a real use
  * and never off a rejected click.
  */
-export interface BattleItemUseFeedback {
-  readonly applied: boolean;
-  readonly itemName: string;
-  readonly restoredHp: number;
-}
+export type BattleItemUseFeedback =
+  | {
+      readonly applied: true;
+      readonly kind: 'heal';
+      readonly itemName: string;
+      readonly restoredHp: number;
+    }
+  | {
+      readonly applied: true;
+      readonly kind: 'revive';
+      readonly itemName: string;
+      readonly targetUnitId: string;
+      readonly restoredHp: number;
+    };
 
 export type BattleAutoTurnDirectiveFeedback =
   | { type: 'none'; reason: 'battle_ended' | 'non_auto_mode' }

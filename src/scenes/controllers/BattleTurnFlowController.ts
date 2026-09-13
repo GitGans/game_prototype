@@ -23,6 +23,7 @@ type BattleTurnSceneAction = Extract<PhaseAction, {
     | "battle_start_turn"
     | "battle_select_skill"
     | "battle_use_skill"
+    | "battle_select_item"
     | "battle_use_item"
     | "battle_advance_turn"
     | "battle_skip_turn"
@@ -340,8 +341,8 @@ export class BattleTurnFlowController {
       prev !== null && prev.side === coord.side && prev.row === coord.row && prev.col === coord.col;
 
     if (isSameTarget) {
-      // Second click confirms. battle_use_skill clears the preview target centrally,
-      // and onStateChanged → refreshCells repaints the cells.
+      // Second click confirms (a skill, or the item in targeting mode). The confirming action
+      // clears the preview target centrally, and onStateChanged → refreshCells repaints the cells.
       this.handleTargetSelect(coord, phase);
       return;
     }
@@ -357,6 +358,12 @@ export class BattleTurnFlowController {
 
   private handleTargetSelect(coord: CellCoord, phase: BattlePhase): void {
     if (this.destroyed) return;
+    // Routed by COMMITTED state, never by a controller field: an item in targeting mode owns the
+    // current valid targets, so the confirmation executes the item.
+    if (phase.selectedUsableInstanceId !== null && phase.activeUnitId !== null) {
+      this.useEquippedItem(phase.activeUnitId, phase.selectedUsableInstanceId, coord);
+      return;
+    }
     const attackerId = phase.activeUnitId!;
     const activeUnit = phase.activeUnit;
 
@@ -568,25 +575,42 @@ export class BattleTurnFlowController {
     this.deps.skillBar.show(
       actions, unit.activeSkillIndex, iconX, startY, iconSize, iconGap,
       entry => this.selectBarAction(entry),
+      phase.type === 'battle' ? phase.selectedUsableInstanceId : null,
     );
   }
 
   /**
-   * A skill switches the active skill and re-prompts for a target. An item is dispatched
-   * IMMEDIATELY: no skill selection, no target preview, no target confirmation, no attack
-   * animation — it resolves against its owner and ends the turn.
+   * A skill switches the active skill and re-prompts for a target. A self item (potion) is
+   * dispatched IMMEDIATELY: no selection, no target preview, no confirmation, no attack
+   * animation. A targeted item (scroll) enters targeting mode and then reuses the ordinary
+   * two-click confirmation. Which is which is the committed `targetMode`, never an effect type.
    */
   private selectBarAction(entry: BattleActionBarEntry): void {
     if (entry.kind === 'skill') { this.switchActiveSkill(entry.skillIndex); return; }
-    this.useEquippedItem(entry.unitId, entry.instanceId);
+    if (entry.targetMode === 'self') {
+      this.useEquippedItem(entry.unitId, entry.instanceId, null);
+      return;
+    }
+    this.selectEquippedItem(entry.unitId, entry.instanceId);
   }
 
-  private useEquippedItem(unitId: string, instanceId: string): void {
+  /** Targeting mode lives in committed state; this only asks for it and re-reads the phase. */
+  private selectEquippedItem(unitId: string, instanceId: string): void {
+    const result = this.runBattleAction({ type: 'battle_select_item', unitId, instanceId });
+    if (!result) return;
+    // Prompt and bar (with the item highlighted) come from the committed phase.
+    this.presentManualTurn();
+  }
+
+  private useEquippedItem(unitId: string, instanceId: string, target: CellCoord | null): void {
     // Pre-action active unit: used only as a style hint for presentBattleEvents.
     const phase = PhaseManager.getPhase();
     const activeUnit = phase.type === 'battle' ? phase.activeUnit : null;
 
-    const result = this.runBattleAction({ type: 'battle_use_item', unitId, instanceId });
+    // A targeted item plays the same action animation as a targeted skill; a self item does not.
+    if (target !== null) this.playAttackAnimation(unitId);
+
+    const result = this.runBattleAction({ type: 'battle_use_item', unitId, instanceId, target });
     // A rejected or refused activation changes nothing and must not schedule a turn.
     if (!result?.itemUse?.applied) return;
 
@@ -609,7 +633,8 @@ export class BattleTurnFlowController {
   private switchActiveSkill(index: number): void {
     const result = this.runBattleAction({ type: "battle_select_skill", skillIndex: index });
     if (!result) return;
-    // battle_select_skill recomputes validTargets and clears the preview target centrally.
+    // battle_select_skill recomputes validTargets and, when it applies, clears the preview target
+    // and any item targeting centrally.
     // Never re-dispatch battle_start_turn here: it would reset the selected skill to index 0.
     this.presentManualTurn();
   }

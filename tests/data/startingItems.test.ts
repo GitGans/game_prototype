@@ -12,6 +12,7 @@ import type { InventoryState } from "../../src/inventory";
 const VITALITY = "item_start_vitality_essence";
 const MIGHT = "item_start_might_essence";
 const POTION = "item_start_small_healing_potion";
+const SCROLL = "item_start_small_resurrection_scroll";
 
 /** Every starting consumable present, in the shared backpack, at the authored slots. */
 function expectStartingConsumables(inventory: InventoryState): void {
@@ -27,16 +28,23 @@ function expectStartingConsumables(inventory: InventoryState): void {
   expect(shared.slots["2"]).toBe(VITALITY);
   expect(shared.slots["3"]).toBe(MIGHT);
   expect(shared.slots["4"]).toBe(POTION);
+  expect(inventory.instances[SCROLL]).toEqual({
+    id: SCROLL, definitionId: "small_resurrection_scroll",
+  });
+  expect(shared.slots["5"]).toBe(SCROLL);
 
-  // Exactly one potion — a session never accumulates spares.
+  // Exactly one potion and one scroll — a session never accumulates spares.
   const potions = Object.values(inventory.instances)
     .filter(i => i.definitionId === "small_healing_potion");
   expect(potions).toHaveLength(1);
+  const scrolls = Object.values(inventory.instances)
+    .filter(i => i.definitionId === "small_resurrection_scroll");
+  expect(scrolls).toHaveLength(1);
 }
 
 describe("CAMPAIGN_STARTING_ITEMS", () => {
-  it("carries six entries: two rings, an equipped necklace, both essences and one potion", () => {
-    expect(CAMPAIGN_STARTING_ITEMS).toHaveLength(6);
+  it("carries seven entries: two rings, an equipped necklace, both essences, a potion and a scroll", () => {
+    expect(CAMPAIGN_STARTING_ITEMS).toHaveLength(7);
     expect(CAMPAIGN_STARTING_ITEMS.map(i => i.instanceId)).toEqual([
       "item_start_bronze_ring",
       "item_start_iron_ring",
@@ -44,7 +52,17 @@ describe("CAMPAIGN_STARTING_ITEMS", () => {
       VITALITY,
       MIGHT,
       POTION,
+      SCROLL,
     ]);
+  });
+
+  it("places the small resurrection scroll in backpack slot 5", () => {
+    const scroll = CAMPAIGN_STARTING_ITEMS.find(i => i.instanceId === SCROLL);
+    expect(scroll).toEqual({
+      instanceId: SCROLL,
+      itemDefinitionId: "small_resurrection_scroll",
+      placement: { kind: "backpack", slot: "5" },
+    });
   });
 
   it("keeps the two pre-existing backpack rings at slots 0 and 1", () => {

@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   createLifecycleHarness, ORC_PATROL_ENEMY_GROUP_ID, ORC_PATROL_TRIGGER_POS,
+  ORC_PATROL_ENTITY_KEY, FIXTURE_MAP_ID,
   type LifecycleHarness,
 } from "./helpers/phaseManagerLifecycleHarness";
 import { GameState } from "../../src/core/GameState";
@@ -21,7 +22,7 @@ import { CAMPAIGN_INITIAL_STATE_DEFINITION } from "../../src/data/campaignInitia
 
 /**
  * The equipped potion through the real pipeline: it appears on the bar, heals its owner,
- * disappears, advances exactly one turn, and becomes permanent only when the attempt is exited.
+ * disappears, advances exactly one turn, and becomes permanent only when the attempt is completed.
  */
 
 const POTION = "item_start_small_healing_potion";
@@ -222,13 +223,15 @@ describe("using the potion in combat", () => {
     const queueBefore = battlePhase(h).roundQueue;
 
     const result = h.manager.transition({
-      type: "battle_use_item", unitId, instanceId: POTION,
+      type: "battle_use_item", unitId, instanceId: POTION, target: null,
     });
 
     expect(result.status).toBe("applied");
     if (result.status !== "applied") throw new Error("expected applied");
     expect(result.battleFeedback?.itemUse)
-      .toEqual({ applied: true, itemName: "Small Healing Potion", restoredHp: POTION_AMOUNT });
+      .toEqual({
+        applied: true, kind: "heal", itemName: "Small Healing Potion", restoredHp: POTION_AMOUNT,
+      });
 
     // Healed by the authored amount.
     expect(runtime().state.units.get(unitId)!.hp).toBe(1 + POTION_AMOUNT);
@@ -248,7 +251,7 @@ describe("using the potion in combat", () => {
     const h = startBattleWithEquippedPotion("warrior");
     const unitId = makeCarrierActiveAndWounded(h, 1);
 
-    const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
     if (result.status !== "applied") throw new Error("expected applied");
 
     expect(result.battleFeedback?.events).toContainEqual(
@@ -259,12 +262,12 @@ describe("using the potion in combat", () => {
   it("cannot be used twice — a repeated click heals nothing and advances nothing", () => {
     const h = startBattleWithEquippedPotion("warrior");
     const unitId = makeCarrierActiveAndWounded(h, 1);
-    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
 
     const hpAfterFirst = runtime().state.units.get(unitId)!.hp;
     const queueAfterFirst = runtime().state.roundQueue;
 
-    const second = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    const second = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
 
     expect(second.status).toBe("rejected");
     expect(runtime().state.units.get(unitId)!.hp).toBe(hpAfterFirst);
@@ -283,7 +286,7 @@ describe("using the potion in combat", () => {
       const hpBefore = runtime().state.units.get(unitId)!.hp;
       const queueBefore = runtime().state.roundQueue;
 
-      const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+      const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
 
       expect(result.status, `mode ${mode}`).toBe("rejected");
       expect(runtime().state.units.get(unitId)!.hp).toBe(hpBefore);
@@ -298,10 +301,10 @@ describe("using the potion in combat", () => {
     const unitId = makeCarrierActiveAndWounded(h, 1);
 
     expect(h.manager.transition({
-      type: "battle_use_item", unitId: "not_a_unit", instanceId: POTION,
+      type: "battle_use_item", unitId: "not_a_unit", instanceId: POTION, target: null,
     }).status).toBe("rejected");
     expect(h.manager.transition({
-      type: "battle_use_item", unitId, instanceId: "not_an_item",
+      type: "battle_use_item", unitId, instanceId: "not_an_item", target: null,
     }).status).toBe("rejected");
 
     // Heal to full, then try again.
@@ -312,7 +315,7 @@ describe("using the potion in combat", () => {
     writeBattleRuntimeSlot({ ...rt, state: { ...rt.state, units } });
     h.manager.transition({ type: "battle_clear_preview_target" });
 
-    expect(h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION }).status)
+    expect(h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null }).status)
       .toBe("rejected");
     expect(runtime().consumedItems).toEqual([]);
   });
@@ -322,7 +325,7 @@ describe("using the potion in combat", () => {
     const unitId = makeCarrierActiveAndWounded(h, 1);
     const templateId = carrier().templateId;
 
-    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
 
     // Still equipped in the session: settlement happens on exit, not mid-battle.
     expect(equippedUsable(templateId)).toBe(POTION);
@@ -335,7 +338,7 @@ describe("settling on exit", () => {
     const h = startBattleWithEquippedPotion("warrior");
     const unitId = makeCarrierActiveAndWounded(h, 1);
     const templateId = carrier().templateId;
-    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
 
     h.manager.transition({ type: "exit_battle", outcome: "victory" });
 
@@ -343,22 +346,16 @@ describe("settling on exit", () => {
     expect(equippedUsable(templateId)).toBeUndefined();
   });
 
-  it("removes it on defeat and on an abandonment exit too", () => {
-    for (const outcome of ["defeat"] as const) {
-      const h = startBattleWithEquippedPotion("warrior");
-      const unitId = makeCarrierActiveAndWounded(h, 1);
-      h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+  it("removes it permanently on defeat too", () => {
+    const h = startBattleWithEquippedPotion("warrior");
+    const unitId = makeCarrierActiveAndWounded(h, 1);
+    const templateId = carrier().templateId;
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
 
-      h.manager.transition({ type: "exit_battle", outcome });
-      expect(inventoryHas(POTION), `outcome ${outcome}`).toBe(false);
-    }
-
-    const menuExit = startBattleWithEquippedPotion("warrior");
-    const unitId = makeCarrierActiveAndWounded(menuExit, 1);
-    menuExit.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
-    menuExit.manager.transition({ type: "exit_to_menu" });
+    h.manager.transition({ type: "exit_battle", outcome: "defeat" });
 
     expect(inventoryHas(POTION)).toBe(false);
+    expect(equippedUsable(templateId)).toBeUndefined();
   });
 
   it("leaves an UNUSED potion equipped when the attempt ends", () => {
@@ -375,10 +372,47 @@ describe("settling on exit", () => {
     const h = startBattleWithEquippedPotion("warrior");
     const unitId = makeCarrierActiveAndWounded(h, 1);
     const templateId = carrier().templateId;
-    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
     h.manager.transition({ type: "exit_battle", outcome: "victory" });
 
     expect(equippedUsable(templateId)).toBeUndefined();
+  });
+});
+
+describe("abandoning the attempt", () => {
+  it("exit_to_menu keeps a potion the abandoned attempt had spent, in its owner's usable_slot", () => {
+    const h = startBattleWithEquippedPotion("warrior");
+    const unitId = makeCarrierActiveAndWounded(h, 1);
+    const templateId = carrier().templateId;
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
+    expect(runtime().consumedItems).toHaveLength(1);
+    // Captured AFTER battle_begin_combat, which persists the confirmed placement mid-battle:
+    // the claim is "nothing is written at exit", not "the pre-battle session is restored".
+    const before = PlayerSessionStore.getSession("campaign");
+    const replaceSession = vi.spyOn(PlayerSessionStore, "replaceSession");
+
+    const result = h.manager.transition({ type: "exit_to_menu" });
+
+    expect(result.status).toBe("applied");
+    expect(h.manager.getPhase().type).toBe("main_menu");
+    expect(readBattleRuntimeSlot()).toBeNull();
+    expect(replaceSession).not.toHaveBeenCalled();
+    expect(inventoryHas(POTION)).toBe(true);
+    expect(equippedUsable(templateId)).toBe(POTION);
+    // Roster identity proves the wound and the heal were not committed either.
+    const after = PlayerSessionStore.getSession("campaign");
+    expect(after.roster).toBe(before.roster);
+    expect(after.inventory).toBe(before.inventory);
+    replaceSession.mockRestore();
+  });
+
+  it("leaves the campaign encounter available", () => {
+    const h = startBattleWithEquippedPotion("warrior");
+
+    h.manager.transition({ type: "exit_to_menu" });
+
+    const subMap = GameState.getCampaignState().world.subMapStates[FIXTURE_MAP_ID];
+    expect(subMap.entityStates[ORC_PATROL_ENTITY_KEY]?.alive).not.toBe(false);
   });
 });
 
@@ -386,7 +420,7 @@ describe("replay", () => {
   it("restores a potion the discarded attempt had spent", () => {
     const h = startBattleWithEquippedPotion("warrior");
     const unitId = makeCarrierActiveAndWounded(h, 1);
-    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
     expect(runtime().consumedItems).toHaveLength(1);
 
     h.manager.transition({ type: "replay" });
@@ -403,7 +437,7 @@ describe("replay", () => {
 
     for (let i = 0; i < 3; i++) {
       const unitId = makeCarrierActiveAndWounded(h, 1);
-      h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+      h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
       h.manager.transition({ type: "replay" });
 
       expect(runtime().consumedItems).toEqual([]);
@@ -446,7 +480,7 @@ describe("replay", () => {
   it("does not restore items spent in an earlier COMPLETED battle", () => {
     const h = startBattleWithEquippedPotion("warrior");
     const unitId = makeCarrierActiveAndWounded(h, 1);
-    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
     h.manager.transition({ type: "exit_battle", outcome: "victory" });
     expect(inventoryHas(POTION)).toBe(false);
 
@@ -461,23 +495,27 @@ describe("replay", () => {
 describe("session lifecycle sequencing", () => {
   /**
    * A debug reset recreates the SAME authored instance ids, so an outgoing attempt's record
-   * would match a brand-new item by id alone. Settlement runs against the OUTGOING session,
-   * before any replacement — this is what keeps that impossible.
+   * would match a brand-new item by id alone. Finalization validates the OUTGOING attempt against
+   * its own session before any replacement, and for an outcome-less exit it writes nothing —
+   * this is what keeps that impossible.
    */
-  it("new_game from a live battle settles the outgoing campaign, not the new one", () => {
+  it("new_game from a live battle discards the outgoing attempt's consumption; the new campaign is untouched", () => {
     const h = startBattleWithEquippedPotion("warrior");
     const unitId = makeCarrierActiveAndWounded(h, 1);
-    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
+    const replaceSession = vi.spyOn(PlayerSessionStore, "replaceSession");
 
     h.manager.transition({ type: "new_game" });
 
     // The freshly created campaign is untouched by the discarded attempt's record.
+    expect(replaceSession).not.toHaveBeenCalled();
     expect(inventoryHas(POTION)).toBe(true);
     expect(equippedUsable("warrior")).toBeUndefined();
     expect(readBattleRuntimeSlot()).toBeNull();
+    replaceSession.mockRestore();
   });
 
-  it("exit_to_menu from a debug battle settles the debug session before it is cleared", () => {
+  it("exit_to_menu from a debug battle validates and discards the attempt, then clears the debug session; campaign untouched", () => {
     const h = createLifecycleHarness();
     h.openDebugSession(1);
     h.manager.transition({ type: "switch_debug_unit", templateId: "warrior" });
@@ -487,13 +525,19 @@ describe("session lifecycle sequencing", () => {
     h.manager.transition({ type: "battle_begin_combat" });
 
     const unitId = makeCarrierActiveAndWounded(h, 1);
-    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
+    const campaignInventoryBefore = GameState.getCampaignState().inventory;
+    const replaceSession = vi.spyOn(PlayerSessionStore, "replaceSession");
 
-    // Must not throw: the debug session still exists when settlement runs, and is cleared after.
+    // Must not throw: the debug session still exists when finalization validates the attempt; no
+    // write follows, and the session is cleared afterwards.
     expect(() => h.manager.transition({ type: "exit_to_menu" })).not.toThrow();
+    expect(replaceSession).not.toHaveBeenCalled();
     expect(GameState.getDebugState()).toBeNull();
-    // The campaign session was never the settlement target.
+    // The campaign session was never a write target.
+    expect(GameState.getCampaignState().inventory).toBe(campaignInventoryBefore);
     expect(inventoryHas(POTION)).toBe(true);
+    replaceSession.mockRestore();
   });
 });
 
@@ -551,7 +595,7 @@ describe("a targetless carrier", () => {
     const unitId = startTargetlessTurn(h, 1);
     const queueBefore = battlePhase(h).roundQueue;
 
-    const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
     if (result.status !== "applied") throw new Error("expected applied");
 
     expect(result.battleFeedback.itemUse?.applied).toBe(true);
@@ -567,7 +611,7 @@ describe("a targetless carrier", () => {
     startTargetlessTurn(h, maxHp);
     const queueBefore = battlePhase(h).roundQueue;
 
-    const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION });
+    const result = h.manager.transition({ type: "battle_use_item", unitId, instanceId: POTION, target: null });
 
     expect(result.status === "applied" ? result.battleFeedback.itemUse : undefined).toBeUndefined();
     expect(runtime().state.roundQueue).toEqual(queueBefore);

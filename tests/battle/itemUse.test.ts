@@ -3,6 +3,7 @@ import type { BattleMode, BattleState } from "../../src/battle/types";
 import type { ReadonlyItemUseEffect } from "../../src/shared/itemTypes";
 import {
   evaluateBattleItemUse,
+  getBattleItemTargetMode,
   isSupportedBattleItemEffect,
   type BattleItemResource,
 } from "../../src/battle/itemUsability";
@@ -46,18 +47,25 @@ const evaluate = (state: BattleState, mode: BattleMode, over: Record<string, unk
 beforeEach(resetUnitIdCounter);
 
 describe("isSupportedBattleItemEffect", () => {
-  it("supports heal and nothing else — one definition, shared by the bar and blocked melee", () => {
+  it("supports heal and revive — one definition, shared by the bar, the resolver and execution", () => {
     expect(isSupportedBattleItemEffect({ type: "heal", amount: 1 })).toBe(true);
-    expect(isSupportedBattleItemEffect({ type: "revive" })).toBe(false);
+    expect(isSupportedBattleItemEffect({ type: "revive", hpPercent: 30 })).toBe(true);
     expect(isSupportedBattleItemEffect({ type: "permanent_stat_boost", stat: "hp", amount: 1 }))
       .toBe(false);
+  });
+
+  it("derives support from the target mode: self for heal, dead_ally for revive", () => {
+    expect(getBattleItemTargetMode({ type: "heal", amount: 1 })).toBe("self");
+    expect(getBattleItemTargetMode({ type: "revive", hpPercent: 30 })).toBe("dead_ally");
+    expect(getBattleItemTargetMode({ type: "permanent_stat_boost", stat: "hp", amount: 1 }))
+      .toBeNull();
   });
 });
 
 describe("evaluateBattleItemUse", () => {
   it("accepts a wounded active player unit on its own manual turn", () => {
     const { state, mode } = scene({ hp: 50 });
-    expect(evaluate(state, mode)).toEqual({ ok: true, amount: 10 });
+    expect(evaluate(state, mode)).toEqual({ ok: true, effect: { type: "heal", amount: 10 } });
   });
 
   it("reads the amount from the resource, never from a constant", () => {
@@ -65,7 +73,7 @@ describe("evaluateBattleItemUse", () => {
     const big = evaluate(state, mode, {
       resource: potion({ effect: { type: "heal", amount: 37 } }),
     });
-    expect(big).toEqual({ ok: true, amount: 37 });
+    expect(big).toEqual({ ok: true, effect: { type: "heal", amount: 37 } });
   });
 
   it("refuses automatic and quick mode — select_target alone is NOT manual control", () => {
@@ -127,8 +135,9 @@ describe("evaluateBattleItemUse", () => {
 
   it("refuses an unsupported effect and a non-positive amount", () => {
     const { state, mode } = scene({ hp: 50 });
-    expect(evaluate(state, mode, { resource: potion({ effect: { type: "revive" } }) }))
-      .toEqual({ ok: false, reason: "unsupported_effect" });
+    expect(evaluate(state, mode, {
+      resource: potion({ effect: { type: "permanent_stat_boost", stat: "hp", amount: 1 } }),
+    })).toEqual({ ok: false, reason: "unsupported_effect" });
     expect(evaluate(state, mode, { resource: potion({ effect: { type: "heal", amount: 0 } }) }))
       .toEqual({ ok: false, reason: "invalid_amount" });
   });
@@ -143,7 +152,8 @@ describe("applyBattleItemUse", () => {
   const apply = (state: BattleState, mode: BattleMode, over: Record<string, unknown> = {}) =>
     applyBattleItemUse({
       state, mode, unitId: "hero", instanceId: "i_potion",
-      resource: potion(), alreadyConsumed: false, ...over,
+      resource: potion(), alreadyConsumed: false,
+      target: null, selectedInstanceId: null, ...over,
     });
 
   it("heals only its owner and reports the actual restoration", () => {
@@ -151,6 +161,7 @@ describe("applyBattleItemUse", () => {
     const result = apply(state, mode);
     if (!result.ok) throw new Error(`unexpected failure: ${result.reason}`);
 
+    expect(result.result.kind).toBe("heal");
     expect(result.result.restoredHp).toBe(10);
     expect(result.result.state.units.get("hero")!.hp).toBe(60);
     // The enemy standing on the field is untouched — the item targets its owner and no one else.
@@ -175,6 +186,12 @@ describe("applyBattleItemUse", () => {
       type: "item_heal", unitId: "hero", unitName: "Test Unit",
       itemName: "Small Healing Potion", amount: 10,
     }]);
+  });
+
+  it("refuses a target on a self item", () => {
+    const { state, mode } = scene({ hp: 50 });
+    expect(apply(state, mode, { target: { side: "player", row: 1, col: 1 } }))
+      .toEqual({ ok: false, reason: "invalid_target" });
   });
 
   it("changes nothing at all on failure", () => {

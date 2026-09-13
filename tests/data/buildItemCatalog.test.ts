@@ -149,15 +149,40 @@ describe("buildItemCatalog", () => {
     expect(() => buildItemCatalog(groups)).not.toThrow();
   });
 
-  it("leaves revive unvalidated for both kinds — it carries no payload and no mechanics", () => {
-    const groups: ItemGroup[] = [
-      { kind: "consumable", items: { r: { name: "R", buyPrice: 1, useEffect: { type: "revive" } } } },
-      { kind: "usable", slot: "usable_slot", items: {
-        s: { name: "S", buyPrice: 1, useEffect: { type: "revive" } },
-      } },
-    ];
+  it("accepts a revive hpPercent in (0, 100] for both kinds, so a new scroll strength is data", () => {
+    for (const hpPercent of [1, 30, 100]) {
+      const groups: ItemGroup[] = [
+        { kind: "consumable", items: { r: { name: "R", buyPrice: 1, useEffect: { type: "revive", hpPercent } } } },
+        { kind: "usable", slot: "usable_slot", items: {
+          s: { name: "S", buyPrice: 1, useEffect: { type: "revive", hpPercent } },
+        } },
+      ];
+      expect(() => buildItemCatalog(groups), `hpPercent ${hpPercent}`).not.toThrow();
+    }
+  });
 
-    expect(() => buildItemCatalog(groups)).not.toThrow();
+  it("throws for a revive hpPercent outside (0, 100] or not finite, whatever the kind", () => {
+    for (const hpPercent of [0, -5, 100.5, NaN, Infinity]) {
+      const usable: ItemGroup[] = [
+        { kind: "usable", slot: "usable_slot", items: {
+          bad: { name: "Bad", buyPrice: 1, useEffect: { type: "revive", hpPercent } },
+        } },
+      ];
+      const consumable: ItemGroup[] = [
+        { kind: "consumable", items: {
+          bad: { name: "Bad", buyPrice: 1, useEffect: { type: "revive", hpPercent } },
+        } },
+      ];
+      expect(() => buildItemCatalog(usable), `usable ${hpPercent}`).toThrow(/hpPercent/);
+      expect(() => buildItemCatalog(consumable), `consumable ${hpPercent}`).toThrow(/hpPercent/);
+    }
+  });
+
+  it("builds the authored small resurrection scroll as a usable_slot item reviving with 30%", () => {
+    const catalog = ITEM_CATALOG;
+    expect(catalog.metadataById.small_resurrection_scroll).toEqual({ kind: "usable", slot: "usable_slot" });
+    expect(catalog.definitions.small_resurrection_scroll.useEffect)
+      .toEqual({ type: "revive", hpPercent: 30 });
   });
 
   it("throws when a consumable item is missing its useEffect", () => {

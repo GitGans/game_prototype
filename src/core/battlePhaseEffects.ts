@@ -26,6 +26,7 @@ import {
   applyBattlePlacementAction,
   computeBattleExitRoster,
   setBattlePreviewTarget,
+  applyBattleModeChange,
   projectBattleActionFeedback,
   type BattleLifecycleAction,
   type BattleTurnPhaseAction,
@@ -130,7 +131,21 @@ export function applyBattleRuntimeMutation(input: {
 
   // ── Battle control ──
   if (action.type === 'battle_set_mode') {
-    installBattleRuntime({ ...runtime, mode: action.mode, pendingAutoTurnIntention: null });
+    // Leaving manual control cancels an in-progress item targeting interaction — selection,
+    // target cells and preview — in this SAME installation, so the committed state is coherent
+    // without relying on any follow-up action.
+    const changed = applyBattleModeChange({
+      state:                    runtime.state,
+      selectedUsableInstanceId: runtime.selectedUsableInstanceId,
+      nextMode:                 action.mode,
+    });
+    installBattleRuntime({
+      ...runtime,
+      state:                    changed.state,
+      selectedUsableInstanceId: changed.selectedUsableInstanceId,
+      mode:                     action.mode,
+      pendingAutoTurnIntention: null,
+    });
     return NO_PHASE_EFFECTS;
   }
   if (action.type === 'battle_prepare_quick_battle') {
@@ -163,6 +178,7 @@ export function applyBattleRuntimeMutation(input: {
       // A narrow value, not the runtime: the handler never resolves a runtime and never sees
       // an instance's inventory identity.
       itemResources:            projectBattleItemResources(runtime),
+      selectedUsableInstanceId: runtime.selectedUsableInstanceId,
     });
 
     // Manage pending intention lifecycle:
@@ -179,7 +195,7 @@ export function applyBattleRuntimeMutation(input: {
 
     // A successful activation drops the consumed resource and appends one record — in the SAME
     // single installation as the new state, so no intermediate runtime exists in which the HP
-    // is restored but the potion is still available.
+    // is restored (or the corpse revived) but the item is still available.
     let nextResources = runtime.usableResources;
     let nextConsumed = runtime.consumedItems;
     if (result.itemUse) {
@@ -196,13 +212,28 @@ export function applyBattleRuntimeMutation(input: {
       }
     }
 
-    // Any turn action invalidates a pending preview target (skill/active unit/targets change).
+    // The manual targeting interaction (item selection + preview) follows the handler's
+    // EXPLICIT instruction. An action that applied invalidates the preview (skill, active unit or
+    // targets changed); a refused or no-op action carries no instruction and returns its input
+    // state, so selection, target cells AND preview are all kept.
+    const targeting = result.targeting;
+    const nextState = targeting === undefined
+      ? result.state
+      : setBattlePreviewTarget(result.state, null);
+    const nextSelected =
+      targeting === undefined            ? runtime.selectedUsableInstanceId
+      : targeting.type === 'select_item' ? targeting.instanceId
+      : null;
+
     installBattleRuntime({
       ...runtime,
-      state: setBattlePreviewTarget(result.state, null),
+      state: nextState,
       turnContext: result.context,
       pendingAutoTurnIntention: nextPendingIntention,
       usableResources: nextResources,
+      // Same single installation as the resource removal: no runtime exists in which the scroll
+      // is consumed but still selected.
+      selectedUsableInstanceId: nextSelected,
       consumedItems: nextConsumed,
     });
     return { battleFeedback: projectBattleActionFeedback(result) };
@@ -268,14 +299,28 @@ export function replayBattleRuntime(previousPhase: BattlePhase): void {
 }
 
 /**
- * Computes the COMPLETE next session for a transition LEAVING the battle phase, and writes it
- * once. One source-neutral pipeline, one storage write, no campaign/debug conditional.
+ * Commits a COMPLETED battle attempt to its player session when a transition leaves the battle
+ * phase, and writes it at most once. One source-neutral pipeline, no campaign/debug conditional.
  *
- * Roster result and item consumption are applied TOGETHER: two sequential writes would publish
- * an intermediate session in which the potion is gone but the battle damage is not yet recorded.
+ * `victory` / `defeat` are the ONLY exits that commit: the roster result and the attempt's item
+ * consumption are applied TOGETHER, in ONE `replaceSession` call — two sequential writes would
+ * publish an intermediate session in which the potion is gone but the battle damage is not yet
+ * recorded.
  *
- * `outcome === null` is abandonment or a menu exit: the inventory settles, and the roster keeps
- * whatever persistence policy that route already had (none).
+ * `outcome === null` is an ABANDONED attempt (`exit_to_menu`, `new_game`): no persistent write.
+ * Battle use never touches the persistent inventory, so leaving `runtime.consumedItems` unsettled
+ * — it is disposed with the runtime by the generic teardown — is exactly what keeps every item
+ * drunk in that attempt in its owner's `usable_slot`. This is the same mechanism that makes
+ * `replay` restore a potion; nothing is rolled back. (The placement confirmed at
+ * `battle_begin_combat` was already persisted mid-battle and is not an exit write.)
+ *
+ * Discarding still requires a valid attempt: the runtime (present, matching `sessionSource`) AND
+ * its owning session (present) are resolved BEFORE the abandonment return, so a mismatched
+ * runtime or a vanished debug session throws on every exit, abandoned ones included.
+ *
+ * Nullable `outcome` means "abandoned" because `exit_to_menu` and `new_game` are today's only
+ * outcome-less exits. A future exit with its own commit policy (retreat, save-and-quit) must
+ * extend this contract explicitly rather than inherit `null`.
  *
  * A failed settlement THROWS rather than settling partially. Every record was produced by this
  * pipeline against this session, so a mismatch is lifecycle corruption, not a user-facing case.
@@ -291,6 +336,10 @@ export function finalizeBattleSessionOnExit(input: {
   const source  = runtime.sessionSource;
   const session = PlayerSessionStore.getSession(source);
 
+  // Abandoned attempt: validated above, then its roster result and item consumption are
+  // discarded together.
+  if (input.outcome === null) return;
+
   const settled = settleBattleItemConsumption({
     inventory: session.inventory,
     catalog:   ITEM_CATALOG,
@@ -303,12 +352,8 @@ export function finalizeBattleSessionOnExit(input: {
     );
   }
 
-  const nextRoster = input.outcome === null
-    ? session.roster
-    : computeBattleExitRoster({ runtime, outcome: input.outcome });
-
   PlayerSessionStore.replaceSession(source, {
-    roster: nextRoster,
+    roster:    computeBattleExitRoster({ runtime, outcome: input.outcome }),
     inventory: settled.nextInventory,
   });
 }

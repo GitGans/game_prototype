@@ -33,6 +33,12 @@ export type BattleTransitionResult = {
   context: TurnContext;
   events: BattleEvent[];
   directive?: TurnStartDirective;
+  /**
+   * `false` ONLY for a refused no-op (state and context returned unchanged); omitted = applied.
+   * Set by the two transitions that can refuse silently — `select_skill` and `charge_turn` — so
+   * callers never have to infer refusal from object identity.
+   */
+  applied?: boolean;
 };
 
 // ─── Facade ──────────────────────────────────────────────────────────────────
@@ -63,6 +69,8 @@ export function resolveBattleTransition(input: {
         state: result.state,
         context,
         events: [],
+        // switchActiveSkillForManualTurn returns `activeUnit` only when the switch happened.
+        applied: result.activeUnit !== undefined,
       };
     }
 
@@ -120,6 +128,7 @@ export function resolveBattleTransition(input: {
         state: result.state,
         context: result.context,
         events: turnEventsToBattleEvents(result.events),
+        applied: !result.refused,
       };
     }
 

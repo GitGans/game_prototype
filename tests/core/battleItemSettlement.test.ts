@@ -11,7 +11,7 @@ import { backpack, equipment, instance, catalog } from "../inventory/helpers";
 
 const CATALOG = catalog({
   potion: { kind: "usable", slot: "usable_slot", useEffect: { type: "heal", amount: 10 } },
-  scroll: { kind: "usable", slot: "usable_slot", useEffect: { type: "revive" } },
+  scroll: { kind: "usable", slot: "usable_slot", useEffect: { type: "revive", hpPercent: 30 } },
   helmet: { kind: "equipment", slot: "helmet" },
 });
 

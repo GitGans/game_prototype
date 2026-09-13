@@ -18,7 +18,7 @@ Scenes are the rendering and input layer of the game. Each scene corresponds to 
 - `MainMenu.ts` — entry screen; routes to new game or debug flow
 - `Game.ts` — battle scene shell; creates grid/unit views, wires battle controllers, routes pointer input, refreshes views from `GamePhase`, and constructs the battle-end overlay. Battle logic lives in the three controllers below.
 - `controllers/BattlePlacementController.ts` — placement UI, bench cards, drag/swap interaction; dispatches placement actions to `PhaseManager`
-- `controllers/BattleTurnFlowController.ts` — turn sequencing, battle control buttons, timers, quick battle, skip/charge flow, manual target confirmation, skill-bar flow; dispatches battle actions to `PhaseManager`
+- `controllers/BattleTurnFlowController.ts` — turn sequencing, battle control buttons, timers, quick battle, skip/charge flow, manual target confirmation, skill-bar flow; dispatches battle actions to `PhaseManager`. Equipped items: a `targetMode: 'self'` item is dispatched immediately (`battle_use_item`, `target: null`); a `dead_ally` item dispatches `battle_select_item` and reuses the two-click confirmation. The confirming click is routed by the COMMITTED `phase.selectedUsableInstanceId` — the controller stores no selection
 - `controllers/BattlePresentationController.ts` — applies battle event, directive, and skill-preview presentations to Phaser objects
 - `WorldMap.ts` — keyboard-driven map navigation; triggers encounters, camps, and portals
 - `Prep.ts` — pre-battle camp screen; manages party composition and equipment access

@@ -8,8 +8,11 @@ import type { BattleItemConsumptionRecord } from './battleRuntimeContext';
  *
  * Consumption is attempt-local during combat — the battle resource and its skill-bar action
  * disappear the moment the item is drunk, while equipment and backpack mutation stay
- * inaccessible — and becomes permanent exactly once, when the attempt is exited. This module is
- * that one conversion, and it is pure: it returns the next inventory and installs nothing.
+ * inaccessible — and becomes permanent exactly once, when the attempt is COMPLETED (a `victory` or
+ * `defeat` exit). An abandoned attempt (`exit_to_menu`, `new_game`) and a replayed one are never
+ * settled: their records are dropped with the runtime, which is what keeps those items in place.
+ * This module is that one conversion, and it is pure: it returns the next inventory and installs
+ * nothing.
  *
  * Every record is validated against the owning inventory BEFORE anything is written, so a
  * corrupted attempt fails loudly with the session untouched rather than half-settled. Records

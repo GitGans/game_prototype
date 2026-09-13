@@ -14,7 +14,7 @@ const HEAL = { type: "heal", amount: 10 } as const;
 const CATALOG = catalog({
   essence: { kind: "consumable", slot: null, useEffect: BOOST },
   potion:  { kind: "usable", slot: "usable_slot", useEffect: HEAL },
-  scroll:  { kind: "usable", slot: "usable_slot", useEffect: { type: "revive" } },
+  scroll:  { kind: "usable", slot: "usable_slot", useEffect: { type: "revive", hpPercent: 30 } },
   helmet:  { kind: "equipment", slot: "helmet" },
 });
 

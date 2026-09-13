@@ -22,6 +22,13 @@ export type BattleEvent =
       unitId: string; unitName: string;
       itemName: string; amount: number }
 
+  // Item-driven resurrection. Distinct from unit_revived: the source is an equipped item, the
+  // wording names it, and there is no skill involved.
+  | { type: 'item_revive';
+      unitId: string; unitName: string;
+      targetId: string; targetName: string;
+      itemName: string; amount: number }
+
   // ── Post-damage (vampirism) ─────────────────────────────────────────
   | { type: 'vampirism_heal';
       unitId: string; unitName: string; amount: number }

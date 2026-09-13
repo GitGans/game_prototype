@@ -4,7 +4,9 @@ import type { SpriteState, RowTrait, UnitLifeState } from './unitTypes';
 import type { ActiveEffect }                         from './activeEffect';
 import type { UnitDeployment }                       from './unitDeploymentTypes';
 import type { UnitStatsSnapshot }                    from './snapshotTypes';
-import type { BattleItemUseFailure, ReadonlyItemUseEffect } from './itemTypes';
+import type {
+  BattleItemTargetMode, BattleItemUseFailure, ReadonlyItemUseEffect,
+} from './itemTypes';
 
 // Minimal render-ready sprite data for a battle unit. Built by
 // core/battleSnapshotBuilder — UI must not derive texture keys itself.
@@ -43,6 +45,8 @@ export type BattleActionBarEntry =
       readonly sprite: string | null;
       /** Copied, never shared with the runtime resource or the catalog. */
       readonly effect: ReadonlyItemUseEffect;
+      /** How the item picks its target — decided by the battle domain, never by consumers. */
+      readonly targetMode: BattleItemTargetMode;
       readonly enabled: boolean;
       readonly disabledReason: BattleItemUseFailure | null;
     };

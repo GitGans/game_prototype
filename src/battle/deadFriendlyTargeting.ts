@@ -4,12 +4,11 @@ import type { Unit } from './types';
 import { isDead } from './lifeState';
 import { getOccupiedCells } from './shapes';
 
-// Structural snapshot of a dead corpse. Includes fields Stage 2 / Stage 3 will
-// need so the same lookup feeds targeting, revive execution, and preview
-// without per-stage churn:
-//   - id      → reviveUnitInBattle(state, unitId)
-//   - name    → unit_revived event / presentation
-//   - maxHp   → computeReviveHp(maxHp, levelPercent)
+// Structural snapshot of a dead corpse. The same lookup feeds targeting, revive
+// execution and preview — for revive skills and resurrection items alike:
+//   - id      → reviveUnitInBattleByPercent(state, unitId, percent)
+//   - name    → unit_revived / item_revive events and preview data
+//   - maxHp   → computeReviveHpFromPercent(unit, percent)
 //   - hp, lifeState, side, shape → required for the walk itself
 export type DeadFriendlyTargetUnit = Pick<
   Unit,

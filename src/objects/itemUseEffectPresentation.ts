@@ -47,14 +47,14 @@ export function formatItemUsePrompt(prompt: PendingItemUsePrompt): string {
 }
 
 /**
- * Tooltip line for a consumable's effect. Target-independent — it describes the item from the
- * catalog, so healing states the nominal ceiling ("up to"), not this character's restoration.
- * Returns null for effects with no mechanics yet.
+ * Tooltip line for an item's effect. Target-independent — it describes the item from the
+ * catalog, so healing states the nominal ceiling ("up to"), not this character's restoration,
+ * and resurrection states the authored share of max HP.
  */
 export function formatUseEffectLine(effect: ReadonlyItemUseEffect | ItemUseEffect | undefined): string | null {
   if (!effect) return null;
   if (effect.type === 'heal') return `Restores up to ${formatStatValue('hp', effect.amount)} HP.`;
-  if (effect.type !== 'permanent_stat_boost') return null; // revive is not implemented
+  if (effect.type === 'revive') return `Revives with ${effect.hpPercent}% HP.`;
   return describeBoost(effect.stat, effect.amount);
 }
 
@@ -91,6 +91,9 @@ const BATTLE_BLOCKED_REASONS: Record<BattleItemUseFailure, string> = {
   unsupported_effect: 'This effect is not implemented yet.',
   invalid_amount: 'This item has an invalid effect value.',
   unit_full_hp: 'Already at full HP.',
+  no_valid_targets: 'No fallen ally to revive.',
+  item_not_selected: 'Select the item first.',
+  invalid_target: 'Not a valid target for this item.',
 };
 
 /**

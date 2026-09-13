@@ -76,6 +76,10 @@ function makeClock() {
 const NO_TARGET_TEXT = "Hero — The selected skill has no valid targets. Choose another action.";
 const ATTACK_TEXT    = "Hero — Click on the red cell to attack";
 const ENEMY_CELL     = { side: "enemy" as const, row: 0 as const, col: 0 as const };
+const CORPSE_CELL    = { side: "player" as const, row: 1 as const, col: 0 as const };
+const REVIVE_TEXT    = "Hero — Click on a fallen ally to revive";
+const SCROLL         = "i_scroll";
+const POTION_ID      = "i_potion";
 
 const neutralPair = (n: number) => ({ highlightBase: n, value: n });
 
@@ -114,6 +118,11 @@ class ScriptedBattle {
   meleeReachable = false;
   rejectSetMode = false;
   skipEndsBattle = false;
+  /** The hero's equipped item, when the scenario gives it one. */
+  item: "scroll" | "potion" | null = null;
+  selectedItem: string | null = null;
+  preview: typeof CORPSE_CELL | null = null;
+  refuseItemUse = false;
   calls: PhaseAction[] = [];
 
   private get active(): string { return this.queue[0]; }
@@ -122,7 +131,23 @@ class ScriptedBattle {
   private targets() {
     if (this.battlePhase !== "select_target" || this.active !== "hero") return [];
     if (this.mode !== "manual") return [];
+    if (this.selectedItem !== null) return [CORPSE_CELL];
     return this.heroSkillIndex === 1 || this.meleeReachable ? [ENEMY_CELL] : [];
+  }
+
+  itemEntry(): BattleActionBarEntry | null {
+    if (this.item === null) return null;
+    return this.item === "scroll"
+      ? {
+          kind: "item", unitId: "hero", instanceId: SCROLL, label: "Small Resurrection Scroll",
+          sprite: null, effect: { type: "revive", hpPercent: 30 }, targetMode: "dead_ally",
+          enabled: true, disabledReason: null,
+        }
+      : {
+          kind: "item", unitId: "hero", instanceId: POTION_ID, label: "Small Healing Potion",
+          sprite: null, effect: { type: "heal", amount: 10 }, targetMode: "self",
+          enabled: true, disabledReason: null,
+        };
   }
 
   phase(): BattlePhase {
@@ -132,6 +157,8 @@ class ScriptedBattle {
     const actions: BattleActionBarEntry[] = active.skills.map((skill, skillIndex) => ({
       kind: "skill", skillIndex, skill,
     }));
+    const item = this.itemEntry();
+    if (item && active.id === "hero" && this.mode === "manual") actions.push(item);
     return makeBattlePhase({
       battlePhase:               this.battlePhase,
       battleMode:                this.mode,
@@ -142,6 +169,8 @@ class ScriptedBattle {
       activeUnit:                active,
       activeUnitSide:            active.side,
       activeUnitActions:         actions,
+      selectedUsableInstanceId:  this.selectedItem,
+      previewTargetCoord:        this.preview,
       manualTurnControlsVisible: this.mode === "manual" && active.side === "player",
       validTargets:              this.targets(),
     });
@@ -184,7 +213,32 @@ class ScriptedBattle {
 
       case "battle_select_skill":
         this.heroSkillIndex = action.skillIndex;
+        this.selectedItem = null;
+        this.preview = null;
         return this.applied({ events: [] });
+
+      case "battle_select_item":
+        this.selectedItem = action.instanceId;
+        this.preview = null;
+        return this.applied({ events: [] });
+
+      case "battle_preview_target":
+        this.preview = action.target as typeof CORPSE_CELL;
+        return this.applied(null);
+
+      case "battle_use_item":
+        if (this.refuseItemUse) return this.applied({ events: [] });
+        this.selectedItem = null;
+        this.preview = null;
+        this.item = null;
+        this.rotate();
+        return this.applied({
+          events: [],
+          itemUse: action.target === null
+            ? { applied: true, kind: "heal", itemName: "Small Healing Potion", restoredHp: 10 }
+            : { applied: true, kind: "revive", itemName: "Small Resurrection Scroll",
+                targetUnitId: "ally", restoredHp: 21 },
+        });
 
       case "battle_decide_auto_turn":
         if (this.activeSide === "player" && this.mode === "manual") {
@@ -240,6 +294,7 @@ function createController(): BattleTurnFlowController {
     skillBar: skillBar as never,
     battlePresentation: {
       presentBattleEvents: vi.fn(),
+      applySkillPreview: vi.fn(),
       applyDirectivePresentation: (input: BattleDirectivePresentationInput) => {
         const presentation = buildBattleDirectivePresentation(input);
         if (presentation.statusText) status = presentation.statusText;
@@ -310,6 +365,83 @@ describe("skill switching", () => {
     expect(battle.count("battle_start_turn", since)).toBe(0);
     expect(battle.count("battle_select_skill", since)).toBe(2);
     expect(clock.size).toBe(0);
+  });
+});
+
+// ─── Equipped items ───────────────────────────────────────────────────────────
+
+describe("the resurrection scroll", () => {
+  function startWithScroll() {
+    battle.item = "scroll";
+    const controller = createController();
+    controller.beginCombat();
+    return controller;
+  }
+
+  it("selecting it dispatches battle_select_item and re-renders the bar and prompt from the phase", () => {
+    startWithScroll();
+    const since = battle.calls.length;
+
+    selectOnBar(battle.itemEntry()!);
+
+    expect(battle.calls.slice(since)).toEqual([
+      { type: "battle_select_item", unitId: "hero", instanceId: SCROLL },
+    ]);
+    // The committed selection is handed to the bar for its active styling.
+    expect(skillBar.show.mock.calls.at(-1)![7]).toBe(SCROLL);
+    expect(status).toBe(REVIVE_TEXT);
+    expect(clock.size).toBe(0);
+  });
+
+  it("first corpse click previews, the second confirms battle_use_item with that cell", () => {
+    const controller = startWithScroll();
+    selectOnBar(battle.itemEntry()!);
+    const since = battle.calls.length;
+
+    controller.handleCellClick(CORPSE_CELL, battle.phase());
+    expect(battle.calls.slice(since)).toEqual([
+      { type: "battle_preview_target", target: CORPSE_CELL },
+    ]);
+
+    controller.handleCellClick(CORPSE_CELL, battle.phase());
+    expect(battle.calls.at(-1)).toEqual({
+      type: "battle_use_item", unitId: "hero", instanceId: SCROLL, target: CORPSE_CELL,
+    });
+    expect(battle.count("battle_use_skill", since)).toBe(0);
+    expect(heroView.setSpriteState).toHaveBeenCalledWith("attack");
+
+    // The next turn is scheduled, not started synchronously.
+    const beforeTurn = battle.calls.length;
+    expect(battle.count("battle_start_turn", beforeTurn)).toBe(0);
+    clock.advance(10_000);
+    expect(battle.calls[beforeTurn]).toEqual({ type: "battle_start_turn" });
+  });
+
+  it("a refused use schedules nothing", () => {
+    const controller = startWithScroll();
+    battle.refuseItemUse = true;
+    selectOnBar(battle.itemEntry()!);
+    controller.handleCellClick(CORPSE_CELL, battle.phase());
+    controller.handleCellClick(CORPSE_CELL, battle.phase());
+
+    expect(battle.calls.at(-1)?.type).toBe("battle_use_item");
+    // Only the cosmetic attack-pose reset may be pending — never a turn continuation.
+    const since = battle.calls.length;
+    clock.advance(10_000);
+    expect(battle.calls.length).toBe(since);
+  });
+
+  it("the potion is still used immediately with target: null", () => {
+    battle.item = "potion";
+    createController().beginCombat();
+    const since = battle.calls.length;
+
+    selectOnBar(battle.itemEntry()!);
+
+    expect(battle.calls.slice(since)).toEqual([
+      { type: "battle_use_item", unitId: "hero", instanceId: POTION_ID, target: null },
+    ]);
+    expect(clock.size).toBe(1);
   });
 });
 

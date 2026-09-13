@@ -22,7 +22,8 @@ const BATTLE_STAT_KEYS: ReadonlySet<string> = new Set(UNIT_BATTLE_STAT_KEYS);
  * carry it, so its payload is always checked. `heal` is executable for both `usable` and
  * `consumable` — a usable potion is drunk from the backpack (core/itemUse.ts) and from
  * usable_slot in battle (battle/itemUse.ts) — so both are checked, and only `equipment`, which
- * may not carry a useEffect at all, is exempt. `revive` has no payload and no mechanics.
+ * may not carry a useEffect at all, is exempt. `revive` carries an authored `hpPercent`, which
+ * must be finite and in (0, 100] for every kind that may carry it.
  */
 function assertUseEffect(id: string, kind: ItemRuntimeKind, effect: ItemUseEffect): void {
   if (effect.type === 'heal') {
@@ -32,7 +33,13 @@ function assertUseEffect(id: string, kind: ItemRuntimeKind, effect: ItemUseEffec
     }
     return;
   }
-  if (effect.type !== 'permanent_stat_boost') return;
+  if (effect.type === 'revive') {
+    const p = effect.hpPercent;
+    if (!Number.isFinite(p) || p <= 0 || p > 100) {
+      throw new Error(`Item "${id}" must revive with a finite hpPercent in (0, 100] (got ${p})`);
+    }
+    return;
+  }
   if (!BATTLE_STAT_KEYS.has(effect.stat)) {
     throw new Error(`Item "${id}" boosts unknown battle stat "${effect.stat}"`);
   }
@@ -48,7 +55,7 @@ function assertUseEffect(id: string, kind: ItemRuntimeKind, effect: ItemUseEffec
  *
  * useEffect ownership by kind (enforced here):
  *   equipment  → useEffect forbidden
- *   usable     → useEffect required; `heal` is executable (backpack and battle)
+ *   usable     → useEffect required; `heal` is executable (backpack and battle), `revive` in battle
  *   consumable → useEffect required; `permanent_stat_boost` and `heal` are executable
  *
  * slot invariant by kind (enforced here):

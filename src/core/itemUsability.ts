@@ -68,7 +68,8 @@ export function evaluateItemUse(input: ItemUseInput): ItemEvaluation {
   if (!located.ok) return { ok: false, reason: located.reason };
 
   const { useEffect } = located.item;
-  // `revive` — and any future variant — stays unsupported until someone gives it mechanics.
+  // `revive` is executable only in battle, from usable_slot (out-of-combat target selection is
+  // future work) — and any future variant stays unsupported until someone gives it mechanics.
   if (useEffect.type !== 'permanent_stat_boost' && useEffect.type !== 'heal') {
     return { ok: false, reason: 'unsupported_effect' };
   }

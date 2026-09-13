@@ -14,10 +14,10 @@ import {
   type BattleEventPresentation,
 } from '../../objects/battleEventPresentation';
 import {
-  buildBattleSkillPreviewPresentation,
+  buildBattleTargetPreviewPresentation,
   type BattleSkillPreviewHeaderColorKind,
 } from '../../objects/battleSkillPreviewPresentation';
-import { buildBattlePhaseSkillPreviewModel } from '../../core/battleSkillPreviewProjection';
+import { buildBattlePhaseTargetPreviewModel } from '../../core/battleSkillPreviewProjection';
 import { buildBattleDirectivePresentation } from '../../objects/battleDirectivePresentation';
 import type { BattleDirectivePresentationInput } from '../../shared/battleDirectivePresentationModel';
 
@@ -126,10 +126,10 @@ export class BattlePresentationController {
   // ─── Skill Preview ────────────────────────────────────────────────────────────
 
   applySkillPreview(phase: BattlePhase, coord: CellCoord): void {
-    const model = buildBattlePhaseSkillPreviewModel({ phase, targetCoord: coord });
+    const model = buildBattlePhaseTargetPreviewModel({ phase, targetCoord: coord });
     if (!model) return;
 
-    const presentation = buildBattleSkillPreviewPresentation(model);
+    const presentation = buildBattleTargetPreviewPresentation(model);
 
     this.deps.refreshCells(phase);
 

@@ -15,11 +15,12 @@ import { canBeginCombat } from '../battle/combatStart';
 // module's import allowlist, so a projection has no path to a state replacement.
 import {
   evaluateBattleItemUse,
-  isSupportedBattleItemEffect,
+  getBattleItemTargetMode,
 } from '../battle/itemUsability';
 import type { BattleActionBarEntry, FieldBattleUnitSnapshot } from '../shared/battleSnapshots';
 
 type BattlePhase = Extract<GamePhase, { type: 'battle' }>;
+type ItemActionEntry = Extract<BattleActionBarEntry, { kind: 'item' }>;
 
 /**
  * The one battle-phase render/control projection: mutable BattleRuntimeContext →
@@ -40,9 +41,13 @@ type BattlePhase = Extract<GamePhase, { type: 'battle' }>;
  *
  * The item entry is appended only when the action genuinely EXISTS. Outside manual player
  * control there is no entry at all rather than a disabled one, because `not_manual_mode` is an
- * execution-time refusal, not a render state — and an unsupported effect (a revive scroll)
- * likewise produces nothing, because "disabled but recoverable" and "never usable" should not
- * look the same. `unit_full_hp` is the recoverable case, and it DOES render, disabled.
+ * execution-time refusal, not a render state — and an effect with no battle mechanics likewise
+ * produces nothing, because "disabled but recoverable" and "never usable" should not look the
+ * same. `unit_full_hp` (a potion) and `no_valid_targets` (a resurrection scroll with no fallen
+ * ally) are the recoverable cases, and they DO render, disabled.
+ *
+ * `targetMode` comes from the battle domain's single definition, so neither the resolver nor
+ * the controller ever interprets an effect type.
  *
  * Ordinary skill indexes are untouched: the item is never a catalog entry, never a learned
  * skill, and therefore never a candidate for AI skill selection.
@@ -62,7 +67,8 @@ function buildActiveUnitActions(
 
   const resource = runtime.usableResources.get(activeUnit.id);
   if (!resource) return actions;
-  if (!isSupportedBattleItemEffect(resource.effect)) return actions;
+  const targetMode = getBattleItemTargetMode(resource.effect);
+  if (targetMode === null) return actions;
 
   const eligibility = evaluateBattleItemUse({
     state:           runtime.state,
@@ -82,6 +88,7 @@ function buildActiveUnitActions(
     sprite:         resource.sprite,
     // Copied: no snapshot field may share an object with the runtime.
     effect:         { ...resource.effect },
+    targetMode,
     enabled:        eligibility.ok,
     disabledReason: eligibility.ok ? null : eligibility.reason,
   });
@@ -113,7 +120,16 @@ export function buildBattlePhaseSnapshot(
   const manualChargeDisabled =
     activeUnitId !== null && hasChargedThisRound(runtime.turnContext, activeUnitId);
 
-  const targetHighlightKind = resolveTargetHighlightKind(activeUnit, battleState.validTargets);
+  const activeUnitActions = buildActiveUnitActions(activeUnit, runtime);
+  // The selection is projected only while its item entry is actually on the bar, so a scene can
+  // never observe a dangling selection (auto/quick modes, another unit's turn, a consumed item).
+  const selectedItem = activeUnitActions.find(
+    (a): a is ItemActionEntry =>
+      a.kind === 'item' && a.instanceId === runtime.selectedUsableInstanceId,
+  ) ?? null;
+
+  const targetHighlightKind =
+    resolveTargetHighlightKind(activeUnit, battleState.validTargets, selectedItem);
 
   const { previewTargetCoord, previewTargetUnitId } = projectPreviewTarget({
     battlePhase:         battleState.phase,
@@ -140,7 +156,8 @@ export function buildBattlePhaseSnapshot(
     roundQueue:          [...battleState.roundQueue],
     activeUnitId,
     activeUnit,
-    activeUnitActions: buildActiveUnitActions(activeUnit, runtime),
+    activeUnitActions,
+    selectedUsableInstanceId: selectedItem?.instanceId ?? null,
     battleMode,
     activeUnitSide,
     manualTurnControlsVisible,
@@ -157,8 +174,22 @@ function resolveTargetHighlightKind(
   // Read-only: this receives the runtime-owned `BattleState.validTargets`, not the
   // snapshot's copied array. Inspected only, never stored.
   validTargets: readonly CellCoord[],
+  // While an item is in targeting mode, validTargets are the ITEM's cells: its target mode —
+  // not the active skill's policy — decides the highlight.
+  selectedItem: ItemActionEntry | null,
 ): BattlePhase['targetHighlightKind'] {
   if (!activeUnit || validTargets.length === 0) return 'none';
+
+  if (selectedItem) {
+    switch (selectedItem.targetMode) {
+      case 'self':      return 'heal_target';
+      case 'dead_ally': return 'revive_target';
+      default: {
+        const _exhaustive: never = selectedItem.targetMode;
+        return _exhaustive;
+      }
+    }
+  }
 
   const policy = compileSkillUsePlan(getActiveSkill(activeUnit)).targetPolicy;
   switch (policy.type) {

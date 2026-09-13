@@ -31,7 +31,8 @@ Pure battle domain logic — all computations, state mutations, and validations 
 - [lifeState.ts](lifeState.ts) — `isAlive` / `isDead` / `killUnit` / `reviveUnit`; the only place that flips `Unit.lifeState`
 - [deployment.ts](deployment.ts) — field/bench queries; living/dead/all field-helper split
 - [deadFriendlyTargeting.ts](deadFriendlyTargeting.ts) — shared structural corpse-cell walker for dead-friendly targeting and (Stage 2+) revive. All callers must pass `deployments`; deriving anchors from cell maps is forbidden.
-- [revive.ts](revive.ts) — revive HP table application (`computeReviveHp`), revive target resolution (`resolveReviveTargetsForAction`), and revive state mutation (`reviveUnitInBattle`). Both target resolution and state mutation must go through this module; do not duplicate corpse walking or call `reviveUnit` directly from execution code.
+- [revive.ts](revive.ts) — the percentage chokepoints shared by skills and items: the HP formula (`computeReviveHpFromPercent`) and the state mutation (`reviveUnitInBattleByPercent`); the skill wrappers `computeReviveHp` / `reviveUnitInBattle` resolve a level to a percent and delegate. Also skill target resolution (`resolveReviveTargetsForAction`). Both target resolution and state mutation must go through this module; do not duplicate corpse walking or call `reviveUnit` directly from execution code.
+- [itemUsability.ts](itemUsability.ts) / [itemUse.ts](itemUse.ts) / [itemPreview.ts](itemPreview.ts) — equipped-item eligibility and targeting (read), selection / cancellation / execution (write), and structured preview data
 - [skillTargetSelection.ts](skillTargetSelection.ts) — shared auto/quick AI selection (`chooseSkillIndexForUnit`, `chooseSkillTargetForPlan`). Owns the policy-aware target choice and skill eligibility filtering for both `autoTurn.ts` and `quickTurn.ts`. Auto and quick turns must not duplicate skill/target selection.
 
 ## Structural Role
@@ -55,8 +56,25 @@ returned to `src/core` for phase transition or rendering
 
 ## Item activation
 
-- **Effect support has one definition: `isSupportedBattleItemEffect` in `itemUsability.ts`.**
-  The action-bar projection and item execution both consult it, so they cannot drift apart.
+- **Effect support and targeting have one definition: `getBattleItemTargetMode` in `itemUsability.ts`.**
+  `heal` → `self`, `revive` → `dead_ally`, anything else → `null` (no battle mechanics);
+  `isSupportedBattleItemEffect` derives from it. The action-bar projection, the resolver (through
+  the projected `targetMode`) and item execution all consult it, so they cannot drift apart.
+- **Resurrection items reuse the skill mechanics.** Valid targets come from
+  `getDeadFriendlyUnitTargets` (same side, dead, FIELD-deployed — never living, enemy or bench);
+  execution resolves the corpse with `getDeadFriendlyUnitAtCell` and revives it through
+  `reviveUnitInBattleByPercent` with the item's authored `hpPercent`. No corpse means
+  `no_valid_targets` (rendered disabled, recoverable).
+- **Battle functions receive the selection as narrow input and return pure results.** The selected
+  item's identity is runtime-owned (`BattleRuntimeContext.selectedUsableInstanceId`) and never
+  enters `BattleState` — only its target cells do, via `validTargets`. `selectBattleItem` returns
+  the state half and `selectedInstanceId` separately; `applyBattleItemUse` takes
+  `selectedInstanceId`; `cancelItemTargeting` is the state half of a cancellation. None of them
+  installs anything: the handler turns results into an explicit targeting instruction and
+  `core/battlePhaseEffects` installs it.
+- **Item previews are data, not wording.** `itemPreview.ts` (`resolveBattleItemPreview`) returns the
+  target, restored HP and cells computed with the SAME formula as execution; the sentence is
+  formatted by `objects/battleSkillPreviewPresentation.ts`.
 - **Read and write are separate modules on purpose.** `itemUsability.ts` decides eligibility and
   is importable by `core/battlePhaseSnapshot`; `itemUse.ts` executes and is importable only by
   `core/phaseHandlers/battlePhaseHandler`. A projection must be able to ask "is this enabled?"
@@ -112,10 +130,10 @@ returned to `src/core` for phase transition or rendering
 - `resolveSkillTargetsForPolicy` takes `BattleState` (not `OccupancyMap`) because dead targeting needs deployment access. `unitAnchor` is always the caster's current field anchor.
 - Dead-caster safety is enforced once, at the executor (`resolveCasterAndSkill`) and turn-flow entry points (`autoTurn`, `quickTurn`, `turnResolver`) — never inside the resolver. The resolver trusts that callers gate on `isAlive(caster)`.
 - Campaign/map resurrection (targeting dead units on the world map) is future work outside `battle/`.
-- Revive target resolution chokepoint is `resolveReviveTargetsForAction` (in `revive.ts`). Revive state-mutation chokepoint is `reviveUnitInBattle`. Both must route dead-friendly corpse geometry through `deadFriendlyTargeting.ts`.
-- Revive amount is target `maxHp × REVIVE_HP_PERCENT_LEVELS[level]` (clamped to ≥1 via `Math.ceil`). Revive does not use caster power and does not consume matrix multipliers — the `effect_area_matrix` defines shape only.
+- Revive target resolution chokepoint is `resolveReviveTargetsForAction` (in `revive.ts`). Revive state-mutation chokepoint is `reviveUnitInBattleByPercent` (`reviveUnitInBattle` is its skill-level wrapper). All must route dead-friendly corpse geometry through `deadFriendlyTargeting.ts`.
+- Revive amount is target `maxHp × percent` (clamped to ≥1 via `Math.ceil`), where the percent is `REVIVE_HP_PERCENT_LEVELS[level]` for a skill and the authored `hpPercent` for an item. Revive does not use caster power and does not consume matrix multipliers — the `effect_area_matrix` defines shape only.
 - Revive does not restore previous `activeEffects` (death already cleared them).
-- Revive does not insert the revived unit into the current `roundQueue`. `reviveUnitInBattle` reuses the existing `roundQueue` reference; the revived unit becomes eligible only on the next `buildRoundQueue` call.
+- Revive does not insert the revived unit into the current `roundQueue`. `reviveUnitInBattleByPercent` reuses the existing `roundQueue` reference; the revived unit becomes eligible on the next `buildRoundQueue` call. If the reviving action ends the round, that call happens in the same action's `advanceTurn`, so the unit appears in the very next round's queue — it is never delayed an extra round.
 - Skills containing a `revive` action must use `targetPolicy: { type: 'dead_friendly' }`. Enforced at compile time by `validateActionSkillDefinition` in `actionSkillDefinitionCompiler.ts`.
 - `chooseSkillIndexForUnit` (`skillTargetSelection.ts`) filters skills by "has at least one valid target". Filtering must be RNG-free; only the final candidate pick consumes RNG. When no candidates exist, fallback delegates to `resolveRandomSkillIndex`.
 - Skill preview reads `unitsById + deployments`. `fieldUnitCells` is render/hover data only and must not be the deployment source for revive geometry. The preview projection (`core/battleSkillPreviewProjection.ts`) builds the `deployments` map from `BattleUnitSnapshot.deployment`.

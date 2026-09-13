@@ -111,6 +111,7 @@ describe("itemActionPresentation", () => {
     // Same wording as the backpack tooltip: the nominal ceiling, not this target's restoration.
     expect(formatItemActionBody(menu())).toBe("Restores up to 10 HP.");
     expect(formatItemActionBody(menu({ effect: null }))).toBeNull();
-    expect(formatItemActionBody(menu({ effect: { type: "revive" } }))).toBeNull();
+    expect(formatItemActionBody(menu({ effect: { type: "revive", hpPercent: 30 } })))
+      .toBe("Revives with 30% HP.");
   });
 });

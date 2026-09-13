@@ -3,6 +3,7 @@ import {
   formatItemUsePrompt,
   formatUseEffectLine,
   formatItemBlockedReason,
+  formatBattleItemActionTooltip,
 } from "../../src/objects/itemUseEffectPresentation";
 import type { ItemUseFailure } from "../../src/shared/itemTypes";
 
@@ -93,8 +94,9 @@ describe("formatUseEffectLine", () => {
     expect(text).not.toMatch(/max hp/i);
   });
 
-  it("returns null for effects with no mechanics, and for no effect at all", () => {
-    expect(formatUseEffectLine({ type: "revive" })).toBeNull();
+  it("states a resurrection's authored share of max HP, and returns null for no effect", () => {
+    expect(formatUseEffectLine({ type: "revive", hpPercent: 30 })).toBe("Revives with 30% HP.");
+    expect(formatUseEffectLine({ type: "revive", hpPercent: 55 })).toBe("Revives with 55% HP.");
     expect(formatUseEffectLine(undefined)).toBeNull();
   });
 });
@@ -108,5 +110,21 @@ describe("formatItemBlockedReason", () => {
     for (const reason of ALL_REASONS) {
       expect(formatItemBlockedReason(reason).length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("formatBattleItemActionTooltip", () => {
+  it("describes the scroll, its cost and — when disabled — why", () => {
+    const effect = { type: "revive", hpPercent: 30 } as const;
+    expect(formatBattleItemActionTooltip("Small Resurrection Scroll", effect, null))
+      .toBe("Small Resurrection Scroll Revives with 30% HP. Uses up the item and ends the turn.");
+    expect(formatBattleItemActionTooltip("Small Resurrection Scroll", effect, "no_valid_targets"))
+      .toMatch(/No fallen ally to revive\.$/);
+  });
+
+  it("words the new targeting refusals", () => {
+    const effect = { type: "revive", hpPercent: 30 } as const;
+    expect(formatBattleItemActionTooltip("S", effect, "item_not_selected")).toMatch(/Select the item first\./);
+    expect(formatBattleItemActionTooltip("S", effect, "invalid_target")).toMatch(/Not a valid target/);
   });
 });

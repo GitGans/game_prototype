@@ -1,9 +1,11 @@
-// Revive owns two chokepoints:
-//   - resolveReviveTargetsForAction: pure target resolution from structural maps
-//   - reviveUnitInBattle:            BattleState-level mutation
-// computeReviveHp is the shared HP formula used by both runtime execution and
-// (Stage 3) preview. All three must route corpse geometry through
-// deadFriendlyTargeting.ts — duplicating the deployment+shape walk is forbidden.
+// Revive owns the resurrection chokepoints, shared by skills AND equipped items:
+//   - computeReviveHpFromPercent:   THE HP formula (maxHp × percent, ceil, ≥ 1)
+//   - reviveUnitInBattleByPercent:  THE BattleState-level mutation
+//   - resolveReviveTargetsForAction: pure skill target resolution from structural maps
+// Skills resolve their level to a percent first (computeReviveHp / reviveUnitInBattle are thin
+// wrappers); items pass their authored `hpPercent` directly — scroll strength is never a skill
+// level. All corpse geometry routes through deadFriendlyTargeting.ts — duplicating the
+// deployment+shape walk is forbidden.
 
 import type { BattleState, Unit } from './types';
 import type { CellCoord, Side } from '../shared/gridTypes';
@@ -26,23 +28,39 @@ export type ReviveHpReadable = Pick<Unit, 'maxHp'>;
 // shape is unchanged from Stage 1's DeadFriendlyTargetUnit.
 export type ReviveResolutionUnit = DeadFriendlyTargetUnit;
 
-// Revive amount is target maxHp × level percent.
-// Does NOT use caster power. Does NOT consume matrix multipliers.
+// THE resurrection HP formula, for skills and items alike: target maxHp × percent,
+// rounded up, never below 1. Does NOT use caster power. Does NOT consume matrix multipliers.
+export function computeReviveHpFromPercent(
+  unit: ReviveHpReadable,
+  hpPercent: number,
+): number {
+  return Math.max(1, Math.ceil((unit.maxHp * hpPercent) / 100));
+}
+
+// Skill path: the level resolves to a percent, then shares the formula above.
 export function computeReviveHp(
   unit: ReviveHpReadable,
   revive: ReviveEffect,
 ): number {
-  const pct = getReviveHpPercent(revive);
-  return Math.max(1, Math.ceil((unit.maxHp * pct) / 100));
+  return computeReviveHpFromPercent(unit, getReviveHpPercent(revive));
 }
 
-// BattleState-level revive mutation chokepoint. Returns null when the unit is
-// missing, not dead, or not field-deployed. roundQueue is intentionally reused
-// by reference — revive does not enter the current round.
+// Skill path wrapper: the level resolves to a percent, then shares the chokepoint below.
 export function reviveUnitInBattle(
   state: BattleState,
   unitId: string,
   revive: ReviveEffect,
+): { state: BattleState; hpRestored: number } | null {
+  return reviveUnitInBattleByPercent(state, unitId, getReviveHpPercent(revive));
+}
+
+// THE BattleState-level revive mutation chokepoint. Returns null when the unit is
+// missing, not dead, or not field-deployed. roundQueue is intentionally reused
+// by reference — resurrection itself never touches the current round's queue.
+export function reviveUnitInBattleByPercent(
+  state: BattleState,
+  unitId: string,
+  hpPercent: number,
 ): { state: BattleState; hpRestored: number } | null {
   const unit = state.units.get(unitId);
   if (!unit) return null;
@@ -51,7 +69,7 @@ export function reviveUnitInBattle(
   const deployment = state.deployments.get(unitId);
   if (!deployment || deployment.kind !== 'field') return null;
 
-  const hpRestored = computeReviveHp(unit, revive);
+  const hpRestored = computeReviveHpFromPercent(unit, hpPercent);
   const revivedUnit = reviveUnit(unit, hpRestored);
 
   const nextUnits = new Map(state.units);

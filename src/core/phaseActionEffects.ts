@@ -246,6 +246,7 @@ export function createPhaseActionEffects(
       case 'battle_start_turn':
       case 'battle_select_skill':
       case 'battle_use_skill':
+      case 'battle_select_item':
       case 'battle_use_item':
       case 'battle_advance_turn':
       case 'battle_skip_turn':
@@ -412,12 +413,21 @@ export function createPhaseActionEffects(
     /**
      * Battle-session finalization runs BEFORE the action-specific dispatch, and is structural
      * rather than an action catalogue: any transition leaving `battle` for a non-battle phase
-     * settles the outgoing attempt first.
+     * hands the outgoing attempt to its lifecycle owner first. What that means is the owner's
+     * decision, not this facade's: a completed exit (`exit_battle`) commits roster + inventory in
+     * one write; an outcome-less exit (`exit_to_menu`, `new_game`) performs no persistent write,
+     * discarding the attempt's roster result and item consumption together.
      *
-     * The ordering is forced, not stylistic. `exit_to_menu` clears the debug session and the
-     * battle runtime inside its dispatch case, and `new_game` reinitializes the campaign there —
-     * so settling afterwards would either write to a session that no longer exists or apply an
-     * outgoing attempt's records to a freshly created one that reuses the same authored ids.
+     * `outcome: null` currently means "abandoned" because those two actions are the only
+     * outcome-less exits. A future battle-to-non-battle action with its own commit policy must
+     * extend the exit contract explicitly instead of silently inheriting `null`.
+     *
+     * The ordering is forced, not stylistic. The owner validates the runtime and resolves its
+     * owning session, and `exit_to_menu` clears the debug session and the battle runtime inside
+     * its dispatch case while `new_game` reinitializes the campaign there — so finalizing
+     * afterwards would find no runtime or no session to validate, or validate against a session
+     * the attempt never belonged to. The call stays unconditional so that validation runs on
+     * every exit, abandoned ones included.
      *
      * `replay` resolves to a battle phase, so this never fires for it: the discarded attempt's
      * consumption is simply dropped, which is exactly what restores the potion.

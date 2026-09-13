@@ -40,7 +40,7 @@ export function mapDirectiveToPresentationInput(
  *
  * Used at both manual entry points — turn start and skill switch — so the same situation is always
  * worded the same way. It resolves no targets, evaluates no items and reads no runtime: an empty
- * committed `validTargets` IS "the selected skill has no targets", and manual player control is the
+ * committed `validTargets` IS "the selected action has no targets", and manual player control is the
  * committed `manualTurnControlsVisible` flag (owned by `battlePhaseSnapshot`), never re-derived here.
  */
 export function buildManualTurnPresentationInput(
@@ -53,6 +53,17 @@ export function buildManualTurnPresentationInput(
 
   if (phase.validTargets.length === 0) {
     return { type: 'await_manual_action', unitName: unit.name };
+  }
+
+  // An item in targeting mode owns the committed validTargets, so its projected target mode —
+  // not the active skill's policy — decides the prompt.
+  const selectedItem = phase.activeUnitActions.find(
+    a => a.kind === 'item' && a.instanceId === phase.selectedUsableInstanceId,
+  );
+  if (selectedItem?.kind === 'item') {
+    const itemPromptKind: ManualTargetPromptKind =
+      selectedItem.targetMode === 'dead_ally' ? 'revive' : 'heal';
+    return { type: 'await_manual_target', promptKind: itemPromptKind, unitName: unit.name };
   }
 
   const promptKind = resolveManualTargetPromptKindForUnit(unit);

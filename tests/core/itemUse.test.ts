@@ -28,7 +28,8 @@ const LOCAL_CATALOG: ItemCatalog = catalog({
   // with a third independently authored amount. Kind decides placement, never the effect.
   flask:    { kind: "usable", slot: "usable_slot", useEffect: { type: "heal", amount: 7 } },
   // Unsupported-effect coverage moved here when `heal` became executable.
-  scroll:   { kind: "consumable", slot: null, useEffect: { type: "revive" } },
+  // Revive is executable only in battle; from the backpack it stays unsupported.
+  scroll:   { kind: "consumable", slot: null, useEffect: { type: "revive", hpPercent: 30 } },
   helm:     { kind: "equipment", slot: "helmet", battleStatBonuses: { hp: 100 } },
 });
 

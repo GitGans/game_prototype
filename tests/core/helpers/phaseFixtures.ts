@@ -68,6 +68,8 @@ export function makeBattlePhase(overrides: Partial<BattlePhase> = {}): BattlePha
     roundQueue: [],
     activeUnitId: null,
     activeUnit: null,
+    activeUnitActions: [],
+    selectedUsableInstanceId: null,
     battleMode: 'manual',
     activeUnitSide: null,
     manualTurnControlsVisible: false,

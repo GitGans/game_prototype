@@ -93,10 +93,11 @@ Live game state in `BattleState` / `CampaignState`
   and > 0). `heal` is executable for **both** `usable` and `consumable` — out of combat by
   `core/itemUse.ts`, and in battle from `usable_slot` by `battle/itemUse.ts` — so its amount is
   validated for both, and only `equipment`, which may carry no `useEffect` at all, is exempt.
-  `revive` remains unimplemented and carries no payload validation; every use path rejects it with
-  `unsupported_effect`. No item id and no particular amount is ever privileged — a stronger potion
-  is a new entry in `items/usable/healing.ts`, never a new branch, and nothing outside that file
-  changes.
+  `revive` carries an authored `hpPercent`, validated here to be finite and in `(0, 100]` for every
+  kind that may carry it; it is executable in battle from `usable_slot` (`battle/itemUse.ts`) and
+  still unsupported out of combat. No item id and no particular amount is ever privileged — a
+  stronger potion is a new entry in `items/usable/healing.ts`, a stronger scroll a new entry in
+  `items/usable/resurrection.ts`, never a new branch, and nothing outside that file changes.
 - **Acquisition data lives elsewhere** — starting inventory in `startingInventoryDefinitions.ts`; shop/loot
   in their own future definition files. Item entries never carry acquisition data.
 

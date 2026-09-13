@@ -124,6 +124,12 @@ export type GamePhase =
        * for a bar that only ever shows one unit.
        */
       activeUnitActions:   readonly BattleActionBarEntry[];
+      /**
+       * The active unit's equipped item currently in targeting mode, projected from the battle
+       * runtime. Null unless that item's entry is on `activeUnitActions` — a scene never sees a
+       * dangling selection. While non-null, `validTargets` are the ITEM's target cells.
+       */
+      selectedUsableInstanceId: string | null;
       battleMode:              BattleMode;
       activeUnitSide:          Side | null;
       manualTurnControlsVisible: boolean;
@@ -252,10 +258,13 @@ export type PhaseAction =
   | { type: 'battle_start_turn' }
   | { type: 'battle_select_skill'; skillIndex: number }
   | { type: 'battle_use_skill'; unitId: string; target: CellCoord; skillIndex?: number }
+  // Enters targeting mode for the ACTIVE unit's equipped item that needs a target (a scroll).
+  | { type: 'battle_select_item'; unitId: string; instanceId: string }
   // Activation of the item equipped in `usable_slot`, during the acting unit's own manual turn.
-  // The payload identifies WHO and WHICH item — never a healing amount and never a target: both
-  // are derived, the amount from authored data and the target from the actor itself.
-  | { type: 'battle_use_item'; unitId: string; instanceId: string }
+  // `target` is null for a self item (potion) and the confirmed cell for a dead-ally item
+  // (scroll), which must be the committed selection. Amounts are never carried — they are
+  // authored data.
+  | { type: 'battle_use_item'; unitId: string; instanceId: string; target: CellCoord | null }
   | { type: 'battle_advance_turn' }
   | { type: 'battle_skip_turn'; reason?: 'manual_skip' | 'blocked_melee' }
   | { type: 'battle_charge_turn' }

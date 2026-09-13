@@ -145,6 +145,11 @@ export type ChargeTurnResult = {
   context: TurnContext;
   events: TurnEvent[];
   charged: boolean;
+  /**
+   * True ONLY for the already-charged no-op: state and context are returned unchanged. The
+   * dead-active recovery is not a refusal — it advances the queue — so it reports false.
+   */
+  refused: boolean;
 };
 
 export function chargeActiveTurn(input: {
@@ -164,13 +169,14 @@ export function chargeActiveTurn(input: {
       context: advanced.context,
       events: advanced.events,
       charged: false,
+      refused: false,
     };
   }
 
   // Already-charged remains a true no-op (legitimate UI-level rejection of a
   // double-tap on a unit that already charged this round).
   if (context.chargedThisRound.has(activeId)) {
-    return { state, context, events: [], charged: false };
+    return { state, context, events: [], charged: false, refused: true };
   }
 
   // Immutable context update — never mutate the existing Set
@@ -202,6 +208,7 @@ export function chargeActiveTurn(input: {
     context: newContext,
     events: [chargeEvent],
     charged: true,
+    refused: false,
   };
 }
 

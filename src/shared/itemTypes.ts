@@ -26,16 +26,19 @@ export type BattleStatBonuses = UnitBattleStatMap;
 export type PartialBattleStatBonuses = UnitBattleStatDelta;
 
 /**
- * A discriminated union keeps the contract honest (e.g. revive carries no amount).
+ * A discriminated union keeps the contract honest: each variant carries exactly its own payload.
  *
  * `heal` is EXECUTABLE on both `usable` and `consumable`: out of combat `core/itemUse.ts` applies
  * it and destroys the source instance; in battle `battle/itemUse.ts` applies it from usable_slot.
- * `permanent_stat_boost` is executable on a `consumable`. `revive` remains catalog data only —
- * no mechanics exist for it, and every use path rejects it with `unsupported_effect`.
+ * `permanent_stat_boost` is executable on a `consumable`. `revive` is executable IN BATTLE only,
+ * from usable_slot during the owner's manual turn: it restores a dead allied field unit to
+ * `hpPercent` of its max HP (`battle/itemUse.ts`). Out of combat it is still rejected with
+ * `unsupported_effect`. `hpPercent` is authored data — validated by the catalog builder, and
+ * defensively again by the battle evaluator; this file declares the contract only.
  */
 export type ItemUseEffect =
   | { type: 'heal'; amount: number }
-  | { type: 'revive' }
+  | { type: 'revive'; hpPercent: number }
   | { type: 'permanent_stat_boost'; stat: keyof BattleStatBonuses; amount: number };
 
 /**
@@ -107,8 +110,18 @@ export type BattleItemUseFailure =
   | 'instance_mismatch'
   | 'already_consumed'
   | 'unsupported_effect'
-  | 'invalid_amount'
-  | 'unit_full_hp';
+  | 'invalid_amount'        // also covers an invalid revive hpPercent
+  | 'unit_full_hp'
+  | 'no_valid_targets'      // revive: no dead allied field unit — recoverable, rendered disabled
+  | 'item_not_selected'     // execution of a targeted item that is not the current selection
+  | 'invalid_target';       // missing / stale / forged target, or a target on a self item
+
+/**
+ * How an equipped item chooses what it affects in battle. Declared here (not in battle/) because
+ * the battle action-bar snapshot carries it. `self` resolves immediately against the owner;
+ * `dead_ally` requires selecting a dead allied FIELD unit's cell first.
+ */
+export type BattleItemTargetMode = 'self' | 'dead_ally';
 
 /**
  * Equip refusals. An explicit shared vocabulary rather than a re-export of an inventory-owned

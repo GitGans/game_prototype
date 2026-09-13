@@ -124,6 +124,23 @@ describe('phaseActionEffects lifecycle ordering', () => {
     expect(calls).toEqual(['sessionFinalization', 'worldConsequence', 'teardown']);
   });
 
+  it('hands an exit_to_menu from battle to the finalizer, with no outcome, before disposing the session', () => {
+    // The facade must DELEGATE abandonment to the owner — never skip the call — so runtime and
+    // owning-session validation run on every exit, and must do so before the dispatch case
+    // destroys the debug session and the runtime.
+    const { controller, calls, deps } = setup();
+
+    controller.apply({ type: 'exit_to_menu' }, BATTLE, MAIN_MENU);
+
+    expect(calls).toEqual([
+      'sessionFinalization', 'clearDebug', 'clearRuntime', 'consumeClear', 'consumeClear', 'rng',
+      'teardown',
+    ]);
+    expect(deps.finalizeBattleSessionOnExit).toHaveBeenCalledWith({
+      previousPhase: BATTLE, outcome: null,
+    });
+  });
+
   it('does not run the generic teardown when an action-specific effect throws', () => {
     // Non-transactional by contract: the failed mutation is NOT rolled back, but nothing
     // after it runs either — no teardown, and (in the coordinator) no commit or sync.
@@ -287,8 +304,10 @@ describe('phaseActionEffects fails closed on impossible accepted inputs', () => 
    * Making it action-aware to keep this case owner-free would reintroduce the action catalogue
    * the structural check exists to avoid, and would silently miss future battle-to-non-battle
    * transitions. The action itself still throws and still applies no world or roster rule.
+   * With no outcome the real owner validates the attempt and writes nothing, so this impossible
+   * input is also free of persistent writes.
    */
-  it('settles the outgoing attempt before throwing for move_party from battle', () => {
+  it('finalizes the outgoing attempt before throwing for move_party from battle', () => {
     const { controller, calls } = setup();
 
     expect(() =>
