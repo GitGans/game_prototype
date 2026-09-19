@@ -13,9 +13,9 @@ import type { UpgradeOptionId } from '../shared/unitTypes';
 import type { SubMapState, WorldPos } from '../shared/worldTypes';
 import type { PlayerSessionSource } from './playerSessionState';
 import type {
-  ItemUsability, PendingItemUsePrompt, ItemActionMenuSnapshot, ItemActionKind,
+  ItemUsability, ItemUseOrigin, PendingItemUsePrompt,
 } from '../shared/snapshotTypes';
-export type { ItemUsability, PendingItemUsePrompt, ItemActionMenuSnapshot, ItemActionKind };
+export type { ItemUsability, ItemUseOrigin, PendingItemUsePrompt };
 import type { BattleParticipant, BattleExitOutcome } from './battleRuntimeContext';
 export type { BattleExitOutcome };
 
@@ -168,7 +168,6 @@ export type GamePhase =
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
       itemUsage: Record<string, ItemUsability>;
-      itemActionMenu: ItemActionMenuSnapshot | null;
       pendingItemUsePrompt: PendingItemUsePrompt | null;
     }
   | {
@@ -185,7 +184,6 @@ export type GamePhase =
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
       itemUsage: Record<string, ItemUsability>;
-      itemActionMenu: ItemActionMenuSnapshot | null;
       pendingItemUsePrompt: PendingItemUsePrompt | null;
     }
   | {
@@ -219,11 +217,13 @@ export type PhaseAction =
   // ── Item mutations (mutation-only: resolveTransition returns same ref) ──
   | { type: 'equip_item'; instanceId: string; unitTemplateId: string }
   | { type: 'unequip_item'; unitTemplateId: string; slot: string }
-  // ── Item use (mutation-only) — open/close/select/request/cancel change presentation only ──
-  | { type: 'open_item_actions'; instanceId: string }
-  | { type: 'close_item_actions' }
-  | { type: 'select_item_action'; instanceId: string; action: ItemActionKind }
-  | { type: 'request_use_item'; instanceId: string }
+  // ── Item use (mutation-only) — request/confirm/cancel change presentation only ──
+  // `request_use_item` names the ORIGIN it is asking about, because the same instance is a different
+  // request from the backpack and from `usable_slot`. `confirm_use_item` deliberately does NOT:
+  // the stored interaction is the single authority for the origin, exactly as it is for session
+  // ownership, and a second description supplied by the caller could not be told apart from a
+  // legitimate change.
+  | { type: 'request_use_item'; instanceId: string; origin: ItemUseOrigin }
   | { type: 'confirm_use_item'; instanceId: string; unitTemplateId: string }
   | { type: 'cancel_use_item' }
   // ── Commerce (mutation-only) — stub, no shop phase yet ────────

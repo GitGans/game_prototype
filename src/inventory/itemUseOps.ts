@@ -178,14 +178,22 @@ export type ConsumeItemResult =
   | { ok: true; nextInventory: InventoryState }
   | { ok: false; reason: ItemLocationFailure };
 
-/** Single-request wrapper over `removeItemInstances` for the backpack use path. */
-export function consumeBackpackItem(
+/**
+ * Single-request wrapper over `removeItemInstances` for the out-of-combat use paths.
+ *
+ * The location is the caller's, not this module's: a consumable is removed from the shared backpack
+ * and a usable from either there or `usable_slot`, and which one applies was already decided by the
+ * evaluation that admitted the use. Validation still runs here in full — the expected location is a
+ * claim to be checked, never an assertion to be trusted.
+ */
+export function consumeItemForUse(
   instanceId: string,
+  expected: ItemUseLocation,
   inventory: InventoryState,
   catalog: ItemCatalog,
 ): ConsumeItemResult {
   const result = removeItemInstances({
-    requests: [{ instanceId, expected: { kind: 'shared_backpack' } }],
+    requests: [{ instanceId, expected }],
     inventory,
     catalog,
   });

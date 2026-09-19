@@ -3,6 +3,7 @@ import {
   formatItemUsePrompt,
   formatUseEffectLine,
   formatItemBlockedReason,
+  formatUsableGestureHint,
   formatBattleItemActionTooltip,
 } from "../../src/objects/itemUseEffectPresentation";
 import type { ItemUseFailure } from "../../src/shared/itemTypes";
@@ -109,6 +110,24 @@ describe("formatItemBlockedReason", () => {
   it("produces non-empty wording for every failure reason", () => {
     for (const reason of ALL_REASONS) {
       expect(formatItemBlockedReason(reason).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+/**
+ * With the Use/Equip window gone, the tooltip is the only thing that tells a player a second click
+ * exists — so the verb has to match what a single click would actually do at that origin.
+ */
+describe("formatUsableGestureHint", () => {
+  it("offers equip from the backpack and unequip from usable_slot", () => {
+    expect(formatUsableGestureHint("backpack")).toMatch(/equip/i);
+    expect(formatUsableGestureHint("backpack")).not.toMatch(/unequip/i);
+    expect(formatUsableGestureHint("equipped_usable")).toMatch(/unequip/i);
+  });
+
+  it("mentions the double-click use in both cases", () => {
+    for (const origin of ["backpack", "equipped_usable"] as const) {
+      expect(formatUsableGestureHint(origin)).toMatch(/double-click/i);
     }
   });
 });

@@ -77,6 +77,8 @@ function input(over: Partial<ItemUseInput> = {}): ItemUseInput {
     playerBlueprints: BLUEPRINTS,
     unitTemplateId: "warrior",
     instanceId: "i_vitality",
+    // The backpack is the default origin for these cases; the equipped-origin block overrides it.
+    origin: "backpack",
     ...over,
   };
 }
@@ -282,6 +284,64 @@ describe("useItem — failures leave both domains untouched", () => {
   });
 });
 
+describe("the origin decides where the item is used from", () => {
+  /** A usable flask sitting in `usable_slot` and nowhere else. */
+  const equippedFlask = () => session({
+    unit: { currentHp: 1 },
+    backpackSlots: {},
+    equipSlots: { usable_slot: "i_flask" },
+  });
+
+  it("drinks the equipped potion out of combat and empties usable_slot", () => {
+    const before = equippedFlask();
+    const result = useItem(input({
+      session: before, instanceId: "i_flask", origin: "equipped_usable",
+    }));
+    if (!result.ok) throw new Error(result.reason);
+
+    expect(result.nextSession.roster.units.warrior.currentHp).toBe(8);   // 1 + 7
+    expect(result.nextSession.inventory.instances.i_flask).toBeUndefined();
+    expect(result.nextSession.inventory.containers.equip_warrior.slots).toEqual({});
+    // The backpack is not where it came from and must not have gained anything.
+    expect(result.nextSession.inventory.containers.backpack_shared.slots).toEqual({});
+  });
+
+  // The two origins are separate claims about one instance, and each is checked. This is what stops
+  // a verdict computed for one location authorizing consumption from the other.
+  it("refuses an equipped-origin use for an item that is in the backpack", () => {
+    const before = session({ unit: { currentHp: 1 } });
+
+    expect(useItem(input({
+      session: before, instanceId: "i_flask", origin: "equipped_usable",
+    }))).toEqual({ ok: false, reason: "not_equipped_by_unit" });
+    expect(before.inventory.instances.i_flask).toBeDefined();
+  });
+
+  it("refuses a backpack-origin use for an item that is equipped", () => {
+    const before = equippedFlask();
+
+    expect(useItem(input({ session: before, instanceId: "i_flask", origin: "backpack" })))
+      .toEqual({ ok: false, reason: "not_in_backpack" });
+    expect(before.inventory.containers.equip_warrior.slots).toEqual({ usable_slot: "i_flask" });
+  });
+
+  it("leaves a revive unsupported from EITHER origin — carrying it changes nothing", () => {
+    // The scroll is authored as a consumable in this catalog, so only the reason for the backpack
+    // claim is interesting; the equipped claim is refused before support is even consulted.
+    expect(useItem(input({ instanceId: "i_scroll", origin: "backpack" })))
+      .toEqual({ ok: false, reason: "unsupported_effect" });
+
+    const equippedScroll = session({
+      backpackSlots: {}, equipSlots: { usable_slot: "i_scroll" },
+    });
+    const equipped = useItem(input({
+      session: equippedScroll, instanceId: "i_scroll", origin: "equipped_usable",
+    }));
+    expect(equipped.ok).toBe(false);
+    expect(equippedScroll.inventory.instances.i_scroll).toBeDefined();
+  });
+});
+
 describe("evaluateItemUsability agrees with the executor", () => {
   const scenarios: Array<[string, Partial<ItemUseInput>]> = [
     ["an eligible HP boost", {}],
@@ -291,6 +351,18 @@ describe("evaluateItemUsability agrees with the executor", () => {
     ["an unimplemented effect", { instanceId: "i_scroll" }],
     ["a missing instance", { instanceId: "nope" }],
     ["an unknown character", { unitTemplateId: "ghost" }],
+    // The agreement must hold per ORIGIN, not just per instance: the read model and the executor
+    // resolve the location through the same mapping, so neither can decide about a different place.
+    ["an eligible equipped heal", {
+      instanceId: "i_flask",
+      origin: "equipped_usable" as const,
+      session: session({
+        unit: { currentHp: 1 }, backpackSlots: {}, equipSlots: { usable_slot: "i_flask" },
+      }),
+    }],
+    ["an equipped claim for a backpack item", {
+      instanceId: "i_flask", origin: "equipped_usable" as const,
+    }],
   ];
 
   it.each(scenarios)("matches on %s", (_label, over) => {

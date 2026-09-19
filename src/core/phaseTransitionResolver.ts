@@ -36,7 +36,6 @@ function buildDebugEquipScreenPlaceholder(): DebugEquipScreenPhase {
     learnedSkills: [],
     upgradeSkills: [],
     itemUsage: {},                  // filled by rebuildPhaseSnapshot
-    itemActionMenu: null,                 // filled by rebuildPhaseSnapshot
     pendingItemUsePrompt: null,           // filled by rebuildPhaseSnapshot
   };
 }
@@ -88,7 +87,6 @@ function buildEquipScreenPlaceholder(
     learnedSkills: [],                    // filled by rebuildPhaseSnapshot
     upgradeSkills: [],                    // filled by rebuildPhaseSnapshot
     itemUsage: {},                  // filled by rebuildPhaseSnapshot
-    itemActionMenu: null,                 // filled by rebuildPhaseSnapshot
     pendingItemUsePrompt: null,           // filled by rebuildPhaseSnapshot
   };
 }
@@ -263,48 +261,25 @@ export function resolveTransition(
       if (currentPhase.pendingItemUsePrompt) return null; // no competing mutation while confirming
       return currentPhase;
 
-    // ── Consumable confirmation (mutation-only) ──────────────────────────────
+    // ── Item-use confirmation (mutation-only) ────────────────────────────────
     // All three return `currentPhase` BY REFERENCE. PhaseManager classifies by reference identity,
     // so returning `{ ...currentPhase, … }` here would be treated as navigation and would call
     // sceneSynchronizer.sync(), restarting EquipScreen on every dialog open and cancel. The pending
-    // request therefore lives in the ConsumeConfirmationController, never in a phase field written
+    // request therefore lives in the item-interaction storage, never in a phase field written
     // here; this resolver owns acceptance only, and stays pure.
-
-    case 'open_item_actions': {
-      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      if (!currentPhase.selectedUnitTemplateId) return null;
-      // One modal at a time. Both fields project the same storage cell, so either being set
-      // means an interaction is already open.
-      if (currentPhase.itemActionMenu || currentPhase.pendingItemUsePrompt) return null;
-      // The item must be a backpack item this screen already evaluated — no new dependency.
-      if (!currentPhase.itemUsage[action.instanceId]) return null;
-      return currentPhase;
-    }
-
-    case 'close_item_actions': {
-      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      if (!currentPhase.itemActionMenu) return null;
-      return currentPhase;
-    }
-
-    case 'select_item_action': {
-      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      const menu = currentPhase.itemActionMenu;
-      if (!menu) return null;
-      if (menu.instanceId !== action.instanceId) return null;                 // stale window
-      if (menu.unitTemplateId !== currentPhase.selectedUnitTemplateId) return null;
-      // A disabled option is not selectable — for `equip` exactly as for `use`.
-      const option = menu.options.find(o => o.action === action.action);
-      if (!option?.enabled) return null;
-      return currentPhase; // effects re-validate live before clearing and applying
-    }
 
     case 'request_use_item': {
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
       if (!currentPhase.selectedUnitTemplateId) return null;
-      if (currentPhase.itemActionMenu || currentPhase.pendingItemUsePrompt) return null; // one modal at a time
-      // Eligibility comes from the snapshot this resolver was handed — no new dependency.
-      if (!currentPhase.itemUsage[action.instanceId]?.canUse) return null;
+      if (currentPhase.pendingItemUsePrompt) return null;                     // one modal at a time
+      // Eligibility comes from the snapshot this resolver was handed — no new dependency. The entry
+      // must describe the SAME origin the gesture claims: a usable in the backpack and the same
+      // instance in `usable_slot` are different requests, validated differently, so a backpack
+      // evaluation must never authorize an equipped-slot use.
+      const usage = currentPhase.itemUsage[action.instanceId];
+      if (!usage) return null;                      // an item this screen never evaluated
+      if (usage.origin !== action.origin) return null;
+      if (!usage.canUse) return null;
       // The target is always the selected character; effects records it, never the caller.
       return currentPhase;
     }

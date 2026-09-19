@@ -1,13 +1,14 @@
 import type { ItemUseFailure } from '../shared/itemTypes';
 import type { PlayerSessionState } from './playerSessionState';
-import { consumeBackpackItem } from '../inventory';
+import { consumeItemForUse } from '../inventory';
 import { applyPermanentStatBoostToRoster, applyItemHealingToRoster } from '../progression';
-import { evaluateItemUse, type ItemUseInput } from './itemUsability';
+import { evaluateItemUse, itemUseLocationForOrigin, type ItemUseInput } from './itemUsability';
 
 export type { ItemUseInput };
 
 /**
- * The consumable EXECUTOR: applies the effect and destroys the instance, together.
+ * The out-of-combat item EXECUTOR: applies the effect and destroys the instance, together — from
+ * whichever origin the caller's input names (shared backpack or `usable_slot`).
  * Pure — no storage, no Phaser, no campaign/debug conditional; the caller supplies the session,
  * the catalog and the blueprints and installs the result.
  *
@@ -15,6 +16,9 @@ export type { ItemUseInput };
  * read model uses too, so a prompt can never advertise an action this refuses. Splitting the two
  * across modules is what keeps the equipment-screen projection unable to reach this function at
  * all — its import allowlist names `core/itemUsability` and not this file.
+ *
+ * Both delegates receive pre-validated data and mutate nothing, so a partial apply is impossible:
+ * either the complete next session is returned or the caller's is untouched.
  */
 
 export type UseItemResult =
@@ -49,8 +53,12 @@ export function useItem(input: ItemUseInput): UseItemResult {
       );
   if (!rosterResult.ok) return { ok: false, reason: rosterResult.reason };
 
-  const inventoryResult = consumeBackpackItem(
+  // The location comes from the SAME mapping the evaluation above validated through, applied to the
+  // same input — so consumption can only ever remove the item from the place eligibility was decided
+  // about, with no second copy of that fact to fall out of step.
+  const inventoryResult = consumeItemForUse(
     input.instanceId,
+    itemUseLocationForOrigin(input.origin, input.unitTemplateId),
     input.session.inventory,
     input.catalog,
   );

@@ -21,7 +21,7 @@ progression's or battle's business, and composing them is `core`'s.
 - [inventoryConstants.ts](inventoryConstants.ts) — `BACKPACK_SLOT_COUNT = 24` (single capacity invariant)
 - [containerOps.ts](containerOps.ts) — `canPlaceItem`, `findFreeBackpackSlot`, `findItemLocation`, `moveItem`, plus the immutable `applySlotChanges` primitive
 - [equipmentOps.ts](equipmentOps.ts) — `canUnitEquipItem`, `getEquippedItems`, `evaluateEquipItem`, `equipItem`, `unequipItem`. **`evaluateEquipItem` is the read half of `equipItem` and enforces every one of its preconditions** — slot resolution, equipment container, source location and swap feasibility against the vacated containers — because `canUnitEquipItem` checks only instance/definition existence and class restriction and is _not_ a sufficient "can this be equipped" predicate. `equipItem` is implemented on top of it, so a screen's enabled state and the pipeline's outcome are one decision and cannot drift (`equipItem`/`unequipItem` take and return `InventoryState`; `unequipItem` takes a `ConcreteEquipSlot` and resolves its destination backpack via `requireSharedBackpack`, no `backpackId` parameter)
-- [itemUseOps.ts](itemUseOps.ts) — `validateItemForUse` (read-only), `removeItemInstances` (immutable batch removal via `applySlotChanges`) and the single-request wrapper `consumeBackpackItem`. Validation takes an explicit **expected location** (`ItemUseLocation`): `shared_backpack` accepts `consumable` and `usable`, `equipped_usable` accepts a `usable` whose metadata places it in `usable_slot` and that is actually in `equip_${unitTemplateId}` there. The equipped variant carries **no caller-chosen slot** — letting a caller name the slot would let a misplaced item authorize its own consumption. Every request requires the instance to have **exactly one** container reference: removal deletes the registry entry, so a second reference would be left dangling — `duplicate_placement` is rejected rather than half-repaired. `removeItemInstances` validates the **whole batch** against the original inventory before constructing a result, and rejects a repeated instance id explicitly (validating it twice would otherwise succeed twice)
+- [itemUseOps.ts](itemUseOps.ts) — `validateItemForUse` (read-only), `removeItemInstances` (immutable batch removal via `applySlotChanges`) and the single-request wrapper `consumeItemForUse` (which takes the expected location, so both out-of-combat origins use one wrapper). Validation takes an explicit **expected location** (`ItemUseLocation`): `shared_backpack` accepts `consumable` and `usable`, `equipped_usable` accepts a `usable` whose metadata places it in `usable_slot` and that is actually in `equip_${unitTemplateId}` there. The equipped variant carries **no caller-chosen slot** — letting a caller name the slot would let a misplaced item authorize its own consumption. Every request requires the instance to have **exactly one** container reference: removal deletes the registry entry, so a second reference would be left dangling — `duplicate_placement` is rejected rather than half-repaired. `removeItemInstances` validates the **whole batch** against the original inventory before constructing a result, and rejects a repeated instance id explicitly (validating it twice would otherwise succeed twice)
 - [equipmentBonuses.ts](equipmentBonuses.ts) — `getEquippedBonuses`
 - [equipmentSlotResolver.ts](equipmentSlotResolver.ts) — `canMetadataUseEquipmentSlot`, `resolvePreferredEquipSlot` (own the `ring` → `ring_1`/`ring_2` rule; `usable` items resolve to `usable_slot`; metadata-driven), `isConcreteEquipSlot` (application-boundary guard rejecting the item-level pseudo-slot `'ring'` and unknown strings)
 - [inventorySnapshots.ts](inventorySnapshots.ts) — `buildBackpackSnapshot`, `buildEquipmentSnapshot` (both take `InventoryState`; `buildBackpackSnapshot` resolves its backpack via `requireSharedBackpack`, no container-id parameter)
@@ -65,9 +65,11 @@ progression's or battle's business, and composing them is `core`'s.
   effect type**.
 - **`usable` items are activatable, from two places.** A `usable` in the shared backpack is
   drinkable exactly like a `consumable` (`shared_backpack`); the same item in `usable_slot` is
-  activatable during a manual battle turn (`equipped_usable`). A resurrection scroll is activatable
-  from `usable_slot` in battle but not from the backpack yet — both decisions belong to the layers
-  that own effect support, never here.
+  activatable during a manual battle turn AND out of combat (`equipped_usable`). The location is
+  always the caller's explicit claim and is always CHECKED here: a wrongly-placed item cannot
+  authorize its own consumption, and a verdict computed for one location can never remove an item
+  from the other. A resurrection scroll is activatable from `usable_slot` in battle but from neither
+  place out of combat — those decisions belong to the layers that own effect support, never here.
 - **Backpack capacity is 24** everywhere — operations and snapshots both use `BACKPACK_SLOT_COUNT`. Do not
   reintroduce a hardcoded `10` or `24`.
 - **Every `InventoryState` has exactly one structurally identified shared backpack** —
@@ -82,7 +84,7 @@ progression's or battle's business, and composing them is `core`'s.
 
 ## Where to Modify
 
-- item resolution / removal for use → [itemUseOps.ts](itemUseOps.ts)
+- item resolution / removal for use, from either out-of-combat location → [itemUseOps.ts](itemUseOps.ts)
 - container placement / movement rules → [containerOps.ts](containerOps.ts)
 - equip / unequip / class restrictions → [equipmentOps.ts](equipmentOps.ts)
 - equipment stat-bonus aggregation → [equipmentBonuses.ts](equipmentBonuses.ts)

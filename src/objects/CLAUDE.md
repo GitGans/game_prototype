@@ -45,8 +45,8 @@ Applying presentation output to Phaser objects is the responsibility of `BattleP
 - `SkillBar.ts` — vertical skill toolbar with active highlight and tooltips
 - `SkillIconRow.ts` — skill list with icons and `SkillCellTooltip` on hover
 - `UpgradeCard.ts` — upgrade-choice card (three states: chosen / available / locked)
-- `ItemCell.ts` — single equipment/backpack slot with tooltip; key method: `refresh()`
-- `EquipmentMatrix.ts` — 4×3 equipment grid composed from `ItemCell`
+- `ItemCell.ts` — single equipment/backpack slot with tooltip and click gestures; key methods: `refresh()`, `cancelPendingGesture()`
+- `EquipmentMatrix.ts` — 4×3 equipment grid composed from `ItemCell`; receives `itemUsage` so the equipped usable's cell can explain its own eligibility
 - `BackpackRow.ts` — configurable inventory grid composed from `ItemCell`
 - `UnitTooltip.ts` — unified unit profile popup; renders any `BattleUnitSnapshot` regardless of side or field/bench state
 - `EffectTooltip.ts` — popup for a single active effect
@@ -87,16 +87,12 @@ Scene receives user interaction via callback — no state mutation here
 - `itemUseEffectPresentation.ts` — wording for out-of-combat use (confirmation body, tooltip line,
   blocked reasons) plus `formatBattleItemActionTooltip` for the skill-bar item action, which
   states the two consequences the icon cannot show: the item is CONSUMED and the turn ENDS.
-- `itemActionPresentation.ts` — wording and option shaping for the item-action window. It
-  **formats and forwards; it decides nothing**: `enabled` is copied through from the snapshot and
-  never recomputed, and the module has no idea which actions an item supports — the option list
-  arrives already decided by the read model (`core/itemUsability` for use,
-  `inventory.evaluateEquipItem` for equip). Disabled reasons come from two vocabularies
-  (`ItemUseFailure`, `ItemEquipFailure`) whose members overlap by name with different wording, so
-  the ACTION selects the table, never the reason alone. `tests/objects/` asserts the pass-through,
-  so a future eligibility rule cannot migrate quietly into wording.
-- `ItemActionDialog.ts` — the item-aware adapter over the generic `ui/ActionDialog`. Structured
-  snapshot data in, callbacks out; no PhaseManager, no storage, no executor, no potion branch.
+- `ItemCell.ts` gestures — a `usable` supports TWO of them (single click equips or unequips, double
+  click opens the use confirmation), so its single click is DEFERRED by `DOUBLE_CLICK_WINDOW_MS`
+  through the game-agnostic `ui/clickGesture` recognizer and exactly one callback fires per gesture.
+  Every other kind stays immediate. `formatUsableGestureHint(origin)` supplies the tooltip line that
+  advertises the second gesture — with the Use/Equip window gone nothing else does — and the verb
+  follows the ORIGIN the usability entry already carries, never the cell's slot key.
 - `SkillBar.ts` renders the entries the committed snapshot supplies (`BattleActionBarEntry`) and
   decides nothing about which exist or are enabled. A disabled item entry stays VISIBLE and
   dimmed — a recoverable "not yet" is information; an unsupported effect produces no entry at all,
@@ -113,6 +109,16 @@ Scene receives user interaction via callback — no state mutation here
 - All sizing uses `LAYOUT_SCALE` from `src/core/Constants` — no raw pixel constants inside components
 - Sprite absence must be handled with a visible fallback (rectangle or letter), never a crash
 - `refresh()` / `update()` is the only path to change displayed data after construction
+- **A pending click gesture belongs to the committed snapshot under which its FIRST click occurred.**
+  Deferring a click (see `ItemCell`) means an input can outlive the state it was made against, so
+  every committed refresh cancels all pending gestures before rendering new data —
+  `EquipmentPanel.refresh()` calls `cancelPendingGestures()` first, unconditionally and before its
+  own early return, and destruction cancels them by destroying the cells. Comparing instance ids
+  instead is **not** a sufficient substitute: `reset_debug_session` keeps the same phase and the same
+  selected character and recreates the same authored instance ids, so nothing about the incoming data
+  would reveal that the context changed. This cannot swallow the gesture that caused the refresh —
+  the recognizer clears its pending state before invoking the callback that dispatches — nor break a
+  double-click, since no transition occurs between its two clicks
 - Stable structure (fixed number of children) → update via `update(snapshot)` or `refresh()`
 - Variable structure (list length changes) → destroy and recreate the component
 - Any UI pattern used in ≥2 places must be extracted into a component here or in `src/ui/`
@@ -129,7 +135,7 @@ Scene receives user interaction via callback — no state mutation here
 - change battle log format or capacity → `BattleLog.ts`
 - change skill bar layout or highlight → `SkillBar.ts`
 - change upgrade card states or layout → `UpgradeCard.ts`
-- change equipment slot visuals → `ItemCell.ts`, `EquipmentMatrix.ts`
+- change equipment slot visuals, or item click/double-click gestures → `ItemCell.ts`, `EquipmentMatrix.ts`
 - change backpack grid → `BackpackRow.ts`
 - change unit stat tooltip → `UnitTooltip.ts`
 - change effect/skill/item tooltip content → `EffectTooltip.ts`, `SkillTooltip.ts`, `SkillCellTooltip.ts`, `ItemTooltip.ts`

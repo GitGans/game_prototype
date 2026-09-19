@@ -14,9 +14,9 @@ import { MAP_DEFINITIONS } from "../../src/data/mapDefinitions";
 import { CAMPAIGN_INITIAL_STATE_DEFINITION } from "../../src/data/campaignInitialStateDefinition";
 
 /**
- * The item-action window through the real pipeline: which modal is open, which options are
- * enabled, and — the part a projection cannot establish — that a selection DISPOSES the stored
- * interaction rather than leaving it behind for the window to reappear from.
+ * The item-use interaction through the real pipeline: which requests are admitted, what a single-click
+ * equip does to the two origins, and — the part a projection cannot establish — that a confirmation is
+ * DISPOSED rather than left behind for the dialog to reappear from.
  */
 
 const UNIT_ID = "warrior";
@@ -24,6 +24,7 @@ const OTHER_UNIT_ID = "mage";
 const POTION = "item_start_small_healing_potion";
 const VITALITY = "item_start_vitality_essence";
 const RING = "item_start_bronze_ring";
+const SCROLL = "item_start_small_resurrection_scroll";
 
 function equipPhase(manager: PhaseManagerClass): Extract<
   GamePhase, { type: "equip_screen" | "debug_equip_screen" }
@@ -35,14 +36,6 @@ function equipPhase(manager: PhaseManagerClass): Extract<
   return phase;
 }
 
-function option(manager: PhaseManagerClass, action: "use" | "equip") {
-  const menu = equipPhase(manager).itemActionMenu;
-  if (!menu) throw new Error("no item-action window is open");
-  const found = menu.options.find(o => o.action === action);
-  if (!found) throw new Error(`window has no "${action}" option`);
-  return found;
-}
-
 function setCurrentHp(source: PlayerSessionSource, hp: number | null): void {
   const session = PlayerSessionStore.getSession(source);
   PlayerSessionStore.replaceRoster(source, {
@@ -50,19 +43,17 @@ function setCurrentHp(source: PlayerSessionSource, hp: number | null): void {
   });
 }
 
-function killUnit(source: PlayerSessionSource): void {
-  const session = PlayerSessionStore.getSession(source);
-  PlayerSessionStore.replaceRoster(source, {
-    units: {
-      ...session.roster.units,
-      [UNIT_ID]: { ...session.roster.units[UNIT_ID], lifeState: "dead", currentHp: 0 },
-    },
-  });
-}
-
 function equippedUsable(source: PlayerSessionSource): string | undefined {
   return PlayerSessionStore.getSession(source)
     .inventory.containers[`equip_${UNIT_ID}`].slots.usable_slot;
+}
+
+/** The backpack slot key currently holding `instanceId`, or null. */
+function backpackSlotOf(source: PlayerSessionSource, instanceId: string): string | null {
+  const containers = PlayerSessionStore.getSession(source).inventory.containers;
+  const backpack = Object.values(containers).find(c => c.kind === "backpack")!;
+  const found = Object.entries(backpack.slots).find(([, id]) => id === instanceId);
+  return found ? found[0] : null;
 }
 
 function openCampaignEquipScreen() {
@@ -85,198 +76,181 @@ beforeEach(() => {
   clearItemInteractionSlot("debug");
 });
 
-describe("opening the window", () => {
-  it("offers Use and Equip for a backpack usable, and writes nothing", () => {
+describe("single-click equip", () => {
+  it("moves a backpack usable into usable_slot and re-homes its usability entry", () => {
     const h = openCampaignEquipScreen();
-    const before = PlayerSessionStore.getSession("campaign");
-    setCurrentHp("campaign", 1); // wounded, so Use is genuinely available
+    setCurrentHp("campaign", 1);
+    h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
+    expect(equipPhase(h.manager).itemUsage[POTION].origin).toBe("backpack");
 
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
+    h.manager.transition({ type: "equip_item", instanceId: POTION, unitTemplateId: UNIT_ID });
 
-    const menu = equipPhase(h.manager).itemActionMenu!;
-    expect(menu.instanceId).toBe(POTION);
-    expect(menu.itemName).toBe("Small Healing Potion");
-    expect(menu.options.map(o => [o.action, o.enabled]))
-      .toEqual([["use", true], ["equip", true]]);
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
-    expect(PlayerSessionStore.getSession("campaign").inventory).toEqual(before.inventory);
-  });
-
-  it("keeps Equip available at full HP and on a dead character, disabling only Use", () => {
-    const h = openCampaignEquipScreen();
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-
-    expect(option(h.manager, "use")).toEqual({
-      action: "use", enabled: false, disabledReason: "unit_full_hp",
+    expect(equippedUsable("campaign")).toBe(POTION);
+    expect(backpackSlotOf("campaign", POTION)).toBeNull();
+    // The same instance now reports on the OTHER origin — one entry, one location.
+    expect(equipPhase(h.manager).itemUsage[POTION]).toMatchObject({
+      canUse: true, origin: "equipped_usable",
     });
-    expect(option(h.manager, "equip").enabled).toBe(true);
-
-    killUnit("campaign");
-    h.manager.transition({ type: "close_item_actions" });
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-
-    expect(option(h.manager, "use")).toEqual({
-      action: "use", enabled: false, disabledReason: "unit_dead",
-    });
-    expect(option(h.manager, "equip").enabled).toBe(true);
   });
 
-  it("opens at most one modal — a confirmation blocks the window and vice versa", () => {
+  /**
+   * "Swap when occupied" needs no gesture of its own: `equipItem` already sends the displaced item
+   * back to the backpack slot the new one came from.
+   */
+  it("swaps the occupant of usable_slot back into the clicked slot", () => {
     const h = openCampaignEquipScreen();
+    h.manager.transition({ type: "equip_item", instanceId: POTION, unitTemplateId: UNIT_ID });
+    expect(equippedUsable("campaign")).toBe(POTION);
 
-    h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
-    expect(h.manager.transition({ type: "open_item_actions", instanceId: POTION }).status)
-      .toBe("rejected");
+    // A second usable — the resurrection scroll — claims the one usable_slot.
+    const scrollSlot = backpackSlotOf("campaign", SCROLL);
+    h.manager.transition({ type: "equip_item", instanceId: SCROLL, unitTemplateId: UNIT_ID });
 
-    h.manager.transition({ type: "cancel_use_item" });
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-    expect(h.manager.transition({ type: "request_use_item", instanceId: VITALITY }).status)
-      .toBe("rejected");
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(equippedUsable("campaign")).toBe(SCROLL);
+    // The displaced potion lands in the slot the scroll came from, not just "somewhere free".
+    expect(backpackSlotOf("campaign", POTION)).toBe(scrollSlot);
+    expect(backpackSlotOf("campaign", SCROLL)).toBeNull();
   });
 
-  it("rejects an item that is not a backpack usable or consumable", () => {
+  it("unequips on a single click, returning the item to the backpack", () => {
     const h = openCampaignEquipScreen();
+    h.manager.transition({ type: "equip_item", instanceId: POTION, unitTemplateId: UNIT_ID });
 
-    expect(h.manager.transition({ type: "open_item_actions", instanceId: RING }).status)
-      .toBe("rejected");
-    expect(h.manager.transition({ type: "open_item_actions", instanceId: "nope" }).status)
-      .toBe("rejected");
-    expect(equipPhase(h.manager).itemActionMenu).toBeNull();
+    h.manager.transition({ type: "unequip_item", unitTemplateId: UNIT_ID, slot: "usable_slot" });
+
+    expect(equippedUsable("campaign")).toBeUndefined();
+    expect(backpackSlotOf("campaign", POTION)).not.toBeNull();
+    expect(equipPhase(h.manager).itemUsage[POTION].origin).toBe("backpack");
   });
 });
 
-describe("selecting an action", () => {
-  it("Use replaces the window with the existing confirmation", () => {
+describe("admitting a use request", () => {
+  it("opens exactly one confirmation at a time", () => {
+    const h = openCampaignEquipScreen();
+
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
+    expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
+
+    // A second request — for any item, from any origin — is refused while one is open.
+    expect(h.manager.transition({
+      type: "request_use_item", instanceId: POTION, origin: "backpack",
+    }).status).toBe("rejected");
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({ instanceId: VITALITY });
+
+    h.manager.transition({ type: "cancel_use_item" });
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+  });
+
+  it("blocks competing equipment mutations while a confirmation is open", () => {
+    const h = openCampaignEquipScreen();
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
+
+    expect(h.manager.transition({
+      type: "equip_item", instanceId: POTION, unitTemplateId: UNIT_ID,
+    }).status).toBe("rejected");
+    expect(equippedUsable("campaign")).toBeUndefined();
+  });
+
+  it("rejects an item the screen evaluated for no origin at all", () => {
+    const h = openCampaignEquipScreen();
+
+    // A ring is equipment: it carries no usability verdict, so neither gesture can use it.
+    expect(h.manager.transition({
+      type: "request_use_item", instanceId: RING, origin: "backpack",
+    }).status).toBe("rejected");
+    expect(h.manager.transition({
+      type: "request_use_item", instanceId: "nope", origin: "backpack",
+    }).status).toBe("rejected");
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+  });
+
+  /**
+   * The origin guard, end to end. A backpack verdict must not admit an equipped-slot request, and
+   * once the item moves the previously valid origin stops working.
+   */
+  it("admits only the origin the committed verdict describes", () => {
     const h = openCampaignEquipScreen();
     setCurrentHp("campaign", 1);
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
+    h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
 
-    h.manager.transition({ type: "select_item_action", instanceId: POTION, action: "use" });
+    expect(h.manager.transition({
+      type: "request_use_item", instanceId: POTION, origin: "equipped_usable",
+    }).status).toBe("rejected");
 
-    expect(equipPhase(h.manager).itemActionMenu).toBeNull();
+    h.manager.transition({ type: "equip_item", instanceId: POTION, unitTemplateId: UNIT_ID });
+
+    expect(h.manager.transition({
+      type: "request_use_item", instanceId: POTION, origin: "backpack",
+    }).status).toBe("rejected");
+    expect(h.manager.transition({
+      type: "request_use_item", instanceId: POTION, origin: "equipped_usable",
+    }).status).toBe("applied");
     expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({ instanceId: POTION });
-  });
-
-  it("Equip closes the window and moves the potion into usable_slot", () => {
-    const h = openCampaignEquipScreen();
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-
-    h.manager.transition({ type: "select_item_action", instanceId: POTION, action: "equip" });
-
-    expect(equipPhase(h.manager).itemActionMenu).toBeNull();
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
-    expect(equippedUsable("campaign")).toBe(POTION);
-  });
-
-  it("rejects a disabled option, leaving the window open", () => {
-    const h = openCampaignEquipScreen(); // full HP → Use disabled
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-
-    expect(h.manager.transition({
-      type: "select_item_action", instanceId: POTION, action: "use",
-    }).status).toBe("rejected");
-    expect(equipPhase(h.manager).itemActionMenu).not.toBeNull();
-    // Equip was never disabled here, so it still goes through.
-    expect(option(h.manager, "equip").enabled).toBe(true);
-  });
-
-  it("rejects a selection naming a different instance, leaving the interaction untouched", () => {
-    const h = openCampaignEquipScreen();
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-
-    expect(h.manager.transition({
-      type: "select_item_action", instanceId: VITALITY, action: "use",
-    }).status).toBe("rejected");
-
-    // The stored interaction still belongs to the potion — an unrelated action disposed nothing.
-    expect(equipPhase(h.manager).itemActionMenu?.instanceId).toBe(POTION);
-  });
-
-  it("closes without writing on close_item_actions", () => {
-    const h = openCampaignEquipScreen();
-    const before = PlayerSessionStore.getSession("campaign");
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-
-    h.manager.transition({ type: "close_item_actions" });
-
-    expect(equipPhase(h.manager).itemActionMenu).toBeNull();
-    expect(PlayerSessionStore.getSession("campaign")).toEqual(before);
   });
 });
 
 describe("stale interactions", () => {
-  it("hides the window when the character changes, and does not restore it on return", () => {
+  it("hides the confirmation when the character changes, and does not restore it on return", () => {
     const h = openCampaignEquipScreen();
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     h.manager.transition({ type: "switch_equip_unit", templateId: OTHER_UNIT_ID });
-    expect(equipPhase(h.manager).itemActionMenu).toBeNull();
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
 
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
-    expect(equipPhase(h.manager).itemActionMenu).toBeNull();
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
   });
 
   it("disposes the interaction when the screen is left", () => {
     const h = openCampaignEquipScreen();
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     h.manager.transition({ type: "close_equip_screen" });
     h.manager.transition({ type: "open_equip_screen", unitTemplateId: UNIT_ID });
 
-    expect(equipPhase(h.manager).itemActionMenu).toBeNull();
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
   });
 
-  it("losing USE eligibility alone leaves the window open, with Use disabled", () => {
-    // Only a selection disposes. A wound healing between open and render must not close a
-    // window whose Equip option is still perfectly usable.
+  it("a confirm that fails live re-validation clears the interaction and writes nothing", () => {
+    // The dialog was opened while the character was wounded; the roster changes underneath before the
+    // player confirms. The use must neither apply nor linger.
     const h = openCampaignEquipScreen();
     setCurrentHp("campaign", 1);
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-    expect(option(h.manager, "use").enabled).toBe(true);
+    h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
+    h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
+    expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
 
-    setCurrentHp("campaign", null); // back to full health
-    h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID }); // re-render, same unit
-
-    expect(equipPhase(h.manager).itemActionMenu).not.toBeNull();
-    expect(option(h.manager, "use").enabled).toBe(false);
-    expect(option(h.manager, "equip").enabled).toBe(true);
-  });
-
-  it("a selection that fails live re-validation clears the interaction and writes nothing", () => {
-    // The window was rendered while the character was wounded; the roster changes underneath
-    // before the player clicks. The action must neither apply nor linger.
-    const h = openCampaignEquipScreen();
-    setCurrentHp("campaign", 1);
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-    expect(option(h.manager, "use").enabled).toBe(true);
-
-    // Heal behind the pipeline's back, so the resolver still sees the stale enabled snapshot.
+    // Heal behind the pipeline's back, so routing still sees the stale committed prompt.
     setCurrentHp("campaign", null);
     const before = PlayerSessionStore.getSession("campaign");
 
-    h.manager.transition({ type: "select_item_action", instanceId: POTION, action: "use" });
+    h.manager.transition({
+      type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
+    });
 
     expect(PlayerSessionStore.getSession("campaign")).toEqual(before);
+    // Cleared, not left behind: the dialog is gone and a fresh request is possible again.
     expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
-    // Cleared, not left behind: the window is gone and can be opened again.
-    expect(equipPhase(h.manager).itemActionMenu).toBeNull();
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-    expect(equipPhase(h.manager).itemActionMenu?.instanceId).toBe(POTION);
+    setCurrentHp("campaign", 1);
+    h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
+    h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({ instanceId: POTION });
   });
 });
 
 describe("session isolation", () => {
-  it("a campaign window is invisible to a debug session, and vice versa", () => {
+  it("a campaign confirmation is invisible to a debug session, and vice versa", () => {
     const campaign = openCampaignEquipScreen();
-    campaign.manager.transition({ type: "open_item_actions", instanceId: POTION });
+    campaign.manager.transition({
+      type: "request_use_item", instanceId: VITALITY, origin: "backpack",
+    });
 
     const debug = createLifecycleHarness();
     debug.openDebugSession(1);
     debug.manager.transition({ type: "switch_debug_unit", templateId: UNIT_ID });
 
-    expect(equipPhase(debug.manager).itemActionMenu).toBeNull();
-    expect(equipPhase(campaign.manager).itemActionMenu?.instanceId).toBe(POTION);
+    expect(equipPhase(debug.manager).pendingItemUsePrompt).toBeNull();
+    expect(equipPhase(campaign.manager).pendingItemUsePrompt)
+      .toMatchObject({ instanceId: VITALITY });
   });
 });

@@ -1,7 +1,7 @@
 import type {
   BattleItemUseFailure, ItemUseFailure, ItemUseEffect, ReadonlyItemUseEffect,
 } from '../shared/itemTypes';
-import type { ItemEffectPreview, PendingItemUsePrompt } from '../shared/snapshotTypes';
+import type { ItemEffectPreview, ItemUseOrigin, PendingItemUsePrompt } from '../shared/snapshotTypes';
 import type { UnitBattleStatKey } from '../shared/unitTypes';
 import { STAT_PRESENTATION, formatStatValue } from './statPresentation';
 
@@ -75,9 +75,22 @@ const BLOCKED_REASONS: Record<ItemUseFailure, string> = {
   invalid_result: 'Cannot use: this item has an invalid effect value.',
 };
 
-/** Always shown for an ineligible consumable — the reason is part of the behaviour contract. */
+/** Always shown for an ineligible item — the reason is part of the behaviour contract. */
 export function formatItemBlockedReason(reason: ItemUseFailure): string {
   return BLOCKED_REASONS[reason];
+}
+
+/**
+ * The two gestures a usable item supports out of combat.
+ *
+ * Shown because nothing else advertises the second one: a single click equips or unequips, and
+ * without this line "double-click to drink" is undiscoverable. The verb follows the ORIGIN, which the
+ * usability entry already carries — no consumer re-derives it from a slot key.
+ */
+export function formatUsableGestureHint(origin: ItemUseOrigin): string {
+  return origin === 'backpack'
+    ? 'Click to equip · Double-click to use.'
+    : 'Click to unequip · Double-click to use.';
 }
 
 const BATTLE_BLOCKED_REASONS: Record<BattleItemUseFailure, string> = {

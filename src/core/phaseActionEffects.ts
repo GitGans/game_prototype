@@ -13,8 +13,6 @@ import {
 } from './phaseHandlers/worldPhaseHandler';
 import { applyEquipmentPhaseAction } from './phaseHandlers/inventoryPhaseHandler';
 import {
-  openItemActions,
-  applyItemActionSelection,
   beginItemUseConfirmation,
   clearItemInteractionIfPresent,
   teardownItemInteractionAfterTransition,
@@ -85,8 +83,6 @@ export interface PhaseActionEffectsDependencies {
   applyMovePartyPhaseAction: typeof applyMovePartyPhaseAction;
   applyBattleWorldConsequence: typeof applyBattleWorldConsequence;
   applyEquipmentPhaseAction: typeof applyEquipmentPhaseAction;
-  openItemActions: typeof openItemActions;
-  applyItemActionSelection: typeof applyItemActionSelection;
   beginItemUseConfirmation: typeof beginItemUseConfirmation;
   clearItemInteractionIfPresent: typeof clearItemInteractionIfPresent;
   teardownItemInteractionAfterTransition: typeof teardownItemInteractionAfterTransition;
@@ -120,8 +116,6 @@ export function createDefaultPhaseActionEffects(): PhaseActionEffectsController 
     applyMovePartyPhaseAction,
     applyBattleWorldConsequence,
     applyEquipmentPhaseAction,
-    openItemActions,
-    applyItemActionSelection,
     beginItemUseConfirmation,
     clearItemInteractionIfPresent,
     teardownItemInteractionAfterTransition,
@@ -294,39 +288,9 @@ export function createPhaseActionEffects(
         return NO_PHASE_EFFECTS;
 
       // ── Item interaction ─────────────────────────────────────────────────
-      // Opening, closing and requesting change PRESENTATION state only — no roster or inventory
-      // write. The owner is the equip screen's own session, so a campaign screen can never file
-      // or dispose a debug interaction.
-      case 'open_item_actions':
-      case 'close_item_actions':
-        if (previousPhase.type !== 'equip_screen' && previousPhase.type !== 'debug_equip_screen') {
-          throw lifecycleError(
-            `"${action.type}" was accepted from a "${previousPhase.type}" phase`,
-          );
-        }
-        if (action.type === 'open_item_actions') {
-          d.openItemActions({
-            source: previousPhase.sessionSource,
-            instanceId: action.instanceId,
-            // Always the selected character — never a caller-chosen target.
-            unitTemplateId: previousPhase.selectedUnitTemplateId,
-          });
-        } else {
-          d.clearItemInteractionIfPresent(previousPhase.sessionSource);
-        }
-        return NO_PHASE_EFFECTS;
-
-      // Selection owns its own disposal: a matching-but-newly-ineligible choice clears the
-      // interaction rather than leaving it stored, and an equip is delegated onward from there.
-      case 'select_item_action':
-        if (previousPhase.type !== 'equip_screen' && previousPhase.type !== 'debug_equip_screen') {
-          throw lifecycleError(
-            `"select_item_action" was accepted from a "${previousPhase.type}" phase`,
-          );
-        }
-        d.applyItemActionSelection({ previousPhase, action });
-        return NO_PHASE_EFFECTS;
-
+      // Requesting and cancelling change PRESENTATION state only — no roster or inventory write.
+      // The owner is the equip screen's own session, so a campaign screen can never file or dispose
+      // a debug interaction.
       case 'request_use_item':
       case 'cancel_use_item':
         if (previousPhase.type !== 'equip_screen' && previousPhase.type !== 'debug_equip_screen') {
@@ -340,6 +304,9 @@ export function createPhaseActionEffects(
             instanceId: action.instanceId,
             // Always the selected character — never a caller-chosen target.
             unitTemplateId: previousPhase.selectedUnitTemplateId,
+            // The origin the resolver admitted, carried through so the commit validates against the
+            // location the request was actually about.
+            origin: action.origin,
           });
         } else {
           d.clearItemInteractionIfPresent(previousPhase.sessionSource);

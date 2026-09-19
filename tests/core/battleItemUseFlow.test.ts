@@ -65,8 +65,7 @@ function startBattleWithEquippedPotion(unitTemplateId: string): LifecycleHarness
   const h = createLifecycleHarness();
   h.startNewCampaign();
   h.manager.transition({ type: "open_equip_screen", unitTemplateId });
-  h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-  h.manager.transition({ type: "select_item_action", instanceId: POTION, action: "equip" });
+  h.manager.transition({ type: "equip_item", instanceId: POTION, unitTemplateId });
   expect(equippedUsable(unitTemplateId)).toBe(POTION);
   h.manager.transition({ type: "close_equip_screen" });
 
@@ -463,7 +462,7 @@ describe("replay", () => {
     });
     // Re-render the committed snapshot so the resolver sees the wound it must decide from.
     h.manager.transition({ type: "switch_equip_unit", templateId: "warrior" });
-    h.manager.transition({ type: "request_use_item", instanceId: POTION });
+    h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
     h.manager.transition({
       type: "confirm_use_item", instanceId: POTION, unitTemplateId: "warrior",
     });
@@ -519,8 +518,7 @@ describe("session lifecycle sequencing", () => {
     const h = createLifecycleHarness();
     h.openDebugSession(1);
     h.manager.transition({ type: "switch_debug_unit", templateId: "warrior" });
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-    h.manager.transition({ type: "select_item_action", instanceId: POTION, action: "equip" });
+    h.manager.transition({ type: "equip_item", instanceId: POTION, unitTemplateId: "warrior" });
     h.startDebugBattle(ORC_PATROL_ENEMY_GROUP_ID);
     h.manager.transition({ type: "battle_begin_combat" });
 
@@ -639,8 +637,7 @@ describe("a targetless carrier", () => {
     const h = createLifecycleHarness();
     h.openDebugSession(1);
     h.manager.transition({ type: "switch_debug_unit", templateId: "warrior" });
-    h.manager.transition({ type: "open_item_actions", instanceId: POTION });
-    h.manager.transition({ type: "select_item_action", instanceId: POTION, action: "equip" });
+    h.manager.transition({ type: "equip_item", instanceId: POTION, unitTemplateId: "warrior" });
     h.startDebugBattle(ORC_PATROL_ENEMY_GROUP_ID);
     h.manager.transition({ type: "battle_begin_combat" });
 

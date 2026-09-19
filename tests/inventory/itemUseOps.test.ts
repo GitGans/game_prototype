@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   validateItemForUse,
   removeItemInstances,
-  consumeBackpackItem,
+  consumeItemForUse,
 } from "../../src/inventory/itemUseOps";
 import type { InventoryState } from "../../src/inventory/inventoryState";
 import { backpack, equipment, instance, catalog } from "./helpers";
@@ -132,11 +132,11 @@ describe("validateItemForUse — shared backpack", () => {
   });
 });
 
-describe("consumeBackpackItem", () => {
+describe("consumeItemForUse", () => {
   it("clears exactly one slot and drops exactly one registry entry", () => {
     const inventory = inventoryWith({ "0": "i_helmet", "3": "i_essence", "4": "i_potion" });
 
-    const result = consumeBackpackItem("i_essence", inventory, CATALOG);
+    const result = consumeItemForUse("i_essence", BACKPACK, inventory, CATALOG);
     if (!result.ok) throw new Error(`unexpected failure: ${result.reason}`);
 
     const next = result.nextInventory;
@@ -153,7 +153,7 @@ describe("consumeBackpackItem", () => {
       },
     };
 
-    const result = consumeBackpackItem("i_essence", inventory, CATALOG);
+    const result = consumeItemForUse("i_essence", BACKPACK, inventory, CATALOG);
     if (!result.ok) throw new Error(`unexpected failure: ${result.reason}`);
 
     const stillReferenced = Object.values(result.nextInventory.containers).some(container =>
@@ -167,7 +167,7 @@ describe("consumeBackpackItem", () => {
     const instancesBefore = { ...inventory.instances };
     const slotsBefore = { ...inventory.containers.backpack_shared.slots };
 
-    consumeBackpackItem("i_essence", inventory, CATALOG);
+    consumeItemForUse("i_essence", BACKPACK, inventory, CATALOG);
 
     expect(inventory.instances).toEqual(instancesBefore);
     expect(inventory.containers.backpack_shared.slots).toEqual(slotsBefore);
@@ -176,10 +176,46 @@ describe("consumeBackpackItem", () => {
   it("forwards the validation failure and changes nothing", () => {
     const inventory = inventoryWith({ "0": "i_essence", "1": "i_essence" });
 
-    expect(consumeBackpackItem("i_essence", inventory, CATALOG))
+    expect(consumeItemForUse("i_essence", BACKPACK, inventory, CATALOG))
       .toEqual({ ok: false, reason: "duplicate_placement" });
     expect(inventory.containers.backpack_shared.slots).toEqual({ "0": "i_essence", "1": "i_essence" });
     expect(inventory.instances.i_essence).toBeDefined();
+  });
+
+  // The location is the caller's claim, and it is CHECKED, not trusted: an item is consumable from
+  // the place the caller names or not at all.
+  it("consumes a usable from usable_slot when the equipped location is named", () => {
+    const inventory: InventoryState = {
+      instances: { i_potion: instance("i_potion", "potion") },
+      containers: {
+        backpack_shared: backpack("backpack_shared", {}),
+        equip_warrior: equipment("warrior", { usable_slot: "i_potion" }),
+      },
+    };
+
+    const result = consumeItemForUse("i_potion", EQUIPPED, inventory, CATALOG);
+    if (!result.ok) throw new Error(`unexpected failure: ${result.reason}`);
+
+    expect(result.nextInventory.instances).toEqual({});
+    expect(result.nextInventory.containers.equip_warrior.slots).toEqual({});
+  });
+
+  it("refuses a backpack item when the equipped location is named, and vice versa", () => {
+    const inBackpack = inventoryWith({ "0": "i_potion" });
+    expect(consumeItemForUse("i_potion", EQUIPPED, inBackpack, CATALOG))
+      .toEqual({ ok: false, reason: "not_equipped_by_unit" });
+    expect(inBackpack.containers.backpack_shared.slots).toEqual({ "0": "i_potion" });
+
+    const equipped: InventoryState = {
+      instances: { i_potion: instance("i_potion", "potion") },
+      containers: {
+        backpack_shared: backpack("backpack_shared", {}),
+        equip_warrior: equipment("warrior", { usable_slot: "i_potion" }),
+      },
+    };
+    expect(consumeItemForUse("i_potion", BACKPACK, equipped, CATALOG))
+      .toEqual({ ok: false, reason: "not_in_backpack" });
+    expect(equipped.containers.equip_warrior.slots).toEqual({ usable_slot: "i_potion" });
   });
 });
 

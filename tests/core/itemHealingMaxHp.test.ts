@@ -123,6 +123,7 @@ function useInput(session: PlayerSessionState, itemCatalog: ItemCatalog): ItemUs
     playerBlueprints: BLUEPRINTS,
     unitTemplateId: "warrior",
     instanceId: "i_potion",
+    origin: "backpack",
   };
 }
 
@@ -242,7 +243,7 @@ describe("the supplied catalog decides both the healing cap and eligibility", ()
 
     // Under catalog A, 130 IS full HP.
     expect(evaluateItemUsability(useInput(atThirty, CATALOG_A)))
-      .toEqual({ canUse: false, reason: "unit_full_hp" });
+      .toEqual({ canUse: false, origin: "backpack", reason: "unit_full_hp" });
     expect(useItem(useInput(atThirty, CATALOG_A)))
       .toEqual({ ok: false, reason: "unit_full_hp" });
     expect(atThirty.inventory.instances.i_potion).toBeDefined();

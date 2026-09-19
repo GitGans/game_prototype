@@ -71,7 +71,7 @@ beforeEach(() => {
 });
 
 function commit(source: PlayerSessionSource, instanceId = VITALITY): void {
-  beginItemUseConfirmation({ source, instanceId, unitTemplateId: UNIT_ID });
+  beginItemUseConfirmation({ source, instanceId, unitTemplateId: UNIT_ID, origin: "backpack" });
   applyItemUsePhaseAction({
     previousPhase: equipPhaseFor(source),
     action: { type: "confirm_use_item", instanceId, unitTemplateId: UNIT_ID },
@@ -80,16 +80,18 @@ function commit(source: PlayerSessionSource, instanceId = VITALITY): void {
 
 describe("confirmation lifecycle", () => {
   it("files a request under the equip screen's own session", () => {
-    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
 
     expect(readItemInteractionForPhase(equipPhaseFor("debug")))
-      .toEqual({ kind: "confirming_use", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+      .toEqual({
+        kind: "confirming_use", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack",
+      });
     expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).toBeNull();
   });
 
   it("clears one owner and leaves the other alone", () => {
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
-    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
+    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
 
     clearItemInteractionIfPresent("campaign");
 
@@ -104,7 +106,7 @@ describe("confirmation lifecycle", () => {
 
 describe("teardownItemInteractionAfterTransition", () => {
   it("keeps the request while the same screen shows the same character", () => {
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
 
     teardownItemInteractionAfterTransition(
       equipPhaseFor("campaign"), equipPhaseFor("campaign"),
@@ -114,7 +116,7 @@ describe("teardownItemInteractionAfterTransition", () => {
   });
 
   it("disposes it when the selected character changes", () => {
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
 
     teardownItemInteractionAfterTransition(
       equipPhaseFor("campaign", UNIT_ID), equipPhaseFor("campaign", "healer"),
@@ -129,7 +131,7 @@ describe("teardownItemInteractionAfterTransition", () => {
     ["debug_level_select", { type: "debug_level_select" } as GamePhase],
   ])("disposes it on exit to %s, a phase carrying no sessionSource", (_label, resolved) => {
     // The owner has to come from the PREVIOUS phase — the resolved one cannot supply it.
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
 
     teardownItemInteractionAfterTransition(equipPhaseFor("campaign"), resolved);
 
@@ -137,8 +139,8 @@ describe("teardownItemInteractionAfterTransition", () => {
   });
 
   it("disposes only the owner that left, never the other session's request", () => {
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
-    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
+    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
 
     teardownItemInteractionAfterTransition(equipPhaseFor("campaign"), { type: "main_menu" });
 
@@ -147,7 +149,7 @@ describe("teardownItemInteractionAfterTransition", () => {
   });
 
   it("does nothing when the previous phase was never an equipment screen", () => {
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
 
     teardownItemInteractionAfterTransition({ type: "main_menu" }, { type: "debug_level_select" });
 
@@ -218,7 +220,7 @@ describe("applyItemUsePhaseAction", () => {
   });
 
   it("writes nothing when the action's instance does not match the stored request", () => {
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
     const before = PlayerSessionStore.getSession("campaign");
 
     applyItemUsePhaseAction({
@@ -230,7 +232,7 @@ describe("applyItemUsePhaseAction", () => {
   });
 
   it("writes nothing when the action's target does not match the stored request", () => {
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
     const before = PlayerSessionStore.getSession("campaign");
 
     applyItemUsePhaseAction({
@@ -241,8 +243,31 @@ describe("applyItemUsePhaseAction", () => {
     expect(PlayerSessionStore.getSession("campaign").inventory).toBe(before.inventory);
   });
 
+  /**
+   * The origin is the STORED request's, not the action's — the action carries none precisely so that
+   * a caller cannot describe the location independently of the confirmation it is confirming.
+   */
+  it("commits against the stored origin, refusing when the item is not there", () => {
+    beginItemUseConfirmation({
+      source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID,
+      // The essence is a backpack consumable; an equipped claim can never be satisfied for it.
+      origin: "equipped_usable",
+    });
+    const before = PlayerSessionStore.getSession("campaign");
+
+    applyItemUsePhaseAction({
+      previousPhase: equipPhaseFor("campaign"),
+      action: { type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID },
+    });
+
+    expect(PlayerSessionStore.getSession("campaign").inventory).toBe(before.inventory);
+    expect(PlayerSessionStore.getSession("campaign").roster).toBe(before.roster);
+    // Disposed all the same: a confirmation never survives its own confirm, committed or not.
+    expect(readItemInteractionForPhase(equipPhaseFor("campaign"))).toBeNull();
+  });
+
   it("disposes the request whether or not the commit succeeds", () => {
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
 
     commit("campaign");
 
@@ -282,8 +307,8 @@ describe("applyItemUsePhaseAction", () => {
       const other: PlayerSessionSource = source === "campaign" ? "debug" : "campaign";
       // Identical instance and character ids in both sessions: a debug reset recreates the same
       // authored instance ids, so nothing but the owning phase can tell these two apart.
-      beginItemUseConfirmation({ source, instanceId: VITALITY, unitTemplateId: UNIT_ID });
-      beginItemUseConfirmation({ source: other, instanceId: VITALITY, unitTemplateId: UNIT_ID });
+      beginItemUseConfirmation({ source, instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
+      beginItemUseConfirmation({ source: other, instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
       const untouched = PlayerSessionStore.getSession(other);
 
       applyItemUsePhaseAction({
@@ -304,8 +329,8 @@ describe("applyItemUsePhaseAction", () => {
   );
 
   it("writes nothing and disposes nothing from a non-equipment phase", () => {
-    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID });
-    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID });
+    beginItemUseConfirmation({ source: "campaign", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
+    beginItemUseConfirmation({ source: "debug", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack" });
     const campaign = PlayerSessionStore.getSession("campaign");
     const debug = PlayerSessionStore.getSession("debug");
 

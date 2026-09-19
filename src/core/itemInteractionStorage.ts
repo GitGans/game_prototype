@@ -11,10 +11,10 @@ import type { PlayerSessionSource } from './playerSessionState';
  * an outbound allowlist cannot express "who may pick up this authority".
  *
  * ── The state machine ───────────────────────────────────────────────────────────────────────
- * `closed | choosing_action | confirming_use` (`ItemInteraction`, declared in
- * `shared/snapshotTypes.ts`), where `closed` is the `null` slot. Both open
- * states record the instance and the character they target. Only ONE can be stored per session,
- * which is what makes "at most one modal is open" a storage property rather than a UI rule.
+ * `closed | confirming_use` (`ItemInteraction`, declared in `shared/snapshotTypes.ts`), where
+ * `closed` is the `null` slot. The open state records the instance, the character it targets and
+ * the ORIGIN it was opened for. Only ONE can be stored per session, which is what makes "at most
+ * one modal is open" a storage property rather than a UI rule.
  *
  * ── Ownership ───────────────────────────────────────────────────────────────────────────────
  * Storage is keyed by `PlayerSessionSource`, not a single global cell. `BattleRuntimeContext`
@@ -48,6 +48,7 @@ export function writeItemInteractionSlot(
     kind: next.kind,
     instanceId: next.instanceId,
     unitTemplateId: next.unitTemplateId,
+    origin: next.origin,
   };
 }
 

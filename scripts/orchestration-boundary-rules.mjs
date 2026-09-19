@@ -98,27 +98,23 @@ export const PHASE_HANDLER_IMPORT_POLICIES = {
   // holds BOTH gateways deliberately — the confirm-time ownership check reads, and reading is not
   // folded into the write gateway.
   //
-  // It holds the two READ evaluators (`core/itemUsability` for use, `inventory` for
-  // `evaluateEquipItem`, with `progression` resolving the class those need) because
-  // `select_item_action` must RE-VALIDATE a stored selection live before applying it — the
-  // snapshot's enabled flag was computed against an older session. And it holds
-  // `inventoryPhaseHandler` because choosing Equip closes the interaction and delegates onward;
-  // the equip write itself stays in its own owner.
+  // It holds the EXECUTOR (`core/itemUse`) and no read evaluator: the commit re-validates by
+  // attempting the use, which performs every check itself and leaves both domains untouched on
+  // failure, so a separate read pass would be a second copy of the same rules. The equip evaluators
+  // (`inventory`, `progression`) and `inventoryPhaseHandler` were removed when single-click equip
+  // replaced the Use/Equip window — this handler no longer routes an equip, and leaving those
+  // permissions behind would be a dormant capability rather than a reviewed one.
   "core/phaseHandlers/itemUsePhaseHandler.ts": {
     kind: "exact-import-allowlist",
     allowedSpecifiers: [
-      "core/itemUsability",
       "core/itemUse",
       "core/itemInteractionAccess",
       "core/itemInteractionWriteAccess",
-      "core/phaseHandlers/inventoryPhaseHandler",
       "core/phases",
       "core/playerSessionState",
       "core/playerSessionStore",
       "data/itemDefinitions",
       "data/units",
-      "inventory",
-      "progression",
       "shared/snapshotTypes",
     ],
   },
@@ -641,13 +637,10 @@ export const RUNTIME_OWNERSHIP_EXPORT_POLICIES = {
   // `export { setItemInteraction } from '../itemInteractionWriteAccess'` would hand the
   // capability to every importer of the handler with the import checker still green.
   "core/phaseHandlers/itemUsePhaseHandler.ts": [
-    { name: "ItemActionSelection", kind: "type-alias" },
     { name: "ItemUsePhaseAction", kind: "type-alias" },
-    { name: "applyItemActionSelection", kind: "function" },
     { name: "applyItemUsePhaseAction", kind: "function" },
     { name: "clearItemInteractionIfPresent", kind: "function" },
     { name: "beginItemUseConfirmation", kind: "function" },
-    { name: "openItemActions", kind: "function" },
     { name: "teardownItemInteractionAfterTransition", kind: "function" },
   ],
   "core/battlePhaseEffects.ts": [

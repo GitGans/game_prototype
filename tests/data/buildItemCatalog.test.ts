@@ -178,6 +178,33 @@ describe("buildItemCatalog", () => {
     }
   });
 
+  it("rejects a usable that authors a stat bonus, and accepts an explicit zero", () => {
+    // A usable holds usable_slot to be activated, not to buff: equipmentBonuses.ts sums every
+    // equipped definition blindly. The rule is about the VALUE — an authored zero changes no
+    // total and stays legal.
+    const buffed: ItemGroup[] = [
+      { kind: "usable", slot: "usable_slot", items: {
+        buffed: {
+          name: "Buffed", buyPrice: 1,
+          battleStatBonuses: { hp: 5 },
+          useEffect: { type: "heal", amount: 10 },
+        },
+      } },
+    ];
+    expect(() => buildItemCatalog(buffed)).toThrow(/must not carry equipped stat bonuses/);
+
+    const zeroed: ItemGroup[] = [
+      { kind: "usable", slot: "usable_slot", items: {
+        zeroed: {
+          name: "Zeroed", buyPrice: 1,
+          battleStatBonuses: { hp: 0 },
+          useEffect: { type: "heal", amount: 10 },
+        },
+      } },
+    ];
+    expect(buildItemCatalog(zeroed).definitions.zeroed.battleStatBonuses.hp).toBe(0);
+  });
+
   it("builds the authored small resurrection scroll as a usable_slot item reviving with 30%", () => {
     const catalog = ITEM_CATALOG;
     expect(catalog.metadataById.small_resurrection_scroll).toEqual({ kind: "usable", slot: "usable_slot" });

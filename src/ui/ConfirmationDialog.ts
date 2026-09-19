@@ -8,8 +8,8 @@ import { scaled } from './layout';
  * Generic modal primitive: shows a message with confirm/cancel controls.
  * It owns no business meaning — callers decide what confirm/cancel means.
  *
- * Framing (scrim, panel, hit area, one-shot teardown-before-callback) lives in `ModalFrame`,
- * shared with `ActionDialog`. Behaviour here is unchanged by that extraction.
+ * Framing (scrim, panel, hit area, one-shot teardown-before-callback) lives in `ModalFrame`, which a
+ * second modal would build on rather than re-rolling the stack.
  */
 export interface ConfirmationDialogConfig {
   scene: Phaser.Scene;

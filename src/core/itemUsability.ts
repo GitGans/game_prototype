@@ -1,17 +1,17 @@
 import type { ItemCatalog } from '../shared/itemTypes';
 import type { ItemUseFailure } from '../shared/itemTypes';
-import type { ItemUsability } from '../shared/snapshotTypes';
+import type { ItemUsability, ItemUseOrigin } from '../shared/snapshotTypes';
 import type { UnitBattleStatKey, UnitBlueprint } from '../shared/unitTypes';
 import type { PlayerSessionState } from './playerSessionState';
-import { validateItemForUse, getEquippedBonuses } from '../inventory';
+import { validateItemForUse, getEquippedBonuses, type ItemUseLocation } from '../inventory';
 import {
   resolveUnitProgression, resolveUnitBattleStats, evaluateItemHealing,
 } from '../progression';
 import { clampAliveCurrentHp } from './playerUnitPersistence';
 
 /**
- * The out-of-combat item READ MODEL: may a given backpack instance be used on a given character,
- * and to what effect. Pure — no storage, no Phaser, no campaign/debug conditional.
+ * The out-of-combat item READ MODEL: may a given instance be used on a given character, from a given
+ * origin, and to what effect. Pure — no storage, no Phaser, no campaign/debug conditional.
  *
  * Deliberately a separate module from `itemUse.ts`, which executes. The equipment-screen
  * projection is allowed to import THIS module and not the executor, so a read-side module has no
@@ -28,6 +28,27 @@ export interface ItemUseInput {
   playerBlueprints: readonly UnitBlueprint[];
   unitTemplateId: string;
   instanceId: string;
+  /** Which of the two out-of-combat locations this request is for. */
+  origin: ItemUseOrigin;
+}
+
+/**
+ * The single origin→location mapping, shared by the read model and the executor.
+ *
+ * Exported so `itemUse` consumes from exactly the location this module validated, WITHOUT the
+ * location travelling back through the evaluation result: one input, one mapping, one answer. A
+ * second copy of that fact in the result would be a second thing that could disagree.
+ *
+ * The equipped variant names only the character, never a slot — `validateItemForUse` decides that a
+ * usable lives in `usable_slot`, so a caller cannot point consumption at a slot of its choosing.
+ */
+export function itemUseLocationForOrigin(
+  origin: ItemUseOrigin,
+  unitTemplateId: string,
+): ItemUseLocation {
+  return origin === 'backpack'
+    ? { kind: 'shared_backpack' }
+    : { kind: 'equipped_usable', unitTemplateId };
 }
 
 /**
@@ -57,19 +78,22 @@ export type ItemEvaluation =
 export function evaluateItemUse(input: ItemUseInput): ItemEvaluation {
   const { session, catalog, playerBlueprints, unitTemplateId, instanceId } = input;
 
-  // Out of combat an item is used FROM THE BACKPACK — for a consumable that is the only place,
-  // for a usable it is the alternative to activating it in battle from usable_slot.
+  // Out of combat an item is used either FROM THE BACKPACK — the only place for a consumable — or
+  // FROM `usable_slot`, for a usable the character is already carrying. `validateItemForUse` stays
+  // the authoritative location validator: kind and placement compatibility are decided there, never
+  // here, so an item cannot authorize its own consumption by being in the wrong place.
   const located = validateItemForUse({
     instanceId,
     inventory: session.inventory,
     catalog,
-    expected: { kind: 'shared_backpack' },
+    expected: itemUseLocationForOrigin(input.origin, unitTemplateId),
   });
   if (!located.ok) return { ok: false, reason: located.reason };
 
   const { useEffect } = located.item;
-  // `revive` is executable only in battle, from usable_slot (out-of-combat target selection is
-  // future work) — and any future variant stays unsupported until someone gives it mechanics.
+  // `revive` is executable only in battle (out-of-combat target selection is future work), from
+  // EITHER origin — carrying the scroll does not make it usable outside combat — and any future
+  // variant stays unsupported until someone gives it mechanics.
   if (useEffect.type !== 'permanent_stat_boost' && useEffect.type !== 'heal') {
     return { ok: false, reason: 'unsupported_effect' };
   }
@@ -144,15 +168,23 @@ export function evaluateItemUse(input: ItemUseInput): ItemEvaluation {
   return { ok: true, effect: { type: 'permanent_stat_boost', stat, amount, oldMaxHp, oldCurrentHp } };
 }
 
-/** The render contract: what the equipment screen shows for one backpack item. */
+/**
+ * The render contract: what the equipment screen shows for one usable item, at one origin.
+ *
+ * The origin is stamped onto the entry — including onto a rejection — so a consumer can tell which
+ * request the verdict is about. The resolver compares it against the origin the gesture claims,
+ * which is what stops a backpack evaluation authorizing an equipped-slot use.
+ */
 export function evaluateItemUsability(input: ItemUseInput): ItemUsability {
+  const { origin } = input;
   const evaluation = evaluateItemUse(input);
-  if (!evaluation.ok) return { canUse: false, reason: evaluation.reason };
+  if (!evaluation.ok) return { canUse: false, origin, reason: evaluation.reason };
 
   const effect = evaluation.effect;
   if (effect.type === 'heal') {
     return {
       canUse: true,
+      origin,
       effect: {
         type: 'heal',
         amount: effect.amount,
@@ -164,6 +196,7 @@ export function evaluateItemUsability(input: ItemUseInput): ItemUsability {
   }
   return {
     canUse: true,
+    origin,
     effect: {
       type: 'permanent_stat_boost',
       stat: effect.stat,

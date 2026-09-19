@@ -7,8 +7,9 @@ import type { UsableItemGroup } from '../authoredItemTypes';
  * id, name, price and `amount`. There is no per-potion handler, strength table or named branch
  * anywhere in the runtime.
  *
- * `usable` rather than `consumable` because these are activated from two places: the backpack
- * (out of combat, via the item-action window) and `usable_slot` (during a manual battle turn).
+ * `usable` rather than `consumable` because these are equippable as well as drinkable, and are
+ * activated from two places: the shared backpack and `usable_slot` — the latter both out of combat
+ * and during a manual battle turn.
  */
 export const HEALING_USABLES_GROUP = {
   kind: 'usable',

@@ -99,13 +99,10 @@ describe("RUNTIME_OWNERSHIP_EXPORT_POLICIES configuration", () => {
         { name: "setItemInteraction", kind: "function" },
       ],
       "core/phaseHandlers/itemUsePhaseHandler.ts": [
-        { name: "ItemActionSelection", kind: "type-alias" },
         { name: "ItemUsePhaseAction", kind: "type-alias" },
-        { name: "applyItemActionSelection", kind: "function" },
         { name: "applyItemUsePhaseAction", kind: "function" },
         { name: "clearItemInteractionIfPresent", kind: "function" },
         { name: "beginItemUseConfirmation", kind: "function" },
-        { name: "openItemActions", kind: "function" },
         { name: "teardownItemInteractionAfterTransition", kind: "function" },
       ],
       "core/battleRuntimeStorage.ts": [

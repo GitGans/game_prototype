@@ -20,6 +20,13 @@ Game-agnostic UI primitive library. Provides reusable visual components and desi
 - `HpBar.ts` — Health bar with optional tri-color (green/yellow/red) mode
 - `ContextMenu.ts` — Stacked button menu with outside-click dismissal
 - `NumberInput.ts` — Keyboard number input with real-time min/max validation
+- `clickGesture.ts` — `ClickGestureRecognizer` + `DOUBLE_CLICK_WINDOW_MS`: exclusive single/double click
+  recognition for one interactive target. A single click is DEFERRED until the window closes, so a
+  double-click emits only `onDouble` and exactly one callback fires per gesture. The scheduler is
+  INJECTED (`GestureScheduler`), so the module imports no Phaser and its timing rules are unit-testable
+  without a scene; the caller passes `scene.time.delayedCall`. Transient input state on a par with
+  hover — never game state — and `cancel()` / `destroy()` exist because a deferred click must not
+  outlive the state it was made against (see the gesture invariant in `src/objects/CLAUDE.md`)
 - `layout.ts` — Scaling and layout helpers: `scaled()`, `centerX/Y()`, `stackY()`, `gridPosition()`, `rowItemCenterX()`
 - `Panel.ts` — Background rectangle primitive with optional border; base surface for cards and overlays
 
@@ -46,14 +53,12 @@ caller manages state changes and re-renders
 
 - `ModalFrame.ts` is the shared modal framing: a full-screen input-blocking scrim, a centred
   `Panel` with its own hit area, a content depth above both, one-shot idempotent teardown, and
-  **teardown-before-callback** resolution. `ConfirmationDialog` and `ActionDialog` are both built
-  on it; a new modal builds on it too rather than re-rolling the stack.
+  **teardown-before-callback** resolution. `ConfirmationDialog` is built on it; a new modal builds on
+  it too rather than re-rolling the stack.
 - Two of its behaviours are load-bearing, not defensive style: the panel's dedicated hit area
   stops an inside click falling through to the scrim and dismissing the modal, and `resolve()`
   tears down BEFORE invoking the callback, so a scene reconciler that destroys a modal in
   response to committed state can never fire an action while doing so.
-- `ActionDialog` renders disabled actions visibly with their explanation and lets the `Button`'s
-  own disabled state block the click — one place decides whether a callback can fire.
 - `ContextMenu.ts` is a different component (anchored, pass-through dismissal) and is unrelated
   to this frame.
 
@@ -83,6 +88,7 @@ caller manages state changes and re-renders
 - change health bar color thresholds → `HpBar.ts` (`setRatio`)
 - change context menu layout or dismissal → `ContextMenu.ts`
 - change number input validation → `NumberInput.ts`
+- change the double-click window or single/double click recognition → `clickGesture.ts`
 - change z-order of any layer → `theme.ts` (`DEPTH`)
 - change overlay dim color/alpha → `theme.ts` (`OVERLAY`)
 - add a row layout calculation → `layout.ts` (`rowItemCenterX`)

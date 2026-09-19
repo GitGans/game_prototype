@@ -27,6 +27,18 @@ function withRenamedBackpack(session: PlayerSessionState, newId: string): Player
   };
 }
 
+/** Damages the selected character by `missing` HP, resolving max HP exactly as the screen does. */
+function wounded(session: PlayerSessionState, missing: number): PlayerSessionState {
+  const maxHp = buildEquipmentScreenPlayerSnapshot(session, UNIT_ID).unitStats!.maxHp.value;
+  return {
+    ...session,
+    roster: { units: {
+      ...session.roster.units,
+      [UNIT_ID]: { ...session.roster.units[UNIT_ID], currentHp: maxHp - missing },
+    } },
+  };
+}
+
 describe("buildEquipmentScreenPlayerSnapshot", () => {
   it("equivalent sessions with different backpack ids produce identical snapshots", () => {
     const a = freshSession();
@@ -67,17 +79,6 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
     const POTION = "item_start_small_healing_potion";
 
     /** Same shape the potion tests below use: a session wounded by `missing` HP. */
-    function wounded(session: PlayerSessionState, missing: number): PlayerSessionState {
-      const maxHp = buildEquipmentScreenPlayerSnapshot(session, UNIT_ID).unitStats!.maxHp.value;
-      return {
-        ...session,
-        roster: { units: {
-          ...session.roster.units,
-          [UNIT_ID]: { ...session.roster.units[UNIT_ID], currentHp: maxHp - missing },
-        } },
-      };
-    }
-
     it("shows a wounded character's actual HP against the resolved maximum", () => {
       const stats = buildEquipmentScreenPlayerSnapshot(wounded(freshSession(), 3), UNIT_ID).unitStats!;
 
@@ -130,6 +131,7 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
 
       expect(snap.itemUsage[VITALITY]).toEqual({
         canUse: true,
+        origin: "backpack",
         effect: { type: "permanent_stat_boost", stat: "hp", amount: 5, healsCurrentHp: true },
       });
     });
@@ -140,7 +142,7 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
         buildEquipmentScreenPlayerSnapshot(s, UNIT_ID).itemUsage[POTION];
 
       // The starting roster is at full HP (currentHp: null), so the potion restores nothing.
-      expect(potionUsage(session)).toEqual({ canUse: false, reason: "unit_full_hp" });
+      expect(potionUsage(session)).toEqual({ canUse: false, origin: "backpack", reason: "unit_full_hp" });
 
       const maxHp = buildEquipmentScreenPlayerSnapshot(session, UNIT_ID).unitStats!.maxHp.value;
       const hurt = {
@@ -153,6 +155,7 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
 
       expect(potionUsage(hurt)).toEqual({
         canUse: true,
+        origin: "backpack",
         // restoredHp is CLAMPED to the 3 missing HP, not the potion's authored 10.
         effect: { type: "heal", amount: 10, restoredHp: 3, currentHp: maxHp - 3, maxHp },
       });
@@ -182,13 +185,13 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
 
       const snap = buildEquipmentScreenPlayerSnapshot(dead, UNIT_ID);
 
-      expect(snap.itemUsage[VITALITY]).toEqual({ canUse: false, reason: "unit_dead" });
+      expect(snap.itemUsage[VITALITY]).toEqual({ canUse: false, origin: "backpack", reason: "unit_dead" });
       expect(snap.pendingItemUsePrompt).toBeNull();
     });
 
     it("projects a justified pending request with names and effect", () => {
       const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID, {
-        kind: "confirming_use", instanceId: VITALITY, unitTemplateId: UNIT_ID,
+        kind: "confirming_use", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack",
       });
 
       expect(snap.pendingItemUsePrompt).toEqual({
@@ -203,7 +206,7 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
     it("omits a prompt whose target is not the selected character", () => {
       const other = PLAYER_UNITS[1].templateId;
       const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID, {
-        instanceId: VITALITY, unitTemplateId: other,
+        kind: "confirming_use", instanceId: VITALITY, unitTemplateId: other, origin: "backpack",
       });
 
       expect(snap.pendingItemUsePrompt).toBeNull();
@@ -211,7 +214,8 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
 
     it("omits a prompt for an item no longer in the backpack", () => {
       const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID, {
-        instanceId: "already_consumed", unitTemplateId: UNIT_ID,
+        kind: "confirming_use", instanceId: "already_consumed", unitTemplateId: UNIT_ID,
+        origin: "backpack",
       });
 
       expect(snap.pendingItemUsePrompt).toBeNull();
@@ -220,6 +224,83 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
     it("omits a prompt when no request is pending", () => {
       expect(buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID).pendingItemUsePrompt)
         .toBeNull();
+    });
+  });
+
+  describe("both out-of-combat origins are projected", () => {
+    const POTION = "item_start_small_healing_potion";
+
+    /** Moves the starting potion out of the backpack and into the character's `usable_slot`. */
+    function withEquippedPotion(session: PlayerSessionState): PlayerSessionState {
+      const backpackId = Object.values(session.inventory.containers).find(c => c.kind === 'backpack')!.id;
+      const backpack = session.inventory.containers[backpackId];
+      const slots = Object.fromEntries(
+        Object.entries(backpack.slots).filter(([, id]) => id !== POTION),
+      );
+      return {
+        roster: session.roster,
+        inventory: {
+          instances: session.inventory.instances,
+          containers: {
+            ...session.inventory.containers,
+            [backpackId]: { ...backpack, slots },
+            [`equip_${UNIT_ID}`]: {
+              ...session.inventory.containers[`equip_${UNIT_ID}`],
+              slots: {
+                ...session.inventory.containers[`equip_${UNIT_ID}`].slots,
+                usable_slot: POTION,
+              },
+            },
+          },
+        },
+      };
+    }
+
+    it("reports the equipped usable with the equipped origin", () => {
+      const session = withEquippedPotion(wounded(freshSession(), 3));
+      const snap = buildEquipmentScreenPlayerSnapshot(session, UNIT_ID);
+
+      const usage = snap.itemUsage[POTION];
+      expect(usage.canUse).toBe(true);
+      expect(usage.origin).toBe("equipped_usable");
+      expect(snap.unitEquipment.slots.usable_slot?.instanceId).toBe(POTION);
+    });
+
+    it("has no entry for usable_slot when it is empty", () => {
+      const snap = buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID);
+
+      expect(snap.unitEquipment.slots.usable_slot).toBeUndefined();
+      // The potion is still in the backpack, so its entry describes THAT origin.
+      expect(snap.itemUsage[POTION].origin).toBe("backpack");
+    });
+
+    it("projects backpack entries only when no character is selected", () => {
+      const snap = buildEquipmentScreenPlayerSnapshot(
+        withEquippedPotion(freshSession()), 'not_a_real_unit',
+      );
+
+      // The equipped potion is in no backpack slot, so nothing reports on it — and nothing renders
+      // it either, since the equipment snapshot is empty in this branch.
+      expect(snap.itemUsage[POTION]).toBeUndefined();
+      for (const entry of Object.values(snap.itemUsage)) expect(entry.origin).toBe("backpack");
+    });
+
+    /**
+     * A confirmation names one origin. An item that moved since it was opened is a different
+     * request, so the dialog must disappear rather than go on describing the old one.
+     */
+    it("omits a prompt whose origin no longer matches where the item is", () => {
+      const equipped = withEquippedPotion(wounded(freshSession(), 3));
+
+      expect(buildEquipmentScreenPlayerSnapshot(equipped, UNIT_ID, {
+        kind: "confirming_use", instanceId: POTION, unitTemplateId: UNIT_ID, origin: "backpack",
+      }).pendingItemUsePrompt).toBeNull();
+
+      const prompt = buildEquipmentScreenPlayerSnapshot(equipped, UNIT_ID, {
+        kind: "confirming_use", instanceId: POTION, unitTemplateId: UNIT_ID,
+        origin: "equipped_usable",
+      }).pendingItemUsePrompt;
+      expect(prompt?.instanceId).toBe(POTION);
     });
   });
 

@@ -75,7 +75,7 @@ function consumeBothItems(): PlayerSessionState {
   for (const instanceId of ["i_vitality", "i_might"]) {
     const result = useItem({
       session, catalog: CATALOG, playerBlueprints: BLUEPRINTS,
-      unitTemplateId: "soldier", instanceId,
+      unitTemplateId: "soldier", instanceId, origin: "backpack",
     });
     if (!result.ok) throw new Error(`consuming ${instanceId} failed: ${result.reason}`);
     session = result.nextSession;

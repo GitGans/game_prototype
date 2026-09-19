@@ -127,7 +127,7 @@ describe("request → cancel", () => {
     const h = openCampaignEquipScreen();
     const before = inventory("campaign");
 
-    h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({
       instanceId: VITALITY,
@@ -150,7 +150,7 @@ describe("request → confirm → repeated confirm", () => {
     const h = openCampaignEquipScreen();
     const instanceCount = Object.keys(inventory("campaign").instances).length;
 
-    h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
     h.manager.transition({
       type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID,
     });
@@ -175,7 +175,7 @@ describe("request → confirm → repeated confirm", () => {
     const h = openCampaignEquipScreen();
 
     for (const instanceId of [VITALITY, MIGHT]) {
-      h.manager.transition({ type: "request_use_item", instanceId });
+      h.manager.transition({ type: "request_use_item", instanceId, origin: "backpack" });
       h.manager.transition({ type: "confirm_use_item", instanceId, unitTemplateId: UNIT_ID });
     }
 
@@ -189,7 +189,7 @@ describe("request → confirm → repeated confirm", () => {
       units: { ...session.roster.units, [UNIT_ID]: { ...session.roster.units[UNIT_ID], currentHp: 4 } },
     });
 
-    h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
     h.manager.transition({
       type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID,
     });
@@ -205,7 +205,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     setCurrentHp("campaign", maxHp - 30);
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
 
-    h.manager.transition({ type: "request_use_item", instanceId: POTION });
+    h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
     expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({
       instanceId: POTION,
       effect: { type: "heal", amount: 10, restoredHp: 10, currentHp: maxHp - 30, maxHp },
@@ -231,7 +231,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     setCurrentHp("campaign", maxHp - 3);
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
 
-    h.manager.transition({ type: "request_use_item", instanceId: POTION });
+    h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
     h.manager.transition({
       type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
     });
@@ -240,14 +240,105 @@ describe("healing potions restore current HP through the same pipeline", () => {
     expect(currentHp("campaign")).toBeNull();
   });
 
+  /**
+   * The gesture story end to end: a single click equips the potion, a double click drinks it from
+   * `usable_slot`. Both run the real pipeline, and the equipped use consumes from the equipment
+   * container rather than the backpack.
+   */
+  it("equips the potion on one click and drinks it from usable_slot on the next request", () => {
+    const h = openCampaignEquipScreen();
+    const maxHp = maxHpOf(h.manager);
+    setCurrentHp("campaign", maxHp - 30);
+    h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
+
+    // Single click: equip.
+    h.manager.transition({ type: "equip_item", instanceId: POTION, unitTemplateId: UNIT_ID });
+    const equipped = equipPhase(h.manager);
+    expect(equipped.unitEquipment.slots.usable_slot?.instanceId).toBe(POTION);
+    // And the screen now evaluates it at its new location.
+    expect(equipped.itemUsage[POTION]).toMatchObject({ canUse: true, origin: "equipped_usable" });
+
+    // A backpack-origin request is refused: that is not where the item is any more.
+    expect(h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" }))
+      .toEqual({ status: "rejected" });
+
+    // Double click: use from usable_slot.
+    h.manager.transition({
+      type: "request_use_item", instanceId: POTION, origin: "equipped_usable",
+    });
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({ instanceId: POTION });
+
+    h.manager.transition({
+      type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
+    });
+
+    expect(currentHp("campaign")).toBe(maxHp - 20);
+    expect(bonuses("campaign")).toEqual({});
+    expect(inventory("campaign").instances[POTION]).toBeUndefined();
+    expect(isReferencedAnywhere(inventory("campaign"), POTION)).toBe(false);
+    expect(equipPhase(h.manager).unitEquipment.slots.usable_slot).toBeUndefined();
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+  });
+
+  /**
+   * The confirmation's origin is authoritative, and it is re-validated at commit time. An item that
+   * moved while the dialog was open makes the stored request wrong, and a wrong request must write
+   * nothing rather than consume from wherever the item happens to be now.
+   */
+  it("commits nothing when the item changes location between request and confirm", () => {
+    const h = openCampaignEquipScreen();
+    const maxHp = maxHpOf(h.manager);
+    setCurrentHp("campaign", maxHp - 30);
+    h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
+
+    h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
+    expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
+
+    // Equip it while the confirmation is open — the resolver blocks this, so reach the store the way
+    // another route would.
+    const session = PlayerSessionStore.getSession("campaign");
+    const backpackId = Object.values(session.inventory.containers).find(c => c.kind === "backpack")!.id;
+    const backpack = session.inventory.containers[backpackId];
+    PlayerSessionStore.replaceInventory("campaign", {
+      instances: session.inventory.instances,
+      containers: {
+        ...session.inventory.containers,
+        [backpackId]: {
+          ...backpack,
+          slots: Object.fromEntries(Object.entries(backpack.slots).filter(([, id]) => id !== POTION)),
+        },
+        [`equip_${UNIT_ID}`]: {
+          ...session.inventory.containers[`equip_${UNIT_ID}`],
+          slots: {
+            ...session.inventory.containers[`equip_${UNIT_ID}`].slots,
+            usable_slot: POTION,
+          },
+        },
+      },
+    });
+
+    // The committed phase still carries the prompt — nothing has re-projected yet — so the confirm
+    // is admitted by routing and refused by the COMMIT, which validates the stored origin against
+    // the live session.
+    h.manager.transition({
+      type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
+    });
+
+    expect(currentHp("campaign")).toBe(maxHp - 30);
+    expect(inventory("campaign").instances[POTION]).toBeDefined();
+    // The confirmation never survives its own confirm, committed or not; and the freshly rebuilt
+    // projection now disagrees about the origin anyway.
+    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+  });
+
   it("refuses a full-health target, keeps the potion, and offers no dialog", () => {
     const h = openCampaignEquipScreen();
 
     expect(equipPhase(h.manager).itemUsage[POTION])
-      .toEqual({ canUse: false, reason: "unit_full_hp" });
+      .toEqual({ canUse: false, origin: "backpack", reason: "unit_full_hp" });
 
     const before = inventory("campaign");
-    const result = h.manager.transition({ type: "request_use_item", instanceId: POTION });
+    const result = h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
 
     expect(result).toEqual({ status: "rejected" });
     expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
@@ -260,7 +351,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     setCurrentHp("campaign", maxHp - 5);
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
 
-    h.manager.transition({ type: "request_use_item", instanceId: POTION });
+    h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
     expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
 
     // Another route heals the character to full while the dialog is open.
@@ -282,7 +373,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
 
     setCurrentHp("debug", maxHp - 30);
     debug.manager.transition({ type: "switch_debug_unit", templateId: UNIT_ID });
-    debug.manager.transition({ type: "request_use_item", instanceId: POTION });
+    debug.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
     debug.manager.transition({
       type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
     });
@@ -305,7 +396,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     setCurrentHp("debug", maxHp - 30);
     h.manager.transition({ type: "switch_debug_unit", templateId: UNIT_ID });
 
-    h.manager.transition({ type: "request_use_item", instanceId: POTION });
+    h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
     h.manager.transition({
       type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
     });
@@ -358,8 +449,8 @@ describe("the equipment screen displays persistent current HP", () => {
 
         expect(displayedHp(h.manager)).toBe(maxHpOf(h.manager));
         expect(equipPhase(h.manager).itemUsage[POTION])
-          .toEqual({ canUse: false, reason: "unit_full_hp" });
-        expect(h.manager.transition({ type: "request_use_item", instanceId: POTION }))
+          .toEqual({ canUse: false, origin: "backpack", reason: "unit_full_hp" });
+        expect(h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" }))
           .toEqual({ status: "rejected" });
       });
 
@@ -371,7 +462,7 @@ describe("the equipment screen displays persistent current HP", () => {
 
         expect(displayedHp(h.manager)).toBe(maxHp - 30);
 
-        h.manager.transition({ type: "request_use_item", instanceId: POTION });
+        h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
         h.manager.transition({
           type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
         });
@@ -386,7 +477,7 @@ describe("the equipment screen displays persistent current HP", () => {
         setCurrentHp(source.name, maxHp - 5);
         refresh(h);
 
-        h.manager.transition({ type: "request_use_item", instanceId: POTION });
+        h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
         h.manager.transition({
           type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
         });
@@ -398,7 +489,7 @@ describe("the equipment screen displays persistent current HP", () => {
         expect(equipPhase(h.manager).itemUsage[POTION]).toBeUndefined();
         expect(isReferencedAnywhere(inventory(source.name), POTION)).toBe(false);
 
-        expect(h.manager.transition({ type: "request_use_item", instanceId: POTION }))
+        expect(h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" }))
           .toEqual({ status: "rejected" });
         expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
       });
@@ -444,7 +535,7 @@ describe("the equipment screen displays persistent current HP", () => {
       // The level-up raises the ceiling; it does not heal, and the wound survives it.
       expect(displayedHp(h.manager)).toBe(beforeMax - 3);
 
-      h.manager.transition({ type: "request_use_item", instanceId: POTION });
+      h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
       h.manager.transition({
         type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
       });
@@ -461,7 +552,7 @@ describe("the equipment screen displays persistent current HP", () => {
       // currentHp stays null across the level-up, so full HP tracks the NEW maximum.
       expect(displayedHp(h.manager)).toBe(maxHpOf(h.manager));
       expect(equipPhase(h.manager).itemUsage[POTION])
-        .toEqual({ canUse: false, reason: "unit_full_hp" });
+        .toEqual({ canUse: false, origin: "backpack", reason: "unit_full_hp" });
     });
   });
 });
@@ -469,7 +560,7 @@ describe("the equipment screen displays persistent current HP", () => {
 describe("a pending request never outlives the screen that owns it", () => {
   it("is dropped when the selected character changes", () => {
     const h = openCampaignEquipScreen();
-    h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     h.manager.transition({ type: "switch_equip_unit", templateId: "healer" });
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
@@ -487,7 +578,7 @@ describe("a pending request never outlives the screen that owns it", () => {
 
   it("is dropped when the screen is left and re-entered", () => {
     const h = openCampaignEquipScreen();
-    h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     h.manager.transition({ type: "close_equip_screen" });
     h.manager.transition({ type: "open_equip_screen", unitTemplateId: UNIT_ID });
@@ -498,7 +589,7 @@ describe("a pending request never outlives the screen that owns it", () => {
 
   it("is dropped by a debug reset, though the reset recreates the very same instance id", () => {
     const h = openDebugEquipScreen();
-    h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
     expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
 
     h.manager.transition({ type: "reset_debug_session" });
@@ -519,7 +610,7 @@ describe("a pending request never outlives the screen that owns it", () => {
 
   it("commits nothing when the item disappears between request and confirm", () => {
     const h = openCampaignEquipScreen();
-    h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     // Another route removes the instance while the dialog is open.
     const session = PlayerSessionStore.getSession("campaign");
@@ -557,9 +648,9 @@ describe("a dead character can use nothing", () => {
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
 
     expect(equipPhase(h.manager).itemUsage[VITALITY])
-      .toEqual({ canUse: false, reason: "unit_dead" });
+      .toEqual({ canUse: false, origin: "backpack", reason: "unit_dead" });
 
-    const result = h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    const result = h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     expect(result).toEqual({ status: "rejected" });
     expect(inventory("campaign").instances[VITALITY]).toBeDefined();
@@ -569,13 +660,13 @@ describe("a dead character can use nothing", () => {
 describe("campaign and debug behave identically and stay isolated", () => {
   it("produces the same roster and inventory delta in both sessions", () => {
     const campaign = openCampaignEquipScreen();
-    campaign.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    campaign.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
     campaign.manager.transition({
       type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID,
     });
 
     const debug = openDebugEquipScreen();
-    debug.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    debug.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
     debug.manager.transition({
       type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID,
     });
@@ -589,7 +680,7 @@ describe("campaign and debug behave identically and stay isolated", () => {
     const h = openDebugEquipScreen();
     const campaignBonusesBefore = bonuses("campaign");
 
-    h.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
     h.manager.transition({
       type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID,
     });
@@ -605,12 +696,12 @@ describe("two managers never see each other's confirmation", () => {
     // Two managers, each on its own session's equipment screen, both with a pending request
     // naming the SAME authored instance id and the SAME character.
     const campaign = openCampaignEquipScreen();
-    campaign.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    campaign.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     const debug = openDebugEquipScreen();
     expect(equipPhase(debug.manager).pendingItemUsePrompt).toBeNull();
 
-    debug.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    debug.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     // Each still sees only its own.
     campaign.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
@@ -631,7 +722,7 @@ describe("two managers never see each other's confirmation", () => {
     const campaign = openCampaignEquipScreen();
     const debug = openDebugEquipScreen();
 
-    debug.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    debug.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
     debug.manager.transition({
       type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID,
     });
@@ -640,7 +731,7 @@ describe("two managers never see each other's confirmation", () => {
     expect(bonuses("campaign")).toEqual({});
 
     // The campaign manager's own request is unaffected by the debug commit.
-    campaign.manager.transition({ type: "request_use_item", instanceId: VITALITY });
+    campaign.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
     campaign.manager.transition({
       type: "confirm_use_item", instanceId: VITALITY, unitTemplateId: UNIT_ID,
     });

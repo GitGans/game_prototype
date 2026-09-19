@@ -244,8 +244,8 @@ describe("phaseTransitionResolver", () => {
       ["unequip_item", equipScreenPhase(), { type: "unequip_item", unitTemplateId: "u1", slot: "helmet" }],
       [
         "request_use_item",
-        equipScreenPhase({ itemUsage: { i1: { canUse: true, effect: BOOST_EFFECT } } }),
-        { type: "request_use_item", instanceId: "i1" },
+        equipScreenPhase({ itemUsage: { i1: { canUse: true, origin: "backpack", effect: BOOST_EFFECT } } }),
+        { type: "request_use_item", instanceId: "i1", origin: "backpack" },
       ],
       [
         "confirm_use_item",
@@ -282,100 +282,67 @@ describe("phaseTransitionResolver", () => {
   });
 
 
-  describe("item-action window routing", () => {
-    const MENU = (options: Array<{ action: "use" | "equip"; enabled: boolean }>) => ({
-      instanceId: "i1",
-      unitTemplateId: "unit_1",
-      unitName: "U",
-      itemName: "P",
-      effect: { type: "heal", amount: 10 } as const,
-      options: options.map(o => ({ ...o, disabledReason: o.enabled ? null : "unit_full_hp" as const })),
-    });
+  describe("item-use origin routing", () => {
+    const BACKPACK_ELIGIBLE = {
+      i1: { canUse: true, origin: "backpack", effect: BOOST_EFFECT },
+    } as const;
+    const EQUIPPED_ELIGIBLE = {
+      i1: { canUse: true, origin: "equipped_usable", effect: BOOST_EFFECT },
+    } as const;
 
-    it("accepts opening for an item the screen already evaluated", () => {
-      const phase = equipScreenPhase({ itemUsage: { i1: { canUse: true, effect: BOOST_EFFECT } } });
-      expect(resolveTransition(phase, { type: "open_item_actions", instanceId: "i1" }, metadata))
-        .toBe(phase);
-    });
-
-    it("rejects opening for an item with no usage entry, or with a modal already open", () => {
-      const evaluated = { i1: { canUse: true, effect: BOOST_EFFECT } };
+    it("accepts a request whose origin matches the verdict the screen committed", () => {
+      const fromBackpack = equipScreenPhase({ itemUsage: { ...BACKPACK_ELIGIBLE } });
       expect(resolveTransition(
-        equipScreenPhase({ itemUsage: evaluated }),
-        { type: "open_item_actions", instanceId: "other" }, metadata,
-      )).toBeNull();
+        fromBackpack, { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata,
+      )).toBe(fromBackpack);
 
+      const fromSlot = equipScreenPhase({ itemUsage: { ...EQUIPPED_ELIGIBLE } });
       expect(resolveTransition(
-        equipScreenPhase({ itemUsage: evaluated, itemActionMenu: MENU([{ action: "use", enabled: true }]) }),
-        { type: "open_item_actions", instanceId: "i1" }, metadata,
-      )).toBeNull();
-
-      expect(resolveTransition(
-        equipScreenPhase({
-          itemUsage: evaluated,
-          pendingItemUsePrompt: {
-            instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E",
-            effect: BOOST_EFFECT,
-          },
-        }),
-        { type: "open_item_actions", instanceId: "i1" }, metadata,
-      )).toBeNull();
+        fromSlot,
+        { type: "request_use_item", instanceId: "i1", origin: "equipped_usable" },
+        metadata,
+      )).toBe(fromSlot);
     });
 
     /**
-     * The enabled guard is symmetric: a disabled Equip is no more selectable than a disabled
-     * Use. Both directions are checked, because an asymmetric guard would let the window offer
-     * an equip the pipeline then silently refuses.
+     * The origin guard is the whole reason the verdict carries one. The same instance is a different
+     * request from the backpack and from `usable_slot`, validated against a different location, so a
+     * verdict computed for one must never admit a gesture claiming the other — otherwise a stale
+     * snapshot could authorize consumption from a place the item is not in.
      */
-    it("rejects a disabled option in either direction, and accepts an enabled one", () => {
-      const disabledUse = equipScreenPhase({ itemActionMenu: MENU([
-        { action: "use", enabled: false }, { action: "equip", enabled: true },
-      ]) });
+    it("rejects a request whose origin disagrees with the committed verdict, both ways", () => {
       expect(resolveTransition(
-        disabledUse, { type: "select_item_action", instanceId: "i1", action: "use" }, metadata,
+        equipScreenPhase({ itemUsage: { ...BACKPACK_ELIGIBLE } }),
+        { type: "request_use_item", instanceId: "i1", origin: "equipped_usable" },
+        metadata,
       )).toBeNull();
-      expect(resolveTransition(
-        disabledUse, { type: "select_item_action", instanceId: "i1", action: "equip" }, metadata,
-      )).toBe(disabledUse);
 
-      const disabledEquip = equipScreenPhase({ itemActionMenu: MENU([
-        { action: "use", enabled: true }, { action: "equip", enabled: false },
-      ]) });
       expect(resolveTransition(
-        disabledEquip, { type: "select_item_action", instanceId: "i1", action: "equip" }, metadata,
-      )).toBeNull();
-      expect(resolveTransition(
-        disabledEquip, { type: "select_item_action", instanceId: "i1", action: "use" }, metadata,
-      )).toBe(disabledEquip);
-    });
-
-    it("rejects a selection naming a different instance than the open window", () => {
-      const phase = equipScreenPhase({ itemActionMenu: MENU([{ action: "use", enabled: true }]) });
-      expect(resolveTransition(
-        phase, { type: "select_item_action", instanceId: "other", action: "use" }, metadata,
+        equipScreenPhase({ itemUsage: { ...EQUIPPED_ELIGIBLE } }),
+        { type: "request_use_item", instanceId: "i1", origin: "backpack" },
+        metadata,
       )).toBeNull();
     });
 
-    it("rejects closing when no window is open, and every window action off-screen", () => {
-      expect(resolveTransition(equipScreenPhase(), { type: "close_item_actions" }, metadata))
-        .toBeNull();
+    it("rejects an ineligible item even when the origin matches", () => {
       expect(resolveTransition(
-        makeBattlePhase(), { type: "open_item_actions", instanceId: "i1" }, metadata,
-      )).toBeNull();
-      expect(resolveTransition(
-        makeBattlePhase(), { type: "select_item_action", instanceId: "i1", action: "use" }, metadata,
+        equipScreenPhase({
+          itemUsage: { i1: { canUse: false, origin: "equipped_usable", reason: "unsupported_effect" } },
+        }),
+        { type: "request_use_item", instanceId: "i1", origin: "equipped_usable" },
+        metadata,
       )).toBeNull();
     });
   });
 
   describe("consumable confirmation routing", () => {
-    const eligible = { i1: { canUse: true, effect: BOOST_EFFECT } };
+    const eligible = { i1: { canUse: true, origin: "backpack", effect: BOOST_EFFECT } } as const;
     const prompt = { instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E", effect: BOOST_EFFECT };
 
     it("rejects a request from a non-equipment phase", () => {
-      expect(resolveTransition(makeBattlePhase(), { type: "request_use_item", instanceId: "i1" }, metadata))
+      expect(resolveTransition(makeBattlePhase(), { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata))
         .toBeNull();
-      expect(resolveTransition(worldMapPhase(true), { type: "request_use_item", instanceId: "i1" }, metadata))
+      expect(resolveTransition(worldMapPhase(true), { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata))
         .toBeNull();
     });
 
@@ -393,7 +360,7 @@ describe("phaseTransitionResolver", () => {
 
       for (const [label, phase] of battlePhases) {
         expect(
-          resolveTransition(phase, { type: "request_use_item", instanceId: "i1" }, metadata),
+          resolveTransition(phase, { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata),
           `request from ${label}`,
         ).toBeNull();
         expect(
@@ -409,26 +376,26 @@ describe("phaseTransitionResolver", () => {
 
     it("rejects a request for an ineligible item", () => {
       const phase = equipScreenPhase({
-        itemUsage: { i1: { canUse: false, reason: "unit_dead" } },
+        itemUsage: { i1: { canUse: false, origin: "backpack", reason: "unit_dead" } },
       });
-      expect(resolveTransition(phase, { type: "request_use_item", instanceId: "i1" }, metadata))
+      expect(resolveTransition(phase, { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata))
         .toBeNull();
     });
 
     it("rejects a request for an item the snapshot does not mention at all", () => {
-      expect(resolveTransition(equipScreenPhase(), { type: "request_use_item", instanceId: "i9" }, metadata))
+      expect(resolveTransition(equipScreenPhase(), { type: "request_use_item", instanceId: "i9", origin: "backpack" }, metadata))
         .toBeNull();
     });
 
     it("rejects a request while no character is selected", () => {
-      const phase = equipScreenPhase({ selectedUnitTemplateId: "", itemUsage: eligible });
-      expect(resolveTransition(phase, { type: "request_use_item", instanceId: "i1" }, metadata))
+      const phase = equipScreenPhase({ selectedUnitTemplateId: "", itemUsage: { ...eligible } });
+      expect(resolveTransition(phase, { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata))
         .toBeNull();
     });
 
     it("rejects a second request while one is pending", () => {
-      const phase = equipScreenPhase({ itemUsage: eligible, pendingItemUsePrompt: prompt });
-      expect(resolveTransition(phase, { type: "request_use_item", instanceId: "i1" }, metadata))
+      const phase = equipScreenPhase({ itemUsage: { ...eligible }, pendingItemUsePrompt: prompt });
+      expect(resolveTransition(phase, { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata))
         .toBeNull();
     });
 
@@ -484,7 +451,7 @@ describe("phaseTransitionResolver", () => {
 
     it("accepts all three from the debug equipment screen too", () => {
       const requesting = debugEquipScreenPhase({ itemUsage: eligible });
-      expect(resolveTransition(requesting, { type: "request_use_item", instanceId: "i1" }, metadata))
+      expect(resolveTransition(requesting, { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata))
         .toBe(requesting);
 
       const pending = debugEquipScreenPhase({

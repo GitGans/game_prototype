@@ -76,10 +76,7 @@ const ACTION_SAMPLES = {
   switch_equip_unit: { type: 'switch_equip_unit', templateId: 'soldier' },
   equip_item: { type: 'equip_item', instanceId: 'inst_1', unitTemplateId: 'soldier' },
   unequip_item: { type: 'unequip_item', unitTemplateId: 'soldier', slot: 'accessory' },
-  open_item_actions: { type: 'open_item_actions', instanceId: 'inst_1' },
-  close_item_actions: { type: 'close_item_actions' },
-  select_item_action: { type: 'select_item_action', instanceId: 'inst_1', action: 'use' },
-  request_use_item: { type: 'request_use_item', instanceId: 'inst_1' },
+  request_use_item: { type: 'request_use_item', instanceId: 'inst_1', origin: 'backpack' },
   confirm_use_item: {
     type: 'confirm_use_item', instanceId: 'inst_1', unitTemplateId: 'soldier',
   },

@@ -74,9 +74,15 @@ function sharedBackpackSlot(slot: string): string | undefined {
   return shared.slots[slot];
 }
 
-function equipThroughWindow(h: LifecycleHarness, instanceId: string): void {
-  h.manager.transition({ type: "open_item_actions", instanceId });
-  h.manager.transition({ type: "select_item_action", instanceId, action: "equip" });
+/** Single-click equip: a usable goes onto the selected character like ordinary gear. */
+function equipOnSelectedUnit(h: LifecycleHarness, instanceId: string): void {
+  const phase = h.manager.getPhase();
+  if (phase.type !== "equip_screen" && phase.type !== "debug_equip_screen") {
+    throw new Error(`expected an equipment screen, got ${phase.type}`);
+  }
+  h.manager.transition({
+    type: "equip_item", instanceId, unitTemplateId: phase.selectedUnitTemplateId,
+  });
 }
 
 /** Equips the scroll on the carrier through the equip screen, then starts a battle and begins combat. */
@@ -84,7 +90,7 @@ function startBattleWithEquippedScroll(): LifecycleHarness {
   const h = createLifecycleHarness();
   h.startNewCampaign();
   h.manager.transition({ type: "open_equip_screen", unitTemplateId: CARRIER });
-  equipThroughWindow(h, SCROLL);
+  equipOnSelectedUnit(h, SCROLL);
   expect(equippedUsable(CARRIER)).toBe(SCROLL);
   h.manager.transition({ type: "close_equip_screen" });
 
@@ -168,7 +174,7 @@ describe("equipping the scroll", () => {
     const h = onEquipScreen();
     expect(sharedBackpackSlot("5")).toBe(SCROLL);
 
-    equipThroughWindow(h, SCROLL);
+    equipOnSelectedUnit(h, SCROLL);
 
     expect(equippedUsable(CARRIER)).toBe(SCROLL);
     expect(sharedBackpackSlot("5")).toBeUndefined();
@@ -176,10 +182,10 @@ describe("equipping the scroll", () => {
 
   it("replaces an equipped potion by the normal swap rule: the potion takes the scroll's slot", () => {
     const h = onEquipScreen();
-    equipThroughWindow(h, POTION);
+    equipOnSelectedUnit(h, POTION);
     expect(equippedUsable(CARRIER)).toBe(POTION);
 
-    equipThroughWindow(h, SCROLL);
+    equipOnSelectedUnit(h, SCROLL);
 
     expect(equippedUsable(CARRIER)).toBe(SCROLL);
     expect(sharedBackpackSlot("5")).toBe(POTION);
@@ -187,7 +193,7 @@ describe("equipping the scroll", () => {
 
   it("unequips back into the backpack", () => {
     const h = onEquipScreen();
-    equipThroughWindow(h, SCROLL);
+    equipOnSelectedUnit(h, SCROLL);
 
     h.manager.transition({ type: "unequip_item", unitTemplateId: CARRIER, slot: "usable_slot" });
 
@@ -197,25 +203,40 @@ describe("equipping the scroll", () => {
   });
 });
 
-describe("backpack Use stays unsupported", () => {
-  it("offers Use disabled with unsupported_effect, and selecting it changes nothing", () => {
+describe("backpack use stays unsupported", () => {
+  /**
+   * Out of combat the scroll has no target selection yet, so it is ineligible from BOTH origins and
+   * the tooltip is the only place that says so. No modal offers it, and no gesture can commit it.
+   */
+  it("reports unsupported_effect for both origins and commits nothing", () => {
     const h = createLifecycleHarness();
     h.startNewCampaign();
     h.manager.transition({ type: "open_equip_screen", unitTemplateId: CARRIER });
-    h.manager.transition({ type: "open_item_actions", instanceId: SCROLL });
 
-    const phase = h.manager.getPhase();
-    if (phase.type !== "equip_screen") throw new Error("expected the equip screen");
-    expect(phase.itemActionMenu?.options.find(o => o.action === "use"))
-      .toEqual({ action: "use", enabled: false, disabledReason: "unsupported_effect" });
+    const inBackpack = h.manager.getPhase();
+    if (inBackpack.type !== "equip_screen") throw new Error("expected the equip screen");
+    expect(inBackpack.itemUsage[SCROLL])
+      .toEqual({ canUse: false, origin: "backpack", reason: "unsupported_effect" });
 
     const before = session();
-    h.manager.transition({ type: "select_item_action", instanceId: SCROLL, action: "use" });
+    expect(h.manager.transition({
+      type: "request_use_item", instanceId: SCROLL, origin: "backpack",
+    })).toEqual({ status: "rejected" });
 
-    const after = session();
-    expect(after.roster).toBe(before.roster);
-    expect(after.inventory).toBe(before.inventory);
-    expect(after.inventory.instances[SCROLL]).toBeDefined();
+    // Equipping it changes the origin but not the verdict.
+    equipOnSelectedUnit(h, SCROLL);
+    const equipped = h.manager.getPhase();
+    if (equipped.type !== "equip_screen") throw new Error("expected the equip screen");
+    expect(equipped.itemUsage[SCROLL])
+      .toEqual({ canUse: false, origin: "equipped_usable", reason: "unsupported_effect" });
+
+    expect(h.manager.transition({
+      type: "request_use_item", instanceId: SCROLL, origin: "equipped_usable",
+    })).toEqual({ status: "rejected" });
+
+    // The scroll still exists and the roster never moved.
+    expect(session().roster).toBe(before.roster);
+    expect(session().inventory.instances[SCROLL]).toBeDefined();
   });
 });
 

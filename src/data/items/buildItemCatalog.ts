@@ -5,6 +5,7 @@ import type {
   ItemRuntimeKind,
   ItemRuntimeMetadata,
   ItemUseEffect,
+  PartialBattleStatBonuses,
 } from '../../shared/itemTypes';
 import type { ItemGroup } from './authoredItemTypes';
 import { createZeroBattleStatMap } from '../../shared/battleStatUtils';
@@ -49,6 +50,31 @@ function assertUseEffect(id: string, kind: ItemRuntimeKind, effect: ItemUseEffec
 }
 
 /**
+ * Stat-bonus ownership. A `usable` occupies `usable_slot` only so it can be activated from
+ * there; it is not gear. `usable_slot` is an ordinary slot of the equipment container, so
+ * `inventory/equipmentBonuses.ts` sums the `battleStatBonuses` of EVERY equipped definition.
+ * Rejecting an authored bonus here keeps that aggregation generic: no runtime code has to
+ * special-case the slot.
+ *
+ * Only numeric zero is accepted, for every authored entry. Entries are read from the authored
+ * record rather than from the canonical stat list, so a malformed JS entry — an unknown stat
+ * key, a string, `NaN`, an infinity — is rejected too, exactly as the builder's other guards
+ * reject malformed input that bypasses the literal types.
+ */
+function assertNoEquippedStatBonuses(
+  id: string,
+  bonuses: PartialBattleStatBonuses | undefined,
+): void {
+  for (const [stat, value] of Object.entries(bonuses ?? {})) {
+    if (value !== 0) {
+      throw new Error(
+        `Item "${id}" of kind "usable" must not carry equipped stat bonuses (got ${stat}: ${String(value)})`,
+      );
+    }
+  }
+}
+
+/**
  * Pure builder: turns authored item groups into the generated catalog. Group array order and
  * per-group key order are preserved. The group is the single source of truth for behavior (kind)
  * and placement (slot); item definitions carry facts only.
@@ -62,6 +88,9 @@ function assertUseEffect(id: string, kind: ItemRuntimeKind, effect: ItemUseEffec
  *   equipment  → ordinary equipment slot only, NEVER usable_slot
  *   usable     → slot MUST be usable_slot (reserved exclusively for kind 'usable')
  *   consumable → slot null
+ *
+ * equipped stat bonuses (enforced here):
+ *   usable → must author none; only an explicit zero is accepted (it occupies a slot to act, not to buff)
  */
 export function buildItemCatalog(groups: readonly ItemGroup[]): ItemCatalog {
   const definitions: Record<string, ItemDefinition> = {};
@@ -87,6 +116,7 @@ export function buildItemCatalog(groups: readonly ItemGroup[]): ItemCatalog {
         throw new Error(`Item "${id}" of kind "equipment" must not have a useEffect`);
       }
       if (item.useEffect) assertUseEffect(id, group.kind, item.useEffect);
+      if (group.kind === 'usable') assertNoEquippedStatBonuses(id, item.battleStatBonuses);
 
       definitions[id] = {
         id,

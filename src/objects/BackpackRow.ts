@@ -15,10 +15,11 @@ export class BackpackRow extends Phaser.GameObjects.Container {
     gap: number,
     snapshot: BackpackSnapshot,
     tooltip: ItemTooltip,
-    onItemClick: (item: ItemSlotSnapshot, cellX: number, cellY: number) => void,
+    onItemClick: (item: ItemSlotSnapshot) => void,
+    onItemDoubleClick: (item: ItemSlotSnapshot) => void,
     cols: number = 5,
     rows: number = 2,
-    /** Consumable eligibility keyed by instance id, forwarded to each cell for its tooltip. */
+    /** Item-use eligibility keyed by instance id, forwarded to each cell for its tooltip. */
     itemUsage: Record<string, ItemUsability> = {},
   ) {
     super(scene, x, y);
@@ -32,13 +33,10 @@ export class BackpackRow extends Phaser.GameObjects.Container {
       const cy = row * (cellSize + gap);
       const item = snapshot.slots[i] ?? null;
 
-      const cellWorldX = x + cx;
-      const cellWorldY = y + cy;
-
       const cell = new ItemCell({
         scene,
-        x: cellWorldX,
-        y: cellWorldY,
+        x: x + cx,
+        y: y + cy,
         size: cellSize,
         slotKey: String(i),
         slotLabel: "",
@@ -46,13 +44,9 @@ export class BackpackRow extends Phaser.GameObjects.Container {
         tooltip,
         usage: item ? itemUsage[item.instanceId] ?? null : null,
         onClick: (it) => {
-          if (it)
-            onItemClick(
-              it,
-              cellWorldX + cellSize / 2,
-              cellWorldY + cellSize / 2,
-            );
+          if (it) onItemClick(it);
         },
+        onDoubleClick: (it) => onItemDoubleClick(it),
       });
       this.cells.push(cell);
     }
@@ -68,5 +62,10 @@ export class BackpackRow extends Phaser.GameObjects.Container {
       const item = snapshot.slots[i] ?? null;
       cell.refresh(item, item ? itemUsage[item.instanceId] ?? null : null);
     });
+  }
+
+  /** Every cell drops its deferred click — see `ItemCell.cancelPendingGesture`. */
+  cancelPendingGestures(): void {
+    for (const cell of this.cells) cell.cancelPendingGesture();
   }
 }

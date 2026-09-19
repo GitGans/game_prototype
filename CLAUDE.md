@@ -84,6 +84,7 @@ Browser-based game with a turn-based game on a grid.
 - Battle runtime writes belong only to its lifecycle owner; reads use the validated read-only gateway. Render snapshots must not share mutable runtime-owned data.
 - `GameState` and `PlayerSessionStore` may be imported only by their registered owners and never re-exported onward; a new direct consumer requires an explicit importer-policy change.
 - Boundary failures must be fixed or resolved through an explicit architectural policy change. Never accept them as a new baseline.
+- Policy files are reviewed, not frozen: a legitimate new dependency needs an explicit, reviewed policy change. Never route a dependency through a re-export or indirect import to keep an allowlist textually unchanged.
 
 Verify with:
 

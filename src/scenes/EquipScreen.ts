@@ -1,9 +1,12 @@
 import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
-import { GamePhase, type PendingItemUsePrompt, type ItemActionMenuSnapshot } from '../core/phases';
+import { GamePhase, type PendingItemUsePrompt } from '../core/phases';
 import { bindStateChanged } from './sceneEvents';
-import { backpackItemClickAction } from './backpackItemClickAction';
+import {
+  backpackItemClickAction, backpackItemUseAction,
+  equippedItemClickAction, equippedItemUseAction,
+} from './itemGestureActions';
 import { ItemSlotSnapshot } from '../battle/types';
 import { UI_THEME } from '../ui/theme';
 import { ItemTooltip } from '../objects/ItemTooltip';
@@ -12,7 +15,6 @@ import { UnitTabRow } from '../objects/UnitTabRow';
 import { UnitSelectionPanel } from '../objects/panels/UnitSelectionPanel';
 import { EquipmentPanel } from '../objects/panels/EquipmentPanel';
 import { ConfirmationDialog } from '../ui/ConfirmationDialog';
-import { ItemActionDialog } from '../objects/ItemActionDialog';
 import { formatItemUsePrompt } from '../objects/itemUseEffectPresentation';
 
 export type EquipScreenPhase      = Extract<GamePhase, { type: 'equip_screen' }>;
@@ -30,12 +32,10 @@ export class EquipScreen extends Phaser.Scene {
   private _equipPanel      : EquipmentPanel      | null = null;
   private _selectorPanel   : EnemyGroupSelector  | null = null;
   /**
-   * Widget handles, never gameplay state. Which modal is open is decided entirely by the
-   * committed phase (`phase.itemActionMenu` / `phase.pendingItemUsePrompt`), and those two
-   * project one storage cell, so at most one can be non-null.
+   * A widget handle, never gameplay state. Whether the confirmation is open is decided entirely by
+   * the committed phase (`phase.pendingItemUsePrompt`).
    */
   private _confirmDialog   : ConfirmationDialog  | null = null;
-  private _itemActionDialog: ItemActionDialog    | null = null;
   private itemTooltip!     : ItemTooltip;
 
   constructor() {
@@ -67,7 +67,6 @@ export class EquipScreen extends Phaser.Scene {
 
   destroy(): void {
     this.syncConfirmDialog(null);
-    this.syncItemActionDialog(null);
   }
 
   // ── Mode switching ─────────────────────────────────────────────────────────
@@ -129,8 +128,10 @@ export class EquipScreen extends Phaser.Scene {
       contentTopY:         CONTENT_TOP_Y,
       phase,
       itemTooltip:         this.itemTooltip,
-      onEquipSlotClick:    (slot, item) => this.onEquipSlotClick(slot, item),
-      onBackpackItemClick: (item) => this.onBackpackItemClick(item),
+      onEquipSlotClick:          (slot, item) => this.onEquipSlotClick(slot, item),
+      onEquipSlotDoubleClick:    (slot, item) => this.onEquipSlotDoubleClick(slot, item),
+      onBackpackItemClick:       (item) => this.onBackpackItemClick(item),
+      onBackpackItemDoubleClick: (item) => this.onBackpackItemDoubleClick(item),
       onUpgrade:           () => PhaseManager.transition({ type: 'open_upgrade_tree' }),
       onBack:              () => PhaseManager.transition({ type: 'close_equip_screen' }),
     });
@@ -142,7 +143,6 @@ export class EquipScreen extends Phaser.Scene {
     this._equipPanel?.destroy();     this._equipPanel     = null;
     this._selectorPanel?.destroy();  this._selectorPanel  = null;
     this.syncConfirmDialog(null);
-    this.syncItemActionDialog(null);
   }
 
   // ── EnemyGroupSelector (debug only, lives in scene) ───────────────────────
@@ -166,10 +166,16 @@ export class EquipScreen extends Phaser.Scene {
 
   // ── Item interaction ───────────────────────────────────────────────────────
 
+  // Input routing only: every gesture is mapped by `itemGestureActions`, the resolver accepts or
+  // rejects it, and the committed phase decides whether a confirmation is rendered. There is no
+  // scene-side eligibility rule and no branch here.
+
   private onBackpackItemClick(item: ItemSlotSnapshot): void {
-    // Input routing only: the resolver accepts or rejects, and the committed phase decides which
-    // modal (if any) is rendered. There is no scene-side eligibility rule.
     PhaseManager.transition(backpackItemClickAction(item, this.getSelectedTemplateId()));
+  }
+
+  private onBackpackItemDoubleClick(item: ItemSlotSnapshot): void {
+    PhaseManager.transition(backpackItemUseAction(item));
   }
 
   /**
@@ -196,43 +202,23 @@ export class EquipScreen extends Phaser.Scene {
   }
 
   /**
-   * Reconciles the item-action window with the committed phase, on the same terms as the
-   * confirmation above: teardown-first, idempotent, and destruction never fires a selection.
-   */
-  private syncItemActionDialog(menu: ItemActionMenuSnapshot | null): void {
-    this._itemActionDialog?.destroy();
-    this._itemActionDialog = null;
-    if (!menu) return;
-
-    this._itemActionDialog = new ItemActionDialog({
-      scene: this,
-      menu,
-      onSelect: action => PhaseManager.transition({
-        type: 'select_item_action',
-        instanceId: menu.instanceId,
-        action,
-      }),
-      onDismiss: () => PhaseManager.transition({ type: 'close_item_actions' }),
-    });
-  }
-
-  /**
-   * Both modals are reconciled together and in one place, because they project ONE storage
-   * cell: rebuilding them independently could momentarily show both.
+   * Modal reconciliation stays in one named place even with a single modal: which modal is open is a
+   * property of the committed phase, and this is the one function that reads it.
    */
   private syncModals(phase: AnyEquipPhase): void {
-    this.syncItemActionDialog(phase.itemActionMenu);
     this.syncConfirmDialog(phase.pendingItemUsePrompt);
   }
 
   private onEquipSlotClick(slot: string, item: ItemSlotSnapshot | null): void {
+    // An empty slot has nothing to unequip; the resolver would reject it, but there is no gesture to
+    // express either.
     if (item) {
-      PhaseManager.transition({
-        type: 'unequip_item',
-        unitTemplateId: this.getSelectedTemplateId(),
-        slot,
-      });
+      PhaseManager.transition(equippedItemClickAction(slot, this.getSelectedTemplateId()));
     }
+  }
+
+  private onEquipSlotDoubleClick(_slot: string, item: ItemSlotSnapshot): void {
+    PhaseManager.transition(equippedItemUseAction(item));
   }
 
   private getSelectedTemplateId(): string {

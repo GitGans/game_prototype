@@ -8,8 +8,10 @@ import type { UsableItemGroup } from "../authoredItemTypes";
  * price and `hpPercent`. There is no per-scroll handler, no strength table and no skill level —
  * items and revive skills share one percentage-based primitive (`battle/revive.ts`).
  *
- * `usable` because it is activated from `usable_slot` in battle. Using it from the backpack is not
- * supported yet (out-of-combat target selection is future work).
+ * `usable` because it is activated from `usable_slot` in battle. Out of combat it is ineligible from
+ * BOTH origins — the backpack and `usable_slot` alike — because target selection outside battle is
+ * future work; carrying the scroll does not change that. It reports `unsupported_effect`, which the
+ * item tooltip states in red.
  */
 export const RESURRECTION_GROUP = {
   kind: "usable",

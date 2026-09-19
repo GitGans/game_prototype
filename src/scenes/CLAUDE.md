@@ -22,7 +22,8 @@ Scenes are the rendering and input layer of the game. Each scene corresponds to 
 - `controllers/BattlePresentationController.ts` — applies battle event, directive, and skill-preview presentations to Phaser objects
 - `WorldMap.ts` — keyboard-driven map navigation; triggers encounters, camps, and portals
 - `Prep.ts` — pre-battle camp screen; manages party composition and equipment access
-- `EquipScreen.ts` — unit equipment and item management; click-to-equip (equipment + usable) / unequip; clicking a consumable dispatches `request_consume_item` and the scene renders `phase.pendingConsumePrompt` through the generic `ui/ConfirmationDialog`. The only scene-local addition is the dialog widget handle — whether a confirmation is open is decided entirely by the committed `GamePhase`
+- `EquipScreen.ts` — unit equipment and item management. Four gestures, all mapped by `itemGestureActions.ts` and dispatched in one line each, with no branch in the scene: a single click equips a backpack item (`equipment` and `usable` alike) or unequips an equipped one; a double click on a `usable` — in the backpack or in `usable_slot` — dispatches `request_use_item` with the matching `origin`; a backpack `consumable`'s single click IS its use request. The scene renders `phase.pendingItemUsePrompt` through the generic `ui/ConfirmationDialog`. The only scene-local addition is the dialog widget handle — whether a confirmation is open is decided entirely by the committed `GamePhase`. Click-gesture timing lives in `ItemCell` / `ui/clickGesture`, never here
+- `itemGestureActions.ts` — the four equip-screen item gestures → `PhaseAction` mappings (backpack click, backpack double-click, equipped click, equipped double-click). Input routing ONLY: it decides nothing about validity — `resolveTransition` accepts or rejects against the committed snapshot — and the backpack switch is exhaustive over `ItemRuntimeKind`, so a new kind fails to compile rather than inheriting another's gesture
 - `UpgradeTreeScreen.ts` — upgrade tier selection per unit
 - `BattleResults.ts` — post-battle summary and level-up display
 - `DebugLevelSelect.ts` — developer tool for picking a battle level directly
@@ -90,7 +91,7 @@ PhaseManager resolves next phase and syncs scenes
 - change battle rules or state transitions → `src/battle/` and `src/core/phaseHandlers/battlePhaseHandler.ts`
 - change map movement or encounter triggers → `WorldMap.ts`
 - change camp/party composition UI → `Prep.ts`
-- change equipment or item interaction → `EquipScreen.ts`
+- change equipment or item interaction → `EquipScreen.ts`; change which action a click or double-click expresses → `itemGestureActions.ts`
 - change upgrade selection UI → `UpgradeTreeScreen.ts`
 - change post-battle display → `BattleResults.ts`
 - change asset loading → `Preloader.ts`

@@ -1,10 +1,8 @@
 import type { UnitClassId, UnitBattleStatKey } from './unitTypes';
 import type {
   ItemUseFailure,
-  ItemEquipFailure,
   ItemDefinition,
   ItemRuntimeMetadata,
-  ReadonlyItemUseEffect,
 } from './itemTypes';
 
 // ─── Stat Snapshots ───────────────────────────────────────────────────────────
@@ -104,15 +102,25 @@ export type ItemEffectPreview =
     };
 
 /**
- * Eligibility of one item instance (backpack consumable or usable) against the currently
- * selected character.
+ * Where an out-of-combat use is being requested FROM. Explicit rather than derived, so eligibility,
+ * the stored confirmation and consumption all refer to the same place: an instance in `usable_slot`
+ * and the same instance in the shared backpack are different requests, validated differently.
+ */
+export type ItemUseOrigin = 'backpack' | 'equipped_usable';
+
+/**
+ * Eligibility of one item instance against the currently selected character, from one of the two
+ * out-of-combat origins: a backpack consumable or usable, or the usable the character is carrying
+ * in `usable_slot`.
  *
  * Produced by the same evaluation the executor runs (`core/itemUsability.ts`), so a prompt can
- * never advertise an action that confirmation would silently refuse.
+ * never advertise an action that confirmation would silently refuse. `origin` is carried on BOTH
+ * branches because a rejection is origin-specific too: the same scroll is refused for different
+ * reasons depending on where it was activated from.
  */
 export type ItemUsability =
-  | { canUse: true; effect: ItemEffectPreview }
-  | { canUse: false; reason: ItemUseFailure };
+  | { canUse: true; origin: ItemUseOrigin; effect: ItemEffectPreview }
+  | { canUse: false; origin: ItemUseOrigin; reason: ItemUseFailure };
 
 /**
  * Everything the confirmation dialog needs, structured — never formatted text. Wording is
@@ -131,46 +139,19 @@ export interface PendingItemUsePrompt {
  * effects side that records it and the snapshot side that projects it. `closed` is the absence of
  * one (a null slot), so at most one modal can be open by construction.
  *
+ * One open state: a confirmation. The `kind` discriminator is kept deliberately even though the
+ * union has a single member — every guard in `phaseHandlers/itemUsePhaseHandler` reads it, and a
+ * future second interaction kind (out-of-combat revive target selection) then costs nothing.
+ *
  * Its OWNER is not a field: storage is keyed by `PlayerSessionSource`, so an interaction cannot
  * claim a session it is not in. Declared here rather than in `core/itemInteractionStorage`
  * because that module is importer-restricted — the snapshot projection must be able to NAME this
  * type without gaining the ability to write the cell.
  */
-export type ItemInteraction =
-  | {
-      readonly kind: 'choosing_action';
-      readonly instanceId: string;
-      readonly unitTemplateId: string;
-    }
-  | {
-      readonly kind: 'confirming_use';
-      readonly instanceId: string;
-      readonly unitTemplateId: string;
-    };
-
-/** The gameplay actions an item-action window can offer. A semantic value, never a callback. */
-export type ItemActionKind = 'use' | 'equip';
-
-/**
- * One row of the item-action window. `disabledReason` is structured — the wording lives in
- * `objects/itemActionPresentation.ts`, which core/ must not import.
- */
-export interface ItemActionOptionSnapshot {
-  readonly action: ItemActionKind;
-  readonly enabled: boolean;
-  readonly disabledReason: ItemUseFailure | ItemEquipFailure | null;
-}
-
-/**
- * The open item-action window as pure data. Its enabled flags come from the same read-side
- * evaluators execution re-runs, so the window cannot offer an action the pipeline would refuse.
- */
-export interface ItemActionMenuSnapshot {
+export type ItemInteraction = {
+  readonly kind: 'confirming_use';
   readonly instanceId: string;
   readonly unitTemplateId: string;
-  readonly unitName: string;
-  readonly itemName: string;
-  /** Absent only for an item with no useEffect at all. */
-  readonly effect: ReadonlyItemUseEffect | null;
-  readonly options: readonly ItemActionOptionSnapshot[];
-}
+  /** The origin the confirmation was opened for — the one consumption must validate against. */
+  readonly origin: ItemUseOrigin;
+};
