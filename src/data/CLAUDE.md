@@ -98,6 +98,11 @@ Live game state in `BattleState` / `CampaignState`
   still unsupported out of combat. No item id and no particular amount is ever privileged — a
   stronger potion is a new entry in `items/usable/healing.ts`, a stronger scroll a new entry in
   `items/usable/resurrection.ts`, never a new branch, and nothing outside that file changes.
+- **No equipped stat bonuses on a `usable`** (enforced at build time). A `usable` MUST NOT author `battleStatBonuses`; only an explicit zero is accepted, because the rule is about the value, not
+  about the key being present. It occupies `usable_slot` to be _activated_, never to buff —
+  `usable_slot` is an ordinary slot of the equipment container, so `inventory/equipmentBonuses.ts`
+  would otherwise sum its bonuses like any other gear. The guard lives in `buildItemCatalog.ts` so
+  bonus aggregation stays generic and no runtime code special-cases the slot.
 - **Acquisition data lives elsewhere** — starting inventory in `startingInventoryDefinitions.ts`; shop/loot
   in their own future definition files. Item entries never carry acquisition data.
 

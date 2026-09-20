@@ -45,6 +45,23 @@ const TOOLTIP = {
   lineH:   Math.round(17 * LAYOUT_SCALE),
 } as const;
 
+const MODAL = {
+  /** Inner padding on all four sides of the panel. */
+  pad:           Math.round(20  * LAYOUT_SCALE),
+  /** Square close-icon button in the panel's top-right corner. */
+  closeIconSize: Math.round(28  * LAYOUT_SCALE),
+  /** Vertical gap between the close-icon band and the content band. */
+  closeIconGap:  Math.round(12  * LAYOUT_SCALE),
+  /** Vertical gap between the content band and the footer button row. */
+  footerGap:     Math.round(16  * LAYOUT_SCALE),
+  /** Footer buttons — dismissal and actions share one size. */
+  buttonW:       Math.round(120 * LAYOUT_SCALE),
+  buttonH:       Math.round(40  * LAYOUT_SCALE),
+  buttonGap:     Math.round(20  * LAYOUT_SCALE),
+  /** Panel width used when a modal's caller does not specify one. */
+  defaultWidth:  Math.round(360 * LAYOUT_SCALE),
+} as const;
+
 const VALUE = {
   positive:  "#44ff88",
   negative:  "#ff4444",
@@ -129,6 +146,7 @@ export const UI_THEME = {
     tooltip:     TOOLTIP,
     panel:       PANEL,
     overlay:     OVERLAY,
+    modal:       MODAL,
     contextMenu: CONTEXT_MENU,
     numberInput: NUMBER_INPUT,
     iconSquare:  ICON_SQUARE,

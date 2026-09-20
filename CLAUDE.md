@@ -140,7 +140,7 @@ No manual UI creation or duplicated patterns.
 
 - Generic UI styles → `src/ui/theme.ts` (via `UI_THEME`):
   fonts, alpha states, depth layers, semantic value colors, screen backgrounds,
-  component tokens (button / tooltip / panel / overlay / contextMenu / numberInput)
+  component tokens (button / tooltip / panel / overlay / modal / contextMenu / numberInput)
 - Game-domain visual tokens → `src/objects/*VisualTheme.ts`:
   - `battleVisualTheme.ts` — cells, units, bench, skills, upgrade cards, portraits
   - `worldMapVisualTheme.ts` — map cell palette

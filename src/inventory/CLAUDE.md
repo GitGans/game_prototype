@@ -70,6 +70,10 @@ progression's or battle's business, and composing them is `core`'s.
   authorize its own consumption, and a verdict computed for one location can never remove an item
   from the other. A resurrection scroll is activatable from `usable_slot` in battle but from neither
   place out of combat — those decisions belong to the layers that own effect support, never here.
+  A `usable` in `usable_slot` contributes **no** equipped stat bonuses: it occupies the slot to
+  provide an action, not to buff. That is an authoring invariant enforced by
+  `data/items/buildItemCatalog.ts` — `getEquippedBonuses` stays a blind sum over every equipped
+  definition and must not grow a slot-specific branch.
 - **Backpack capacity is 24** everywhere — operations and snapshots both use `BACKPACK_SLOT_COUNT`. Do not
   reintroduce a hardcoded `10` or `24`.
 - **Every `InventoryState` has exactly one structurally identified shared backpack** —

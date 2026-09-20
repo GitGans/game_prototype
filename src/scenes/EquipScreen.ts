@@ -192,6 +192,12 @@ export class EquipScreen extends Phaser.Scene {
       scene: this,
       message: formatItemUsePrompt(prompt),
       confirmLabel: 'Use',
+      dismiss: {
+        backdrop:  true,
+        closeIcon: true,
+        button:    { label: 'Cancel', style: 'neutral' },
+        escape:    true,
+      },
       onConfirm: () => PhaseManager.transition({
         type: 'confirm_use_item',
         instanceId: prompt.instanceId,
