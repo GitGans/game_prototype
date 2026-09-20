@@ -19,8 +19,8 @@ Game-specific visual components that know game data and render it using primitiv
 Current files:
 - `battleEventPresentation.ts` — formats battle events as floating-text and log entries
 - `battleDirectivePresentation.ts` — formats `BattleDirectivePresentationInput` (from `shared/`) as status text and skill-bar visibility flags; owns all directive UI wording
-- `battleSkillPreviewPresentation.ts` — formats skill-preview header color and damage/healing estimates
-- `itemUseEffectPresentation.ts` — formats consumable wording: the confirmation prompt, the tooltip effect line, and the blocked-reason line. HP wording must state BOTH the permanent max-HP growth and the immediate heal
+- `battleSkillPreviewPresentation.ts` — `buildBattleTargetPreviewPresentation` formats every manual target-preview variant: skill previews (header color, damage/healing estimates) and the item-resurrection variant, whose sentence ("<target> revived +<hp> HP") is written HERE from structured data — the battle domain (`battle/itemPreview.ts`) computes only the target, restored HP and cells
+- `itemUseEffectPresentation.ts` — formats consumable wording: the confirmation prompt, the tooltip effect line, and the blocked-reason line. An HP **boost** must state BOTH the permanent max-HP growth and the immediate heal; ordinary **healing** must state neither — it restores current HP only, and wording that implied growth would make a potion indistinguishable from an essence. The heal prompt reports `restoredHp` (already clamped by progression), never the item's nominal amount; the tooltip line is target-independent and says "up to"; a resurrection states its authored share ("Revives with 30% HP."). It also words every `BattleItemUseFailure`, including `no_valid_targets`, `item_not_selected` and `invalid_target"
 
 Presentation builders:
 - receive already-computed read models and presentation inputs from `shared/` or `core/`
@@ -45,8 +45,8 @@ Applying presentation output to Phaser objects is the responsibility of `BattleP
 - `SkillBar.ts` — vertical skill toolbar with active highlight and tooltips
 - `SkillIconRow.ts` — skill list with icons and `SkillCellTooltip` on hover
 - `UpgradeCard.ts` — upgrade-choice card (three states: chosen / available / locked)
-- `ItemCell.ts` — single equipment/backpack slot with tooltip; key method: `refresh()`
-- `EquipmentMatrix.ts` — 4×3 equipment grid composed from `ItemCell`
+- `ItemCell.ts` — single equipment/backpack slot with tooltip and click gestures; key methods: `refresh()`, `cancelPendingGesture()`
+- `EquipmentMatrix.ts` — 4×3 equipment grid composed from `ItemCell`; receives `itemUsage` so the equipped usable's cell can explain its own eligibility
 - `BackpackRow.ts` — configurable inventory grid composed from `ItemCell`
 - `UnitTooltip.ts` — unified unit profile popup; renders any `BattleUnitSnapshot` regardless of side or field/bench state
 - `EffectTooltip.ts` — popup for a single active effect
@@ -82,6 +82,22 @@ Scene receives user interaction via callback — no state mutation here
 - depends on: `src/ui/` (BaseTooltip, HpBar, theme, primitives), `src/shared/` (grid, unit, snapshot, item, skill contracts; battle snapshots), `src/core/Constants`, `src/core/phases`, `src/core/unitSpriteKey`
 - used by: scenes (`src/scenes/`)
 
+## Item presentation
+
+- `itemUseEffectPresentation.ts` — wording for out-of-combat use (confirmation body, tooltip line,
+  blocked reasons) plus `formatBattleItemActionTooltip` for the skill-bar item action, which
+  states the two consequences the icon cannot show: the item is CONSUMED and the turn ENDS.
+- `ItemCell.ts` gestures — a `usable` supports TWO of them (single click equips or unequips, double
+  click opens the use confirmation), so its single click is DEFERRED by `DOUBLE_CLICK_WINDOW_MS`
+  through the game-agnostic `ui/clickGesture` recognizer and exactly one callback fires per gesture.
+  Every other kind stays immediate. `formatUsableGestureHint(origin)` supplies the tooltip line that
+  advertises the second gesture — with the Use/Equip window gone nothing else does — and the verb
+  follows the ORIGIN the usability entry already carries, never the cell's slot key.
+- `SkillBar.ts` renders the entries the committed snapshot supplies (`BattleActionBarEntry`) and
+  decides nothing about which exist or are enabled. A disabled item entry stays VISIBLE and
+  dimmed — a recoverable "not yet" is information; an unsupported effect produces no entry at all,
+  and that decision belongs to `battle/itemUsability`.
+
 ## Invariants
 
 - `objects/*VisualTheme.ts` files must not import `UI_THEME` or any other `ui/` module
@@ -93,6 +109,16 @@ Scene receives user interaction via callback — no state mutation here
 - All sizing uses `LAYOUT_SCALE` from `src/core/Constants` — no raw pixel constants inside components
 - Sprite absence must be handled with a visible fallback (rectangle or letter), never a crash
 - `refresh()` / `update()` is the only path to change displayed data after construction
+- **A pending click gesture belongs to the committed snapshot under which its FIRST click occurred.**
+  Deferring a click (see `ItemCell`) means an input can outlive the state it was made against, so
+  every committed refresh cancels all pending gestures before rendering new data —
+  `EquipmentPanel.refresh()` calls `cancelPendingGestures()` first, unconditionally and before its
+  own early return, and destruction cancels them by destroying the cells. Comparing instance ids
+  instead is **not** a sufficient substitute: `reset_debug_session` keeps the same phase and the same
+  selected character and recreates the same authored instance ids, so nothing about the incoming data
+  would reveal that the context changed. This cannot swallow the gesture that caused the refresh —
+  the recognizer clears its pending state before invoking the callback that dispatches — nor break a
+  double-click, since no transition occurs between its two clicks
 - Stable structure (fixed number of children) → update via `update(snapshot)` or `refresh()`
 - Variable structure (list length changes) → destroy and recreate the component
 - Any UI pattern used in ≥2 places must be extracted into a component here or in `src/ui/`
@@ -109,7 +135,7 @@ Scene receives user interaction via callback — no state mutation here
 - change battle log format or capacity → `BattleLog.ts`
 - change skill bar layout or highlight → `SkillBar.ts`
 - change upgrade card states or layout → `UpgradeCard.ts`
-- change equipment slot visuals → `ItemCell.ts`, `EquipmentMatrix.ts`
+- change equipment slot visuals, or item click/double-click gestures → `ItemCell.ts`, `EquipmentMatrix.ts`
 - change backpack grid → `BackpackRow.ts`
 - change unit stat tooltip → `UnitTooltip.ts`
 - change effect/skill/item tooltip content → `EffectTooltip.ts`, `SkillTooltip.ts`, `SkillCellTooltip.ts`, `ItemTooltip.ts`

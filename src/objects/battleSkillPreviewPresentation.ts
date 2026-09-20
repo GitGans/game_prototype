@@ -1,5 +1,5 @@
 import type {
-  SkillPreviewModel,
+  BattleTargetPreviewModel,
   SkillPreviewHeaderColorKind,
 } from '../shared/skillPreviewModel';
 
@@ -22,12 +22,35 @@ export type BattleSkillPreviewPresentation = {
 
 // ─── Public function ──────────────────────────────────────────────────────────
 
-export function buildBattleSkillPreviewPresentation(
-  model: SkillPreviewModel,
+function formatPreviewBody(lines: readonly string[]): string {
+  return `Preview:\n${lines.join('\n')}\n[click again to confirm]`;
+}
+
+/**
+ * Formats every manual target-preview variant. The item variant arrives as structured data
+ * (target, restored HP) — its wording lives here, not in the battle domain.
+ */
+export function buildBattleTargetPreviewPresentation(
+  model: BattleTargetPreviewModel,
 ): BattleSkillPreviewPresentation {
-  return {
-    cells: model.cells,
-    statusHeader: model.statusHeader,
-    statusBody: `Preview:\n${model.statusLines.join('\n')}\n[click again to confirm]`,
-  };
+  switch (model.kind) {
+    case 'skill':
+      return {
+        cells: model.cells,
+        statusHeader: model.statusHeader,
+        statusBody: formatPreviewBody(model.statusLines),
+      };
+
+    case 'item_revive':
+      return {
+        cells: model.cells,
+        statusHeader: { text: model.itemName, colorKind: 'neutral' },
+        statusBody: formatPreviewBody([`${model.targetName} revived +${model.restoredHp} HP`]),
+      };
+
+    default: {
+      const _exhaustive: never = model;
+      throw new Error(`Unhandled target preview: ${JSON.stringify(_exhaustive)}`);
+    }
+  }
 }

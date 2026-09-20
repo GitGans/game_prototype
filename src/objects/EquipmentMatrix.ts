@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { EquipmentSnapshot, ItemSlotSnapshot } from '../shared/snapshotTypes';
 import { ItemTooltip } from './ItemTooltip';
 import { ItemCell } from './ItemCell';
+import type { ItemUsability } from '../shared/snapshotTypes';
 
 const EQUIP_MATRIX: Array<Array<string | null>> = [
   ['necklace', 'helmet',    'artifact'   ],
@@ -37,6 +38,12 @@ export class EquipmentMatrix extends Phaser.GameObjects.Container {
     snapshot: EquipmentSnapshot,
     tooltip: ItemTooltip,
     onSlotClick: (slot: string, item: ItemSlotSnapshot | null) => void,
+    onSlotDoubleClick: (slot: string, item: ItemSlotSnapshot) => void,
+    /**
+     * Item-use eligibility keyed by instance id — the equipped usable has a verdict too, so its cell
+     * can explain why activation is unavailable exactly as a backpack cell does.
+     */
+    itemUsage: Record<string, ItemUsability> = {},
   ) {
     super(scene, x, y);
 
@@ -56,7 +63,9 @@ export class EquipmentMatrix extends Phaser.GameObjects.Container {
           slotLabel: SLOT_LABELS[slot] ?? slot,
           item,
           tooltip,
+          usage: item ? itemUsage[item.instanceId] ?? null : null,
           onClick: (it) => onSlotClick(slot, it),
+          onDoubleClick: (it) => onSlotDoubleClick(slot, it),
         });
         this.cells[slot] = cell;
       });
@@ -65,9 +74,15 @@ export class EquipmentMatrix extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  refresh(snapshot: EquipmentSnapshot): void {
+  refresh(snapshot: EquipmentSnapshot, itemUsage: Record<string, ItemUsability> = {}): void {
     for (const [slot, cell] of Object.entries(this.cells)) {
-      cell?.refresh(snapshot.slots[slot] ?? null);
+      const item = snapshot.slots[slot] ?? null;
+      cell?.refresh(item, item ? itemUsage[item.instanceId] ?? null : null);
     }
+  }
+
+  /** Every cell drops its deferred click — see `ItemCell.cancelPendingGesture`. */
+  cancelPendingGestures(): void {
+    for (const cell of Object.values(this.cells)) cell?.cancelPendingGesture();
   }
 }

@@ -170,7 +170,7 @@ describe("real-source sweep", () => {
   ].sort();
 
   it("covers every registered owner (the sweep is not vacuous)", () => {
-    // 12 since consumablePhaseHandler joined playerSessionStore's permitted importers.
+    // 12 since itemUsePhaseHandler joined playerSessionStore's permitted importers.
     expect(OWNERS.length).toBe(12);
   });
 

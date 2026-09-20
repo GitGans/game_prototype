@@ -5,16 +5,17 @@ import type {
   BackpackSnapshot, EquipmentSnapshot, UnitTabSnapshot,
 } from '../shared/snapshotTypes';
 export type { UnitStatValueSnapshot, UnitStatsSnapshot, SkillIconSnapshot };
-import type { BattleUnitSnapshot, FieldBattleUnitSnapshot, BattleOccupancySnapshot, BattleFieldUnitCellsSnapshot } from '../shared/battleSnapshots';
+import type { BattleUnitSnapshot, FieldBattleUnitSnapshot, BattleOccupancySnapshot, BattleFieldUnitCellsSnapshot, BattleActionBarEntry } from '../shared/battleSnapshots';
+export type { BattleActionBarEntry };
 import type { PlacementSelection, BattleState, BattleMode, Side } from '../battle/types';
 import type { CellCoord } from '../shared/gridTypes';
 import type { UpgradeOptionId } from '../shared/unitTypes';
 import type { SubMapState, WorldPos } from '../shared/worldTypes';
 import type { PlayerSessionSource } from './playerSessionState';
 import type {
-  ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest,
+  ItemUsability, ItemUseOrigin, PendingItemUsePrompt,
 } from '../shared/snapshotTypes';
-export type { ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest };
+export type { ItemUsability, ItemUseOrigin, PendingItemUsePrompt };
 import type { BattleParticipant, BattleExitOutcome } from './battleRuntimeContext';
 export type { BattleExitOutcome };
 
@@ -116,6 +117,19 @@ export type GamePhase =
       activeUnitId:        string | null;
       // Active unit is always field-deployed (round queue is field-only).
       activeUnit:          FieldBattleUnitSnapshot | null;
+      /**
+       * The active unit's action bar: its ordinary skills, plus its equipped usable item when
+       * one is currently offerable. Projected for the ACTIVE UNIT ONLY — building it per unit
+       * would put the item evaluator on the `battle_preview_target` pointer-move path N times
+       * for a bar that only ever shows one unit.
+       */
+      activeUnitActions:   readonly BattleActionBarEntry[];
+      /**
+       * The active unit's equipped item currently in targeting mode, projected from the battle
+       * runtime. Null unless that item's entry is on `activeUnitActions` — a scene never sees a
+       * dangling selection. While non-null, `validTargets` are the ITEM's target cells.
+       */
+      selectedUsableInstanceId: string | null;
       battleMode:              BattleMode;
       activeUnitSide:          Side | null;
       manualTurnControlsVisible: boolean;
@@ -153,8 +167,8 @@ export type GamePhase =
       canStartBattle: boolean;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
-      consumableUsage: Record<string, ConsumableUsability>;
-      pendingConsumePrompt: PendingConsumePrompt | null;
+      itemUsage: Record<string, ItemUsability>;
+      pendingItemUsePrompt: PendingItemUsePrompt | null;
     }
   | {
       type: 'equip_screen';
@@ -169,8 +183,8 @@ export type GamePhase =
       unitStats: UnitStatsSnapshot | null;
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
-      consumableUsage: Record<string, ConsumableUsability>;
-      pendingConsumePrompt: PendingConsumePrompt | null;
+      itemUsage: Record<string, ItemUsability>;
+      pendingItemUsePrompt: PendingItemUsePrompt | null;
     }
   | {
       type: 'upgrade_tree';
@@ -203,10 +217,15 @@ export type PhaseAction =
   // ── Item mutations (mutation-only: resolveTransition returns same ref) ──
   | { type: 'equip_item'; instanceId: string; unitTemplateId: string }
   | { type: 'unequip_item'; unitTemplateId: string; slot: string }
-  // ── Consumable use (mutation-only) — request/cancel change presentation state only ──
-  | { type: 'request_consume_item'; instanceId: string }
-  | { type: 'confirm_consume_item'; instanceId: string; unitTemplateId: string }
-  | { type: 'cancel_consume_item' }
+  // ── Item use (mutation-only) — request/confirm/cancel change presentation only ──
+  // `request_use_item` names the ORIGIN it is asking about, because the same instance is a different
+  // request from the backpack and from `usable_slot`. `confirm_use_item` deliberately does NOT:
+  // the stored interaction is the single authority for the origin, exactly as it is for session
+  // ownership, and a second description supplied by the caller could not be told apart from a
+  // legitimate change.
+  | { type: 'request_use_item'; instanceId: string; origin: ItemUseOrigin }
+  | { type: 'confirm_use_item'; instanceId: string; unitTemplateId: string }
+  | { type: 'cancel_use_item' }
   // ── Commerce (mutation-only) — stub, no shop phase yet ────────
   | { type: 'buy_item'; definitionId: string }
   | { type: 'sell_item'; instanceId: string }
@@ -239,6 +258,13 @@ export type PhaseAction =
   | { type: 'battle_start_turn' }
   | { type: 'battle_select_skill'; skillIndex: number }
   | { type: 'battle_use_skill'; unitId: string; target: CellCoord; skillIndex?: number }
+  // Enters targeting mode for the ACTIVE unit's equipped item that needs a target (a scroll).
+  | { type: 'battle_select_item'; unitId: string; instanceId: string }
+  // Activation of the item equipped in `usable_slot`, during the acting unit's own manual turn.
+  // `target` is null for a self item (potion) and the confirmed cell for a dead-ally item
+  // (scroll), which must be the committed selection. Amounts are never carried — they are
+  // authored data.
+  | { type: 'battle_use_item'; unitId: string; instanceId: string; target: CellCoord | null }
   | { type: 'battle_advance_turn' }
   | { type: 'battle_skip_turn'; reason?: 'manual_skip' | 'blocked_melee' }
   | { type: 'battle_charge_turn' }

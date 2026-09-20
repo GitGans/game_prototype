@@ -519,8 +519,8 @@ describe("ORCHESTRATION_COLLABORATOR_REGISTRY (real production policy)", () => {
           { specifier: "core/campaignLifecycle", role: "effects-owner" },
           { specifier: "core/debugLifecycle", role: "effects-owner" },
           { specifier: "core/phaseHandlers/campPhaseHandler", role: "effects-owner" },
-          { specifier: "core/phaseHandlers/consumablePhaseHandler", role: "effects-owner" },
           { specifier: "core/phaseHandlers/inventoryPhaseHandler", role: "effects-owner" },
+          { specifier: "core/phaseHandlers/itemUsePhaseHandler", role: "effects-owner" },
           { specifier: "core/phaseHandlers/progressionPhaseHandler", role: "effects-owner" },
           { specifier: "core/phaseHandlers/worldPhaseHandler", role: "effects-owner" },
           { specifier: "core/random", role: "effects-infrastructure" },
@@ -542,7 +542,7 @@ describe("ORCHESTRATION_COLLABORATOR_REGISTRY (real production policy)", () => {
           { specifier: "core/phases", role: "neutral-contract" },
           { specifier: "core/GameState", role: "authoritative-state-reader" },
           { specifier: "core/battleRuntimeAccess", role: "authoritative-state-reader" },
-          { specifier: "core/consumeConfirmationAccess", role: "authoritative-state-reader" },
+          { specifier: "core/itemInteractionAccess", role: "authoritative-state-reader" },
           { specifier: "core/playerSessionStore", role: "authoritative-state-reader" },
           { specifier: "core/battlePhaseSnapshot", role: "snapshot-projection" },
           { specifier: "core/battleResultsSnapshot", role: "snapshot-projection" },
@@ -727,17 +727,17 @@ describe("runtime ownership import allowlists", () => {
           "core/phases",
         ],
       },
-      "core/consumeConfirmationStorage.ts": {
+      "core/itemInteractionStorage.ts": {
         kind: "exact-import-allowlist",
         allowedSpecifiers: [
           "core/playerSessionState",
           "shared/snapshotTypes",
         ],
       },
-      "core/consumeConfirmationWriteAccess.ts": {
+      "core/itemInteractionWriteAccess.ts": {
         kind: "exact-import-allowlist",
         allowedSpecifiers: [
-          "core/consumeConfirmationStorage",
+          "core/itemInteractionStorage",
           "core/playerSessionState",
           "shared/snapshotTypes",
         ],
@@ -757,8 +757,8 @@ describe("runtime ownership import allowlists", () => {
     // through the read gateway, in the handler that holds both — never by widening this module.
     expect(
       evaluateDirectoryPolicy({
-        policy: RUNTIME_OWNERSHIP_IMPORT_POLICIES["core/consumeConfirmationWriteAccess.ts"],
-        normalizedSpecifier: "core/consumeConfirmationAccess",
+        policy: RUNTIME_OWNERSHIP_IMPORT_POLICIES["core/itemInteractionWriteAccess.ts"],
+        normalizedSpecifier: "core/itemInteractionAccess",
         isRelativeSpecifier: true,
       }),
     ).toMatchObject({ kind: "outside-exact-import-allowlist" });
@@ -876,7 +876,9 @@ describe("ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES (real production policy)", 
       "core/battlePhaseEffects.ts": {
         kind: "exact-import-allowlist",
         allowedSpecifiers: [
+          "battle/itemUsability",
           "battle/turnResolver",
+          "core/battleItemSettlement",
           "core/battleRuntimeAccess",
           "core/battleRuntimeContext",
           "core/battleRuntimeWriteAccess",
@@ -885,6 +887,7 @@ describe("ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES (real production policy)", 
           "core/phaseHandlers/battlePhaseHandler",
           "core/phases",
           "core/playerSessionStore",
+          "data/itemDefinitions",
           "shared/random",
         ],
       },
@@ -900,12 +903,12 @@ describe("ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES (real production policy)", 
           "data/units",
         ],
       },
-      "core/consumeConfirmationAccess.ts": {
+      "core/itemInteractionAccess.ts": {
         kind: "exact-import-allowlist",
         // The READ gateway. Never the write capability: the cell and the writer are pinned in
         // RUNTIME_OWNERSHIP_IMPORT_POLICIES, exactly as for the battle-runtime triad.
         allowedSpecifiers: [
-          "core/consumeConfirmationStorage",
+          "core/itemInteractionStorage",
           "core/phases",
           "shared/snapshotTypes",
         ],
@@ -946,12 +949,14 @@ describe("ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES (real production policy)", 
         kind: "exact-import-allowlist",
         allowedSpecifiers: [
           "battle/combatStart",
+          "battle/itemUsability",
           "battle/skillPlanCompiler",
           "battle/skillRuntime",
           "battle/turnResolver",
           "core/battleRuntimeContext",
           "core/battleSnapshotBuilder",
           "core/phases",
+          "shared/battleSnapshots",
           "shared/gridTypes",
         ],
       },
@@ -962,8 +967,8 @@ describe("ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES (real production policy)", 
       "core/equipmentScreenSnapshot.ts": {
         kind: "exact-import-allowlist",
         allowedSpecifiers: [
-          // The READ MODEL. `core/consumableUse` — the executor — is deliberately absent.
-          "core/consumableUsability",
+          // The READ MODEL. `core/itemUse` — the executor — is deliberately absent.
+          "core/itemUsability",
           "core/phases",
           "core/playerSessionState",
           "core/unitSpriteKey",
@@ -1070,12 +1075,12 @@ describe("Stage 4C reverse coverage against the real registries and sources", ()
       ["core/battleResultsSnapshot.ts", STAGE_4C_REGISTRY_NAME],
       ["core/battleRuntimeAccess.ts", "RUNTIME_OWNERSHIP_IMPORT_POLICIES"],
       ["core/campaignLifecycle.ts", STAGE_4C_REGISTRY_NAME],
-      ["core/consumeConfirmationAccess.ts", STAGE_4C_REGISTRY_NAME],
       ["core/debugLifecycle.ts", STAGE_4C_REGISTRY_NAME],
       ["core/equipmentScreenSnapshot.ts", STAGE_4C_REGISTRY_NAME],
+      ["core/itemInteractionAccess.ts", STAGE_4C_REGISTRY_NAME],
       ["core/phaseHandlers/campPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
-      ["core/phaseHandlers/consumablePhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
       ["core/phaseHandlers/inventoryPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
+      ["core/phaseHandlers/itemUsePhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
       ["core/phaseHandlers/progressionPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
       ["core/phaseHandlers/worldPhaseHandler.ts", "PHASE_HANDLER_IMPORT_POLICIES"],
       ["core/playerSessionStore.ts", STAGE_4C_REGISTRY_NAME],

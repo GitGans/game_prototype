@@ -13,17 +13,17 @@ import {
 } from './phaseHandlers/worldPhaseHandler';
 import { applyEquipmentPhaseAction } from './phaseHandlers/inventoryPhaseHandler';
 import {
-  openConsumeConfirmation,
-  clearConsumeConfirmationIfPresent,
-  teardownConsumeConfirmationAfterTransition,
-  applyConsumablePhaseAction,
-} from './phaseHandlers/consumablePhaseHandler';
+  beginItemUseConfirmation,
+  clearItemInteractionIfPresent,
+  teardownItemInteractionAfterTransition,
+  applyItemUsePhaseAction,
+} from './phaseHandlers/itemUsePhaseHandler';
 import { applyCampPhaseAction } from './phaseHandlers/campPhaseHandler';
 import { applyChooseUpgradePhaseAction } from './phaseHandlers/progressionPhaseHandler';
 import {
   startBattleRuntime,
   replayBattleRuntime,
-  applyBattleExitRosterEffect,
+  finalizeBattleSessionOnExit,
   applyBattleRuntimeMutation,
   clearBattleRuntimeIfPresent,
   teardownBattleRuntimeAfterTransition,
@@ -83,15 +83,15 @@ export interface PhaseActionEffectsDependencies {
   applyMovePartyPhaseAction: typeof applyMovePartyPhaseAction;
   applyBattleWorldConsequence: typeof applyBattleWorldConsequence;
   applyEquipmentPhaseAction: typeof applyEquipmentPhaseAction;
-  openConsumeConfirmation: typeof openConsumeConfirmation;
-  clearConsumeConfirmationIfPresent: typeof clearConsumeConfirmationIfPresent;
-  teardownConsumeConfirmationAfterTransition: typeof teardownConsumeConfirmationAfterTransition;
-  applyConsumablePhaseAction: typeof applyConsumablePhaseAction;
+  beginItemUseConfirmation: typeof beginItemUseConfirmation;
+  clearItemInteractionIfPresent: typeof clearItemInteractionIfPresent;
+  teardownItemInteractionAfterTransition: typeof teardownItemInteractionAfterTransition;
+  applyItemUsePhaseAction: typeof applyItemUsePhaseAction;
   applyCampPhaseAction: typeof applyCampPhaseAction;
   applyChooseUpgradePhaseAction: typeof applyChooseUpgradePhaseAction;
   startBattleRuntime: typeof startBattleRuntime;
   replayBattleRuntime: typeof replayBattleRuntime;
-  applyBattleExitRosterEffect: typeof applyBattleExitRosterEffect;
+  finalizeBattleSessionOnExit: typeof finalizeBattleSessionOnExit;
   applyBattleRuntimeMutation: typeof applyBattleRuntimeMutation;
   clearBattleRuntimeIfPresent: typeof clearBattleRuntimeIfPresent;
   teardownBattleRuntimeAfterTransition: typeof teardownBattleRuntimeAfterTransition;
@@ -116,15 +116,15 @@ export function createDefaultPhaseActionEffects(): PhaseActionEffectsController 
     applyMovePartyPhaseAction,
     applyBattleWorldConsequence,
     applyEquipmentPhaseAction,
-    openConsumeConfirmation,
-    clearConsumeConfirmationIfPresent,
-    teardownConsumeConfirmationAfterTransition,
-    applyConsumablePhaseAction,
+    beginItemUseConfirmation,
+    clearItemInteractionIfPresent,
+    teardownItemInteractionAfterTransition,
+    applyItemUsePhaseAction,
     applyCampPhaseAction,
     applyChooseUpgradePhaseAction,
     startBattleRuntime,
     replayBattleRuntime,
-    applyBattleExitRosterEffect,
+    finalizeBattleSessionOnExit,
     applyBattleRuntimeMutation,
     clearBattleRuntimeIfPresent,
     teardownBattleRuntimeAfterTransition,
@@ -168,15 +168,15 @@ export function createPhaseActionEffects(
         d.clearBattleRuntimeIfPresent();
         // Accepted from ANY phase, so dispose both owners rather than relying on the
         // equip-screen teardown below.
-        d.clearConsumeConfirmationIfPresent('campaign');
-        d.clearConsumeConfirmationIfPresent('debug');
+        d.clearItemInteractionIfPresent('campaign');
+        d.clearItemInteractionIfPresent('debug');
         replaceRngStreams();
         d.initializeNewCampaign();
         return NO_PHASE_EFFECTS;
 
       case 'init_debug':
         d.clearBattleRuntimeIfPresent();
-        d.clearConsumeConfirmationIfPresent('debug');
+        d.clearItemInteractionIfPresent('debug');
         replaceRngStreams();
         d.initializeDebugSessionForLevel(action.level);
         return NO_PHASE_EFFECTS;
@@ -186,7 +186,7 @@ export function createPhaseActionEffects(
         // structural teardown below would not fire — and it recreates the same authored instance
         // ids, so matching ids would not distinguish the stale request either.
         d.clearBattleRuntimeIfPresent();
-        d.clearConsumeConfirmationIfPresent('debug');
+        d.clearItemInteractionIfPresent('debug');
         replaceRngStreams();
         d.resetDebugSession();
         return NO_PHASE_EFFECTS;
@@ -194,8 +194,8 @@ export function createPhaseActionEffects(
       case 'exit_to_menu':
         d.clearDebugSession();
         d.clearBattleRuntimeIfPresent();
-        d.clearConsumeConfirmationIfPresent('campaign');
-        d.clearConsumeConfirmationIfPresent('debug');
+        d.clearItemInteractionIfPresent('campaign');
+        d.clearItemInteractionIfPresent('debug');
         replaceRngStreams();
         return NO_PHASE_EFFECTS;
 
@@ -220,10 +220,10 @@ export function createPhaseActionEffects(
         if (previousPhase.type !== 'battle') {
           throw lifecycleError(`"exit_battle" was accepted from a "${previousPhase.type}" phase`);
         }
-        // Order is load-bearing: the runtime must still be installed for both calls, and each
-        // validates it independently. Disposal is the finalizer's job, after this returns —
-        // clearing first would make the battle result impossible to apply.
-        d.applyBattleExitRosterEffect({ previousPhase, outcome: action.outcome });
+        // Session finalization (roster result + item settlement) already ran in `apply`, BEFORE
+        // this dispatch — see the note there. What remains is the campaign world consequence,
+        // which must still run while the runtime is installed; it validates the runtime
+        // independently. Disposal is the finalizer's job, after this returns.
         d.applyBattleWorldConsequence({ previousPhase, outcome: action.outcome });
         return NO_PHASE_EFFECTS;
 
@@ -240,6 +240,8 @@ export function createPhaseActionEffects(
       case 'battle_start_turn':
       case 'battle_select_skill':
       case 'battle_use_skill':
+      case 'battle_select_item':
+      case 'battle_use_item':
       case 'battle_advance_turn':
       case 'battle_skip_turn':
       case 'battle_charge_turn':
@@ -285,36 +287,39 @@ export function createPhaseActionEffects(
         d.applyEquipmentPhaseAction({ source: previousPhase.sessionSource, action });
         return NO_PHASE_EFFECTS;
 
-      // ── Consumable confirmation ──────────────────────────────────────────
-      // Request and cancel change PRESENTATION state only — no roster or inventory write. The
-      // owner is the equip screen's own session, so a campaign screen can never file or dispose
-      // a debug request.
-      case 'request_consume_item':
-      case 'cancel_consume_item':
+      // ── Item interaction ─────────────────────────────────────────────────
+      // Requesting and cancelling change PRESENTATION state only — no roster or inventory write.
+      // The owner is the equip screen's own session, so a campaign screen can never file or dispose
+      // a debug interaction.
+      case 'request_use_item':
+      case 'cancel_use_item':
         if (previousPhase.type !== 'equip_screen' && previousPhase.type !== 'debug_equip_screen') {
           throw lifecycleError(
             `"${action.type}" was accepted from a "${previousPhase.type}" phase`,
           );
         }
-        if (action.type === 'request_consume_item') {
-          d.openConsumeConfirmation({
+        if (action.type === 'request_use_item') {
+          d.beginItemUseConfirmation({
             source: previousPhase.sessionSource,
             instanceId: action.instanceId,
             // Always the selected character — never a caller-chosen target.
             unitTemplateId: previousPhase.selectedUnitTemplateId,
+            // The origin the resolver admitted, carried through so the commit validates against the
+            // location the request was actually about.
+            origin: action.origin,
           });
         } else {
-          d.clearConsumeConfirmationIfPresent(previousPhase.sessionSource);
+          d.clearItemInteractionIfPresent(previousPhase.sessionSource);
         }
         return NO_PHASE_EFFECTS;
 
-      case 'confirm_consume_item':
+      case 'confirm_use_item':
         if (previousPhase.type !== 'equip_screen' && previousPhase.type !== 'debug_equip_screen') {
           throw lifecycleError(
-            `"confirm_consume_item" was accepted from a "${previousPhase.type}" phase`,
+            `"confirm_use_item" was accepted from a "${previousPhase.type}" phase`,
           );
         }
-        d.applyConsumablePhaseAction({ previousPhase, action });
+        d.applyItemUsePhaseAction({ previousPhase, action });
         return NO_PHASE_EFFECTS;
 
       case 'toggle_camp_unit':
@@ -372,11 +377,40 @@ export function createPhaseActionEffects(
   }
 
   const apply: ApplyPhaseActionEffects = (action, previousPhase, resolvedPhase) => {
+    /**
+     * Battle-session finalization runs BEFORE the action-specific dispatch, and is structural
+     * rather than an action catalogue: any transition leaving `battle` for a non-battle phase
+     * hands the outgoing attempt to its lifecycle owner first. What that means is the owner's
+     * decision, not this facade's: a completed exit (`exit_battle`) commits roster + inventory in
+     * one write; an outcome-less exit (`exit_to_menu`, `new_game`) performs no persistent write,
+     * discarding the attempt's roster result and item consumption together.
+     *
+     * `outcome: null` currently means "abandoned" because those two actions are the only
+     * outcome-less exits. A future battle-to-non-battle action with its own commit policy must
+     * extend the exit contract explicitly instead of silently inheriting `null`.
+     *
+     * The ordering is forced, not stylistic. The owner validates the runtime and resolves its
+     * owning session, and `exit_to_menu` clears the debug session and the battle runtime inside
+     * its dispatch case while `new_game` reinitializes the campaign there — so finalizing
+     * afterwards would find no runtime or no session to validate, or validate against a session
+     * the attempt never belonged to. The call stays unconditional so that validation runs on
+     * every exit, abandoned ones included.
+     *
+     * `replay` resolves to a battle phase, so this never fires for it: the discarded attempt's
+     * consumption is simply dropped, which is exactly what restores the potion.
+     */
+    if (previousPhase.type === 'battle' && resolvedPhase.type !== 'battle') {
+      d.finalizeBattleSessionOnExit({
+        previousPhase,
+        outcome: action.type === 'exit_battle' ? action.outcome : null,
+      });
+    }
+
     const effects = dispatch(action, previousPhase, resolvedPhase);
     // Runs only after the action-specific effect succeeded. If it threw, teardown, snapshot
     // rebuild, commit and sync/notify are all skipped — the existing non-transactional
     // contract. Nothing is rolled back.
-    d.teardownConsumeConfirmationAfterTransition(previousPhase, resolvedPhase);
+    d.teardownItemInteractionAfterTransition(previousPhase, resolvedPhase);
     d.teardownBattleRuntimeAfterTransition(previousPhase, resolvedPhase);
     return effects;
   };

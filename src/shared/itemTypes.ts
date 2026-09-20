@@ -26,43 +26,116 @@ export type BattleStatBonuses = UnitBattleStatMap;
 export type PartialBattleStatBonuses = UnitBattleStatDelta;
 
 /**
- * A discriminated union keeps the contract honest (e.g. revive carries no amount).
+ * A discriminated union keeps the contract honest: each variant carries exactly its own payload.
  *
- * `permanent_stat_boost` is EXECUTABLE: `core/consumableUse.ts` applies it and destroys the
- * source instance. `heal` and `revive` remain catalog data only — no mechanics exist for them,
- * and the use operation rejects them with `unsupported_effect`.
+ * `heal` is EXECUTABLE on both `usable` and `consumable`: out of combat `core/itemUse.ts` applies
+ * it and destroys the source instance; in battle `battle/itemUse.ts` applies it from usable_slot.
+ * `permanent_stat_boost` is executable on a `consumable`. `revive` is executable IN BATTLE only,
+ * from usable_slot during the owner's manual turn: it restores a dead allied field unit to
+ * `hpPercent` of its max HP (`battle/itemUse.ts`). Out of combat it is still rejected with
+ * `unsupported_effect`. `hpPercent` is authored data — validated by the catalog builder, and
+ * defensively again by the battle evaluator; this file declares the contract only.
  */
 export type ItemUseEffect =
   | { type: 'heal'; amount: number }
-  | { type: 'revive' }
+  | { type: 'revive'; hpPercent: number }
   | { type: 'permanent_stat_boost'; stat: keyof BattleStatBonuses; amount: number };
 
 /**
- * Consumable-use failure vocabulary. Declared here, beside `ItemUseEffect`, because three layers
- * report into one contract and none of them may import the others:
- *   inventory/consumableOps.ts   → ConsumableLocationFailure
- *   progression/consumableStatBoost.ts → ConsumableBoostFailure
- *   core/consumableUsability.ts  → widens both into ConsumableUseFailure
+ * Deeply-readonly effect. A plain `readonly effect: ItemUseEffect` field protects only the
+ * reference — every variant's members are mutable, so a holder of a runtime resource or a render
+ * snapshot could still assign `effect.amount` and bypass the exclusive runtime-write owner.
+ * Every runtime resource, domain input and snapshot entry uses THIS type instead.
+ *
+ * `Readonly<T>` is homomorphic and distributes over the union; the variants are scalar-only, so
+ * one level is sufficient. A future nested-object variant would need a deeper mapped type.
  */
-export type ConsumableLocationFailure =
+export type ReadonlyItemUseEffect = Readonly<ItemUseEffect>;
+
+/**
+ * Item-use failure vocabulary. Declared here, beside `ItemUseEffect`, because several layers
+ * report into one contract and none of them may import the others:
+ *   inventory/itemUseOps.ts            → ItemLocationFailure
+ *   progression/consumableStatBoost.ts → ItemBoostFailure
+ *   progression/itemHealing.ts         → ItemHealFailure
+ *   core/itemUsability.ts              → widens all three into ItemUseFailure
+ */
+export type ItemLocationFailure =
   | 'missing_instance'
   | 'missing_definition'
-  | 'not_consumable'
+  | 'not_usable_from_here'
   | 'missing_use_effect'
   | 'not_in_backpack'
+  | 'not_equipped_by_unit'
   | 'duplicate_placement';
 
-export type ConsumableBoostFailure =
+export type ItemBoostFailure =
   | 'unit_dead'
   | 'invalid_amount'
   | 'invalid_result';
 
-export type ConsumableUseFailure =
-  | ConsumableLocationFailure
-  | ConsumableBoostFailure
+/**
+ * `unit_full_hp` is specific to healing: restoring nothing is refused rather than silently
+ * consuming the item. A permanent stat boost has no such rule — a full-health character may
+ * still consume an essence.
+ */
+export type ItemHealFailure =
+  | 'unit_dead'
+  | 'invalid_amount'
+  | 'invalid_result'
+  | 'unit_full_hp';
+
+export type ItemUseFailure =
+  | ItemLocationFailure
+  | ItemBoostFailure
+  | ItemHealFailure
   | 'unit_not_found'
   | 'blueprint_not_found'
   | 'unsupported_effect';
+
+/**
+ * In-battle activation refusals. Declared here — not in `battle/` — because the battle render
+ * snapshot (`shared/battleSnapshots.ts`) carries them, and `shared/` may not import any other
+ * layer, including type-only.
+ *
+ * `not_manual_mode` exists because `BattleState.phase === 'select_target'` is ALSO set on
+ * automatic turns; the phase alone never establishes manual player control.
+ */
+export type BattleItemUseFailure =
+  | 'not_manual_mode'
+  | 'not_awaiting_manual_action'
+  | 'not_active_unit'
+  | 'unit_dead'
+  | 'unit_not_on_field'
+  | 'instance_mismatch'
+  | 'already_consumed'
+  | 'unsupported_effect'
+  | 'invalid_amount'        // also covers an invalid revive hpPercent
+  | 'unit_full_hp'
+  | 'no_valid_targets'      // revive: no dead allied field unit — recoverable, rendered disabled
+  | 'item_not_selected'     // execution of a targeted item that is not the current selection
+  | 'invalid_target';       // missing / stale / forged target, or a target on a self item
+
+/**
+ * How an equipped item chooses what it affects in battle. Declared here (not in battle/) because
+ * the battle action-bar snapshot carries it. `self` resolves immediately against the owner;
+ * `dead_ally` requires selecting a dead allied FIELD unit's cell first.
+ */
+export type BattleItemTargetMode = 'self' | 'dead_ally';
+
+/**
+ * Equip refusals. An explicit shared vocabulary rather than a re-export of an inventory-owned
+ * type, for the same reason as above: the equipment-screen snapshot carries them.
+ */
+export type ItemEquipFailure =
+  | 'missing_instance'
+  | 'missing_definition'
+  | 'not_equippable'
+  | 'class_restricted'
+  | 'missing_equip_container'
+  | 'missing_location'
+  | 'missing_equipped_instance'
+  | 'invalid_swap';
 
 /**
  * Item-specific facts only. Behavior (usable/equippable) and placement (slot) are NOT
@@ -78,16 +151,17 @@ export interface ItemDefinition {
   allowedClassIds?: UnitClassId[];
   battleStatBonuses: BattleStatBonuses;
   buyPrice: number;                   // sellPrice = floor(buyPrice/4), computed
-  useEffect?: ItemUseEffect;          // data only — required for usable + consumable; never applied this stage
+  useEffect?: ItemUseEffect;          // required for usable + consumable; executable for both
   sprite?: string;
 }
 
 /**
  * Behavior + placement generated from the authored item group (the single source of truth).
  *   equipment  → ordinary equippable gear;
- *   usable     → equippable future-use item, placed into 'usable_slot';
- *   consumable → backpack-only future-use item (not equippable).
- * `useEffect` is data only for usable/consumable — no runtime use mechanics exist yet.
+ *   usable     → equippable activatable item, placed into 'usable_slot';
+ *   consumable → backpack-only usable item (not equippable).
+ * `useEffect` is executed for both `usable` and `consumable` — out of combat by core/itemUse.ts,
+ * and for a `usable` in usable_slot during a manual battle turn by battle/itemUse.ts.
  */
 export type ItemRuntimeKind = 'equipment' | 'usable' | 'consumable';
 

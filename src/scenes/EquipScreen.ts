@@ -1,8 +1,12 @@
 import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
-import { GamePhase, type PendingConsumePrompt } from '../core/phases';
+import { GamePhase, type PendingItemUsePrompt } from '../core/phases';
 import { bindStateChanged } from './sceneEvents';
+import {
+  backpackItemClickAction, backpackItemUseAction,
+  equippedItemClickAction, equippedItemUseAction,
+} from './itemGestureActions';
 import { ItemSlotSnapshot } from '../battle/types';
 import { UI_THEME } from '../ui/theme';
 import { ItemTooltip } from '../objects/ItemTooltip';
@@ -11,7 +15,7 @@ import { UnitTabRow } from '../objects/UnitTabRow';
 import { UnitSelectionPanel } from '../objects/panels/UnitSelectionPanel';
 import { EquipmentPanel } from '../objects/panels/EquipmentPanel';
 import { ConfirmationDialog } from '../ui/ConfirmationDialog';
-import { formatConsumePrompt } from '../objects/itemUseEffectPresentation';
+import { formatItemUsePrompt } from '../objects/itemUseEffectPresentation';
 
 export type EquipScreenPhase      = Extract<GamePhase, { type: 'equip_screen' }>;
 export type DebugEquipScreenPhase = Extract<GamePhase, { type: 'debug_equip_screen' }>;
@@ -28,8 +32,8 @@ export class EquipScreen extends Phaser.Scene {
   private _equipPanel      : EquipmentPanel      | null = null;
   private _selectorPanel   : EnemyGroupSelector  | null = null;
   /**
-   * The only new scene-local state: a widget handle, never gameplay state. Whether a
-   * confirmation is open is decided entirely by `phase.pendingConsumePrompt`.
+   * A widget handle, never gameplay state. Whether the confirmation is open is decided entirely by
+   * the committed phase (`phase.pendingItemUsePrompt`).
    */
   private _confirmDialog   : ConfirmationDialog  | null = null;
   private itemTooltip!     : ItemTooltip;
@@ -52,7 +56,7 @@ export class EquipScreen extends Phaser.Scene {
       this.showCharacterMode(phase);
     }
 
-    this.syncConfirmDialog(phase.pendingConsumePrompt);
+    this.syncModals(phase);
 
     bindStateChanged(this, this.onStateChanged, this);
   }
@@ -124,8 +128,10 @@ export class EquipScreen extends Phaser.Scene {
       contentTopY:         CONTENT_TOP_Y,
       phase,
       itemTooltip:         this.itemTooltip,
-      onEquipSlotClick:    (slot, item) => this.onEquipSlotClick(slot, item),
-      onBackpackItemClick: (item) => this.onBackpackItemClick(item),
+      onEquipSlotClick:          (slot, item) => this.onEquipSlotClick(slot, item),
+      onEquipSlotDoubleClick:    (slot, item) => this.onEquipSlotDoubleClick(slot, item),
+      onBackpackItemClick:       (item) => this.onBackpackItemClick(item),
+      onBackpackItemDoubleClick: (item) => this.onBackpackItemDoubleClick(item),
       onUpgrade:           () => PhaseManager.transition({ type: 'open_upgrade_tree' }),
       onBack:              () => PhaseManager.transition({ type: 'close_equip_screen' }),
     });
@@ -160,22 +166,16 @@ export class EquipScreen extends Phaser.Scene {
 
   // ── Item interaction ───────────────────────────────────────────────────────
 
+  // Input routing only: every gesture is mapped by `itemGestureActions`, the resolver accepts or
+  // rejects it, and the committed phase decides whether a confirmation is rendered. There is no
+  // scene-side eligibility rule and no branch here.
+
   private onBackpackItemClick(item: ItemSlotSnapshot): void {
-    const { metadata } = item;
-    // equipment + usable both equip; usable resolves to usable_slot via metadata.slot.
-    if (metadata.kind === 'equipment' || metadata.kind === 'usable') {
-      PhaseManager.transition({
-        type: 'equip_item',
-        instanceId: item.instanceId,
-        unitTemplateId: this.getSelectedTemplateId(),
-      });
-      return;
-    }
-    // consumable: request confirmation. The resolver rejects ineligible items, so an
-    // unusable consumable simply does nothing here — no scene-side eligibility rule.
-    if (metadata.kind === 'consumable') {
-      PhaseManager.transition({ type: 'request_consume_item', instanceId: item.instanceId });
-    }
+    PhaseManager.transition(backpackItemClickAction(item, this.getSelectedTemplateId()));
+  }
+
+  private onBackpackItemDoubleClick(item: ItemSlotSnapshot): void {
+    PhaseManager.transition(backpackItemUseAction(item));
   }
 
   /**
@@ -183,32 +183,48 @@ export class EquipScreen extends Phaser.Scene {
    * resolves by destroying itself BEFORE invoking a callback, so destroying it here can never
    * fire a consumption.
    */
-  private syncConfirmDialog(prompt: PendingConsumePrompt | null): void {
+  private syncConfirmDialog(prompt: PendingItemUsePrompt | null): void {
     this._confirmDialog?.destroy();
     this._confirmDialog = null;
     if (!prompt) return;
 
     this._confirmDialog = new ConfirmationDialog({
       scene: this,
-      message: formatConsumePrompt(prompt),
+      message: formatItemUsePrompt(prompt),
       confirmLabel: 'Use',
+      dismiss: {
+        backdrop:  true,
+        closeIcon: true,
+        button:    { label: 'Cancel', style: 'neutral' },
+        escape:    true,
+      },
       onConfirm: () => PhaseManager.transition({
-        type: 'confirm_consume_item',
+        type: 'confirm_use_item',
         instanceId: prompt.instanceId,
         unitTemplateId: prompt.unitTemplateId,
       }),
-      onCancel: () => PhaseManager.transition({ type: 'cancel_consume_item' }),
+      onCancel: () => PhaseManager.transition({ type: 'cancel_use_item' }),
     });
   }
 
+  /**
+   * Modal reconciliation stays in one named place even with a single modal: which modal is open is a
+   * property of the committed phase, and this is the one function that reads it.
+   */
+  private syncModals(phase: AnyEquipPhase): void {
+    this.syncConfirmDialog(phase.pendingItemUsePrompt);
+  }
+
   private onEquipSlotClick(slot: string, item: ItemSlotSnapshot | null): void {
+    // An empty slot has nothing to unequip; the resolver would reject it, but there is no gesture to
+    // express either.
     if (item) {
-      PhaseManager.transition({
-        type: 'unequip_item',
-        unitTemplateId: this.getSelectedTemplateId(),
-        slot,
-      });
+      PhaseManager.transition(equippedItemClickAction(slot, this.getSelectedTemplateId()));
     }
+  }
+
+  private onEquipSlotDoubleClick(_slot: string, item: ItemSlotSnapshot): void {
+    PhaseManager.transition(equippedItemUseAction(item));
   }
 
   private getSelectedTemplateId(): string {
@@ -226,6 +242,6 @@ export class EquipScreen extends Phaser.Scene {
     } else {
       this._equipPanel?.refresh(phase);
     }
-    this.syncConfirmDialog(phase.pendingConsumePrompt);
+    this.syncModals(phase);
   }
 }

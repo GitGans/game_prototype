@@ -25,3 +25,20 @@ export type SkillPreviewModel = {
   };
   statusLines: string[];
 };
+
+/**
+ * Structured preview for a selected resurrection item. No display text: the battle domain
+ * computes the target and HP, and `objects/battleSkillPreviewPresentation.ts` writes the wording.
+ */
+export type ItemRevivePreviewModel = {
+  kind: 'item_revive';
+  itemName: string;
+  targetName: string;
+  restoredHp: number;
+  cells: SkillPreviewCell[];
+};
+
+/** What a manual target click previews: the active skill, or the item in targeting mode. */
+export type BattleTargetPreviewModel =
+  | ({ kind: 'skill' } & SkillPreviewModel)
+  | ItemRevivePreviewModel;

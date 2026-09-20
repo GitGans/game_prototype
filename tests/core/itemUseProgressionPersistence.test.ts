@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { useConsumableItem } from "../../src/core/consumableUse";
+import { useItem } from "../../src/core/itemUse";
 import { applyVictoryLevelUpPersistence } from "../../src/core/playerUnitPersistence";
 import type { PlayerSessionState } from "../../src/core/playerSessionState";
 import type { PlayerUnitState, RosterState } from "../../src/progression";
@@ -73,9 +73,9 @@ function startingSession(): PlayerSessionState {
 function consumeBothItems(): PlayerSessionState {
   let session = startingSession();
   for (const instanceId of ["i_vitality", "i_might"]) {
-    const result = useConsumableItem({
+    const result = useItem({
       session, catalog: CATALOG, playerBlueprints: BLUEPRINTS,
-      unitTemplateId: "soldier", instanceId,
+      unitTemplateId: "soldier", instanceId, origin: "backpack",
     });
     if (!result.ok) throw new Error(`consuming ${instanceId} failed: ${result.reason}`);
     session = result.nextSession;

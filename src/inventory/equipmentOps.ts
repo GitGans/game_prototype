@@ -1,4 +1,4 @@
-import type { ItemCatalog, ItemContainer, ItemInstance, ItemDefinition } from '../shared/itemTypes';
+import type { ItemCatalog, ItemContainer, ItemInstance, ItemDefinition, ItemEquipFailure } from '../shared/itemTypes';
 import type { UnitClassId } from '../shared/unitTypes';
 import { canPlaceItem, findFreeBackpackSlot, findItemLocation, moveItem, applySlotChanges } from './containerOps';
 import { resolvePreferredEquipSlot, type ConcreteEquipSlot } from './equipmentSlotResolver';
@@ -6,7 +6,7 @@ import { requireSharedBackpack, type InventoryState } from './inventoryState';
 
 export type EquipItemResult =
   | { ok: true; nextInventory: InventoryState }
-  | { ok: false; reason: string };
+  | { ok: false; reason: ItemEquipFailure | string };
 
 export type UnequipItemResult =
   | { ok: true; nextInventory: InventoryState }
@@ -47,19 +47,34 @@ export function getEquippedItems(
 }
 
 /**
- * Equips a backpack item onto the unit's equipment slot.
- * - Empty target slot → simple move (backpack → equipment).
- * - Occupied target slot → SWAP: the equipped item goes to the backpack slot the
- *   new item came from; the new item goes to the equipment slot.
- * Pure: inputs are never mutated. On failure returns a reason and leaves inputs untouched.
+ * What a successful equip would do, decided without producing a next inventory.
+ *
+ * `swaps` names the instance that would be displaced back to the source slot, or null for a
+ * simple move into an empty slot.
  */
-export function equipItem(
+export type EvaluateEquipResult =
+  | { ok: true; slot: ConcreteEquipSlot; swaps: string | null }
+  | { ok: false; reason: ItemEquipFailure };
+
+/**
+ * The read half of `equipItem`: EVERY precondition it enforces, and no write.
+ *
+ * It exists because `canUnitEquipItem` is not a sufficient "can this be equipped" predicate — it
+ * checks instance existence, definition existence and class restriction only, while an equip also
+ * needs a resolvable slot, an equipment container, a locatable source and, on the swap path, two
+ * `canPlaceItem` checks against the VACATED containers. A screen that enabled its Equip control
+ * from the narrower predicate would offer actions the pipeline then refuses.
+ *
+ * `equipItem` is implemented on top of this, so the enabled state on screen and the outcome of
+ * the write are decided by the same code and cannot drift.
+ */
+export function evaluateEquipItem(
   unitTemplateId: string,
   classId: UnitClassId,
   instanceId: string,
   inventory: InventoryState,
   catalog: ItemCatalog,
-): EquipItemResult {
+): EvaluateEquipResult {
   const { containers, instances } = inventory;
   const instance = instances[instanceId];
   if (!instance) return { ok: false, reason: 'missing_instance' };
@@ -88,15 +103,9 @@ export function equipItem(
   if (!location) return { ok: false, reason: 'missing_location' };
 
   const currentlyEquipped = equipContainer.slots[slot];
+  if (currentlyEquipped === undefined) return { ok: true, slot, swaps: null };
 
-  if (currentlyEquipped === undefined) {
-    // Simple equip — delegate to moveItem (target slot is empty).
-    const result = moveItem(instanceId, location.containerId, location.slotKey, equipContainerId, slot, containers, instances, catalog);
-    if (!result.ok) return result;
-    return { ok: true, nextInventory: { instances, containers: result.nextContainers } };
-  }
-
-  // SWAP. Vacate both slots immutably, validate against the vacated state, then place.
+  // SWAP feasibility, decided against the VACATED containers exactly as the write does.
   if (!instances[currentlyEquipped]) return { ok: false, reason: 'missing_equipped_instance' };
   const vacated = applySlotChanges(containers, [
     { containerId: equipContainerId,     slotKey: slot,             instanceId: null },
@@ -104,10 +113,51 @@ export function equipItem(
   ]);
   const oldFitsSource = canPlaceItem(currentlyEquipped, vacated[location.containerId], location.slotKey, instances, catalog);
   const newFitsEquip  = canPlaceItem(instanceId,       vacated[equipContainerId],     slot,             instances, catalog);
-  if (!oldFitsSource || !newFitsEquip) return { ok: false, reason: 'invalid_swap' }; // inputs untouched
+  if (!oldFitsSource || !newFitsEquip) return { ok: false, reason: 'invalid_swap' };
 
+  return { ok: true, slot, swaps: currentlyEquipped };
+}
+
+/**
+ * Equips a backpack item onto the unit's equipment slot.
+ * - Empty target slot → simple move (backpack → equipment).
+ * - Occupied target slot → SWAP: the equipped item goes to the backpack slot the
+ *   new item came from; the new item goes to the equipment slot.
+ * Pure: inputs are never mutated. On failure returns a reason and leaves inputs untouched.
+ *
+ * Owns no precondition of its own — every check lives in `evaluateEquipItem` above.
+ */
+export function equipItem(
+  unitTemplateId: string,
+  classId: UnitClassId,
+  instanceId: string,
+  inventory: InventoryState,
+  catalog: ItemCatalog,
+): EquipItemResult {
+  const { containers, instances } = inventory;
+
+  const evaluation = evaluateEquipItem(unitTemplateId, classId, instanceId, inventory, catalog);
+  if (!evaluation.ok) return { ok: false, reason: evaluation.reason };
+  const { slot, swaps } = evaluation;
+
+  const equipContainerId = `equip_${unitTemplateId}`;
+  // Non-null: evaluateEquipItem returned ok, so the instance is placed exactly once.
+  const location = findItemLocation(instanceId, containers)!;
+
+  if (swaps === null) {
+    // Simple equip — delegate to moveItem (target slot is empty).
+    const result = moveItem(instanceId, location.containerId, location.slotKey, equipContainerId, slot, containers, instances, catalog);
+    if (!result.ok) return result;
+    return { ok: true, nextInventory: { instances, containers: result.nextContainers } };
+  }
+
+  // SWAP. Vacate both slots immutably, then place — feasibility is already proven.
+  const vacated = applySlotChanges(containers, [
+    { containerId: equipContainerId,     slotKey: slot,             instanceId: null },
+    { containerId: location.containerId, slotKey: location.slotKey, instanceId: null },
+  ]);
   const nextContainers = applySlotChanges(vacated, [
-    { containerId: location.containerId, slotKey: location.slotKey, instanceId: currentlyEquipped },
+    { containerId: location.containerId, slotKey: location.slotKey, instanceId: swaps },
     { containerId: equipContainerId,     slotKey: slot,             instanceId },
   ]);
   return { ok: true, nextInventory: { instances, containers: nextContainers } };

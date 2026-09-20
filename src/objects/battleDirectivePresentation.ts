@@ -45,6 +45,15 @@ export function buildBattleDirectivePresentation(
         displaySkillBar: true,
       };
 
+    case 'await_manual_action':
+      // No targeting prompt: the selected skill has nothing to click on the grid. The bar stays up
+      // so the player can pick another skill, use an item, skip or charge.
+      return {
+        statusText:
+          `${input.unitName ?? '?'} — The selected skill has no valid targets. Choose another action.`,
+        displaySkillBar: true,
+      };
+
     case 'none':
       return {};
 

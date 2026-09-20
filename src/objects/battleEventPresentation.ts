@@ -71,6 +71,27 @@ function presentBattleEvent(
         },
       };
 
+    case 'item_heal':
+      // Names the item, because the player chose it: a bare "restored N HP" would read like a
+      // passive effect rather than the action they just spent.
+      return {
+        floatingText: { unitId: event.unitId, kind: 'heal', amount: event.amount },
+        logEntry: {
+          text: `${event.unitName} drinks ${event.itemName} and restores ${event.amount} HP`,
+          type: 'positive',
+        },
+      };
+
+    case 'item_revive':
+      // Names the item and both units: the player spent this action on a specific corpse.
+      return {
+        floatingText: { unitId: event.targetId, kind: 'heal', amount: event.amount },
+        logEntry: {
+          text: `${event.unitName} reads ${event.itemName} and revives ${event.targetName} +${event.amount} HP`,
+          type: 'positive',
+        },
+      };
+
     case 'vampirism_heal':
       return {
         floatingText: { unitId: event.unitId, kind: 'heal', amount: event.amount },

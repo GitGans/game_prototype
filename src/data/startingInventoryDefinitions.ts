@@ -37,9 +37,10 @@ export interface StartingItemDefinition {
   placement: StartingItemPlacement;
 }
 
-// Two rings in the shared backpack (slots 0/1), a necklace equipped on the warrior, and one of
-// each permanent-stat consumable (slots 2/3). Used for BOTH campaign and debug initialization, so
-// resetting a debug session restores the consumables and discards accumulated permanent bonuses.
+// Two rings in the shared backpack (slots 0/1), a necklace equipped on the warrior, one of each
+// permanent-stat consumable (slots 2/3), one healing potion (slot 4) and one small resurrection
+// scroll (slot 5). Used for BOTH campaign and debug initialization, so resetting a debug session
+// restores the consumables and discards accumulated permanent bonuses.
 export const CAMPAIGN_STARTING_ITEMS = [
   {
     instanceId: "item_start_bronze_ring",
@@ -65,5 +66,15 @@ export const CAMPAIGN_STARTING_ITEMS = [
     instanceId: "item_start_might_essence",
     itemDefinitionId: "might_essence",
     placement: { kind: "backpack", slot: "3" },
+  },
+  {
+    instanceId: "item_start_small_healing_potion",
+    itemDefinitionId: "small_healing_potion",
+    placement: { kind: "backpack", slot: "4" },
+  },
+  {
+    instanceId: "item_start_small_resurrection_scroll",
+    itemDefinitionId: "small_resurrection_scroll",
+    placement: { kind: "backpack", slot: "5" },
   },
 ] satisfies readonly StartingItemDefinition[];

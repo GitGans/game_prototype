@@ -21,8 +21,10 @@ export interface EquipmentPanelConfig {
   contentTopY:        number;
   phase:              AnyEquipPhase;
   itemTooltip:        ItemTooltip;
-  onEquipSlotClick:   (slot: string, item: ItemSlotSnapshot | null) => void;
-  onBackpackItemClick: (item: ItemSlotSnapshot, cellX: number, cellY: number) => void;
+  onEquipSlotClick:         (slot: string, item: ItemSlotSnapshot | null) => void;
+  onEquipSlotDoubleClick:   (slot: string, item: ItemSlotSnapshot) => void;
+  onBackpackItemClick:      (item: ItemSlotSnapshot) => void;
+  onBackpackItemDoubleClick: (item: ItemSlotSnapshot) => void;
   onUpgrade:          () => void;
   onBack:             () => void;
 }
@@ -59,7 +61,8 @@ export class EquipmentPanel {
 
   constructor(cfg: EquipmentPanelConfig) {
     const { scene, screenW, contentTopY, phase, itemTooltip,
-            onEquipSlotClick, onBackpackItemClick, onUpgrade, onBack } = cfg;
+            onEquipSlotClick, onEquipSlotDoubleClick,
+            onBackpackItemClick, onBackpackItemDoubleClick, onUpgrade, onBack } = cfg;
     this.scene = scene;
 
     // ── Layout math ─────────────────────────────────────────────────────────
@@ -93,7 +96,8 @@ export class EquipmentPanel {
     this.matrix = new EquipmentMatrix(
       scene, matrixX, panelTopY, CELL_SIZE, CELL_GAP,
       phase.unitEquipment, itemTooltip,
-      onEquipSlotClick,
+      onEquipSlotClick, onEquipSlotDoubleClick,
+      phase.itemUsage,
     );
 
     // ── Unit sprite preview (center) ─────────────────────────────────────────
@@ -130,9 +134,9 @@ export class EquipmentPanel {
     this.backpack = new BackpackRow(
       scene, backpackX, backpackY, CELL_SIZE, CELL_GAP,
       phase.backpack, itemTooltip,
-      onBackpackItemClick,
+      onBackpackItemClick, onBackpackItemDoubleClick,
       BACKPACK_COLS, BACKPACK_ROWS,
-      phase.consumableUsage,
+      phase.itemUsage,
     );
 
     const backpackBottomY    = backpackY + BACKPACK_ROWS * (CELL_SIZE + CELL_GAP) - CELL_GAP;
@@ -155,6 +159,12 @@ export class EquipmentPanel {
   }
 
   refresh(phase: AnyEquipPhase): void {
+    // A committed refresh is an input-context boundary: a click deferred under the PREVIOUS snapshot
+    // must not be applied against this one. Unconditional, and BEFORE the early return below, so it
+    // also covers refreshes that render nothing. The gesture that caused this refresh has already
+    // cleared its own pending state, so nothing still in flight here is legitimate.
+    this.cancelPendingGestures();
+
     const { selectedUnit, unitStats } = phase;
     if (!selectedUnit || !unitStats) return;
 
@@ -179,14 +189,27 @@ export class EquipmentPanel {
     this.statsPanel.showFixedStatsBodySnapshot(
       selectedUnit, unitStats, this.statsX, this.statsY + HEADER_H, STATS_W,
     );
-    this.matrix.refresh(phase.unitEquipment);
-    this.backpack.refresh(phase.backpack, phase.consumableUsage);
+    this.matrix.refresh(phase.unitEquipment, phase.itemUsage);
+    this.backpack.refresh(phase.backpack, phase.itemUsage);
     this.skillRow.setPosition(this.skillX, this.skillY);
     this.skillRow.render(phase.upgradeSkills);
   }
 
   getContentBottomY(): number {
     return this.backpackBottomY;
+  }
+
+  /**
+   * Drops every deferred item click without emitting it.
+   *
+   * A pending gesture belongs to the committed snapshot under which its first click occurred, so it
+   * must not survive into the next one — `reset_debug_session` keeps the same phase, the same selected
+   * character and the same authored instance ids, so nothing about the incoming data would reveal
+   * that the context changed. Called from `refresh()`; destruction is covered by destroying the cells.
+   */
+  private cancelPendingGestures(): void {
+    this.matrix.cancelPendingGestures();
+    this.backpack.cancelPendingGestures();
   }
 
   destroy(): void {

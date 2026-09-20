@@ -23,3 +23,24 @@ describe('battleEventPresentation — unit_revived', () => {
     expect(presentation.logEntry?.type).toBe('positive');
   });
 });
+
+describe('battleEventPresentation — item_revive', () => {
+  it('names the item and both units, and floats the restored HP over the revived unit', () => {
+    const event: BattleEvent = {
+      type: 'item_revive',
+      unitId: 'o', unitName: 'Warrior',
+      targetId: 't', targetName: 'Archer',
+      itemName: 'Small Resurrection Scroll',
+      amount: 21,
+    };
+    const [presentation] = buildBattleEventPresentations([event], {
+      activeUnitSide: 'player',
+    });
+
+    expect(presentation.floatingText).toEqual({ unitId: 't', kind: 'heal', amount: 21 });
+    expect(presentation.logEntry).toEqual({
+      text: 'Warrior reads Small Resurrection Scroll and revives Archer +21 HP',
+      type: 'positive',
+    });
+  });
+});

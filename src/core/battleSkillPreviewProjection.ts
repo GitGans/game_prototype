@@ -3,7 +3,8 @@ import type { UnitDeployment } from '../shared/unitDeploymentTypes';
 import type { GamePhase } from './phases';
 import type { BattleUnitSnapshot } from '../shared/battleSnapshots';
 import { buildSkillPreviewModel, type SkillPreviewUnit } from '../battle/skillPreview';
-import type { SkillPreviewModel } from '../shared/skillPreviewModel';
+import { resolveBattleItemPreview } from '../battle/itemPreview';
+import type { BattleTargetPreviewModel } from '../shared/skillPreviewModel';
 
 type BattlePhase = Extract<GamePhase, { type: 'battle' }>;
 
@@ -31,10 +32,15 @@ function toSkillPreviewUnit(unit: BattleUnitSnapshot): SkillPreviewUnit {
   };
 }
 
-export function buildBattlePhaseSkillPreviewModel(input: {
+/**
+ * The preview for a manual target click, derived only from committed `GamePhase` data: the item in
+ * targeting mode when there is one (its target cells own `validTargets`), otherwise the active
+ * skill. Returns structured data only — wording is `objects/battleSkillPreviewPresentation.ts`.
+ */
+export function buildBattlePhaseTargetPreviewModel(input: {
   phase: BattlePhase;
   targetCoord: CellCoord;
-}): SkillPreviewModel | null {
+}): BattleTargetPreviewModel | null {
   const { phase } = input;
 
   const deployments = new Map<string, UnitDeployment>(
@@ -45,11 +51,34 @@ export function buildBattlePhaseSkillPreviewModel(input: {
   );
   const activeUnit = phase.activeUnit ? toSkillPreviewUnit(phase.activeUnit) : null;
 
-  return buildSkillPreviewModel({
+  const selectedItem = phase.activeUnitActions.find(
+    a => a.kind === 'item' && a.instanceId === phase.selectedUsableInstanceId,
+  );
+  if (selectedItem?.kind === 'item') {
+    if (!activeUnit) return null;
+    const preview = resolveBattleItemPreview({
+      effect: selectedItem.effect,
+      ownerSide: activeUnit.side,
+      targetCoord: input.targetCoord,
+      units: unitsById,
+      deployments,
+    });
+    if (!preview) return null;
+    return {
+      kind: 'item_revive',
+      itemName: selectedItem.label,
+      targetName: preview.targetName,
+      restoredHp: preview.restoredHp,
+      cells: preview.cells.map(coord => ({ coord, kind: 'effect', highlight: 'revive' })),
+    };
+  }
+
+  const model = buildSkillPreviewModel({
     activeUnit,
     targetCoord: input.targetCoord,
     occupancy: phase.occupancy,
     unitsById,
     deployments,
   });
+  return model ? { kind: 'skill', ...model } : null;
 }

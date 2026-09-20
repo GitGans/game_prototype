@@ -4,6 +4,7 @@ import type {
   UnitTabSnapshot,
   BackpackSnapshot,
   EquipmentSnapshot,
+  ItemSlotSnapshot,
   UnitStatsSnapshot,
   SkillIconSnapshot,
 } from '../shared/snapshotTypes';
@@ -17,11 +18,12 @@ import { resolvePlayerUnitSpriteSheet } from './unitSprites';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { EMPTY_EQUIP_SNAPSHOT } from './phases';
 import type {
-  ConsumableUsability, PendingConsumePrompt, PendingConsumeRequest,
+  ItemUsability, ItemUseOrigin, PendingItemUsePrompt, ItemInteraction,
 } from '../shared/snapshotTypes';
+
 // The READ MODEL only. `core/consumableUse` — the executor — is deliberately absent from this
 // module's import allowlist, so a projection has no path to a roster/inventory replacement.
-import { evaluateConsumableUsability } from './consumableUsability';
+import { evaluateItemUsability } from './itemUsability';
 
 export interface EquipmentScreenPlayerSnapshot {
   selectedUnitSpriteKey: string | null;
@@ -32,33 +34,52 @@ export interface EquipmentScreenPlayerSnapshot {
   unitStats: UnitStatsSnapshot | null;
   learnedSkills: SkillIconSnapshot[];
   upgradeSkills: SkillIconSnapshot[];
-  /** Keyed by item instance id; consumables in the shared backpack only. */
-  consumableUsage: Record<string, ConsumableUsability>;
-  pendingConsumePrompt: PendingConsumePrompt | null;
+  /**
+   * Keyed by item instance id: backpack usables and consumables, plus the selected character's
+   * equipped usable. One entry per instance is unambiguous — an instance is in the backpack XOR in
+   * an equipment slot, never both (`validateItemForUse` rejects `duplicate_placement`).
+   */
+  itemUsage: Record<string, ItemUsability>;
+  pendingItemUsePrompt: PendingItemUsePrompt | null;
 }
 
 /**
- * Eligibility for every backpack consumable against the selected character, produced by the same
- * evaluation the executor runs — the UI and the application never maintain separate rules. For a
- * dead or missing selected character every entry reports the blocking reason rather than being
- * omitted, so the screen can explain why use is unavailable.
+ * Eligibility for every item that can be USED against the selected character, from both
+ * out-of-combat origins: backpack consumables and usables, and the usable the character is carrying
+ * in `usable_slot`. Both go through the same evaluation the executor runs, so the UI and the
+ * application never maintain separate rules.
+ *
+ * For a dead or missing selected character every entry reports the blocking reason rather than being
+ * omitted — the tooltip is required to explain why use is unavailable, so an absent entry would be
+ * an explanation the screen cannot give.
  */
-function buildConsumableUsage(
+function buildItemUsage(
   session: PlayerSessionState,
   backpack: BackpackSnapshot,
+  equippedUsable: ItemSlotSnapshot | null,
   selectedUnitTemplateId: string,
-): Record<string, ConsumableUsability> {
-  const usage: Record<string, ConsumableUsability> = {};
-  for (const slot of backpack.slots) {
-    if (!slot || slot.metadata.kind !== 'consumable') continue;
-    usage[slot.instanceId] = evaluateConsumableUsability({
+): Record<string, ItemUsability> {
+  const usage: Record<string, ItemUsability> = {};
+
+  const evaluate = (instanceId: string, origin: ItemUseOrigin): void => {
+    usage[instanceId] = evaluateItemUsability({
       session,
       catalog: ITEM_CATALOG,
       playerBlueprints: PLAYER_UNITS,
       unitTemplateId: selectedUnitTemplateId,
-      instanceId: slot.instanceId,
+      instanceId,
+      origin,
     });
+  };
+
+  for (const slot of backpack.slots) {
+    if (!slot) continue;
+    if (slot.metadata.kind !== 'consumable' && slot.metadata.kind !== 'usable') continue;
+    evaluate(slot.instanceId, 'backpack');
   }
+
+  if (equippedUsable) evaluate(equippedUsable.instanceId, 'equipped_usable');
+
   return usage;
 }
 
@@ -66,34 +87,42 @@ function buildConsumableUsage(
  * Projects the pending request into renderable prompt data — or omits it.
  *
  * Omission HIDES the dialog; it never disposes the request. Disposal belongs to
- * `phaseHandlers/consumablePhaseHandler`, the only holder of the confirmation write capability.
+ * `phaseHandlers/itemUsePhaseHandler`, the only holder of the interaction write capability.
  * Two different operations, two different owners.
  */
-function buildPendingConsumePrompt(
-  pendingConsume: PendingConsumeRequest | null,
-  usage: Record<string, ConsumableUsability>,
+function buildPendingItemUsePrompt(
+  interaction: ItemInteraction | null,
+  usage: Record<string, ItemUsability>,
   backpack: BackpackSnapshot,
+  unitEquipment: EquipmentSnapshot,
   selectedUnitTemplateId: string,
   selectedUnitName: string | null,
-): PendingConsumePrompt | null {
-  if (!pendingConsume) return null;
-  if (pendingConsume.unitTemplateId !== selectedUnitTemplateId) return null;
+): PendingItemUsePrompt | null {
+  if (!interaction || interaction.kind !== 'confirming_use') return null;
+  if (interaction.unitTemplateId !== selectedUnitTemplateId) return null;
   if (selectedUnitName === null) return null;
 
-  const entry = usage[pendingConsume.instanceId];
-  if (!entry?.canUse) return null;
+  const entry = usage[interaction.instanceId];
+  // The entry must describe the SAME origin the confirmation was opened for. An item that moved
+  // between the backpack and `usable_slot` while the dialog was open is a different request, and the
+  // dialog must not go on describing the one it was opened for.
+  if (!entry?.canUse || entry.origin !== interaction.origin) return null;
 
-  const slot = backpack.slots.find(s => s?.instanceId === pendingConsume.instanceId);
+  const slot = interaction.origin === 'backpack'
+    ? backpack.slots.find(s => s?.instanceId === interaction.instanceId) ?? null
+    : unitEquipment.slots.usable_slot?.instanceId === interaction.instanceId
+      ? unitEquipment.slots.usable_slot
+      : null;
   if (!slot) return null;
 
   return {
-    instanceId: pendingConsume.instanceId,
-    unitTemplateId: pendingConsume.unitTemplateId,
+    instanceId: interaction.instanceId,
+    unitTemplateId: interaction.unitTemplateId,
     unitName: selectedUnitName,
     itemName: slot.definition.name,
-    stat: entry.effect.stat,
-    amount: entry.effect.amount,
-    healsCurrentHp: entry.effect.healsCurrentHp,
+    // Forwarded whole: the prompt describes exactly what the usage entry already decided, so the
+    // dialog cannot show a different effect from the one confirmation will execute.
+    effect: entry.effect,
   };
 }
 
@@ -120,7 +149,7 @@ function buildUnitTab(blueprint: UnitBlueprint, session: PlayerSessionState): Un
 export function buildEquipmentScreenPlayerSnapshot(
   session: PlayerSessionState,
   selectedUnitTemplateId: string,
-  pendingConsume: PendingConsumeRequest | null = null,
+  interaction: ItemInteraction | null = null,
 ): EquipmentScreenPlayerSnapshot {
   // Matches today's buildUnitTabSnapshots(): iterate ALL blueprints unconditionally,
   // not just ones present in the roster (a unit missing from roster.units still
@@ -132,8 +161,6 @@ export function buildEquipmentScreenPlayerSnapshot(
   const selectedBlueprint = PLAYER_UNITS.find(u => u.templateId === selectedUnitTemplateId);
   const selectedUnitState = session.roster.units[selectedUnitTemplateId];
 
-  const consumableUsage = buildConsumableUsage(session, backpack, selectedUnitTemplateId);
-
   if (!selectedBlueprint || !selectedUnitState) {
     return {
       selectedUnitSpriteKey: null,
@@ -144,14 +171,19 @@ export function buildEquipmentScreenPlayerSnapshot(
       unitStats: null,
       learnedSkills: [],
       upgradeSkills: [],
-      consumableUsage,
-      // No selected character to target — every usage entry already reports the reason.
-      pendingConsumePrompt: null,
+      // Backpack entries only: with no selected character there is no equipment to project either,
+      // and every entry already reports the reason use is unavailable.
+      itemUsage: buildItemUsage(session, backpack, null, selectedUnitTemplateId),
+      pendingItemUsePrompt: null,
     };
   }
 
   const progression = resolveUnitProgression(selectedBlueprint, selectedUnitState.chosenUpgrades);
+  // Built BEFORE the usage map: the equipped usable is one of the two origins it evaluates.
   const unitEquipment = buildEquipmentSnapshot(selectedUnitTemplateId, session.inventory, ITEM_CATALOG);
+  const itemUsage = buildItemUsage(
+    session, backpack, unitEquipment.slots.usable_slot ?? null, selectedUnitTemplateId,
+  );
   const unitStats = buildUnitStatsSnapshot(
     selectedBlueprint,
     selectedUnitState.level,
@@ -160,6 +192,7 @@ export function buildEquipmentScreenPlayerSnapshot(
     session.inventory.instances,
     ITEM_DEFINITIONS,
     progression.statModifiers,
+    { currentHp: selectedUnitState.currentHp, lifeState: selectedUnitState.lifeState },
   );
   const learnedSkills = progression.skills.map(buildSkillIconSnapshot);
 
@@ -172,11 +205,12 @@ export function buildEquipmentScreenPlayerSnapshot(
     unitStats,
     learnedSkills,
     upgradeSkills: learnedSkills.slice(1, 5),
-    consumableUsage,
-    pendingConsumePrompt: buildPendingConsumePrompt(
-      pendingConsume,
-      consumableUsage,
+    itemUsage,
+    pendingItemUsePrompt: buildPendingItemUsePrompt(
+      interaction,
+      itemUsage,
       backpack,
+      unitEquipment,
       selectedUnitTemplateId,
       selectedBlueprint.name,
     ),

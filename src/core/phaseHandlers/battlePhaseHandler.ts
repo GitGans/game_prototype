@@ -11,6 +11,12 @@ import {
 import { checkGameOver }               from '../../battle/combat';
 import { resolveBattleTransition }     from '../../battle/battleTransition';
 import { resolveSkillTurn }            from '../../battle/skillTurnResolver';
+import {
+  applyBattleItemUse,
+  selectBattleItem,
+  cancelItemTargeting,
+} from '../../battle/itemUse';
+import type { BattleItemResource }  from '../../battle/itemUsability';
 import { decideAutoTurn }             from '../../battle/autoTurn';
 import {
   selectBenchSlot,
@@ -30,6 +36,7 @@ import type { PlayerSessionSource }     from '../playerSessionState';
 import { PlayerSessionStore }           from '../playerSessionStore';
 import { applyFieldPlacementsToRoster } from '../playerUnitPersistence';
 import { applyBattleResult }            from '../battleExit';
+import type { RosterState }             from '../../progression';
 import type {
   AutoTurnIntention,
   BattleRuntimeContext,
@@ -117,19 +124,23 @@ export function applyBattleLifecyclePhaseAction(input: {
 // ─── Battle Exit ──────────────────────────────────────────────────────────────
 
 /**
- * The only place a battle result is bound to storage. Contains no roster rules and no
- * campaign/debug conditional: `sessionSource` selects a storage tree and nothing else.
- * A missing debug session throws through `PlayerSessionStore`, never falling back to
- * campaign. The next roster is fully computed before the single write.
+ * Composes the next roster for a battle exit, and WRITES NOTHING.
+ *
+ * It stops at the roster because a completed exit settles two domains at once — the battle result and
+ * the attempt's item consumption — and those must reach storage in ONE `replaceSession` call,
+ * or a moment exists in which the potion is gone but the damage is not yet recorded. Sequencing
+ * that single write is `battlePhaseEffects.finalizeBattleSessionOnExit`'s job.
+ *
+ * Contains no roster rules and no campaign/debug conditional: `sessionSource` selects a storage
+ * tree and nothing else. A missing debug session throws through `PlayerSessionStore`, never
+ * falling back to campaign.
  */
-export function applyBattleExitPhaseAction(input: {
+export function computeBattleExitRoster(input: {
   runtime: BattleRuntimeContext;
   outcome: BattleExitOutcome;
-}): void {
-  const source  = input.runtime.sessionSource;
-  const session = PlayerSessionStore.getSession(source);
-  const next    = applyBattleResult({ runtime: input.runtime, session, outcome: input.outcome });
-  PlayerSessionStore.replaceRoster(source, next);
+}): RosterState {
+  const session = PlayerSessionStore.getSession(input.runtime.sessionSource);
+  return applyBattleResult({ runtime: input.runtime, session, outcome: input.outcome });
 }
 
 // ─── Battle Preview Target (transient manual-targeting UI state) ───────────────
@@ -141,6 +152,29 @@ export function setBattlePreviewTarget(
   target: CellCoord | null,
 ): BattleState {
   return { ...state, previewTargetCoord: target ? { ...target } : null };
+}
+
+// ─── Battle Mode Change (manual targeting interaction) ──────────────────────────
+
+/**
+ * The battle rule for an ACCEPTED mode change. Leaving manual control cancels an in-progress item
+ * targeting interaction as a whole — selection, target cells and preview in one result — so the
+ * committed state is coherent without any follow-up action. Every other mode change leaves the
+ * interaction exactly as it was.
+ *
+ * This decides WHEN a mode change cancels targeting; `battle/itemUse.cancelItemTargeting` owns
+ * the BattleState shape of the cancellation; `battlePhaseEffects` installs the result.
+ */
+export function applyBattleModeChange(input: {
+  state:                    BattleState;
+  selectedUsableInstanceId: string | null;
+  nextMode:                 BattleMode;
+}): { state: BattleState; selectedUsableInstanceId: string | null } {
+  const { state, selectedUsableInstanceId, nextMode } = input;
+  if (nextMode === 'manual' || selectedUsableInstanceId === null) {
+    return { state, selectedUsableInstanceId };
+  }
+  return { state: cancelItemTargeting(state), selectedUsableInstanceId: null };
 }
 
 // ─── Battle Placement Actions ─────────────────────────────────────────────────
@@ -175,6 +209,8 @@ export type BattleTurnPhaseAction = Extract<PhaseAction, {
     | 'battle_start_turn'
     | 'battle_select_skill'
     | 'battle_use_skill'
+    | 'battle_select_item'
+    | 'battle_use_item'
     | 'battle_advance_turn'
     | 'battle_skip_turn'
     | 'battle_charge_turn'
@@ -185,6 +221,7 @@ export type BattleTurnPhaseAction = Extract<PhaseAction, {
 
 const BATTLE_TURN_ACTION_TYPES = new Set<string>([
   'battle_start_turn', 'battle_select_skill', 'battle_use_skill',
+  'battle_select_item', 'battle_use_item',
   'battle_advance_turn', 'battle_skip_turn', 'battle_charge_turn',
   'battle_quick_turn',
   'battle_decide_auto_turn',
@@ -209,7 +246,55 @@ export type BattlePhaseActionResult = {
   winner?:             Side;
   autoTurnDirective?:  BattleAutoTurnDirective;
   autoTurnApplied?:    boolean;
+  /**
+   * Present only on a SUCCESSFUL `battle_use_item`. It is what lets `battlePhaseEffects` drop
+   * the consumed resource and append one record inside the same runtime installation — the
+   * handler decides, the effects owner writes.
+   */
+  itemUse?: BattleItemUseOutcome;
+  /**
+   * Explicit instruction for the manual targeting interaction. Never projected into
+   * `BattleActionFeedback` — applied by `battlePhaseEffects` only.
+   */
+  targeting?: ManualTargetingUpdate;
 };
+
+/**
+ * Instruction to the runtime owner for the manual targeting interaction (selected item + preview).
+ *   select_item → install this selection; the returned state already carries its target cells.
+ *   reset       → the action APPLIED: drop the item selection and the preview (target cells are
+ *                 whatever the applied rule produced).
+ * Omitted       → the action was refused or a no-op: the handler returns its input state, and
+ *                 selection, target cells and preview are kept EXACTLY.
+ */
+export type ManualTargetingUpdate =
+  | { readonly type: 'select_item'; readonly instanceId: string }
+  | { readonly type: 'reset' };
+
+const RESET_TARGETING: ManualTargetingUpdate = { type: 'reset' };
+
+/** Attaches the reset instruction only when the action applied. */
+function resetTargetingIf(applied: boolean): { targeting?: ManualTargetingUpdate } {
+  return applied ? { targeting: RESET_TARGETING } : {};
+}
+
+/** What a successful in-battle item activation produced, for the runtime and for feedback. */
+export type BattleItemUseOutcome =
+  | {
+      readonly kind: 'heal';
+      readonly instanceId: string;
+      readonly unitId: string;
+      readonly itemName: string;
+      readonly restoredHp: number;
+    }
+  | {
+      readonly kind: 'revive';
+      readonly instanceId: string;
+      readonly unitId: string;
+      readonly itemName: string;
+      readonly targetUnitId: string;
+      readonly restoredHp: number;
+    };
 
 /**
  * Drops `activeSkill` and `validTargets`. `validTargets` is the same array
@@ -222,8 +307,6 @@ function projectTurnDirective(directive: TurnStartDirective): BattleTurnDirectiv
       return { type: 'none', reason: directive.reason };
     case 'continue_immediately':
       return { type: 'continue_immediately' };
-    case 'schedule_next_turn':
-      return { type: 'schedule_next_turn', delayKind: directive.delayKind };
     case 'schedule_auto_turn':
       return {
         type:         'schedule_auto_turn',
@@ -236,6 +319,8 @@ function projectTurnDirective(directive: TurnStartDirective): BattleTurnDirectiv
         activeUnitId: directive.activeUnitId,
         promptKind:   directive.promptKind,
       };
+    case 'await_manual_action':
+      return { type: 'await_manual_action', activeUnitId: directive.activeUnitId };
     default: {
       const _exhaustive: never = directive;
       throw new Error(`Unhandled turn start directive: ${JSON.stringify(_exhaustive)}`);
@@ -290,6 +375,25 @@ export function projectBattleActionFeedback(result: BattlePhaseActionResult): Ba
   if (result.winner !== undefined)            feedback.winner = result.winner;
   if (result.autoTurnDirective !== undefined) feedback.autoTurnDirective = projectAutoTurnDirective(result.autoTurnDirective);
   if (result.autoTurnApplied !== undefined)   feedback.autoTurnApplied = result.autoTurnApplied;
+  // Rebuilt, never forwarded: the handler's outcome is a runtime-facing record. `targeting` is
+  // internal runtime control and deliberately has no feedback counterpart.
+  if (result.itemUse !== undefined) {
+    const itemUse = result.itemUse;
+    feedback.itemUse = itemUse.kind === 'heal'
+      ? {
+          applied:    true,
+          kind:       'heal',
+          itemName:   itemUse.itemName,
+          restoredHp: itemUse.restoredHp,
+        }
+      : {
+          applied:      true,
+          kind:         'revive',
+          itemName:     itemUse.itemName,
+          targetUnitId: itemUse.targetUnitId,
+          restoredHp:   itemUse.restoredHp,
+        };
+  }
   return feedback;
 }
 
@@ -308,23 +412,114 @@ export function applyBattleTurnAction(input: {
   mode:                      BattleMode;
   rng:                       Rng;
   pendingAutoTurnIntention?: AutoTurnIntention | null;
+  /**
+   * The attempt's still-unconsumed equipped items, keyed by battle unit id. A NARROW value
+   * supplied by `battlePhaseEffects`, which owns the runtime — this handler never resolves a
+   * runtime and never performs a storage lookup, exactly like `mode` above.
+   */
+  itemResources?:            ReadonlyMap<string, BattleItemResource>;
+  /** Narrow runtime value, like `mode`: the currently selected item id, or null. */
+  selectedUsableInstanceId?: string | null;
 }): BattlePhaseActionResult {
   const { state, context, action, mode, rng } = input;
+  const itemResources = input.itemResources ?? new Map<string, BattleItemResource>();
 
   switch (action.type) {
 
-    // resolveActiveTurnStart can call advanceTurn internally (missing active
-    // unit, or manual melee blocked and auto-skipped). advanceTurn ticks
-    // round effects which can kill units → check game-over.
+    // resolveActiveTurnStart calls advanceTurn internally only for technical recovery (missing or
+    // dead active unit). advanceTurn ticks round effects, which can kill units → check game-over.
     case 'battle_start_turn': {
-      const result = resolveBattleTransition({ state, context, action: { type: 'start_turn', mode }, rng });
-      return withWinner({ state: result.state, context: result.context, events: result.events, directive: result.directive });
+      const result = resolveBattleTransition({
+        state, context, rng,
+        action: { type: 'start_turn', mode },
+      });
+      return withWinner({
+        state: result.state, context: result.context, events: result.events, directive: result.directive,
+        // Directive 'none' (battle ended / quick mode / empty queue) is a no-op.
+        ...resetTargetingIf(result.directive?.type !== 'none'),
+      });
     }
 
-    // Pure UI state — no damage, no queue advancement.
+    /**
+     * Pure targeting-mode entry — no events, no queue movement. A refusal changes nothing.
+     */
+    case 'battle_select_item': {
+      const selected = selectBattleItem({
+        state, mode,
+        unitId:          action.unitId,
+        instanceId:      action.instanceId,
+        resource:        itemResources.get(action.unitId) ?? null,
+        alreadyConsumed: false,
+      });
+      if (!selected.ok) return { state, context, events: [] };
+      return {
+        state: selected.state, context, events: [],
+        targeting: { type: 'select_item', instanceId: selected.selectedInstanceId },
+      };
+    }
+
+    /**
+     * Compound, and in the SAME load-bearing order `battle_use_skill` uses below:
+     * item effect → game-over → advance exactly one turn (ticking round effects) → game-over.
+     * Effect-agnostic: heal and revive share it. A failed activation returns the state untouched,
+     * advances nothing and carries no targeting instruction.
+     */
+    case 'battle_use_item': {
+      const resource = itemResources.get(action.unitId) ?? null;
+      const applied = applyBattleItemUse({
+        state, mode,
+        unitId:             action.unitId,
+        instanceId:         action.instanceId,
+        target:             action.target,
+        selectedInstanceId: input.selectedUsableInstanceId ?? null,
+        resource,
+        // A consumed item is removed from `itemResources` by the effects owner, so absence here
+        // already means "already consumed"; the flag stays for callers holding a stale map.
+        alreadyConsumed:    false,
+      });
+      if (!applied.ok) return { state, context, events: [] };
+
+      const used = applied.result;
+      const itemName = resource!.name;   // non-null: the evaluator matched it
+      const itemUse: BattleItemUseOutcome = used.kind === 'heal'
+        ? { kind: 'heal', instanceId: action.instanceId, unitId: action.unitId,
+            itemName, restoredHp: used.restoredHp }
+        : { kind: 'revive', instanceId: action.instanceId, unitId: action.unitId,
+            itemName, targetUnitId: used.targetUnitId, restoredHp: used.restoredHp };
+
+      const winnerAfterEffect = checkGameOver(used.state);
+      if (winnerAfterEffect) {
+        return {
+          state: { ...used.state, phase: 'end' }, context, events: [...used.events],
+          winner: winnerAfterEffect,
+          itemUse,
+          targeting: RESET_TARGETING,
+        };
+      }
+
+      const advanced = resolveBattleTransition({
+        state: used.state, context, action: { type: 'advance_turn' }, rng,
+      });
+      const winnerAfterAdvance = checkGameOver(advanced.state);
+
+      return {
+        state: winnerAfterAdvance ? { ...advanced.state, phase: 'end' } : advanced.state,
+        context: advanced.context,
+        events: [...used.events, ...advanced.events],
+        ...(winnerAfterAdvance ? { winner: winnerAfterAdvance } : {}),
+        itemUse,
+        targeting: RESET_TARGETING,
+      };
+    }
+
+    // Pure UI state — no damage, no queue advancement. A refused switch keeps the targeting
+    // interaction; an applied one replaces it (validTargets already recomputed for the skill).
     case 'battle_select_skill': {
       const result = resolveBattleTransition({ state, context, action: { type: 'select_skill', skillIndex: action.skillIndex }, rng });
-      return { state: result.state, context: result.context, events: result.events };
+      return {
+        state: result.state, context: result.context, events: result.events,
+        ...resetTargetingIf(result.applied !== false),
+      };
     }
 
     // Compound: skill → game-over → advance turn → game-over.
@@ -344,25 +539,31 @@ export function applyBattleTurnAction(input: {
         context: result.context,
         events:  result.events,
         ...(result.winner ? { winner: result.winner } : {}),
+        // Always ends the turn when it runs.
+        targeting: RESET_TARGETING,
       };
     }
 
     // Round-end effect ticks happen inside advanceTurn and can kill units.
     case 'battle_advance_turn': {
       const result = resolveBattleTransition({ state, context, action: { type: 'advance_turn' }, rng });
-      return withWinner({ state: result.state, context: result.context, events: result.events });
+      return withWinner({ state: result.state, context: result.context, events: result.events, targeting: RESET_TARGETING });
     }
 
-    // Skip may advance the queue and trigger round effects.
+    // Skip may advance the queue and trigger round effects. It always ends the turn.
     case 'battle_skip_turn': {
       const result = resolveBattleTransition({ state, context, action: { type: 'skip_turn', reason: action.reason }, rng });
-      return withWinner({ state: result.state, context: result.context, events: result.events });
+      return withWinner({ state: result.state, context: result.context, events: result.events, targeting: RESET_TARGETING });
     }
 
-    // Current charge never deals damage, but check defensively.
+    // Current charge never deals damage, but check defensively. An already-charged unit's charge
+    // is a refused no-op and keeps the targeting interaction.
     case 'battle_charge_turn': {
       const result = resolveBattleTransition({ state, context, action: { type: 'charge_turn' }, rng });
-      return withWinner({ state: result.state, context: result.context, events: result.events });
+      return withWinner({
+        state: result.state, context: result.context, events: result.events,
+        ...resetTargetingIf(result.applied !== false),
+      });
     }
 
     // One quick-battle iteration: quick_turn → advance_turn → game-over.
@@ -371,7 +572,7 @@ export function applyBattleTurnAction(input: {
       const quick    = resolveBattleTransition({ state, context, action: { type: 'quick_turn', unitId: action.unitId }, rng });
       const advanced = resolveBattleTransition({ state: quick.state, context: quick.context, action: { type: 'advance_turn' }, rng });
       const events   = [...quick.events, ...advanced.events];
-      return withWinner({ state: advanced.state, context: advanced.context, events });
+      return withWinner({ state: advanced.state, context: advanced.context, events, targeting: RESET_TARGETING });
     }
 
     // Decides what the auto unit will do — no state mutation.
@@ -461,7 +662,7 @@ export function applyBattleTurnAction(input: {
             state: selected.state, context: selected.context,
             action: { type: 'skip_turn', reason: intention.reason }, rng,
           });
-          return { ...withWinner({ state: skipped.state, context: skipped.context, events: skipped.events }), autoTurnApplied: true };
+          return { ...withWinner({ state: skipped.state, context: skipped.context, events: skipped.events }), autoTurnApplied: true, targeting: RESET_TARGETING };
         }
 
         case 'advance_turn': {
@@ -472,7 +673,7 @@ export function applyBattleTurnAction(input: {
             state: selected.state, context: selected.context,
             action: { type: 'advance_turn' }, rng,
           });
-          return { ...withWinner({ state: advanced.state, context: advanced.context, events: advanced.events }), autoTurnApplied: true };
+          return { ...withWinner({ state: advanced.state, context: advanced.context, events: advanced.events }), autoTurnApplied: true, targeting: RESET_TARGETING };
         }
 
         case 'use_skill': {
@@ -491,6 +692,7 @@ export function applyBattleTurnAction(input: {
             events:  result.events,
             ...(result.winner ? { winner: result.winner } : {}),
             autoTurnApplied: true,
+            targeting: RESET_TARGETING,
           };
         }
 

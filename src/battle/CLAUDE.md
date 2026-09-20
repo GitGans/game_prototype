@@ -31,7 +31,8 @@ Pure battle domain logic — all computations, state mutations, and validations 
 - [lifeState.ts](lifeState.ts) — `isAlive` / `isDead` / `killUnit` / `reviveUnit`; the only place that flips `Unit.lifeState`
 - [deployment.ts](deployment.ts) — field/bench queries; living/dead/all field-helper split
 - [deadFriendlyTargeting.ts](deadFriendlyTargeting.ts) — shared structural corpse-cell walker for dead-friendly targeting and (Stage 2+) revive. All callers must pass `deployments`; deriving anchors from cell maps is forbidden.
-- [revive.ts](revive.ts) — revive HP table application (`computeReviveHp`), revive target resolution (`resolveReviveTargetsForAction`), and revive state mutation (`reviveUnitInBattle`). Both target resolution and state mutation must go through this module; do not duplicate corpse walking or call `reviveUnit` directly from execution code.
+- [revive.ts](revive.ts) — the percentage chokepoints shared by skills and items: the HP formula (`computeReviveHpFromPercent`) and the state mutation (`reviveUnitInBattleByPercent`); the skill wrappers `computeReviveHp` / `reviveUnitInBattle` resolve a level to a percent and delegate. Also skill target resolution (`resolveReviveTargetsForAction`). Both target resolution and state mutation must go through this module; do not duplicate corpse walking or call `reviveUnit` directly from execution code.
+- [itemUsability.ts](itemUsability.ts) / [itemUse.ts](itemUse.ts) / [itemPreview.ts](itemPreview.ts) — equipped-item eligibility and targeting (read), selection / cancellation / execution (write), and structured preview data
 - [skillTargetSelection.ts](skillTargetSelection.ts) — shared auto/quick AI selection (`chooseSkillIndexForUnit`, `chooseSkillTargetForPlan`). Owns the policy-aware target choice and skill eligibility filtering for both `autoTurn.ts` and `quickTurn.ts`. Auto and quick turns must not duplicate skill/target selection.
 
 ## Structural Role
@@ -53,6 +54,42 @@ returned to `src/core` for phase transition or rendering
 - depends on: `src/shared` (grid, skill, unit, item, snapshot types), `src/data` (skill definitions, shape definitions)
 - used by: `src/core` (battle initialization, phase handlers, `PhaseManager`)
 
+## Item activation
+
+- **Effect support and targeting have one definition: `getBattleItemTargetMode` in `itemUsability.ts`.**
+  `heal` → `self`, `revive` → `dead_ally`, anything else → `null` (no battle mechanics);
+  `isSupportedBattleItemEffect` derives from it. The action-bar projection, the resolver (through
+  the projected `targetMode`) and item execution all consult it, so they cannot drift apart.
+- **Resurrection items reuse the skill mechanics.** Valid targets come from
+  `getDeadFriendlyUnitTargets` (same side, dead, FIELD-deployed — never living, enemy or bench);
+  execution resolves the corpse with `getDeadFriendlyUnitAtCell` and revives it through
+  `reviveUnitInBattleByPercent` with the item's authored `hpPercent`. No corpse means
+  `no_valid_targets` (rendered disabled, recoverable).
+- **Battle functions receive the selection as narrow input and return pure results.** The selected
+  item's identity is runtime-owned (`BattleRuntimeContext.selectedUsableInstanceId`) and never
+  enters `BattleState` — only its target cells do, via `validTargets`. `selectBattleItem` returns
+  the state half and `selectedInstanceId` separately; `applyBattleItemUse` takes
+  `selectedInstanceId`; `cancelItemTargeting` is the state half of a cancellation. None of them
+  installs anything: the handler turns results into an explicit targeting instruction and
+  `core/battlePhaseEffects` installs it.
+- **Item previews are data, not wording.** `itemPreview.ts` (`resolveBattleItemPreview`) returns the
+  target, restored HP and cells computed with the SAME formula as execution; the sentence is
+  formatted by `objects/battleSkillPreviewPresentation.ts`.
+- **Read and write are separate modules on purpose.** `itemUsability.ts` decides eligibility and
+  is importable by `core/battlePhaseSnapshot`; `itemUse.ts` executes and is importable only by
+  `core/phaseHandlers/battlePhaseHandler`. A projection must be able to ask "is this enabled?"
+  without being able to change anything — "does not call" and "cannot reach" are different
+  guarantees, and only the second is enforceable. Both directions are pinned in
+  `ORCHESTRATION_COLLABORATOR_IMPORT_POLICIES`.
+- **Manual control is determined explicitly by battle mode.**
+  `BattleState.phase === 'select_target'` alone does not establish manual player control.
+- **A living player in manual mode is never skipped automatically.**
+  If the selected skill has no valid targets, turn start waits for a manual action. Automatic and
+  quick turns retain their existing skill-selection and skip/advance behavior.
+- **The battle domain does not read inventory state.**
+  Item activation receives a narrow `BattleItemResource`; turn initialization is independent of
+  equipped items.
+
 ## Invariants
 
 - All state-mutating functions return a **new** `BattleState`; they never mutate in place. This is enforced by the type system, not convention: `BattleState`, `Unit`, `OccupancyMap`, `ActiveEffect`, `CellCoord`, `UnitShape` and `UnitDeployment` are `readonly` at every runtime-owned depth (`ReadonlyMap` / `readonly T[]`), so a write requires building a replacement. Helpers that only query state therefore take `ReadonlyMap` / `readonly T[]` parameters while still returning fresh mutable collections. Never reach for a cast to silence a readonly error — see the read-gateway bullet in the root `CLAUDE.md`
@@ -61,13 +98,13 @@ returned to `src/core` for phase transition or rendering
 - Placement validation is anchor-based: shape offsets from the anchor define all occupied cells
 - Every player unit has the permanent `1×1` shape invariant. With a `2×3` player field, 3 bench slots, and at most 9 selected player units, every valid player roster is guaranteed to fit. `autoPlacePlayer()` does not need an unplaceable-player-party failure path — placement failure is an invariant violation and throws. The invariant is enforced structurally at boot by `validateUnitDefinitionCollections` (`core/unitDefinitionValidator.ts`), not only by `tests/core/unitDefinitionsShape.test.ts`.
 - **Placement collision and combat occupancy are two different indexes, and this is the one place they intentionally differ:**
-    - `getDeploymentBlockedCells(state)` (`placement.ts`) — every field-deployed body, **alive and dead**. The only collision source for `canPlace()`. Cell keys carry `side`, so a player corpse blocks only player-side placement.
-    - `buildOccupancy(units, deployments)` (`occupancy.ts`) — **living blockers only**, for combat.
-  A corpse must not block combat targeting, but nothing may be placed on top of it. Never use `state.occupancy` for placement collision, and never use deployments as a combat blocking index.
+  - `getDeploymentBlockedCells(state)` (`placement.ts`) — every field-deployed body, **alive and dead**. The only collision source for `canPlace()`. Cell keys carry `side`, so a player corpse blocks only player-side placement.
+  - `buildOccupancy(units, deployments)` (`occupancy.ts`) — **living blockers only**, for combat.
+    A corpse must not block combat targeting, but nothing may be placed on top of it. Never use `state.occupancy` for placement collision, and never use deployments as a combat blocking index.
 - `canPlace()` derives collision from `state.units + state.deployments`. `withoutUnits()` (`placementState.ts`) must therefore keep removing ignored units from **both** maps — a one-sided removal now throws instead of degrading.
 - `autoPlacePlayer()` is living-first, total, and order-preserving:
-    - living candidates are placed before dead ones, so corpses can never push a living combatant onto the bench (which would make `canBeginCombat()` false for an otherwise valid party);
-    - it returns `AutoPlacePlayerResult { state, placements }`; `placements` follows the **original candidate order**, while runtime IDs (`p1`, `p2`, …) follow creation order, i.e. living-first. Nothing may derive participant or display order from ID order.
+  - living candidates are placed before dead ones, so corpses can never push a living combatant onto the bench (which would make `canBeginCombat()` false for an otherwise valid party);
+  - it returns `AutoPlacePlayerResult { state, placements }`; `placements` follows the **original candidate order**, while runtime IDs (`p1`, `p2`, …) follow creation order, i.e. living-first. Nothing may derive participant or display order from ID order.
 - `PlayerPlacementCandidate.initialLifeState` drives that partition and is passed through to `createUnitInstance`.
 - `createUnitInstance` accepts `initialLifeState` (default `'alive'`). A dead input yields the canonical dead state — `lifeState: 'dead'`, `hp: 0` — and `initialHp` is ignored. Every other resolved field (max HP, stats, class, skills, shape, row trait, sprite sheet, stat-highlight baseline) is identical for alive and dead units.
 - `canBeginCombat(state)` (`combatStart.ts`) — combat may start only in the placement phase and only with at least one **living** player unit field-deployed. Enforced in `applyBattleLifecycleAction`'s `battle_begin_combat`; UI state is never trusted as validation.
@@ -93,10 +130,10 @@ returned to `src/core` for phase transition or rendering
 - `resolveSkillTargetsForPolicy` takes `BattleState` (not `OccupancyMap`) because dead targeting needs deployment access. `unitAnchor` is always the caster's current field anchor.
 - Dead-caster safety is enforced once, at the executor (`resolveCasterAndSkill`) and turn-flow entry points (`autoTurn`, `quickTurn`, `turnResolver`) — never inside the resolver. The resolver trusts that callers gate on `isAlive(caster)`.
 - Campaign/map resurrection (targeting dead units on the world map) is future work outside `battle/`.
-- Revive target resolution chokepoint is `resolveReviveTargetsForAction` (in `revive.ts`). Revive state-mutation chokepoint is `reviveUnitInBattle`. Both must route dead-friendly corpse geometry through `deadFriendlyTargeting.ts`.
-- Revive amount is target `maxHp × REVIVE_HP_PERCENT_LEVELS[level]` (clamped to ≥1 via `Math.ceil`). Revive does not use caster power and does not consume matrix multipliers — the `effect_area_matrix` defines shape only.
+- Revive target resolution chokepoint is `resolveReviveTargetsForAction` (in `revive.ts`). Revive state-mutation chokepoint is `reviveUnitInBattleByPercent` (`reviveUnitInBattle` is its skill-level wrapper). All must route dead-friendly corpse geometry through `deadFriendlyTargeting.ts`.
+- Revive amount is target `maxHp × percent` (clamped to ≥1 via `Math.ceil`), where the percent is `REVIVE_HP_PERCENT_LEVELS[level]` for a skill and the authored `hpPercent` for an item. Revive does not use caster power and does not consume matrix multipliers — the `effect_area_matrix` defines shape only.
 - Revive does not restore previous `activeEffects` (death already cleared them).
-- Revive does not insert the revived unit into the current `roundQueue`. `reviveUnitInBattle` reuses the existing `roundQueue` reference; the revived unit becomes eligible only on the next `buildRoundQueue` call.
+- Revive does not insert the revived unit into the current `roundQueue`. `reviveUnitInBattleByPercent` reuses the existing `roundQueue` reference; the revived unit becomes eligible on the next `buildRoundQueue` call. If the reviving action ends the round, that call happens in the same action's `advanceTurn`, so the unit appears in the very next round's queue — it is never delayed an extra round.
 - Skills containing a `revive` action must use `targetPolicy: { type: 'dead_friendly' }`. Enforced at compile time by `validateActionSkillDefinition` in `actionSkillDefinitionCompiler.ts`.
 - `chooseSkillIndexForUnit` (`skillTargetSelection.ts`) filters skills by "has at least one valid target". Filtering must be RNG-free; only the final candidate pick consumes RNG. When no candidates exist, fallback delegates to `resolveRandomSkillIndex`.
 - Skill preview reads `unitsById + deployments`. `fieldUnitCells` is render/hover data only and must not be the deployment source for revive geometry. The preview projection (`core/battleSkillPreviewProjection.ts`) builds the `deployments` map from `BattleUnitSnapshot.deployment`.
