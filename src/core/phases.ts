@@ -13,9 +13,13 @@ import type { UpgradeOptionId } from '../shared/unitTypes';
 import type { SubMapState, WorldPos } from '../shared/worldTypes';
 import type { PlayerSessionSource } from './playerSessionState';
 import type {
-  ItemUsability, ItemUseOrigin, PendingItemUsePrompt,
+  ItemUsability, ItemUseOrigin, PendingItemUsePrompt, PendingItemInteraction,
+  PendingResurrectionTargetSelection, ResurrectionTargetOption,
 } from '../shared/snapshotTypes';
-export type { ItemUsability, ItemUseOrigin, PendingItemUsePrompt };
+export type {
+  ItemUsability, ItemUseOrigin, PendingItemUsePrompt, PendingItemInteraction,
+  PendingResurrectionTargetSelection, ResurrectionTargetOption,
+};
 import type { BattleParticipant, BattleExitOutcome } from './battleRuntimeContext';
 export type { BattleExitOutcome };
 
@@ -168,7 +172,7 @@ export type GamePhase =
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
       itemUsage: Record<string, ItemUsability>;
-      pendingItemUsePrompt: PendingItemUsePrompt | null;
+      pendingItemInteraction: PendingItemInteraction | null;
     }
   | {
       type: 'equip_screen';
@@ -184,7 +188,7 @@ export type GamePhase =
       learnedSkills: SkillIconSnapshot[];
       upgradeSkills: SkillIconSnapshot[];
       itemUsage: Record<string, ItemUsability>;
-      pendingItemUsePrompt: PendingItemUsePrompt | null;
+      pendingItemInteraction: PendingItemInteraction | null;
     }
   | {
       type: 'upgrade_tree';
@@ -225,6 +229,11 @@ export type PhaseAction =
   // legitimate change.
   | { type: 'request_use_item'; instanceId: string; origin: ItemUseOrigin }
   | { type: 'confirm_use_item'; instanceId: string; unitTemplateId: string }
+  // Resurrection target selection. Like `confirm_use_item` it names no origin and no initiator:
+  // the stored interaction is the single authority for both. The only thing the caller contributes
+  // is WHICH dead party member was picked, and that is validated against the committed snapshot
+  // and then re-validated against authoritative state before anything is written.
+  | { type: 'select_item_revive_target'; instanceId: string; targetUnitTemplateId: string }
   | { type: 'cancel_use_item' }
   // ── Commerce (mutation-only) — stub, no shop phase yet ────────
   | { type: 'buy_item'; definitionId: string }

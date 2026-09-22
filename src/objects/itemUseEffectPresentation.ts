@@ -1,7 +1,10 @@
 import type {
   BattleItemUseFailure, ItemUseFailure, ItemUseEffect, ReadonlyItemUseEffect,
 } from '../shared/itemTypes';
-import type { ItemEffectPreview, ItemUseOrigin, PendingItemUsePrompt } from '../shared/snapshotTypes';
+import type {
+  ItemEffectPreview, ItemUseOrigin, PendingItemUsePrompt,
+  PendingResurrectionTargetSelection,
+} from '../shared/snapshotTypes';
 import type { UnitBattleStatKey } from '../shared/unitTypes';
 import { STAT_PRESENTATION, formatStatValue } from './statPresentation';
 
@@ -47,6 +50,19 @@ export function formatItemUsePrompt(prompt: PendingItemUsePrompt): string {
 }
 
 /**
+ * Resurrection modal heading.
+ *
+ * The percentage is the item's AUTHORED share and is target-independent, so the heading is written
+ * before a target is chosen and does not change when the player hovers a different card. The
+ * restored HP is resolved per target at commit time and deliberately never shown here.
+ */
+export function formatResurrectionTargetPrompt(
+  selection: Pick<PendingResurrectionTargetSelection, 'hpPercent'>,
+): string {
+  return `Выберите персонажа для воскрешения — ${selection.hpPercent}% HP`;
+}
+
+/**
  * Tooltip line for an item's effect. Target-independent — it describes the item from the
  * catalog, so healing states the nominal ceiling ("up to"), not this character's restoration,
  * and resurrection states the authored share of max HP.
@@ -73,6 +89,10 @@ const BLOCKED_REASONS: Record<ItemUseFailure, string> = {
   duplicate_placement: 'Cannot use: this item is in an inconsistent state.',
   invalid_amount: 'Cannot use: this item has an invalid effect value.',
   invalid_result: 'Cannot use: this item has an invalid effect value.',
+  // Resurrection. Recoverable refusals: the scroll is kept and the player is told what is missing.
+  no_valid_targets: 'Нет подходящих целей',
+  unit_in_camp: 'Персонаж в лагере не может использовать свиток воскрешения',
+  invalid_target: 'Эту цель нельзя воскресить',
 };
 
 /** Always shown for an ineligible item — the reason is part of the behaviour contract. */

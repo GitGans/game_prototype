@@ -36,7 +36,7 @@ function buildDebugEquipScreenPlaceholder(): DebugEquipScreenPhase {
     learnedSkills: [],
     upgradeSkills: [],
     itemUsage: {},                  // filled by rebuildPhaseSnapshot
-    pendingItemUsePrompt: null,           // filled by rebuildPhaseSnapshot
+    pendingItemInteraction: null,         // filled by rebuildPhaseSnapshot
   };
 }
 
@@ -87,7 +87,7 @@ function buildEquipScreenPlaceholder(
     learnedSkills: [],                    // filled by rebuildPhaseSnapshot
     upgradeSkills: [],                    // filled by rebuildPhaseSnapshot
     itemUsage: {},                  // filled by rebuildPhaseSnapshot
-    pendingItemUsePrompt: null,           // filled by rebuildPhaseSnapshot
+    pendingItemInteraction: null,         // filled by rebuildPhaseSnapshot
   };
 }
 
@@ -253,16 +253,16 @@ export function resolveTransition(
 
     case 'equip_item':
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      if (currentPhase.pendingItemUsePrompt) return null; // no competing mutation while confirming
+      if (currentPhase.pendingItemInteraction) return null; // no competing mutation while a modal is open
       return currentPhase;
 
     case 'unequip_item':
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      if (currentPhase.pendingItemUsePrompt) return null; // no competing mutation while confirming
+      if (currentPhase.pendingItemInteraction) return null; // no competing mutation while a modal is open
       return currentPhase;
 
-    // ── Item-use confirmation (mutation-only) ────────────────────────────────
-    // All three return `currentPhase` BY REFERENCE. PhaseManager classifies by reference identity,
+    // ── Item-use interaction (mutation-only) ─────────────────────────────────
+    // All four return `currentPhase` BY REFERENCE. PhaseManager classifies by reference identity,
     // so returning `{ ...currentPhase, … }` here would be treated as navigation and would call
     // sceneSynchronizer.sync(), restarting EquipScreen on every dialog open and cancel. The pending
     // request therefore lives in the item-interaction storage, never in a phase field written
@@ -271,7 +271,7 @@ export function resolveTransition(
     case 'request_use_item': {
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
       if (!currentPhase.selectedUnitTemplateId) return null;
-      if (currentPhase.pendingItemUsePrompt) return null;                     // one modal at a time
+      if (currentPhase.pendingItemInteraction) return null;                   // one modal at a time
       // Eligibility comes from the snapshot this resolver was handed — no new dependency. The entry
       // must describe the SAME origin the gesture claims: a usable in the backpack and the same
       // instance in `usable_slot` are different requests, validated differently, so a backpack
@@ -279,24 +279,39 @@ export function resolveTransition(
       const usage = currentPhase.itemUsage[action.instanceId];
       if (!usage) return null;                      // an item this screen never evaluated
       if (usage.origin !== action.origin) return null;
-      if (!usage.canUse) return null;
-      // The target is always the selected character; effects records it, never the caller.
+      if (!usage.canUse) return null;    // incl. no_valid_targets and a camp initiator
+      // The INITIATOR is always the selected character; effects records it, never the caller.
       return currentPhase;
     }
 
     case 'confirm_use_item': {
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      const pending = currentPhase.pendingItemUsePrompt;
-      if (!pending) return null;
-      if (pending.instanceId !== action.instanceId) return null;              // stale dialog
-      if (pending.unitTemplateId !== action.unitTemplateId) return null;
-      if (pending.unitTemplateId !== currentPhase.selectedUnitTemplateId) return null;
+      const pending = currentPhase.pendingItemInteraction;
+      // A confirmation only — a resurrection has no implied target and must go through selection.
+      if (pending?.kind !== 'confirming_use') return null;
+      const { prompt } = pending;
+      if (prompt.instanceId !== action.instanceId) return null;              // stale dialog
+      if (prompt.unitTemplateId !== action.unitTemplateId) return null;
+      if (prompt.unitTemplateId !== currentPhase.selectedUnitTemplateId) return null;
       return currentPhase; // effects clear the request, then re-validate before committing
+    }
+
+    case 'select_item_revive_target': {
+      if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
+      const pending = currentPhase.pendingItemInteraction;
+      if (pending?.kind !== 'selecting_revive_target') return null;
+      const { selection } = pending;
+      if (selection.instanceId !== action.instanceId) return null;           // stale modal
+      // The initiator is this screen's selected character, and the target must be one the COMMITTED
+      // snapshot offered — a forged id is rejected here and again by the executor's own evaluation.
+      if (selection.unitTemplateId !== currentPhase.selectedUnitTemplateId) return null;
+      if (!selection.targets.some(t => t.templateId === action.targetUnitTemplateId)) return null;
+      return currentPhase;
     }
 
     case 'cancel_use_item': {
       if (currentPhase.type !== 'equip_screen' && currentPhase.type !== 'debug_equip_screen') return null;
-      if (!currentPhase.pendingItemUsePrompt) return null;
+      if (!currentPhase.pendingItemInteraction) return null;                 // either kind
       return currentPhase;
     }
 
@@ -322,6 +337,13 @@ export function resolveTransition(
     // ── Camp unit toggle (mutation-only) ─────────────────────────────────────
     case 'toggle_camp_unit':
       if (currentPhase.type !== 'camp' && currentPhase.type !== 'debug_equip_screen') return null;
+      // Camp membership decides resurrection eligibility for the initiator AND every target, so a
+      // toggle while an item modal is open would change the request underneath it — and a
+      // move-out-and-back round trip would make a hidden interaction renderable again without a new
+      // use request. Same rule as equip/unequip: no competing mutation while a modal is open.
+      if (currentPhase.type === 'debug_equip_screen' && currentPhase.pendingItemInteraction) {
+        return null;
+      }
       return currentPhase; // mutation-only → rebuildPhaseSnapshot refreshes camp/campUnitIds/activeLivingUnitCount
 
     // ── Commerce — stub until 'shop' phase exists ────────────────────────────

@@ -1,8 +1,13 @@
 import type { ItemUseFailure } from '../shared/itemTypes';
 import type { PlayerSessionState } from './playerSessionState';
 import { consumeItemForUse } from '../inventory';
-import { applyPermanentStatBoostToRoster, applyItemHealingToRoster } from '../progression';
-import { evaluateItemUse, itemUseLocationForOrigin, type ItemUseInput } from './itemUsability';
+import {
+  applyPermanentStatBoostToRoster, applyItemHealingToRoster, applyUnitResurrectionToRoster,
+} from '../progression';
+import {
+  evaluateItemUse, evaluateResurrectionTargetUse, itemUseLocationForOrigin,
+  type ItemUseInput, type ResurrectionTargetInput,
+} from './itemUsability';
 
 export type { ItemUseInput };
 
@@ -35,6 +40,11 @@ export function useItem(input: ItemUseInput): UseItemResult {
   // Both delegates receive pre-validated data and neither mutates its input, so a partial apply
   // is impossible: either the complete next session is returned or the caller's is untouched.
   const effect = evaluation.effect;
+  // Resurrection needs a chosen target and belongs to `useResurrectionItem`. Refusing it HERE makes
+  // "no target-selection interaction, no revive" a property of the executor rather than of its
+  // callers' discipline: there is no code path that raises a character without one.
+  if (effect.type === 'revive') return { ok: false, reason: 'unsupported_effect' };
+
   const rosterResult = effect.type === 'heal'
     ? applyItemHealingToRoster(
         input.session.roster,
@@ -56,6 +66,53 @@ export function useItem(input: ItemUseInput): UseItemResult {
   // The location comes from the SAME mapping the evaluation above validated through, applied to the
   // same input — so consumption can only ever remove the item from the place eligibility was decided
   // about, with no second copy of that fact to fall out of step.
+  const inventoryResult = consumeItemForUse(
+    input.instanceId,
+    itemUseLocationForOrigin(input.origin, input.unitTemplateId),
+    input.session.inventory,
+    input.catalog,
+  );
+  if (!inventoryResult.ok) return { ok: false, reason: inventoryResult.reason };
+
+  return {
+    ok: true,
+    nextSession: {
+      roster: rosterResult.nextRoster,
+      inventory: inventoryResult.nextInventory,
+    },
+  };
+}
+
+export type { ResurrectionTargetInput as ResurrectionUseInput };
+
+/**
+ * The out-of-combat RESURRECTION executor: raises the chosen target and destroys the instance,
+ * together.
+ *
+ * Two characters are involved and they are never confused: the roster write lands on the TARGET,
+ * while consumption is validated against the INITIATOR and the origin the request was admitted for
+ * — the scroll leaves the initiator's `usable_slot` or the shared backpack, never the raised
+ * character's equipment.
+ *
+ * Consumption is immediate and permanent. Unlike an in-battle activation there is no attempt-local
+ * consumption record and no deferred settlement: there is no attempt to settle.
+ *
+ * Like `useItem` it owns no eligibility rule — every check lives in `evaluateResurrectionTargetUse`,
+ * which the projection uses too — and every step builds an immutable result, so either the complete
+ * next session is returned or the caller's is untouched.
+ */
+export function useResurrectionItem(input: ResurrectionTargetInput): UseItemResult {
+  const evaluation = evaluateResurrectionTargetUse(input);
+  if (!evaluation.ok) return { ok: false, reason: evaluation.reason };
+
+  const rosterResult = applyUnitResurrectionToRoster(
+    input.session.roster,
+    evaluation.target.templateId,
+    { hpPercent: evaluation.hpPercent, maxHp: evaluation.target.maxHp },
+  );
+  if (!rosterResult.ok) return { ok: false, reason: rosterResult.reason };
+
+  // The INITIATOR's location, through the same mapping the evaluation validated with.
   const inventoryResult = consumeItemForUse(
     input.instanceId,
     itemUseLocationForOrigin(input.origin, input.unitTemplateId),

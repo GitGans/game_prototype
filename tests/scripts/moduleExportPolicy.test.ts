@@ -102,7 +102,7 @@ describe("RUNTIME_OWNERSHIP_EXPORT_POLICIES configuration", () => {
         { name: "ItemUsePhaseAction", kind: "type-alias" },
         { name: "applyItemUsePhaseAction", kind: "function" },
         { name: "clearItemInteractionIfPresent", kind: "function" },
-        { name: "beginItemUseConfirmation", kind: "function" },
+        { name: "beginItemUseInteraction", kind: "function" },
         { name: "teardownItemInteractionAfterTransition", kind: "function" },
       ],
       "core/battleRuntimeStorage.ts": [

@@ -18,12 +18,13 @@ import { resolvePlayerUnitSpriteSheet } from './unitSprites';
 import { getUnitSpriteTextureKey } from './unitSpriteKey';
 import { EMPTY_EQUIP_SNAPSHOT } from './phases';
 import type {
-  ItemUsability, ItemUseOrigin, PendingItemUsePrompt, ItemInteraction,
+  ItemUsability, ItemUseOrigin, ItemInteraction,
+  PendingItemInteraction, ResurrectionTargetOption,
 } from '../shared/snapshotTypes';
 
-// The READ MODEL only. `core/consumableUse` — the executor — is deliberately absent from this
+// The READ MODEL only. `core/itemUse` — the executor — is deliberately absent from this
 // module's import allowlist, so a projection has no path to a roster/inventory replacement.
-import { evaluateItemUsability } from './itemUsability';
+import { evaluateItemUsability, evaluateResurrectionRequest } from './itemUsability';
 
 export interface EquipmentScreenPlayerSnapshot {
   selectedUnitSpriteKey: string | null;
@@ -40,7 +41,8 @@ export interface EquipmentScreenPlayerSnapshot {
    * an equipment slot, never both (`validateItemForUse` rejects `duplicate_placement`).
    */
   itemUsage: Record<string, ItemUsability>;
-  pendingItemUsePrompt: PendingItemUsePrompt | null;
+  /** At most one item modal, by type: a confirmation or a resurrection target selection. */
+  pendingItemInteraction: PendingItemInteraction | null;
 }
 
 /**
@@ -84,28 +86,55 @@ function buildItemUsage(
 }
 
 /**
- * Projects the pending request into renderable prompt data — or omits it.
+ * Render data for the supplied target ids: name and portrait only. No HP, no level, no class, no
+ * equipment — the modal is a choice of WHO, not a stat comparison.
  *
- * Omission HIDES the dialog; it never disposes the request. Disposal belongs to
+ * It filters NOTHING. The ids come from `evaluateResurrectionRequest`, already ordered and already
+ * checked; a second filter here is exactly how a modal starts offering a character the commit
+ * refuses. An id with no blueprint is skipped, never synthesized — the rule the evaluator applies.
+ */
+function buildResurrectionTargets(
+  session: PlayerSessionState,
+  targetTemplateIds: readonly string[],
+): ResurrectionTargetOption[] {
+  const options: ResurrectionTargetOption[] = [];
+  for (const templateId of targetTemplateIds) {
+    const blueprint = PLAYER_UNITS.find(b => b.templateId === templateId);
+    if (!blueprint) continue;
+    const chosenUpgrades = session.roster.units[templateId]?.chosenUpgrades ?? {};
+    const progression = resolveUnitProgression(blueprint, chosenUpgrades);
+    options.push({
+      templateId,
+      name: blueprint.name,
+      spriteKey: spriteKeyFromProgression(blueprint, progression),
+    });
+  }
+  return options;
+}
+
+/**
+ * Projects the stored interaction into renderable modal data — or omits it.
+ *
+ * Omission HIDES the modal; it never disposes the request. Disposal belongs to
  * `phaseHandlers/itemUsePhaseHandler`, the only holder of the interaction write capability.
  * Two different operations, two different owners.
  */
-function buildPendingItemUsePrompt(
+function buildPendingItemInteraction(
   interaction: ItemInteraction | null,
   usage: Record<string, ItemUsability>,
+  session: PlayerSessionState,
   backpack: BackpackSnapshot,
   unitEquipment: EquipmentSnapshot,
   selectedUnitTemplateId: string,
   selectedUnitName: string | null,
-): PendingItemUsePrompt | null {
-  if (!interaction || interaction.kind !== 'confirming_use') return null;
+): PendingItemInteraction | null {
+  if (!interaction) return null;
   if (interaction.unitTemplateId !== selectedUnitTemplateId) return null;
-  if (selectedUnitName === null) return null;
 
   const entry = usage[interaction.instanceId];
-  // The entry must describe the SAME origin the confirmation was opened for. An item that moved
-  // between the backpack and `usable_slot` while the dialog was open is a different request, and the
-  // dialog must not go on describing the one it was opened for.
+  // The entry must describe the SAME origin the interaction was opened for. An item that moved
+  // between the backpack and `usable_slot` while the modal was open is a different request, and the
+  // modal must not go on describing the one it was opened for.
   if (!entry?.canUse || entry.origin !== interaction.origin) return null;
 
   const slot = interaction.origin === 'backpack'
@@ -115,14 +144,49 @@ function buildPendingItemUsePrompt(
       : null;
   if (!slot) return null;
 
+  if (interaction.kind === 'selecting_revive_target') {
+    if (entry.effect.type !== 'revive') return null;
+    // THE list: the same evaluation the commit runs, for this instance, origin and initiator. The
+    // roster is never walked here — a projection that re-derived eligibility could offer a target
+    // the executor then refuses.
+    const request = evaluateResurrectionRequest({
+      session,
+      catalog: ITEM_CATALOG,
+      playerBlueprints: PLAYER_UNITS,
+      unitTemplateId: interaction.unitTemplateId,
+      instanceId: interaction.instanceId,
+      origin: interaction.origin,
+    });
+    if (!request.ok) return null;
+
+    return {
+      kind: 'selecting_revive_target',
+      selection: {
+        instanceId: interaction.instanceId,
+        // The INITIATOR — the character spending the scroll, not the one being raised.
+        unitTemplateId: interaction.unitTemplateId,
+        itemName: slot.definition.name,
+        hpPercent: request.hpPercent,
+        targets: buildResurrectionTargets(session, request.targetTemplateIds),
+      },
+    };
+  }
+
+  // A revive has no implied target, so it can never render a confirmation.
+  if (entry.effect.type === 'revive') return null;
+  if (selectedUnitName === null) return null;
+
   return {
-    instanceId: interaction.instanceId,
-    unitTemplateId: interaction.unitTemplateId,
-    unitName: selectedUnitName,
-    itemName: slot.definition.name,
-    // Forwarded whole: the prompt describes exactly what the usage entry already decided, so the
-    // dialog cannot show a different effect from the one confirmation will execute.
-    effect: entry.effect,
+    kind: 'confirming_use',
+    prompt: {
+      instanceId: interaction.instanceId,
+      unitTemplateId: interaction.unitTemplateId,
+      unitName: selectedUnitName,
+      itemName: slot.definition.name,
+      // Forwarded whole: the prompt describes exactly what the usage entry already decided, so the
+      // dialog cannot show a different effect from the one confirmation will execute.
+      effect: entry.effect,
+    },
   };
 }
 
@@ -174,7 +238,7 @@ export function buildEquipmentScreenPlayerSnapshot(
       // Backpack entries only: with no selected character there is no equipment to project either,
       // and every entry already reports the reason use is unavailable.
       itemUsage: buildItemUsage(session, backpack, null, selectedUnitTemplateId),
-      pendingItemUsePrompt: null,
+      pendingItemInteraction: null,
     };
   }
 
@@ -206,9 +270,10 @@ export function buildEquipmentScreenPlayerSnapshot(
     learnedSkills,
     upgradeSkills: learnedSkills.slice(1, 5),
     itemUsage,
-    pendingItemUsePrompt: buildPendingItemUsePrompt(
+    pendingItemInteraction: buildPendingItemInteraction(
       interaction,
       itemUsage,
+      session,
       backpack,
       unitEquipment,
       selectedUnitTemplateId,

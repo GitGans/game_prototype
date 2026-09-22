@@ -11,7 +11,9 @@ import { ITEM_CATALOG } from "../../src/data/itemDefinitions";
 import { backpack, equipment, instance, catalog } from "../inventory/helpers";
 
 const WARRIOR = PLAYER_UNITS.find(u => u.templateId === "warrior")!;
+const ALLY = PLAYER_UNITS.find(u => u.templateId !== "warrior")!;
 const BLUEPRINTS: readonly UnitBlueprint[] = [WARRIOR];
+const WITH_ALLY: readonly UnitBlueprint[] = [WARRIOR, ALLY];
 
 const HP_BOOST = { type: "permanent_stat_boost", stat: "hp", amount: 5 } as const;
 const STR_BOOST = { type: "permanent_stat_boost", stat: "physicalStrength", amount: 2 } as const;
@@ -27,8 +29,9 @@ const LOCAL_CATALOG: ItemCatalog = catalog({
   // A USABLE potion: drinkable from the backpack on exactly the same terms as a consumable,
   // with a third independently authored amount. Kind decides placement, never the effect.
   flask:    { kind: "usable", slot: "usable_slot", useEffect: { type: "heal", amount: 7 } },
-  // Unsupported-effect coverage moved here when `heal` became executable.
-  // Revive is executable only in battle; from the backpack it stays unsupported.
+  // Revive is executable out of combat too, but only through `useResurrectionItem` with a chosen
+  // target — `useItem` refuses it, and with an all-alive roster it is refused earlier still, for
+  // having no eligible target at all.
   scroll:   { kind: "consumable", slot: null, useEffect: { type: "revive", hpPercent: 30 } },
   helm:     { kind: "equipment", slot: "helmet", battleStatBonuses: { hp: 100 } },
 });
@@ -65,6 +68,20 @@ function session(overrides: {
           "3": "i_draught", "4": "i_scroll", "5": "i_flask",
         }),
         equip_warrior: equipment("warrior", overrides.equipSlots ?? {}),
+      },
+    },
+  };
+}
+
+/** A second party member, dead and outside camp: the one thing a resurrection needs. */
+function sessionWithDeadAlly(): PlayerSessionState {
+  const base = session();
+  return {
+    ...base,
+    roster: {
+      units: {
+        ...base.roster.units,
+        [ALLY.templateId]: unit({ lifeState: "dead", currentHp: 0 }),
       },
     },
   };
@@ -215,7 +232,7 @@ describe("useItem — an unknown definition is rejected before anything is resol
 describe("useItem — failures leave both domains untouched", () => {
   const cases: Array<[string, Partial<ItemUseInput>, string]> = [
     ["a missing instance", { instanceId: "nope" }, "missing_instance"],
-    ["an unimplemented effect", { instanceId: "i_scroll" }, "unsupported_effect"],
+    ["a resurrection with no eligible target", { instanceId: "i_scroll" }, "no_valid_targets"],
     ["an unknown character", { unitTemplateId: "ghost" }, "unit_not_found"],
     ["an item held in no container", { instanceId: "i_helm" }, "not_usable_from_here"],
   ];
@@ -325,11 +342,17 @@ describe("the origin decides where the item is used from", () => {
     expect(before.inventory.containers.equip_warrior.slots).toEqual({ usable_slot: "i_flask" });
   });
 
-  it("leaves a revive unsupported from EITHER origin — carrying it changes nothing", () => {
-    // The scroll is authored as a consumable in this catalog, so only the reason for the backpack
-    // claim is interesting; the equipped claim is refused before support is even consulted.
-    expect(useItem(input({ instanceId: "i_scroll", origin: "backpack" })))
-      .toEqual({ ok: false, reason: "unsupported_effect" });
+  it("refuses a revive from EITHER origin — raising a character needs a chosen target", () => {
+    // An ELIGIBLE resurrection, so the refusal is the executor's own guard rather than a missing
+    // target: `useItem` applies self-target effects only, and there is no path through it that
+    // raises anyone without the target-selection interaction.
+    const withDeadAlly = sessionWithDeadAlly();
+    expect(useItem(input({
+      session: withDeadAlly, playerBlueprints: WITH_ALLY,
+      instanceId: "i_scroll", origin: "backpack",
+    }))).toEqual({ ok: false, reason: "unsupported_effect" });
+    expect(withDeadAlly.inventory.instances.i_scroll).toBeDefined();
+    expect(withDeadAlly.roster.units[ALLY.templateId].lifeState).toBe("dead");
 
     const equippedScroll = session({
       backpackSlots: {}, equipSlots: { usable_slot: "i_scroll" },
@@ -348,7 +371,10 @@ describe("evaluateItemUsability agrees with the executor", () => {
     ["an eligible non-HP boost", { instanceId: "i_might" }],
     ["an eligible heal", { instanceId: "i_elixir", session: session({ unit: { currentHp: 1 } }) }],
     ["a heal on a full-health target", { instanceId: "i_elixir" }],
-    ["an unimplemented effect", { instanceId: "i_scroll" }],
+    // With an all-alive roster the scroll is refused for having no target, by BOTH sides. A
+    // resurrection that IS eligible is deliberately absent: the read model says yes and `useItem`
+    // says no, because raising a character goes through `useResurrectionItem` and a chosen target.
+    ["a resurrection with no eligible target", { instanceId: "i_scroll" }],
     ["a missing instance", { instanceId: "nope" }],
     ["an unknown character", { unitTemplateId: "ghost" }],
     // The agreement must hold per ORIGIN, not just per instance: the read model and the executor

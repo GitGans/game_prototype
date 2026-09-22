@@ -13,7 +13,7 @@ import {
 } from './phaseHandlers/worldPhaseHandler';
 import { applyEquipmentPhaseAction } from './phaseHandlers/inventoryPhaseHandler';
 import {
-  beginItemUseConfirmation,
+  beginItemUseInteraction,
   clearItemInteractionIfPresent,
   teardownItemInteractionAfterTransition,
   applyItemUsePhaseAction,
@@ -83,7 +83,7 @@ export interface PhaseActionEffectsDependencies {
   applyMovePartyPhaseAction: typeof applyMovePartyPhaseAction;
   applyBattleWorldConsequence: typeof applyBattleWorldConsequence;
   applyEquipmentPhaseAction: typeof applyEquipmentPhaseAction;
-  beginItemUseConfirmation: typeof beginItemUseConfirmation;
+  beginItemUseInteraction: typeof beginItemUseInteraction;
   clearItemInteractionIfPresent: typeof clearItemInteractionIfPresent;
   teardownItemInteractionAfterTransition: typeof teardownItemInteractionAfterTransition;
   applyItemUsePhaseAction: typeof applyItemUsePhaseAction;
@@ -116,7 +116,7 @@ export function createDefaultPhaseActionEffects(): PhaseActionEffectsController 
     applyMovePartyPhaseAction,
     applyBattleWorldConsequence,
     applyEquipmentPhaseAction,
-    beginItemUseConfirmation,
+    beginItemUseInteraction,
     clearItemInteractionIfPresent,
     teardownItemInteractionAfterTransition,
     applyItemUsePhaseAction,
@@ -299,24 +299,38 @@ export function createPhaseActionEffects(
           );
         }
         if (action.type === 'request_use_item') {
-          d.beginItemUseConfirmation({
+          const usage = previousPhase.itemUsage[action.instanceId];
+          // The resolver accepted this request against THIS entry; its absence or refusal here is
+          // lifecycle corruption, not a routing decision this facade may make.
+          if (!usage?.canUse) {
+            throw lifecycleError(
+              `"request_use_item" was accepted with no usable entry for "${action.instanceId}"`,
+            );
+          }
+          d.beginItemUseInteraction({
             source: previousPhase.sessionSource,
             instanceId: action.instanceId,
-            // Always the selected character — never a caller-chosen target.
+            // Always the selected character — never a caller-chosen initiator.
             unitTemplateId: previousPhase.selectedUnitTemplateId,
             // The origin the resolver admitted, carried through so the commit validates against the
             // location the request was actually about.
             origin: action.origin,
+            // The committed verdict, forwarded: which interaction an effect opens is the handler's
+            // rule, and this facade must not decide it.
+            effectKind: usage.effect.type,
           });
         } else {
           d.clearItemInteractionIfPresent(previousPhase.sessionSource);
         }
         return NO_PHASE_EFFECTS;
 
+      // Both commits go to the same owner: one confirms a self-target effect, the other submits a
+      // chosen resurrection target. Neither carries an origin or an initiator — storage holds both.
       case 'confirm_use_item':
+      case 'select_item_revive_target':
         if (previousPhase.type !== 'equip_screen' && previousPhase.type !== 'debug_equip_screen') {
           throw lifecycleError(
-            `"confirm_use_item" was accepted from a "${previousPhase.type}" phase`,
+            `"${action.type}" was accepted from a "${previousPhase.type}" phase`,
           );
         }
         d.applyItemUsePhaseAction({ previousPhase, action });

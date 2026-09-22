@@ -30,7 +30,7 @@ export function makeEquipScreenPhase(overrides: Partial<EquipScreenPhase> = {}):
     learnedSkills: [],
     upgradeSkills: [],
     itemUsage: {},
-    pendingItemUsePrompt: null,
+    pendingItemInteraction: null,
     ...overrides,
   };
 }

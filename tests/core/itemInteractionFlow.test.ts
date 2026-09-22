@@ -5,7 +5,7 @@ import { PlayerSessionStore } from "../../src/core/playerSessionStore";
 import { clearItemInteractionSlot } from "../../src/core/itemInteractionStorage";
 import { initCampaignState } from "../../src/core/initCampaignState";
 import type { PhaseManagerClass } from "../../src/core/PhaseManager";
-import type { GamePhase } from "../../src/core/phases";
+import type { GamePhase, PendingItemUsePrompt } from "../../src/core/phases";
 import type { PlayerSessionSource } from "../../src/core/playerSessionState";
 import { PLAYER_UNITS } from "../../src/data/units";
 import { ITEM_CATALOG } from "../../src/data/itemDefinitions";
@@ -34,6 +34,15 @@ function equipPhase(manager: PhaseManagerClass): Extract<
     throw new Error(`expected an equipment screen, got ${phase.type}`);
   }
   return phase;
+}
+
+/**
+ * The confirmation payload the screen is currently rendering, or null when no confirmation is open.
+ * A resurrection interaction renders the target modal instead and is deliberately not a prompt.
+ */
+function pendingPrompt(manager: PhaseManagerClass): PendingItemUsePrompt | null {
+  const interaction = equipPhase(manager).pendingItemInteraction;
+  return interaction?.kind === "confirming_use" ? interaction.prompt : null;
 }
 
 function setCurrentHp(source: PlayerSessionSource, hp: number | null): void {
@@ -129,16 +138,16 @@ describe("admitting a use request", () => {
     const h = openCampaignEquipScreen();
 
     h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
+    expect(pendingPrompt(h.manager)).not.toBeNull();
 
     // A second request — for any item, from any origin — is refused while one is open.
     expect(h.manager.transition({
       type: "request_use_item", instanceId: POTION, origin: "backpack",
     }).status).toBe("rejected");
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({ instanceId: VITALITY });
+    expect(pendingPrompt(h.manager)).toMatchObject({ instanceId: VITALITY });
 
     h.manager.transition({ type: "cancel_use_item" });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
   });
 
   it("blocks competing equipment mutations while a confirmation is open", () => {
@@ -161,7 +170,7 @@ describe("admitting a use request", () => {
     expect(h.manager.transition({
       type: "request_use_item", instanceId: "nope", origin: "backpack",
     }).status).toBe("rejected");
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
   });
 
   /**
@@ -185,7 +194,7 @@ describe("admitting a use request", () => {
     expect(h.manager.transition({
       type: "request_use_item", instanceId: POTION, origin: "equipped_usable",
     }).status).toBe("applied");
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({ instanceId: POTION });
+    expect(pendingPrompt(h.manager)).toMatchObject({ instanceId: POTION });
   });
 });
 
@@ -195,10 +204,10 @@ describe("stale interactions", () => {
     h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     h.manager.transition({ type: "switch_equip_unit", templateId: OTHER_UNIT_ID });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
 
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
   });
 
   it("disposes the interaction when the screen is left", () => {
@@ -208,7 +217,7 @@ describe("stale interactions", () => {
     h.manager.transition({ type: "close_equip_screen" });
     h.manager.transition({ type: "open_equip_screen", unitTemplateId: UNIT_ID });
 
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
   });
 
   it("a confirm that fails live re-validation clears the interaction and writes nothing", () => {
@@ -218,7 +227,7 @@ describe("stale interactions", () => {
     setCurrentHp("campaign", 1);
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
     h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
+    expect(pendingPrompt(h.manager)).not.toBeNull();
 
     // Heal behind the pipeline's back, so routing still sees the stale committed prompt.
     setCurrentHp("campaign", null);
@@ -230,11 +239,11 @@ describe("stale interactions", () => {
 
     expect(PlayerSessionStore.getSession("campaign")).toEqual(before);
     // Cleared, not left behind: the dialog is gone and a fresh request is possible again.
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
     setCurrentHp("campaign", 1);
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
     h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({ instanceId: POTION });
+    expect(pendingPrompt(h.manager)).toMatchObject({ instanceId: POTION });
   });
 });
 
@@ -249,8 +258,8 @@ describe("session isolation", () => {
     debug.openDebugSession(1);
     debug.manager.transition({ type: "switch_debug_unit", templateId: UNIT_ID });
 
-    expect(equipPhase(debug.manager).pendingItemUsePrompt).toBeNull();
-    expect(equipPhase(campaign.manager).pendingItemUsePrompt)
+    expect(pendingPrompt(debug.manager)).toBeNull();
+    expect(pendingPrompt(campaign.manager))
       .toMatchObject({ instanceId: VITALITY });
   });
 });

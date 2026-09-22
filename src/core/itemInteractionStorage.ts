@@ -11,10 +11,12 @@ import type { PlayerSessionSource } from './playerSessionState';
  * an outbound allowlist cannot express "who may pick up this authority".
  *
  * ── The state machine ───────────────────────────────────────────────────────────────────────
- * `closed | confirming_use` (`ItemInteraction`, declared in `shared/snapshotTypes.ts`), where
- * `closed` is the `null` slot. The open state records the instance, the character it targets and
- * the ORIGIN it was opened for. Only ONE can be stored per session, which is what makes "at most
- * one modal is open" a storage property rather than a UI rule.
+ * `closed | confirming_use | selecting_revive_target` (`ItemInteraction`, declared in
+ * `shared/snapshotTypes.ts`), where `closed` is the `null` slot. Both open states record the
+ * instance, the INITIATING character and the ORIGIN the request was opened for — and nothing else:
+ * no target list and no HP, so a stored interaction can never describe a party that has since
+ * changed. Only ONE can be stored per session, which is what makes "at most one modal is open" a
+ * storage property rather than a UI rule.
  *
  * ── Ownership ───────────────────────────────────────────────────────────────────────────────
  * Storage is keyed by `PlayerSessionSource`, not a single global cell. `BattleRuntimeContext`

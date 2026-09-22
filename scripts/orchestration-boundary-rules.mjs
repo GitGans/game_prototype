@@ -98,15 +98,24 @@ export const PHASE_HANDLER_IMPORT_POLICIES = {
   // holds BOTH gateways deliberately — the confirm-time ownership check reads, and reading is not
   // folded into the write gateway.
   //
-  // It holds the EXECUTOR (`core/itemUse`) and no read evaluator: the commit re-validates by
-  // attempting the use, which performs every check itself and leaves both domains untouched on
-  // failure, so a separate read pass would be a second copy of the same rules. The equip evaluators
+  // It holds the EXECUTOR (`core/itemUse`) for the COMMIT: the commit re-validates by attempting
+  // the use, which performs every check itself and leaves both domains untouched on failure, so no
+  // separate read pass guards a commit and no eligibility rule is copied here.
+  //
+  // It additionally holds the READ MODEL (`core/itemUsability`) for ONE other responsibility:
+  // LIFECYCLE RECONCILIATION. After an accepted transition that stays on the equipment screen, the
+  // owner must decide whether an OPEN interaction is still justified and dispose it if not. The
+  // snapshot projection can only HIDE such a request — and a hidden request whose conditions come
+  // back would render again with no new use request — while disposal needs the interaction write
+  // capability, which lives here alone. Calling the evaluator is reuse, not a second copy of it.
+  // The equip evaluators
   // (`inventory`, `progression`) and `inventoryPhaseHandler` were removed when single-click equip
   // replaced the Use/Equip window — this handler no longer routes an equip, and leaving those
   // permissions behind would be a dormant capability rather than a reviewed one.
   "core/phaseHandlers/itemUsePhaseHandler.ts": {
     kind: "exact-import-allowlist",
     allowedSpecifiers: [
+      "core/itemUsability",
       "core/itemUse",
       "core/itemInteractionAccess",
       "core/itemInteractionWriteAccess",
@@ -640,7 +649,7 @@ export const RUNTIME_OWNERSHIP_EXPORT_POLICIES = {
     { name: "ItemUsePhaseAction", kind: "type-alias" },
     { name: "applyItemUsePhaseAction", kind: "function" },
     { name: "clearItemInteractionIfPresent", kind: "function" },
-    { name: "beginItemUseConfirmation", kind: "function" },
+    { name: "beginItemUseInteraction", kind: "function" },
     { name: "teardownItemInteractionAfterTransition", kind: "function" },
   ],
   "core/battlePhaseEffects.ts": [

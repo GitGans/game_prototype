@@ -186,7 +186,7 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
       const snap = buildEquipmentScreenPlayerSnapshot(dead, UNIT_ID);
 
       expect(snap.itemUsage[VITALITY]).toEqual({ canUse: false, origin: "backpack", reason: "unit_dead" });
-      expect(snap.pendingItemUsePrompt).toBeNull();
+      expect(snap.pendingItemInteraction).toBeNull();
     });
 
     it("projects a justified pending request with names and effect", () => {
@@ -194,12 +194,15 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
         kind: "confirming_use", instanceId: VITALITY, unitTemplateId: UNIT_ID, origin: "backpack",
       });
 
-      expect(snap.pendingItemUsePrompt).toEqual({
-        instanceId: VITALITY,
-        unitTemplateId: UNIT_ID,
-        unitName: PLAYER_UNITS.find(u => u.templateId === UNIT_ID)!.name,
-        itemName: ITEM_CATALOG.definitions.vitality_essence.name,
-        effect: { type: "permanent_stat_boost", stat: "hp", amount: 5, healsCurrentHp: true },
+      expect(snap.pendingItemInteraction).toEqual({
+        kind: "confirming_use",
+        prompt: {
+          instanceId: VITALITY,
+          unitTemplateId: UNIT_ID,
+          unitName: PLAYER_UNITS.find(u => u.templateId === UNIT_ID)!.name,
+          itemName: ITEM_CATALOG.definitions.vitality_essence.name,
+          effect: { type: "permanent_stat_boost", stat: "hp", amount: 5, healsCurrentHp: true },
+        },
       });
     });
 
@@ -209,7 +212,7 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
         kind: "confirming_use", instanceId: VITALITY, unitTemplateId: other, origin: "backpack",
       });
 
-      expect(snap.pendingItemUsePrompt).toBeNull();
+      expect(snap.pendingItemInteraction).toBeNull();
     });
 
     it("omits a prompt for an item no longer in the backpack", () => {
@@ -218,11 +221,11 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
         origin: "backpack",
       });
 
-      expect(snap.pendingItemUsePrompt).toBeNull();
+      expect(snap.pendingItemInteraction).toBeNull();
     });
 
     it("omits a prompt when no request is pending", () => {
-      expect(buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID).pendingItemUsePrompt)
+      expect(buildEquipmentScreenPlayerSnapshot(freshSession(), UNIT_ID).pendingItemInteraction)
         .toBeNull();
     });
   });
@@ -294,13 +297,13 @@ describe("buildEquipmentScreenPlayerSnapshot", () => {
 
       expect(buildEquipmentScreenPlayerSnapshot(equipped, UNIT_ID, {
         kind: "confirming_use", instanceId: POTION, unitTemplateId: UNIT_ID, origin: "backpack",
-      }).pendingItemUsePrompt).toBeNull();
+      }).pendingItemInteraction).toBeNull();
 
       const prompt = buildEquipmentScreenPlayerSnapshot(equipped, UNIT_ID, {
         kind: "confirming_use", instanceId: POTION, unitTemplateId: UNIT_ID,
         origin: "equipped_usable",
-      }).pendingItemUsePrompt;
-      expect(prompt?.instanceId).toBe(POTION);
+      }).pendingItemInteraction;
+      expect(prompt).toMatchObject({ kind: "confirming_use", prompt: { instanceId: POTION } });
     });
   });
 

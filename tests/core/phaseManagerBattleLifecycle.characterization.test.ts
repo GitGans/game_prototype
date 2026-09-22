@@ -80,6 +80,9 @@ const ACTION_SAMPLES = {
   confirm_use_item: {
     type: 'confirm_use_item', instanceId: 'inst_1', unitTemplateId: 'soldier',
   },
+  select_item_revive_target: {
+    type: 'select_item_revive_target', instanceId: 'inst_1', targetUnitTemplateId: 'soldier',
+  },
   cancel_use_item: { type: 'cancel_use_item' },
   buy_item: { type: 'buy_item', definitionId: 'item_1' },
   sell_item: { type: 'sell_item', instanceId: 'inst_1' },

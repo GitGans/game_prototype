@@ -60,6 +60,29 @@ const MODAL = {
   buttonGap:     Math.round(20  * LAYOUT_SCALE),
   /** Panel width used when a modal's caller does not specify one. */
   defaultWidth:  Math.round(360 * LAYOUT_SCALE),
+
+  /**
+   * Grid of selectable option cards inside a modal — a portrait with a label beneath it. The
+   * caller derives the panel width from the actual column count, these card widths and gaps, and
+   * the padding above; it declares no dimension of its own.
+   */
+  targetGrid: {
+    cardW:           Math.round(120 * LAYOUT_SCALE),
+    portraitSize:    Math.round(72  * LAYOUT_SCALE),
+    colGap:          Math.round(16  * LAYOUT_SCALE),
+    rowGap:          Math.round(16  * LAYOUT_SCALE),
+    /** Gap between the portrait and its label. */
+    labelGap:        Math.round(8   * LAYOUT_SCALE),
+    /** Reserved label band: cards stay one height whatever the label length. */
+    labelLines:      2,
+    labelLineH:      Math.round(16  * LAYOUT_SCALE),
+    /** Gap between the modal's own text blocks and the grid. */
+    textGap:         Math.round(10  * LAYOUT_SCALE),
+    /** Cards per row; further cards wrap to the next row. */
+    maxColumns:      4,
+    /** Hover outline width — unscaled, like every other stroke width. */
+    cardBorderWidth: 1,
+  },
 } as const;
 
 const VALUE = {

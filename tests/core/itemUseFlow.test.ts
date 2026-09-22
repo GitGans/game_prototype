@@ -9,7 +9,7 @@ import { requireBattleRuntimeForPhase } from "../../src/core/battleRuntimeAccess
 import { applyVictoryLevelUpPersistence } from "../../src/core/playerUnitPersistence";
 import { resolvePlayerMaxHpForLevel } from "../../src/core/battleSetupProjection";
 import type { PhaseManagerClass } from "../../src/core/PhaseManager";
-import type { GamePhase } from "../../src/core/phases";
+import type { GamePhase, PendingItemUsePrompt } from "../../src/core/phases";
 import type { PlayerSessionSource } from "../../src/core/playerSessionState";
 import type { InventoryState } from "../../src/inventory";
 import { initCampaignState } from "../../src/core/initCampaignState";
@@ -38,6 +38,15 @@ function equipPhase(manager: PhaseManagerClass): Extract<
     throw new Error(`expected an equipment screen, got ${phase.type}`);
   }
   return phase;
+}
+
+/**
+ * The confirmation payload the screen is currently rendering, or null when no confirmation is open.
+ * A resurrection interaction renders the target modal instead and is deliberately not a prompt.
+ */
+function pendingPrompt(manager: PhaseManagerClass): PendingItemUsePrompt | null {
+  const interaction = equipPhase(manager).pendingItemInteraction;
+  return interaction?.kind === "confirming_use" ? interaction.prompt : null;
 }
 
 function bonuses(source: PlayerSessionSource): Record<string, number> {
@@ -129,7 +138,7 @@ describe("request → cancel", () => {
 
     h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({
+    expect(pendingPrompt(h.manager)).toMatchObject({
       instanceId: VITALITY,
       unitTemplateId: UNIT_ID,
       effect: { type: "permanent_stat_boost", stat: "hp", amount: 5, healsCurrentHp: true },
@@ -139,7 +148,7 @@ describe("request → cancel", () => {
 
     h.manager.transition({ type: "cancel_use_item" });
 
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
     expect(bonuses("campaign")).toEqual({});
     expect(inventory("campaign")).toBe(before);
   });
@@ -159,7 +168,7 @@ describe("request → confirm → repeated confirm", () => {
     expect(Object.keys(inventory("campaign").instances)).toHaveLength(instanceCount - 1);
     expect(inventory("campaign").instances[VITALITY]).toBeUndefined();
     expect(isReferencedAnywhere(inventory("campaign"), VITALITY)).toBe(false);
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
 
     // A second confirmation of the same instance grants nothing extra.
     const afterFirst = inventory("campaign");
@@ -206,7 +215,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
 
     h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({
+    expect(pendingPrompt(h.manager)).toMatchObject({
       instanceId: POTION,
       effect: { type: "heal", amount: 10, restoredHp: 10, currentHp: maxHp - 30, maxHp },
     });
@@ -222,7 +231,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
 
     expect(inventory("campaign").instances[POTION]).toBeUndefined();
     expect(isReferencedAnywhere(inventory("campaign"), POTION)).toBe(false);
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
   });
 
   it("clamps restoration to missing HP and never overheals", () => {
@@ -266,7 +275,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     h.manager.transition({
       type: "request_use_item", instanceId: POTION, origin: "equipped_usable",
     });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toMatchObject({ instanceId: POTION });
+    expect(pendingPrompt(h.manager)).toMatchObject({ instanceId: POTION });
 
     h.manager.transition({
       type: "confirm_use_item", instanceId: POTION, unitTemplateId: UNIT_ID,
@@ -277,7 +286,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     expect(inventory("campaign").instances[POTION]).toBeUndefined();
     expect(isReferencedAnywhere(inventory("campaign"), POTION)).toBe(false);
     expect(equipPhase(h.manager).unitEquipment.slots.usable_slot).toBeUndefined();
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
   });
 
   /**
@@ -292,7 +301,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
 
     h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
+    expect(pendingPrompt(h.manager)).not.toBeNull();
 
     // Equip it while the confirmation is open — the resolver blocks this, so reach the store the way
     // another route would.
@@ -328,7 +337,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     expect(inventory("campaign").instances[POTION]).toBeDefined();
     // The confirmation never survives its own confirm, committed or not; and the freshly rebuilt
     // projection now disagrees about the origin anyway.
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
   });
 
   it("refuses a full-health target, keeps the potion, and offers no dialog", () => {
@@ -341,7 +350,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     const result = h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
 
     expect(result).toEqual({ status: "rejected" });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
     expect(inventory("campaign")).toBe(before);
   });
 
@@ -352,7 +361,7 @@ describe("healing potions restore current HP through the same pipeline", () => {
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
 
     h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
+    expect(pendingPrompt(h.manager)).not.toBeNull();
 
     // Another route heals the character to full while the dialog is open.
     setCurrentHp("campaign", null);
@@ -491,7 +500,7 @@ describe("the equipment screen displays persistent current HP", () => {
 
         expect(h.manager.transition({ type: "request_use_item", instanceId: POTION, origin: "backpack" }))
           .toEqual({ status: "rejected" });
-        expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+        expect(pendingPrompt(h.manager)).toBeNull();
       });
     });
   }
@@ -565,7 +574,7 @@ describe("a pending request never outlives the screen that owns it", () => {
     h.manager.transition({ type: "switch_equip_unit", templateId: "healer" });
     h.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
 
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
 
     // Confirming the original ids now does nothing.
     const before = inventory("campaign");
@@ -583,14 +592,14 @@ describe("a pending request never outlives the screen that owns it", () => {
     h.manager.transition({ type: "close_equip_screen" });
     h.manager.transition({ type: "open_equip_screen", unitTemplateId: UNIT_ID });
 
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
     expect(bonuses("campaign")).toEqual({});
   });
 
   it("is dropped by a debug reset, though the reset recreates the very same instance id", () => {
     const h = openDebugEquipScreen();
     h.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
-    expect(equipPhase(h.manager).pendingItemUsePrompt).not.toBeNull();
+    expect(pendingPrompt(h.manager)).not.toBeNull();
 
     h.manager.transition({ type: "reset_debug_session" });
 
@@ -598,7 +607,7 @@ describe("a pending request never outlives the screen that owns it", () => {
     // session plus the explicit lifecycle disposal distinguishes the stale request.
     expect(equipPhase(h.manager).selectedUnitTemplateId).toBe(UNIT_ID);
     expect(inventory("debug").instances[VITALITY]).toBeDefined();
-    expect(equipPhase(h.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(h.manager)).toBeNull();
 
     const before = inventory("debug");
     h.manager.transition({
@@ -699,23 +708,23 @@ describe("two managers never see each other's confirmation", () => {
     campaign.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     const debug = openDebugEquipScreen();
-    expect(equipPhase(debug.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(debug.manager)).toBeNull();
 
     debug.manager.transition({ type: "request_use_item", instanceId: VITALITY, origin: "backpack" });
 
     // Each still sees only its own.
     campaign.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
-    expect(equipPhase(campaign.manager).pendingItemUsePrompt).toMatchObject({
+    expect(pendingPrompt(campaign.manager)).toMatchObject({
       instanceId: VITALITY,
     });
-    expect(equipPhase(debug.manager).pendingItemUsePrompt).toMatchObject({ instanceId: VITALITY });
+    expect(pendingPrompt(debug.manager)).toMatchObject({ instanceId: VITALITY });
 
     // Cancelling on the debug manager disposes only the debug request.
     debug.manager.transition({ type: "cancel_use_item" });
-    expect(equipPhase(debug.manager).pendingItemUsePrompt).toBeNull();
+    expect(pendingPrompt(debug.manager)).toBeNull();
 
     campaign.manager.transition({ type: "switch_equip_unit", templateId: UNIT_ID });
-    expect(equipPhase(campaign.manager).pendingItemUsePrompt).not.toBeNull();
+    expect(pendingPrompt(campaign.manager)).not.toBeNull();
   });
 
   it("lets each manager commit only against its own session", () => {

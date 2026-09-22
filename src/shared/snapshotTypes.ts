@@ -83,7 +83,7 @@ export interface UnitTabSnapshot {
  * must not be re-derived in the render layer. It deliberately carries no `nextHp`: that is
  * `currentHp + restoredHp`, and a stored copy could disagree with the fields it is derived from.
  */
-export type ItemEffectPreview =
+export type SelfItemEffectPreview =
   | {
       type: 'permanent_stat_boost';
       stat: UnitBattleStatKey;
@@ -100,6 +100,16 @@ export type ItemEffectPreview =
       currentHp: number;
       maxHp: number;
     };
+
+/**
+ * `revive` is the one effect whose target is not the selected character, so its preview carries the
+ * authored share ONLY — no target, no restored HP, no max HP. The restoration is resolved at commit
+ * time from the chosen target's own max HP, and a copy here could describe a different character
+ * from the one the player picks.
+ */
+export type ItemEffectPreview =
+  | SelfItemEffectPreview
+  | { type: 'revive'; hpPercent: number };
 
 /**
  * Where an out-of-combat use is being requested FROM. Explicit rather than derived, so eligibility,
@@ -125,23 +135,63 @@ export type ItemUsability =
 /**
  * Everything the confirmation dialog needs, structured — never formatted text. Wording is
  * produced by `objects/itemUseEffectPresentation.ts`, which `core/` must not import.
+ *
+ * Its effect is narrowed to `SelfItemEffectPreview`: a resurrection has no single implied target,
+ * so it must render the target-selection modal instead. Narrowing by TYPE makes that a compile
+ * error rather than a wording bug.
  */
 export interface PendingItemUsePrompt {
   instanceId:     string;
   unitTemplateId: string;
   unitName:       string;
   itemName:       string;
-  effect:         ItemEffectPreview;
+  effect:         SelfItemEffectPreview;
 }
+
+/**
+ * One selectable dead party member in the resurrection modal: who they are and what they look like.
+ * Deliberately no HP, level, class or equipment — the modal is a choice of WHO, not a stat table.
+ */
+export interface ResurrectionTargetOption {
+  templateId: string;
+  name:       string;
+  spriteKey:  string | null;
+}
+
+/**
+ * Everything the resurrection target modal needs. `unitTemplateId` is the INITIATING character —
+ * the one selected on the equipment screen, whose scroll is being spent — never the chosen target.
+ *
+ * `targets` is projected from the same evaluation the commit runs, so the modal cannot offer a
+ * character the commit would refuse.
+ */
+export interface PendingResurrectionTargetSelection {
+  instanceId:     string;
+  unitTemplateId: string;
+  itemName:       string;
+  hpPercent:      number;
+  targets:        ResurrectionTargetOption[];
+}
+
+/**
+ * The single render field for "an item modal is open". ONE nullable field, not one per modal, so
+ * the phase cannot represent two simultaneous item modals — the same guarantee the single storage
+ * cell gives on the authoritative side.
+ */
+export type PendingItemInteraction =
+  | { kind: 'confirming_use';           prompt:    PendingItemUsePrompt }
+  | { kind: 'selecting_revive_target';  selection: PendingResurrectionTargetSelection };
 
 /**
  * The open item interaction as pure data — the only thing the pipeline carries between the
  * effects side that records it and the snapshot side that projects it. `closed` is the absence of
  * one (a null slot), so at most one modal can be open by construction.
  *
- * One open state: a confirmation. The `kind` discriminator is kept deliberately even though the
- * union has a single member — every guard in `phaseHandlers/itemUsePhaseHandler` reads it, and a
- * future second interaction kind (out-of-combat revive target selection) then costs nothing.
+ * Two open states: a confirmation for a self-target effect, and target selection for a
+ * resurrection. Both record the same three facts — the instance, the INITIATING character, and the
+ * origin the request was admitted for — because both commit through the same validation. Neither
+ * stores targets or HP: the eligible set is re-derived from authoritative state on every rebuild,
+ * so a stored copy can never describe a party that has since changed.
  *
  * Its OWNER is not a field: storage is keyed by `PlayerSessionSource`, so an interaction cannot
  * claim a session it is not in. Declared here rather than in `core/itemInteractionStorage`
@@ -149,9 +199,10 @@ export interface PendingItemUsePrompt {
  * type without gaining the ability to write the cell.
  */
 export type ItemInteraction = {
-  readonly kind: 'confirming_use';
+  readonly kind: 'confirming_use' | 'selecting_revive_target';
   readonly instanceId: string;
+  /** The INITIATING character: the equip screen's own selected character. */
   readonly unitTemplateId: string;
-  /** The origin the confirmation was opened for — the one consumption must validate against. */
+  /** The origin the interaction was opened for — the one consumption must validate against. */
   readonly origin: ItemUseOrigin;
 };

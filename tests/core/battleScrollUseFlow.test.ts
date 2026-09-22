@@ -203,12 +203,13 @@ describe("equipping the scroll", () => {
   });
 });
 
-describe("backpack use stays unsupported", () => {
+describe("out-of-combat use needs a fallen party member", () => {
   /**
-   * Out of combat the scroll has no target selection yet, so it is ineligible from BOTH origins and
-   * the tooltip is the only place that says so. No modal offers it, and no gesture can commit it.
+   * The scroll is usable out of combat, but only against a dead party member. A campaign that has
+   * just started has none, so it is ineligible from BOTH origins — a recoverable refusal the
+   * tooltip explains, with no modal offered and no gesture able to commit it.
    */
-  it("reports unsupported_effect for both origins and commits nothing", () => {
+  it("reports no_valid_targets for both origins and commits nothing", () => {
     const h = createLifecycleHarness();
     h.startNewCampaign();
     h.manager.transition({ type: "open_equip_screen", unitTemplateId: CARRIER });
@@ -216,19 +217,19 @@ describe("backpack use stays unsupported", () => {
     const inBackpack = h.manager.getPhase();
     if (inBackpack.type !== "equip_screen") throw new Error("expected the equip screen");
     expect(inBackpack.itemUsage[SCROLL])
-      .toEqual({ canUse: false, origin: "backpack", reason: "unsupported_effect" });
+      .toEqual({ canUse: false, origin: "backpack", reason: "no_valid_targets" });
 
     const before = session();
     expect(h.manager.transition({
       type: "request_use_item", instanceId: SCROLL, origin: "backpack",
     })).toEqual({ status: "rejected" });
 
-    // Equipping it changes the origin but not the verdict.
+    // Equipping it changes the origin but not the verdict — carrying a scroll finds no one to raise.
     equipOnSelectedUnit(h, SCROLL);
     const equipped = h.manager.getPhase();
     if (equipped.type !== "equip_screen") throw new Error("expected the equip screen");
     expect(equipped.itemUsage[SCROLL])
-      .toEqual({ canUse: false, origin: "equipped_usable", reason: "unsupported_effect" });
+      .toEqual({ canUse: false, origin: "equipped_usable", reason: "no_valid_targets" });
 
     expect(h.manager.transition({
       type: "request_use_item", instanceId: SCROLL, origin: "equipped_usable",

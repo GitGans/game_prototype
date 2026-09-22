@@ -6,6 +6,7 @@ import type { PlayerSessionState } from './playerSessionState';
 import { validateItemForUse, getEquippedBonuses, type ItemUseLocation } from '../inventory';
 import {
   resolveUnitProgression, resolveUnitBattleStats, evaluateItemHealing,
+  evaluateResurrectionEligibility, type PlayerUnitState,
 } from '../progression';
 import { clampAliveCurrentHp } from './playerUnitPersistence';
 
@@ -20,6 +21,12 @@ import { clampAliveCurrentHp } from './playerUnitPersistence';
  *
  * It performs the whole evaluation, including the arithmetic pre-checks, so the executor adds no
  * rules of its own and the two can never disagree about eligibility.
+ *
+ * Most effects act on the character the request names. `revive` does not: it names an INITIATOR
+ * (the character spending the scroll) and evaluates a set of TARGETS. Both the modal's target list
+ * and the commit come from that one evaluation — `evaluateResurrectionRequest` projects it for
+ * rendering, `evaluateResurrectionTargetUse` resolves one submitted id from it — so the screen can
+ * never offer a character the commit would refuse.
  */
 
 export interface ItemUseInput {
@@ -55,6 +62,12 @@ export function itemUseLocationForOrigin(
  * The resolved effect the executor needs; never leaves core. Discriminated by effect type so the
  * executor dispatches on data it was given rather than re-reading the catalog.
  */
+export interface EvaluatedResurrectionTarget {
+  templateId: string;
+  /** Resolved from the TARGET's own blueprint, level, upgrades, permanent bonuses and equipment. */
+  maxHp: number;
+}
+
 export type EvaluatedItemEffect =
   | {
       type: 'permanent_stat_boost';
@@ -69,11 +82,93 @@ export type EvaluatedItemEffect =
       maxHp: number;
       currentHp: number;
       restoredHp: number;
+    }
+  | {
+      type: 'revive';
+      hpPercent: number;
+      /** Every target the commit would accept, in blueprint order. Never empty on an `ok` result. */
+      targets: readonly EvaluatedResurrectionTarget[];
     };
 
 export type ItemEvaluation =
   | { ok: true; effect: EvaluatedItemEffect }
   | { ok: false; reason: ItemUseFailure };
+
+/**
+ * One character's resolved HP pair. The single place this composition lives, shared by the selected
+ * character's own effects and by every resurrection target — one formula, one answer, whichever
+ * character is being asked about.
+ *
+ * Max HP is resolved from the SUPPLIED catalog, never the global ITEM_DEFINITIONS: item validation
+ * and HP arithmetic must not be able to read different content.
+ */
+function resolveRosterUnitHp(
+  session: PlayerSessionState,
+  catalog: ItemCatalog,
+  blueprint: UnitBlueprint,
+  unitState: PlayerUnitState,
+): { maxHp: number; currentHp: number } {
+  const progression = resolveUnitProgression(blueprint, unitState.chosenUpgrades);
+  const equipmentBonuses = getEquippedBonuses(
+    blueprint.templateId,
+    session.inventory.containers,
+    session.inventory.instances,
+    catalog.definitions,
+  );
+  const maxHp = resolveUnitBattleStats({
+    blueprint,
+    level: unitState.level,
+    upgradeModifiers: progression.statModifiers,
+    equipmentBonuses,
+    permanentBonuses: unitState.permanentBonuses,
+  }).hp;
+
+  // The existing core-owned normalization — progression may not import core, so the caller
+  // resolves it here and hands progression a plain number. Nothing is duplicated.
+  return { maxHp, currentHp: clampAliveCurrentHp(unitState.currentHp, maxHp) };
+}
+
+/**
+ * Resurrection eligibility for ONE request: a living, non-camp initiating character, a valid
+ * authored percentage, and at least one dead non-camp party member whose max HP can be resolved.
+ *
+ * Targets are built by walking `playerBlueprints`, so the order every consumer receives is the same
+ * blueprint order the equipment screen already uses — no consumer sorts, and there is no second
+ * ordering rule. A roster record with no blueprint is SKIPPED, never synthesized (the rule
+ * `battleSetupProjection` already applies).
+ */
+function evaluateResurrectionUse(input: ItemUseInput, hpPercent: number): ItemEvaluation {
+  const { session, catalog, playerBlueprints, unitTemplateId } = input;
+
+  if (!Number.isFinite(hpPercent) || hpPercent <= 0 || hpPercent > 100) {
+    return { ok: false, reason: 'invalid_amount' };
+  }
+  if (!playerBlueprints.some(b => b.templateId === unitTemplateId)) {
+    return { ok: false, reason: 'blueprint_not_found' };
+  }
+
+  // unit_not_found / unit_dead / unit_in_camp / no_valid_targets all come from progression: who is
+  // with the party and who may act for it is a roster rule, not an orchestration one.
+  const eligibility = evaluateResurrectionEligibility({
+    roster: session.roster,
+    initiatorTemplateId: unitTemplateId,
+  });
+  if (!eligibility.ok) return { ok: false, reason: eligibility.reason };
+
+  const eligible = new Set(eligibility.targetTemplateIds);
+  const targets: EvaluatedResurrectionTarget[] = [];
+  for (const blueprint of playerBlueprints) {
+    if (!eligible.has(blueprint.templateId)) continue;
+    const targetState = session.roster.units[blueprint.templateId];
+    if (!targetState) continue;
+    const { maxHp } = resolveRosterUnitHp(session, catalog, blueprint, targetState);
+    if (!Number.isFinite(maxHp) || maxHp < 1) continue;
+    targets.push({ templateId: blueprint.templateId, maxHp });
+  }
+  if (targets.length === 0) return { ok: false, reason: 'no_valid_targets' };
+
+  return { ok: true, effect: { type: 'revive', hpPercent, targets } };
+}
 
 export function evaluateItemUse(input: ItemUseInput): ItemEvaluation {
   const { session, catalog, playerBlueprints, unitTemplateId, instanceId } = input;
@@ -91,9 +186,14 @@ export function evaluateItemUse(input: ItemUseInput): ItemEvaluation {
   if (!located.ok) return { ok: false, reason: located.reason };
 
   const { useEffect } = located.item;
-  // `revive` is executable only in battle (out-of-combat target selection is future work), from
-  // EITHER origin — carrying the scroll does not make it usable outside combat — and any future
-  // variant stays unsupported until someone gives it mechanics.
+
+  // `revive` targets a character OTHER than the one holding the item, so it takes its own branch:
+  // it has no `amount`, and its eligibility is about the party rather than the selected character.
+  if (useEffect.type === 'revive') {
+    return evaluateResurrectionUse(input, useEffect.hpPercent);
+  }
+
+  // Any future variant stays unsupported until someone gives it mechanics.
   if (useEffect.type !== 'permanent_stat_boost' && useEffect.type !== 'heal') {
     return { ok: false, reason: 'unsupported_effect' };
   }
@@ -109,26 +209,8 @@ export function evaluateItemUse(input: ItemUseInput): ItemEvaluation {
 
   if (unitState.lifeState === 'dead') return { ok: false, reason: 'unit_dead' };
 
-  // Max HP is resolved from the SUPPLIED catalog, never the global ITEM_DEFINITIONS: item
-  // validation and HP arithmetic must not be able to read different content.
-  const progression = resolveUnitProgression(blueprint, unitState.chosenUpgrades);
-  const equipmentBonuses = getEquippedBonuses(
-    unitTemplateId,
-    session.inventory.containers,
-    session.inventory.instances,
-    catalog.definitions,
-  );
-  const oldMaxHp = resolveUnitBattleStats({
-    blueprint,
-    level: unitState.level,
-    upgradeModifiers: progression.statModifiers,
-    equipmentBonuses,
-    permanentBonuses: unitState.permanentBonuses,
-  }).hp;
-
-  // The existing core-owned normalization — progression may not import core, so the caller
-  // resolves it here and hands progression a plain number. Nothing is duplicated.
-  const oldCurrentHp = clampAliveCurrentHp(unitState.currentHp, oldMaxHp);
+  const { maxHp: oldMaxHp, currentHp: oldCurrentHp } =
+    resolveRosterUnitHp(session, catalog, blueprint, unitState);
 
   if (useEffect.type === 'heal') {
     // The restoration formula and the full-HP refusal belong to progression; core supplies the
@@ -168,6 +250,61 @@ export function evaluateItemUse(input: ItemUseInput): ItemEvaluation {
   return { ok: true, effect: { type: 'permanent_stat_boost', stat, amount, oldMaxHp, oldCurrentHp } };
 }
 
+export type ResurrectionRequestEvaluation =
+  | { ok: true; hpPercent: number; targetTemplateIds: readonly string[] }
+  | { ok: false; reason: ItemUseFailure };
+
+/**
+ * The renderable form of a resurrection request: the authored percentage and the eligible target
+ * IDs, in blueprint order.
+ *
+ * This is THE list. The snapshot projection must not re-derive eligibility from the roster, or the
+ * modal could offer a character the commit then refuses — a target whose max HP cannot be resolved
+ * is excluded by `evaluateResurrectionUse` and nowhere else. Resolved HP stays inside
+ * `EvaluatedResurrectionTarget` and never reaches a render contract.
+ */
+export function evaluateResurrectionRequest(input: ItemUseInput): ResurrectionRequestEvaluation {
+  const evaluation = evaluateItemUse(input);
+  if (!evaluation.ok) return { ok: false, reason: evaluation.reason };
+  if (evaluation.effect.type !== 'revive') return { ok: false, reason: 'unsupported_effect' };
+  return {
+    ok: true,
+    hpPercent: evaluation.effect.hpPercent,
+    targetTemplateIds: evaluation.effect.targets.map(t => t.templateId),
+  };
+}
+
+export interface ResurrectionTargetInput extends ItemUseInput {
+  /** The dead party member chosen in the modal. Resolved against the evaluated eligible set. */
+  targetUnitTemplateId: string;
+}
+
+export type ResurrectionTargetEvaluation =
+  | { ok: true; hpPercent: number; target: EvaluatedResurrectionTarget }
+  | { ok: false; reason: ItemUseFailure };
+
+/**
+ * Commit-time evaluation: the SAME request evaluation, then the submitted id resolved from its own
+ * eligible set.
+ *
+ * Nothing supplied by the UI is trusted — not the target id, not the percentage, and certainly not
+ * an HP number. A submitted id that is absent from the freshly evaluated set (alive again, moved to
+ * camp, removed) is `invalid_target`.
+ */
+export function evaluateResurrectionTargetUse(
+  input: ResurrectionTargetInput,
+): ResurrectionTargetEvaluation {
+  const evaluation = evaluateItemUse(input);
+  if (!evaluation.ok) return { ok: false, reason: evaluation.reason };
+  if (evaluation.effect.type !== 'revive') return { ok: false, reason: 'unsupported_effect' };
+
+  const target = evaluation.effect.targets
+    .find(t => t.templateId === input.targetUnitTemplateId);
+  if (!target) return { ok: false, reason: 'invalid_target' };
+
+  return { ok: true, hpPercent: evaluation.effect.hpPercent, target };
+}
+
 /**
  * The render contract: what the equipment screen shows for one usable item, at one origin.
  *
@@ -181,6 +318,12 @@ export function evaluateItemUsability(input: ItemUseInput): ItemUsability {
   if (!evaluation.ok) return { canUse: false, origin, reason: evaluation.reason };
 
   const effect = evaluation.effect;
+  // The percentage only: the eligible targets stay out of the per-item render entry, which is keyed
+  // by instance and shown in a tooltip. The modal asks for them separately, through the same
+  // evaluation.
+  if (effect.type === 'revive') {
+    return { canUse: true, origin, effect: { type: 'revive', hpPercent: effect.hpPercent } };
+  }
   if (effect.type === 'heal') {
     return {
       canUse: true,

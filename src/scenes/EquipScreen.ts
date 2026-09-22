@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { LAYOUT_SCALE } from '../core/Constants';
 import { PhaseManager } from '../core/PhaseManager';
-import { GamePhase, type PendingItemUsePrompt } from '../core/phases';
+import { GamePhase, type PendingItemInteraction } from '../core/phases';
 import { bindStateChanged } from './sceneEvents';
 import {
   backpackItemClickAction, backpackItemUseAction,
@@ -15,6 +15,7 @@ import { UnitTabRow } from '../objects/UnitTabRow';
 import { UnitSelectionPanel } from '../objects/panels/UnitSelectionPanel';
 import { EquipmentPanel } from '../objects/panels/EquipmentPanel';
 import { ConfirmationDialog } from '../ui/ConfirmationDialog';
+import { ResurrectionTargetDialog } from '../objects/ResurrectionTargetDialog';
 import { formatItemUsePrompt } from '../objects/itemUseEffectPresentation';
 
 export type EquipScreenPhase      = Extract<GamePhase, { type: 'equip_screen' }>;
@@ -32,10 +33,12 @@ export class EquipScreen extends Phaser.Scene {
   private _equipPanel      : EquipmentPanel      | null = null;
   private _selectorPanel   : EnemyGroupSelector  | null = null;
   /**
-   * A widget handle, never gameplay state. Whether the confirmation is open is decided entirely by
-   * the committed phase (`phase.pendingItemUsePrompt`).
+   * Widget handles, never gameplay state. WHICH modal is open — if any — is decided entirely by the
+   * committed phase (`phase.pendingItemInteraction`). Neither handle stores a selection, a target
+   * list, an origin or a percentage.
    */
-  private _confirmDialog   : ConfirmationDialog  | null = null;
+  private _confirmDialog   : ConfirmationDialog       | null = null;
+  private _reviveDialog    : ResurrectionTargetDialog | null = null;
   private itemTooltip!     : ItemTooltip;
 
   constructor() {
@@ -56,7 +59,7 @@ export class EquipScreen extends Phaser.Scene {
       this.showCharacterMode(phase);
     }
 
-    this.syncModals(phase);
+    this.syncModals(phase.pendingItemInteraction);
 
     bindStateChanged(this, this.onStateChanged, this);
   }
@@ -66,7 +69,7 @@ export class EquipScreen extends Phaser.Scene {
   }
 
   destroy(): void {
-    this.syncConfirmDialog(null);
+    this.syncModals(null);
   }
 
   // ── Mode switching ─────────────────────────────────────────────────────────
@@ -142,7 +145,7 @@ export class EquipScreen extends Phaser.Scene {
     this._tabRow?.destroy();         this._tabRow         = null;
     this._equipPanel?.destroy();     this._equipPanel     = null;
     this._selectorPanel?.destroy();  this._selectorPanel  = null;
-    this.syncConfirmDialog(null);
+    this.syncModals(null);
   }
 
   // ── EnemyGroupSelector (debug only, lives in scene) ───────────────────────
@@ -179,40 +182,56 @@ export class EquipScreen extends Phaser.Scene {
   }
 
   /**
-   * Reconciles the dialog with the committed phase. Teardown-first and idempotent: the dialog
-   * resolves by destroying itself BEFORE invoking a callback, so destroying it here can never
-   * fire a consumption.
+   * Reconciles the open modal with the committed phase — the one function that reads which modal
+   * belongs on screen.
+   *
+   * Teardown-first and idempotent: both dialogs resolve by destroying themselves BEFORE invoking a
+   * callback, so destroying one here can never fire a use or a selection. The item tooltip is
+   * hidden before a modal opens because it renders at a higher depth and would sit over the panel.
    */
-  private syncConfirmDialog(prompt: PendingItemUsePrompt | null): void {
+  private syncModals(interaction: PendingItemInteraction | null): void {
     this._confirmDialog?.destroy();
     this._confirmDialog = null;
-    if (!prompt) return;
+    this._reviveDialog?.destroy();
+    this._reviveDialog = null;
+    if (!interaction) return;
 
-    this._confirmDialog = new ConfirmationDialog({
+    this.itemTooltip.hide();
+
+    if (interaction.kind === 'confirming_use') {
+      const { prompt } = interaction;
+      this._confirmDialog = new ConfirmationDialog({
+        scene: this,
+        message: formatItemUsePrompt(prompt),
+        confirmLabel: 'Use',
+        dismiss: {
+          backdrop:  true,
+          closeIcon: true,
+          button:    { label: 'Cancel', style: 'neutral' },
+          escape:    true,
+        },
+        onConfirm: () => PhaseManager.transition({
+          type: 'confirm_use_item',
+          instanceId: prompt.instanceId,
+          unitTemplateId: prompt.unitTemplateId,
+        }),
+        onCancel: () => PhaseManager.transition({ type: 'cancel_use_item' }),
+      });
+      return;
+    }
+
+    const { selection } = interaction;
+    this._reviveDialog = new ResurrectionTargetDialog({
       scene: this,
-      message: formatItemUsePrompt(prompt),
-      confirmLabel: 'Use',
-      dismiss: {
-        backdrop:  true,
-        closeIcon: true,
-        button:    { label: 'Cancel', style: 'neutral' },
-        escape:    true,
-      },
-      onConfirm: () => PhaseManager.transition({
-        type: 'confirm_use_item',
-        instanceId: prompt.instanceId,
-        unitTemplateId: prompt.unitTemplateId,
+      selection,
+      // One click resurrects: there is no second confirmation step, even for a single target.
+      onSelectTarget: (targetUnitTemplateId) => PhaseManager.transition({
+        type: 'select_item_revive_target',
+        instanceId: selection.instanceId,
+        targetUnitTemplateId,
       }),
       onCancel: () => PhaseManager.transition({ type: 'cancel_use_item' }),
     });
-  }
-
-  /**
-   * Modal reconciliation stays in one named place even with a single modal: which modal is open is a
-   * property of the committed phase, and this is the one function that reads it.
-   */
-  private syncModals(phase: AnyEquipPhase): void {
-    this.syncConfirmDialog(phase.pendingItemUsePrompt);
   }
 
   private onEquipSlotClick(slot: string, item: ItemSlotSnapshot | null): void {
@@ -242,6 +261,6 @@ export class EquipScreen extends Phaser.Scene {
     } else {
       this._equipPanel?.refresh(phase);
     }
-    this.syncModals(phase);
+    this.syncModals(phase.pendingItemInteraction);
   }
 }

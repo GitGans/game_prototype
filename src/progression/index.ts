@@ -8,3 +8,4 @@ export * from './rosterCamp';
 export * from './rosterUpgrades';
 export * from './consumableStatBoost';
 export * from './itemHealing';
+export * from './itemResurrection';

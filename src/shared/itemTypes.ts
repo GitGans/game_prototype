@@ -30,11 +30,14 @@ export type PartialBattleStatBonuses = UnitBattleStatDelta;
  *
  * `heal` is EXECUTABLE on both `usable` and `consumable`: out of combat `core/itemUse.ts` applies
  * it and destroys the source instance; in battle `battle/itemUse.ts` applies it from usable_slot.
- * `permanent_stat_boost` is executable on a `consumable`. `revive` is executable IN BATTLE only,
- * from usable_slot during the owner's manual turn: it restores a dead allied field unit to
- * `hpPercent` of its max HP (`battle/itemUse.ts`). Out of combat it is still rejected with
- * `unsupported_effect`. `hpPercent` is authored data — validated by the catalog builder, and
- * defensively again by the battle evaluator; this file declares the contract only.
+ * `permanent_stat_boost` is executable on a `consumable`. `revive` is executable in BOTH places and
+ * restores its target to `hpPercent` of that target's max HP: in battle from usable_slot during the
+ * owner's manual turn, against a dead allied FIELD unit (`battle/itemUse.ts`); out of combat from
+ * either origin, by a living non-camp character, against a dead non-camp party member chosen in the
+ * target-selection interaction (`core/itemUse.ts`). The two domains share only the authored
+ * percentage — battle revive mutates `BattleState`, out-of-combat revive mutates the persistent
+ * roster. `hpPercent` is authored data — validated by the catalog builder, and defensively again by
+ * each evaluator; this file declares the contract only.
  */
 export type ItemUseEffect =
   | { type: 'heal'; amount: number }
@@ -85,13 +88,32 @@ export type ItemHealFailure =
   | 'invalid_result'
   | 'unit_full_hp';
 
+/**
+ * Out-of-combat resurrection refusals, owned by `progression/itemResurrection.ts`. A strict SUBSET
+ * of `ItemUseFailure`, so core forwards a progression reason unchanged — a translation table would
+ * be a second place where the two vocabularies could drift.
+ *
+ * `unit_dead` / `unit_in_camp` describe the INITIATING character; `invalid_target` describes the
+ * chosen target (absent, alive, or in camp).
+ */
+export type ItemResurrectionFailure =
+  | 'unit_not_found'
+  | 'unit_dead'
+  | 'unit_in_camp'
+  | 'invalid_target'
+  | 'invalid_amount'
+  | 'invalid_result';
+
 export type ItemUseFailure =
   | ItemLocationFailure
   | ItemBoostFailure
   | ItemHealFailure
+  | ItemResurrectionFailure
   | 'unit_not_found'
   | 'blueprint_not_found'
-  | 'unsupported_effect';
+  | 'unsupported_effect'
+  /** Resurrection: no dead non-camp party member exists — recoverable, explained in the tooltip. */
+  | 'no_valid_targets';
 
 /**
  * In-battle activation refusals. Declared here — not in `battle/` — because the battle render

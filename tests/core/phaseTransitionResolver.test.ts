@@ -64,7 +64,7 @@ function debugEquipScreenPhase(overrides: Partial<DebugEquipScreenPhase> = {}): 
     learnedSkills: [],
     upgradeSkills: [],
     itemUsage: {},
-    pendingItemUsePrompt: null,
+    pendingItemInteraction: null,
     ...overrides,
   };
 }
@@ -84,7 +84,7 @@ function equipScreenPhase(overrides: Partial<EquipScreenPhase> = {}): EquipScree
     learnedSkills: [],
     upgradeSkills: [],
     itemUsage: {},
-    pendingItemUsePrompt: null,
+    pendingItemInteraction: null,
     ...overrides,
   };
 }
@@ -250,9 +250,12 @@ describe("phaseTransitionResolver", () => {
       [
         "confirm_use_item",
         equipScreenPhase({
-          pendingItemUsePrompt: {
-            instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E",
-            effect: BOOST_EFFECT,
+          pendingItemInteraction: {
+            kind: "confirming_use",
+            prompt: {
+              instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E",
+              effect: BOOST_EFFECT,
+            },
           },
         }),
         { type: "confirm_use_item", instanceId: "i1", unitTemplateId: "unit_1" },
@@ -260,9 +263,12 @@ describe("phaseTransitionResolver", () => {
       [
         "cancel_use_item",
         equipScreenPhase({
-          pendingItemUsePrompt: {
-            instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E",
-            effect: BOOST_EFFECT,
+          pendingItemInteraction: {
+            kind: "confirming_use",
+            prompt: {
+              instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E",
+              effect: BOOST_EFFECT,
+            },
           },
         }),
         { type: "cancel_use_item" },
@@ -338,6 +344,8 @@ describe("phaseTransitionResolver", () => {
   describe("consumable confirmation routing", () => {
     const eligible = { i1: { canUse: true, origin: "backpack", effect: BOOST_EFFECT } } as const;
     const prompt = { instanceId: "i1", unitTemplateId: "unit_1", unitName: "U", itemName: "E", effect: BOOST_EFFECT };
+    /** The committed render field: a confirmation is one of the two item-interaction kinds. */
+    const confirming = { kind: "confirming_use", prompt } as const;
 
     it("rejects a request from a non-equipment phase", () => {
       expect(resolveTransition(makeBattlePhase(), { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata))
@@ -394,13 +402,13 @@ describe("phaseTransitionResolver", () => {
     });
 
     it("rejects a second request while one is pending", () => {
-      const phase = equipScreenPhase({ itemUsage: { ...eligible }, pendingItemUsePrompt: prompt });
+      const phase = equipScreenPhase({ itemUsage: { ...eligible }, pendingItemInteraction: confirming });
       expect(resolveTransition(phase, { type: "request_use_item", instanceId: "i1", origin: "backpack" }, metadata))
         .toBeNull();
     });
 
     it("rejects competing equipment mutations while a confirmation is pending", () => {
-      const phase = equipScreenPhase({ pendingItemUsePrompt: prompt });
+      const phase = equipScreenPhase({ pendingItemInteraction: confirming });
       expect(resolveTransition(phase, { type: "equip_item", instanceId: "i2", unitTemplateId: "unit_1" }, metadata))
         .toBeNull();
       expect(resolveTransition(phase, { type: "unequip_item", unitTemplateId: "unit_1", slot: "helmet" }, metadata))
@@ -416,7 +424,7 @@ describe("phaseTransitionResolver", () => {
     });
 
     it("rejects a confirmation naming a different instance than the pending one", () => {
-      const phase = equipScreenPhase({ pendingItemUsePrompt: prompt });
+      const phase = equipScreenPhase({ pendingItemInteraction: confirming });
       expect(resolveTransition(
         phase,
         { type: "confirm_use_item", instanceId: "i2", unitTemplateId: "unit_1" },
@@ -425,7 +433,7 @@ describe("phaseTransitionResolver", () => {
     });
 
     it("rejects a confirmation naming a different target than the pending one", () => {
-      const phase = equipScreenPhase({ pendingItemUsePrompt: prompt });
+      const phase = equipScreenPhase({ pendingItemInteraction: confirming });
       expect(resolveTransition(
         phase,
         { type: "confirm_use_item", instanceId: "i1", unitTemplateId: "other" },
@@ -435,7 +443,7 @@ describe("phaseTransitionResolver", () => {
 
     it("rejects a confirmation whose target is no longer the selected character", () => {
       const phase = equipScreenPhase({
-        selectedUnitTemplateId: "other", pendingItemUsePrompt: prompt,
+        selectedUnitTemplateId: "other", pendingItemInteraction: confirming,
       });
       expect(resolveTransition(
         phase,
@@ -455,7 +463,7 @@ describe("phaseTransitionResolver", () => {
         .toBe(requesting);
 
       const pending = debugEquipScreenPhase({
-        pendingItemUsePrompt: { ...prompt, unitTemplateId: "unit_1" },
+        pendingItemInteraction: { kind: "confirming_use", prompt: { ...prompt, unitTemplateId: "unit_1" } },
       });
       expect(resolveTransition(pending, { type: "cancel_use_item" }, metadata)).toBe(pending);
     });
