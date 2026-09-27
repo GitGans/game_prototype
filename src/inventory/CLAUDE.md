@@ -54,24 +54,25 @@ progression's or battle's business, and composing them is `core`'s.
   and assign the returned `nextContainers` / `nextInstances` back themselves.
 - **No progression:** equipment rules that need the current class take a resolved `classId` argument; `core`
   resolves it (via `resolveUnitProgression`) and passes it in.
-- **Item use is split across layers, and this one owns only the item half.**
-  `itemUseOps.ts` resolves and removes; it never applies an effect and never sees a roster.
-  Applying a `permanent_stat_boost` is `progression/consumableStatBoost.ts` and applying a `heal`
-  out of combat is `progression/itemHealing.ts`; composing them with the item half is
-  `core/itemUse.ts`. In battle, `battle/itemUse.ts` applies the effect; inventory participates again only when a
-  completed attempt is settled through `core/battleItemSettlement.ts`. Abandoned and replayed
-  attempts do not mutate persistent inventory. `useEffect` reaches this
-  domain as opaque data it forwards to the caller: **kind and placement decide here, never the
-  effect type**.
-- **`usable` items are activatable, from two places.** A `usable` in the shared backpack is
-  drinkable exactly like a `consumable` (`shared_backpack`); the same item in `usable_slot` is
-  activatable during a manual battle turn AND out of combat (`equipped_usable`). The location is
-  always the caller's explicit claim and is always CHECKED here: a wrongly-placed item cannot
-  authorize its own consumption, and a verdict computed for one location can never remove an item
-  from the other. A resurrection scroll is activatable from `usable_slot` in battle but from neither
-  place out of combat — those decisions belong to the layers that own effect support, never here.
-  A `usable` in `usable_slot` contributes **no** equipped stat bonuses: it occupies the slot to
-  provide an action, not to buff. That is an authoring invariant enforced by
+- **Item use is split across layers, and inventory owns only the item half.** `itemUseOps.ts`
+  resolves, validates and removes an item; it never applies an effect and never reads or changes a
+  roster. Permanent boosts, healing and persistent resurrection belong respectively to
+  `progression/consumableStatBoost.ts`, `progression/itemHealing.ts` and
+  `progression/itemResurrection.ts`; `core/itemUse.ts` composes those operations with inventory
+  consumption. In battle, `battle/itemUse.ts` applies an attempt-local effect and persistent
+  inventory changes only when `core/battleItemSettlement.ts` settles a completed attempt. The
+  `useEffect` payload is opaque to inventory: **kind and placement decide whether removal is valid,
+  never the effect type**.
+- **`usable` items are activatable from two out-of-combat locations.** A `usable` in the shared
+  backpack is activated through `shared_backpack`; the same item in `usable_slot` is activated
+  through `equipped_usable`, both out of combat and, where supported by the battle domain, during a
+  manual battle turn. A `consumable` is usable only from the shared backpack. The location is always
+  the caller's explicit claim and is always CHECKED here: a misplaced item cannot authorize its own
+  consumption, and a verdict for one origin cannot remove an item from another. A resurrection
+  effect follows exactly these ordinary kind/location rules; inventory does not special-case
+  resurrection scroll ids or decide whether a valid target exists. A `usable` in `usable_slot`
+  contributes **no** equipped stat bonuses: it occupies the slot to provide an action, not to buff.
+  That is an authoring invariant enforced by
   `data/items/buildItemCatalog.ts` — `getEquippedBonuses` stays a blind sum over every equipped
   definition and must not grow a slot-specific branch.
 - **Backpack capacity is 24** everywhere — operations and snapshots both use `BACKPACK_SLOT_COUNT`. Do not

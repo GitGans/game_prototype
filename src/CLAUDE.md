@@ -22,7 +22,7 @@ The system is split into layers: static content definitions, domain logic, orche
 * world/    → world-map logic and types
 * battle/   → battle domain rules (placement, combat, targeting, initiative)
 * inventory/→ pure inventory & equipment domain (containers, equip, bonuses, item use, snapshots, pricing)
-* progression/→ unit progression domain (roster state, class/upgrade resolution, stats)
+* progression/→ unit progression domain (roster state, class/upgrade resolution, stats, and persistent item effects on the roster: healing, permanent boosts, resurrection)
 * campaign/ → persistent campaign state contract (`CampaignState`) — the only future save source
 * save/     → future save/load boundary contract (`SaveRepository`); no implementation yet
 * core/     → game orchestration: PhaseManager, GameState (campaign/debug containers), battle-runtime storage + access gateways, phase definitions, transitions
@@ -121,11 +121,22 @@ imports — enforced by `check-boundaries.mjs`.
     (`MIN_LIVING_BATTLE_PARTY_SIZE = 1`); beginning combat additionally requires a living
     player unit on the field
   * no scene or projection re-derives these bounds — they are forwarded through GamePhase
+* Persistent out-of-combat resurrection rules live in `progression/itemResurrection.ts`:
+  * the initiating character must exist, be alive and be outside camp
+  * a valid target must be dead and outside camp; reserve/bench membership does not exclude it
+  * target eligibility reuses `isSelectedForBattle()` from `rosterCamp.ts`, so party membership has
+    one definition
+  * progression receives the target's resolved max HP as a plain number and does not import
+    inventory or core
+  * resurrection preserves level, upgrades, permanent bonuses, camp membership and last placement
+  * restored HP is `ceil(maxHp × hpPercent / 100)`, with a minimum of 1; full HP uses the sparse
+    `currentHp: null` representation
 
 ## Where to Modify
 
 * add/change game content (units, skills, items)      → data/
 * change battle rules (combat, targeting, placement)  → battle/
+* change persistent out-of-combat resurrection eligibility or roster mutation → progression/itemResurrection.ts; change how it is composed with item validation and consumption → core/itemUsability.ts + core/itemUse.ts
 * change world-map rules                              → world/
 * add a new game screen or transition                 → core/phases.ts + core/phaseTransitionResolver.ts + core/phaseActionEffects.ts + scenes/ (not core/PhaseManager.ts — the coordinator is action-agnostic)
 * change the persistent campaign state shape           → campaign/campaignState.ts

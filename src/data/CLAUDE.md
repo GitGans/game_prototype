@@ -88,16 +88,18 @@ Live game state in `BattleState` / `CampaignState`
   consumable -> slot null
   ```
 - **`useEffect` presence by kind** — `equipment` forbids it; `usable` and `consumable` require it.
-  **Validation follows executability.** `permanent_stat_boost` is executable wherever it may appear, so
-  its payload is always validated (the stat must be a canonical battle stat; the amount must be finite
-  and > 0). `heal` is executable for **both** `usable` and `consumable` — out of combat by
-  `core/itemUse.ts`, and in battle from `usable_slot` by `battle/itemUse.ts` — so its amount is
-  validated for both, and only `equipment`, which may carry no `useEffect` at all, is exempt.
-  `revive` carries an authored `hpPercent`, validated here to be finite and in `(0, 100]` for every
-  kind that may carry it; it is executable in battle from `usable_slot` (`battle/itemUse.ts`) and
-  still unsupported out of combat. No item id and no particular amount is ever privileged — a
-  stronger potion is a new entry in `items/usable/healing.ts`, a stronger scroll a new entry in
-  `items/usable/resurrection.ts`, never a new branch, and nothing outside that file changes.
+  **Validation follows executability.** `permanent_stat_boost` is executable wherever it may appear,
+  so its stat and positive finite amount are always validated. `heal` is executable for both
+  `usable` and `consumable` items — out of combat through `core/itemUse.ts`, and from `usable_slot`
+  in battle through `battle/itemUse.ts` — so its amount is validated for both kinds. `revive`
+  carries an authored `hpPercent`, validated here as finite and in `(0, 100]` for every kind that
+  may carry it. It is executable from `usable_slot` in battle and, outside battle, from any origin
+  allowed by the item's runtime kind: a `usable` may be activated from the shared backpack or
+  `usable_slot`, while a `consumable` may be activated from the shared backpack only. No item id
+  and no particular percentage is privileged. A stronger potion is another authored entry in
+  `items/usable/healing.ts`; a stronger resurrection scroll is another authored entry in
+  `items/usable/resurrection.ts` with a different `hpPercent`. The shared mechanics require no new
+  item-specific branch, and nothing outside those files changes.
 - **No equipped stat bonuses on a `usable`** (enforced at build time). A `usable` MUST NOT author `battleStatBonuses`; only an explicit zero is accepted, because the rule is about the value, not
   about the key being present. It occupies `usable_slot` to be _activated_, never to buff —
   `usable_slot` is an ordinary slot of the equipment container, so `inventory/equipmentBonuses.ts`

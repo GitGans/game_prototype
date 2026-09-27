@@ -14,7 +14,7 @@ Game-agnostic UI primitive library. Provides reusable visual components and desi
 
 ## Key Files
 
-- `theme.ts` — Generic UI/app design tokens exposed only through `UI_THEME`: fonts (`FONT_SIZE`, `fontSize()`), alpha states, depth layers, semantic text colors, screen backgrounds, and generic component tokens for button / tooltip / panel / overlay / modal / contextMenu / numberInput. Game-domain visual tokens live in `src/objects/*VisualTheme.ts`.
+- `theme.ts` — generic UI/app design tokens exposed through `UI_THEME`: fonts (`FONT_SIZE`, `fontSize()`), alpha states, depth layers, semantic text colors, screen backgrounds and component tokens. `UI_THEME.component.modal.targetGrid` owns the generic dimensions for portrait/label option grids inside modals: card width, portrait size, row/column gaps, label band, text gap, maximum column count and border width. Game-domain colors remain in `src/objects/*VisualTheme.ts`.
 - `Button.ts` — Styled button with hover/idle/disabled states; exports `Button` and `ButtonConfig`
 - `BaseTooltip.ts` — Abstract generic base for all tooltips; subclasses implement `buildContent(data)`
 - `HpBar.ts` — Health bar with optional tri-color (green/yellow/red) mode
@@ -87,6 +87,10 @@ caller manages state changes and re-renders
   declares none. The caller passes panel `width` and its own `contentHeight`;
   `modalContentWidth(width)` gives the wrap width to measure against first. The frame adds padding
   and header/footer reserves and exposes `contentCenterX/Y`, `contentWidth/Height`, `contentDepth`.
+- A game-specific selectable grid may compose `UI_THEME.component.modal.targetGrid` with
+  `ModalFrame`, but it must not declare local pixel dimensions or reimplement the scrim, close
+  icon, footer, Escape handling or one-shot resolution. Eligibility and option contents belong to
+  the caller's committed snapshot, not to `ui/`.
 - A new modal supplies content plus `actions` through `ModalFrame`; it does not re-roll the scrim,
   the close icon, or the footer row.
 - `ContextMenu.ts` is a different component (anchored, pass-through dismissal) and is unrelated
@@ -117,7 +121,7 @@ caller manages state changes and re-renders
 - add a new tooltip type → extend `BaseTooltip` in `src/objects/`
 - change health bar color thresholds → `HpBar.ts` (`setRatio`)
 - change modal dismissal routes or footer composition → `ModalFrame.ts`
-- change modal padding, close-icon size, or button dimensions → `theme.ts` (`UI_THEME.component.modal`)
+- change modal padding, close-icon size, button dimensions, or selectable target-grid dimensions → `theme.ts` (`UI_THEME.component.modal`, including `targetGrid`)
 - change context menu layout or dismissal → `ContextMenu.ts`
 - change number input validation → `NumberInput.ts`
 - change the double-click window or single/double click recognition → `clickGesture.ts`

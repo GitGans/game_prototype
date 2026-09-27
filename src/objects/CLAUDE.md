@@ -20,7 +20,7 @@ Current files:
 - `battleEventPresentation.ts` — formats battle events as floating-text and log entries
 - `battleDirectivePresentation.ts` — formats `BattleDirectivePresentationInput` (from `shared/`) as status text and skill-bar visibility flags; owns all directive UI wording
 - `battleSkillPreviewPresentation.ts` — `buildBattleTargetPreviewPresentation` formats every manual target-preview variant: skill previews (header color, damage/healing estimates) and the item-resurrection variant, whose sentence ("<target> revived +<hp> HP") is written HERE from structured data — the battle domain (`battle/itemPreview.ts`) computes only the target, restored HP and cells
-- `itemUseEffectPresentation.ts` — formats consumable wording: the confirmation prompt, the tooltip effect line, and the blocked-reason line. An HP **boost** must state BOTH the permanent max-HP growth and the immediate heal; ordinary **healing** must state neither — it restores current HP only, and wording that implied growth would make a potion indistinguishable from an essence. The heal prompt reports `restoredHp` (already clamped by progression), never the item's nominal amount; the tooltip line is target-independent and says "up to"; a resurrection states its authored share ("Revives with 30% HP."). It also words every `BattleItemUseFailure`, including `no_valid_targets`, `item_not_selected` and `invalid_target"
+- `itemUseEffectPresentation.ts` — formats out-of-combat item confirmation text, resurrection target-selection headings, tooltip effect lines and blocked-reason lines, plus battle item-action tooltip wording. Self-target confirmation text receives only `SelfItemEffectPreview`; resurrection receives a separate `PendingResurrectionTargetSelection` and shows the authored percentage without calculating or displaying target HP. `no_valid_targets` is presented as the red tooltip reason `Нет подходящих целей`; the item remains present and no modal opens. The module formats structured snapshot data only and owns no eligibility or effect calculation.
 
 Presentation builders:
 - receive already-computed read models and presentation inputs from `shared/` or `core/`
@@ -53,6 +53,7 @@ Applying presentation output to Phaser objects is the responsibility of `BattleP
 - `SkillTooltip.ts` — popup for skill name and damage type
 - `SkillCellTooltip.ts` — extended skill popup with description and screen-clamped positioning
 - `ItemTooltip.ts` — item stats, class-restriction and supplied `notes` lines. It RENDERS notes and composes none: eligibility travels the existing `EquipmentPanel → BackpackRow → ItemCell` data path and `ItemCell` composes the lines via `itemUseEffectPresentation.ts`
+- `ResurrectionTargetDialog.ts` — game-specific out-of-combat resurrection target picker built on `ui/ModalFrame`. It renders the committed target options as portrait/name cards in rows of up to four, dispatches one selected target through its callback, and owns no eligibility or HP logic. Card selection resolves the frame before invoking the callback; backdrop, close icon, Cancel and Escape all use the frame's shared dismissal path and consume nothing.
 - `UnitCampButton.ts` — camp/party toggle button placed on unit portraits; built on `Button`
 - `BattleResultUnitCard.ts` — post-battle unit card (sprite, name, level); built on `Panel`
 - `BattleEndOverlay.ts` — victory/defeat overlay composed from `Panel` + `Button`; receives outcome, isDebugBattle, labels, and callbacks; never reads `GameState` or calls `PhaseManager`
@@ -84,11 +85,13 @@ Scene receives user interaction via callback — no state mutation here
 
 ## Item presentation
 
-- `itemUseEffectPresentation.ts` — wording for out-of-combat use (confirmation body, tooltip line,
-  blocked reasons) plus `formatBattleItemActionTooltip` for the skill-bar item action, which
-  states the two consequences the icon cannot show: the item is CONSUMED and the turn ENDS.
+- `itemUseEffectPresentation.ts` — wording for out-of-combat self-target confirmation, resurrection
+  target selection, tooltip effect lines and blocked reasons, plus `formatBattleItemActionTooltip`
+  for the battle skill-bar item action. It receives already-resolved structured data and must not
+  import or reproduce resurrection, healing or inventory rules.
 - `ItemCell.ts` gestures — a `usable` supports TWO of them (single click equips or unequips, double
-  click opens the use confirmation), so its single click is DEFERRED by `DOUBLE_CLICK_WINDOW_MS`
+  click opens the item interaction — a use confirmation, or resurrection target selection), so its
+  single click is DEFERRED by `DOUBLE_CLICK_WINDOW_MS`
   through the game-agnostic `ui/clickGesture` recognizer and exactly one callback fires per gesture.
   Every other kind stays immediate. `formatUsableGestureHint(origin)` supplies the tooltip line that
   advertises the second gesture — with the Use/Equip window gone nothing else does — and the verb
@@ -106,7 +109,7 @@ Scene receives user interaction via callback — no state mutation here
 - Components do not call `PhaseManager` or mutate game state — they only fire callbacks
 - Overlay components (e.g. `BattleEndOverlay`) receive `outcome` and `isDebugBattle` as plain typed values — they never read `PhaseManager` or `GameState` internally; the scene resolves these and passes the results as constructor arguments
 - All tooltips extend `BaseTooltip` from `src/ui/`
-- All sizing uses `LAYOUT_SCALE` from `src/core/Constants` — no raw pixel constants inside components
+- All sizing uses `LAYOUT_SCALE` from `src/core/Constants` — no raw pixel constants inside components. A layout shared with `ui/` primitives takes its dimensions from the matching `UI_THEME.component` token instead of a local constant — a modal option grid, for example, uses `UI_THEME.component.modal.targetGrid`
 - Sprite absence must be handled with a visible fallback (rectangle or letter), never a crash
 - `refresh()` / `update()` is the only path to change displayed data after construction
 - **A pending click gesture belongs to the committed snapshot under which its FIRST click occurred.**
